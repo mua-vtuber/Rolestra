@@ -1,0 +1,118 @@
+/**
+ * Design tokens — CSS custom properties for light/dark themes.
+ *
+ * Every colour used in the app should reference a token here
+ * so that switching [data-theme] on <html> toggles the entire UI.
+ */
+
+/* ── Light theme (default) ─────────────────────────────────────── */
+:root,
+[data-theme='light'] {
+  /* Surface / background */
+  --bg-primary: #ffffff;
+  --bg-secondary: #fafafa;
+  --bg-tertiary: #f5f5f5;
+  --bg-hover: #f0f0f0;
+  --bg-active: #e8f0fe;
+  --bg-accent: #1a73e8;
+  --bg-danger: #dc2626;
+  --bg-danger-soft: #fce8e6;
+  --bg-success-soft: #e6f4ea;
+  --bg-warning-soft: #fff3cd;
+
+  /* Text */
+  --text-primary: #333333;
+  --text-secondary: #555555;
+  --text-tertiary: #888888;
+  --text-muted: #999999;
+  --text-on-accent: #ffffff;
+  --text-accent: #1a73e8;
+  --text-danger: #d93025;
+  --text-success: #137333;
+  --text-warning: #e37400;
+  --text-warning-dark: #856404;
+
+  /* Border */
+  --border-primary: #e0e0e0;
+  --border-secondary: #cccccc;
+  --border-accent: #1a73e8;
+  --border-danger: #d93025;
+  --border-success: #ceead6;
+  --border-warning: #ffeeba;
+
+  /* Message bubbles */
+  --bubble-user: #e8f0fe;
+  --bubble-assistant: #f5f5f5;
+  --bubble-system: #fff3cd;
+
+  /* Code blocks */
+  --code-bg: #fafafa;
+  --code-border: #d8d8d8;
+  --code-header: #e6e6e6;
+
+  /* Search highlight */
+  --highlight-bg: #fff176;
+
+  /* Shadows */
+  --shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.2);
+
+  /* Overlay */
+  --overlay-bg: rgba(0, 0, 0, 0.4);
+
+  /* Scrollbar */
+  --scrollbar-thumb: #c0c0c0;
+  --scrollbar-track: transparent;
+}
+
+/* ── Dark theme ────────────────────────────────────────────────── */
+[data-theme='dark'] {
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252526;
+  --bg-tertiary: #2d2d30;
+  --bg-hover: #3e3e42;
+  --bg-active: #264f78;
+  --bg-accent: #4a9eff;
+  --bg-danger: #f44336;
+  --bg-danger-soft: #3d2020;
+  --bg-success-soft: #1b3a26;
+  --bg-warning-soft: #3d3520;
+
+  --text-primary: #d4d4d4;
+  --text-secondary: #aaaaaa;
+  --text-tertiary: #808080;
+  --text-muted: #666666;
+  --text-on-accent: #ffffff;
+  --text-accent: #4a9eff;
+  --text-danger: #f44336;
+  --text-success: #81c995;
+  --text-warning: #ffa726;
+  --text-warning-dark: #ffc107;
+
+  --border-primary: #3e3e42;
+  --border-secondary: #555555;
+  --border-accent: #4a9eff;
+  --border-danger: #f44336;
+  --border-success: #2e6b3e;
+  --border-warning: #7a6520;
+
+  --bubble-user: #264f78;
+  --bubble-assistant: #2d2d30;
+  --bubble-system: #3d3520;
+
+  --code-bg: #1e1e1e;
+  --code-border: #3e3e42;
+  --code-header: #333333;
+
+  --highlight-bg: #806d00;
+
+  --shadow-toast: 0 4px 12px rgba(0, 0, 0, 0.6);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-modal: 0 8px 32px rgba(0, 0, 0, 0.5);
+
+  --overlay-bg: rgba(0, 0, 0, 0.6);
+
+  --scrollbar-thumb: #555555;
+  --scrollbar-track: transparent;
+}

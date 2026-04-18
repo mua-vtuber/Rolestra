@@ -1,0 +1,54 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Electron
+release/
+
+# Data
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# Claude Code
+.claude/
+
+# oh-my-claudecode
+.omc/
+.worktrees/
+
+# Agestra plugin workspace (local, plugin-generated)
+.agestra/
+
+# Rolestra cli-smoke matrix results (generated locally)
+tools/cli-smoke/matrix-results/
+
+# Superpowers brainstorm sessions (local)
+.superpowers/

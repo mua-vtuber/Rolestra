@@ -1,0 +1,108 @@
+/**
+ * Provider type definitions shared between main and renderer.
+ *
+ * These types define the contract for all AI providers (API, CLI, Local).
+ * The renderer uses ProviderInfo (serializable) for display;
+ * the main process uses these types plus BaseProvider (non-serializable).
+ */
+
+/** Provider capability flags for runtime feature detection. */
+export type ProviderCapability =
+  | 'streaming'
+  | 'resume'
+  | 'tools'
+  | 'json-mode'
+  | 'multimodal'
+  | 'code-execution';
+
+/** Provider type discriminator. */
+export type ProviderType = 'api' | 'cli' | 'local';
+
+/** Runtime provider status. */
+export type ProviderStatus =
+  | 'ready'
+  | 'warming-up'
+  | 'busy'
+  | 'error'
+  | 'not-installed';
+
+/**
+ * Discriminated union for provider configuration.
+ * The `type` field determines which additional fields are present.
+ */
+export type ProviderConfig =
+  | ApiProviderConfig
+  | CliProviderConfig
+  | LocalProviderConfig;
+
+export interface ApiProviderConfig {
+  type: 'api';
+  endpoint: string;
+  /** Reference key for safeStorage — never a raw API key. */
+  apiKeyRef: string;
+  model: string;
+}
+
+export interface CliProviderConfig {
+  type: 'cli';
+  command: string;
+  args: string[];
+  inputFormat: 'stdin-json' | 'args' | 'pipe';
+  outputFormat: 'stream-json' | 'jsonl' | 'raw-stdout';
+  sessionStrategy: 'persistent' | 'per-turn';
+  hangTimeout: { first: number; subsequent: number };
+  model: string;
+  /** WSL distro name when the CLI is installed inside WSL (undefined = native). */
+  wslDistro?: string;
+}
+
+export interface LocalProviderConfig {
+  type: 'local';
+  baseUrl: string;
+  model: string;
+}
+
+/** Chat message for provider communication. */
+export interface Message {
+  role: 'user' | 'assistant' | 'system';
+  content: string | ContentBlock[];
+  /** Speaker name in multi-party conversations. */
+  name?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Content block for multimodal messages. */
+export interface ContentBlock {
+  type: 'text' | 'image' | 'tool_use' | 'tool_result';
+  data: unknown;
+}
+
+/** Options for completion requests. */
+export interface CompletionOptions {
+  temperature?: number;
+  maxTokens?: number;
+  tools?: ToolDefinition[];
+  [key: string]: unknown;
+}
+
+/** Tool definition for tool-capable providers. */
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/**
+ * Serializable provider info for IPC transport.
+ * Unlike BaseProvider, this contains no methods — safe for contextBridge.
+ */
+export interface ProviderInfo {
+  id: string;
+  type: ProviderType;
+  displayName: string;
+  model: string;
+  capabilities: ProviderCapability[];
+  status: ProviderStatus;
+  config: ProviderConfig;
+  persona?: string;
+}

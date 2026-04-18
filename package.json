@@ -1,0 +1,59 @@
+{
+  "name": "ai-chat-arena",
+  "version": "0.1.0",
+  "description": "Multi AI conversation and consensus platform",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "rebuild:node": "npm rebuild better-sqlite3",
+    "rebuild:electron": "npx electron-rebuild -f -w better-sqlite3",
+    "predev": "npm run rebuild:electron",
+    "pretest": "npm run rebuild:node",
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "lint": "eslint .",
+    "i18n:check": "npx i18next-parser && git diff --exit-code src/renderer/i18n/locales/",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.6.2",
+    "i18next": "^25.8.6",
+    "js-tiktoken": "^1.0.21",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-i18next": "^16.5.4",
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.3",
+    "@eslint/js": "^9.39.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "electron": "^40.0.0",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.39.2",
+    "eslint-plugin-i18next": "^6.1.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.3.0",
+    "i18next-parser": "^9.0.2",
+    "jsdom": "^28.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.55.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.0.18"
+  }
+}
