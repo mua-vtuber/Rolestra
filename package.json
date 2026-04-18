@@ -16,7 +16,9 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "lint": "eslint .",
     "i18n:check": "npx i18next-parser && git diff --exit-code src/renderer/i18n/locales/",
-    "test": "vitest run"
+    "test": "vitest run",
+    "smoke:test": "vitest run tools/cli-smoke",
+    "smoke:run": "tsx tools/cli-smoke/src/index.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
@@ -51,6 +53,7 @@
     "globals": "^17.3.0",
     "i18next-parser": "^9.0.2",
     "jsdom": "^28.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.55.0",
     "vite": "^6.0.0",

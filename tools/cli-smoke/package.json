@@ -1,0 +1,14 @@
+{
+  "name": "@rolestra/cli-smoke",
+  "private": true,
+  "version": "0.0.1",
+  "description": "Phase R1 isolated smoke tests for Rolestra CLI matrix",
+  "type": "module",
+  "scripts": {
+    "run": "tsx src/index.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

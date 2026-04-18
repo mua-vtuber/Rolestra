@@ -10,7 +10,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['src/**/__tests__/**/*.test.ts', 'src/**/__tests__/**/*.test.tsx'],
+    include: [
+      'src/**/__tests__/**/*.test.ts',
+      'src/**/__tests__/**/*.test.tsx',
+      'tools/cli-smoke/__tests__/**/*.test.ts',
+    ],
     environment: 'node',
     coverage: {
       provider: 'v8',
