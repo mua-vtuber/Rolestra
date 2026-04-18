@@ -42,7 +42,7 @@ export interface SmokeScenarioResult {
   permissionMode: PermissionMode;
   projectKind: ProjectKind;
   os: NodeJS.Platform;
-  started: string;
+  startedAt: string;
   finishedAt: string;
   success: boolean;
   observations: string[];

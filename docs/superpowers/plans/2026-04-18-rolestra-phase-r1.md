@@ -257,7 +257,7 @@ export interface SmokeScenarioResult {
   permissionMode: PermissionMode;
   projectKind: ProjectKind;
   os: NodeJS.Platform;
-  started: string;
+  startedAt: string;
   finishedAt: string;
   success: boolean;
   observations: string[];
@@ -1720,7 +1720,7 @@ async function runScenario(
   arenaRoot: string,
   externalSrc?: string,
 ): Promise<SmokeScenarioResult> {
-  const started = new Date().toISOString();
+  const startedAt = new Date().toISOString();
   const scenarioId = `${cli}-${mode}-${kind}`;
   const observations: string[] = [];
   try {
@@ -1730,7 +1730,7 @@ async function runScenario(
       if (mode === 'auto') {
         return {
           scenario: scenarioId, cliKind: cli, permissionMode: mode, projectKind: kind,
-          os: process.platform, started, finishedAt: new Date().toISOString(),
+          os: process.platform, startedAt, finishedAt: new Date().toISOString(),
           success: true,
           observations: ['expected-reject: external + auto is forbidden by design'],
         };
@@ -1789,14 +1789,14 @@ async function runScenario(
 
     return {
       scenario: scenarioId, cliKind: cli, permissionMode: mode, projectKind: kind,
-      os: process.platform, started, finishedAt: new Date().toISOString(),
+      os: process.platform, startedAt, finishedAt: new Date().toISOString(),
       success, observations, stderr: r.stderr.slice(0, 2000),
       fileCreated: created ? markerPath : undefined,
     };
   } catch (err) {
     return {
       scenario: scenarioId, cliKind: cli, permissionMode: mode, projectKind: kind,
-      os: process.platform, started, finishedAt: new Date().toISOString(),
+      os: process.platform, startedAt, finishedAt: new Date().toISOString(),
       success: false, observations: [...observations, `error: ${(err as Error).message}`],
     };
   }
@@ -1827,7 +1827,7 @@ async function main() {
       for (const m of modes) for (const k of kinds) {
         results.push({
           scenario: `${cli}-${m}-${k}`, cliKind: cli, permissionMode: m, projectKind: k,
-          os: process.platform, started: new Date().toISOString(), finishedAt: new Date().toISOString(),
+          os: process.platform, startedAt: new Date().toISOString(), finishedAt: new Date().toISOString(),
           success: false, observations: ['skipped: CLI not installed'],
         });
       }
