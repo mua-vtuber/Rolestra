@@ -5,7 +5,7 @@
   "description": "Phase R1 isolated smoke tests for Rolestra CLI matrix",
   "type": "module",
   "scripts": {
-    "run": "tsx src/index.ts",
+    "run": "tsx src/smoke-runner.ts",
     "test": "vitest run"
   },
   "dependencies": {

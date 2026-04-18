@@ -18,7 +18,7 @@
     "i18n:check": "npx i18next-parser && git diff --exit-code src/renderer/i18n/locales/",
     "test": "vitest run",
     "smoke:test": "vitest run tools/cli-smoke",
-    "smoke:run": "tsx tools/cli-smoke/src/index.ts"
+    "smoke:run": "tsx tools/cli-smoke/src/smoke-runner.ts"
   },
   "dependencies": {
     "better-sqlite3": "^12.6.2",
