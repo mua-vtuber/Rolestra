@@ -10,7 +10,7 @@ export const CliKindSchema = z.enum(['claude', 'codex', 'gemini']);
 export type CliKind = z.infer<typeof CliKindSchema>;
 
 export const ProjectSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   slug: z.string().min(1).regex(/^[a-z0-9][a-z0-9_-]*$/, 'lowercase slug'),
   name: z.string().min(1),
   description: z.string().default(''),
