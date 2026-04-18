@@ -69,7 +69,7 @@ tools/cli-smoke/
 **Acceptance Criteria:**
 - [ ] `npm run smoke:test`가 vitest로 cli-smoke 디렉토리 테스트만 실행
 - [ ] `npx tsx tools/cli-smoke/src/index.ts` 실행 시 TypeScript strict mode 오류 없이 종료
-- [ ] tsconfig가 루트 `tsconfig.json`을 extends
+- [ ] tsconfig가 루트 `tsconfig.node.json`을 extends (Node 도구 컨텍스트이므로 node 프로파일 상속)
 - [ ] README에 실행 가이드 존재
 
 **Verify:** `npx tsx -e "console.log('ok')"` → `ok`, 이후 `npm run smoke:test` → `No test files found` (아직 테스트 없음, exit 1이어도 정상)
