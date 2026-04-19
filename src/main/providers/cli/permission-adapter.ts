@@ -1,138 +1,123 @@
 /**
- * CLI Permission Adapters — map permission grants to CLI-specific flags.
+ * CLI Permission Adapter (Rolestra v3 / R2).
  *
- * Each CLI tool has different permission models:
- * - Claude Code: --allowedTools flag
- * - Codex: --approval-mode flag
- * - Gemini/others: prompt-only (no CLI flag support)
+ * Ported from `tools/cli-smoke/src/permission-adapter.ts` — proven by the R1
+ * live smoke matrix (13/18). Produces CLI-specific argv for each
+ * (cliKind × permissionMode) cell plus a separate read-only argv used by
+ * observers/reviewers.
+ *
+ * Guard rail: spec §7.3 forbids `projectKind='external' + permissionMode='auto'`
+ * because `auto` grants destructive rights and external paths are outside the
+ * Rolestra root. Call {@link assertExternalNotAuto} at the top of each adapter.
+ *
+ * NOTE: This is an intentional breaking change from the v2 API
+ * (`buildReadOnlyArgs(projectPath, consensusPath)` + system-prompt helpers).
+ * Call sites that still use the v2 shape are marked `@ts-expect-error
+ * R2-Task21` and will be migrated in Task 21.
  */
 
-/** Interface for CLI-specific permission adapters. */
-export interface CliPermissionAdapter {
-  /**
-   * Build CLI args for read-only mode.
-   *
-   * @param projectPath - Absolute path to the project folder.
-   * @param consensusPath - Optional absolute path to the consensus folder (granted R+W).
-   */
-  buildReadOnlyArgs(projectPath: string, consensusPath?: string): string[];
-  /**
-   * Build CLI args for worker mode (write/execute allowed).
-   *
-   * @param projectPath - Absolute path to the project folder.
-   * @param consensusPath - Optional absolute path to the consensus folder (granted R+W).
-   */
-  buildWorkerArgs(projectPath: string, consensusPath?: string): string[];
-  /** System prompt text for read-only participants. */
-  getReadOnlySystemPrompt(): string;
-  /**
-   * System prompt text for the designated worker.
-   *
-   * @param projectPath - Absolute path to the project folder.
-   * @param consensusFolder - Absolute path to the consensus folder where the work summary must be written.
-   * @param summaryFileName - Target filename for the work summary document.
-   */
-  getWorkerSystemPrompt(
-    projectPath: string,
-    consensusFolder: string,
-    summaryFileName: string,
-  ): string;
-  /** System prompt text for non-worker during execution. */
-  getObserverSystemPrompt(workerName: string): string;
+import type { PermissionMode, ProjectKind } from '../../../shared/project-types';
+
+/** Supported CLI kinds for the Rolestra permission matrix. */
+export type CliKind = 'claude' | 'codex' | 'gemini';
+
+export interface AdapterContext {
+  cliKind: CliKind;
+  permissionMode: PermissionMode;
+  projectKind: ProjectKind;
+  /** Absolute spawn cwd (project-scoped; see PermissionService.resolveForCli). */
+  cwd: string;
+  /** Absolute path to the arena consensus folder (granted R+W). */
+  consensusPath: string;
 }
 
+export interface CliPermissionAdapter {
+  /** Main argv for the active permission mode (auto|hybrid|approval). */
+  buildArgs(ctx: AdapterContext): string[];
+  /** Argv for read-only observers/reviewers (ignores permissionMode). */
+  buildReadOnlyArgs(ctx: AdapterContext): string[];
+}
+
+/**
+ * Spec §7.3 guard: `external` projects must never run in `auto` mode —
+ * `auto` implies unrestricted write/exec and an external folder sits outside
+ * the Rolestra root where our path-guard cannot follow.
+ */
+export function assertExternalNotAuto(ctx: AdapterContext): void {
+  if (ctx.projectKind === 'external' && ctx.permissionMode === 'auto') {
+    throw new Error('external project + auto mode is forbidden (spec §7.3)');
+  }
+}
+
+// Claude Code tool whitelists — kept verbatim from R1 so the matrix stays
+// identical to what the live smoke runner validated.
+const CLAUDE_AUTO_TOOLS = 'Read,Glob,Grep,Edit,Write,Bash,WebSearch,WebFetch';
+const CLAUDE_HYBRID_TOOLS = 'Read,Glob,Grep,Edit,Write,WebSearch,WebFetch';
+const CLAUDE_READONLY_TOOLS = 'Read,Glob,Grep,WebSearch,WebFetch';
+
 export class ClaudePermissionAdapter implements CliPermissionAdapter {
-  buildReadOnlyArgs(projectPath: string, consensusPath?: string): string[] {
-    const args: string[] = ['--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch'];
-    // Pre-grant the project folder for reading (avoids per-file permission prompts)
-    if (projectPath && projectPath !== '.') {
-      args.push('--add-dir', projectPath);
+  buildArgs(ctx: AdapterContext): string[] {
+    assertExternalNotAuto(ctx);
+    switch (ctx.permissionMode) {
+      case 'auto':
+        return [
+          '--permission-mode', 'acceptEdits',
+          '--allowedTools', CLAUDE_AUTO_TOOLS,
+          '--add-dir', ctx.consensusPath,
+        ];
+      case 'hybrid':
+        return [
+          '--permission-mode', 'acceptEdits',
+          '--allowedTools', CLAUDE_HYBRID_TOOLS,
+          '--add-dir', ctx.consensusPath,
+        ];
+      case 'approval':
+        return [
+          '--allowedTools', CLAUDE_READONLY_TOOLS,
+          '--permission-mode', 'default',
+          '--add-dir', ctx.consensusPath,
+        ];
     }
-    // Pre-grant the consensus folder for reading and writing
-    if (consensusPath) {
-      args.push('--add-dir', consensusPath);
-    }
-    return args;
   }
 
-  buildWorkerArgs(projectPath: string, consensusPath?: string): string[] {
-    const args: string[] = [];
-    // Pre-grant the project folder so the worker can operate without prompts
-    if (projectPath && projectPath !== '.') {
-      args.push('--add-dir', projectPath);
-    }
-    // Pre-grant the consensus folder for writing the work summary
-    if (consensusPath) {
-      args.push('--add-dir', consensusPath);
-    }
-    return args;
-  }
-
-  getReadOnlySystemPrompt(): string {
-    return '이 프로젝트 폴더는 읽기 전용입니다. 파일을 수정하거나 명령을 실행하지 마세요.';
-  }
-
-  getWorkerSystemPrompt(
-    projectPath: string,
-    consensusFolder: string,
-    summaryFileName: string,
-  ): string {
-    return `작업자로 선택되었습니다. ${projectPath}에 대한 쓰기/실행 권한이 부여되었습니다.\n작업 완료 후 합의 폴더에 작업 요약 문서를 작성하세요: ${consensusFolder}/${summaryFileName}`;
-  }
-
-  getObserverSystemPrompt(workerName: string): string {
-    return `작업 금지. ${workerName}이(가) 작업 중입니다.`;
+  buildReadOnlyArgs(ctx: AdapterContext): string[] {
+    return [
+      '--allowedTools', CLAUDE_READONLY_TOOLS,
+      '--permission-mode', 'default',
+      '--add-dir', ctx.consensusPath,
+    ];
   }
 }
 
 export class CodexPermissionAdapter implements CliPermissionAdapter {
-  buildReadOnlyArgs(_projectPath: string, _consensusPath?: string): string[] {
-    return [];
+  buildArgs(ctx: AdapterContext): string[] {
+    assertExternalNotAuto(ctx);
+    switch (ctx.permissionMode) {
+      case 'auto':
+        return ['exec', '-a', 'never', '--sandbox', 'danger-full-access', '-C', ctx.cwd, '--skip-git-repo-check', '-'];
+      case 'hybrid':
+        return ['exec', '--full-auto', '-C', ctx.cwd, '-'];
+      case 'approval':
+        return ['exec', '-a', 'on-failure', '--sandbox', 'workspace-write', '-C', ctx.cwd, '-'];
+    }
   }
 
-  buildWorkerArgs(_projectPath: string, _consensusPath?: string): string[] {
-    return [];
-  }
-
-  getReadOnlySystemPrompt(): string {
-    return '이 프로젝트 폴더는 읽기 전용입니다. 파일을 수정하거나 명령을 실행하지 마세요.';
-  }
-
-  getWorkerSystemPrompt(
-    projectPath: string,
-    consensusFolder: string,
-    summaryFileName: string,
-  ): string {
-    return `작업자로 선택되었습니다. ${projectPath}에 대한 쓰기/실행 권한이 부여되었습니다.\n작업 완료 후 합의 폴더에 작업 요약 문서를 작성하세요: ${consensusFolder}/${summaryFileName}`;
-  }
-
-  getObserverSystemPrompt(workerName: string): string {
-    return `작업 금지. ${workerName}이(가) 작업 중입니다.`;
+  buildReadOnlyArgs(ctx: AdapterContext): string[] {
+    return ['exec', '-a', 'never', '--sandbox', 'read-only', '-C', ctx.cwd, '-'];
   }
 }
 
-export class PromptOnlyPermissionAdapter implements CliPermissionAdapter {
-  buildReadOnlyArgs(_projectPath: string, _consensusPath?: string): string[] {
-    return [];
+export class GeminiPermissionAdapter implements CliPermissionAdapter {
+  buildArgs(ctx: AdapterContext): string[] {
+    assertExternalNotAuto(ctx);
+    switch (ctx.permissionMode) {
+      case 'auto':    return ['--approval-mode', 'yolo'];
+      case 'hybrid':  return ['--approval-mode', 'auto_edit'];
+      case 'approval': return ['--approval-mode', 'default'];
+    }
   }
 
-  buildWorkerArgs(_projectPath: string, _consensusPath?: string): string[] {
-    return [];
-  }
-
-  getReadOnlySystemPrompt(): string {
-    return '이 프로젝트 폴더는 읽기 전용입니다. 파일을 수정하거나 명령을 실행하지 마세요.';
-  }
-
-  getWorkerSystemPrompt(
-    projectPath: string,
-    consensusFolder: string,
-    summaryFileName: string,
-  ): string {
-    return `작업자로 선택되었습니다. ${projectPath}에 대한 쓰기/실행 권한이 부여되었습니다.\n작업 완료 후 합의 폴더에 작업 요약 문서를 작성하세요: ${consensusFolder}/${summaryFileName}`;
-  }
-
-  getObserverSystemPrompt(workerName: string): string {
-    return `작업 금지. ${workerName}이(가) 작업 중입니다.`;
+  buildReadOnlyArgs(_ctx: AdapterContext): string[] {
+    return ['--approval-mode', 'default'];
   }
 }

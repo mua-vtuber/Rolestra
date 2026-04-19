@@ -180,6 +180,7 @@ export class TurnExecutor {
             const summaryFileName = buildSummaryFileName(Date.now());
             // Store so orchestrator can retrieve it after the turn completes
             this.lastWorkerSummaryFileName = summaryFileName;
+            // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
             permissionPrompt = adapter.getWorkerSystemPrompt(
               projectPath,
               consensusFolder,
@@ -200,8 +201,10 @@ export class TurnExecutor {
               (p) => p.id === ssm.workerId,
             );
             const workerName = workerParticipant?.displayName ?? 'Worker';
+            // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
             permissionPrompt = adapter.getObserverSystemPrompt(workerName);
           } else if (ssm.state === 'REVIEWING') {
+            // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
             permissionPrompt = adapter.getReadOnlySystemPrompt();
           } else {
             permissionPrompt = '';

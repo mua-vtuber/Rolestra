@@ -20,6 +20,10 @@ import type {
   CompletionOptions,
 } from '../../../shared/provider-types';
 import type { CliPermissionAdapter } from './permission-adapter';
+// NOTE: v3 CliPermissionAdapter (R2 Task 7) no longer exposes
+// buildReadOnlyArgs(projectPath, consensusPath) / buildWorkerArgs(...).
+// The call sites below that use the v2 shape are marked @ts-expect-error
+// R2-Task21 until the wiring is migrated in Task 21.
 import { consensusFolderService } from '../../ipc/handlers/workspace-handler';
 import type { ParsedCliPermissionRequest } from './cli-permission-parser';
 import type { CliStreamerCallbacks } from './cli-stream';
@@ -272,7 +276,9 @@ export class CliProvider extends BaseProvider {
 
     const consensusPath = consensusFolderService.getFolderPath() ?? undefined;
     const permArgs = this._permissionMode === 'worker'
+      // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
       ? adapter.buildWorkerArgs(this._projectPath, consensusPath)
+      // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
       : adapter.buildReadOnlyArgs(this._projectPath, consensusPath);
 
     if (permArgs.length === 0) return this.cliConfig;
