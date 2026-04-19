@@ -19,69 +19,15 @@ import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../migrator';
 import { migrations } from '../migrations/index';
-
-/** Timestamp stamp for any columns that demand a non-null INTEGER. */
-const NOW = 1_700_000_000_000;
-
-interface MasterRow {
-  name: string;
-}
-
-function tableExists(db: Database.Database, name: string): boolean {
-  const row = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name = ?")
-    .get(name) as MasterRow | undefined;
-  return row?.name === name;
-}
-
-function indexExists(db: Database.Database, name: string): boolean {
-  const row = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name = ?")
-    .get(name) as MasterRow | undefined;
-  return row?.name === name;
-}
-
-/** Inserts a single provider with the given id (and default display/kind). */
-function insertProvider(db: Database.Database, id: string): void {
-  db.prepare(
-    `INSERT INTO providers (id, display_name, kind, config_json, created_at, updated_at)
-     VALUES (?, ?, 'api', '{}', ?, ?)`,
-  ).run(id, `Provider ${id}`, NOW, NOW);
-}
-
-/** Inserts a regular (non-DM, non-external) project. */
-function insertProject(db: Database.Database, id: string, slug?: string): void {
-  db.prepare(
-    `INSERT INTO projects (id, slug, name, kind, permission_mode, created_at)
-     VALUES (?, ?, ?, 'new', 'auto', ?)`,
-  ).run(id, slug ?? id, `Project ${id}`, NOW);
-}
-
-/** Inserts a project_members row linking a project to a provider. */
-function insertProjectMember(
-  db: Database.Database,
-  projectId: string,
-  providerId: string,
-): void {
-  db.prepare(
-    `INSERT INTO project_members (project_id, provider_id, added_at)
-     VALUES (?, ?, ?)`,
-  ).run(projectId, providerId, NOW);
-}
-
-/** Inserts a channel belonging to a project. project_id=NULL means DM. */
-function insertChannel(
-  db: Database.Database,
-  id: string,
-  projectId: string | null,
-  kind: string = 'user',
-  name: string = `channel-${id}`,
-): void {
-  db.prepare(
-    `INSERT INTO channels (id, project_id, name, kind, created_at)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, projectId, name, kind, NOW);
-}
+import {
+  NOW,
+  indexExists,
+  insertChannel,
+  insertProject,
+  insertProjectMember,
+  insertProvider,
+  tableExists,
+} from './_helpers';
 
 describe('v3 migrations 001-004 — schema contract', () => {
   let db: Database.Database;
@@ -127,11 +73,14 @@ describe('v3 migrations 001-004 — schema contract', () => {
       }
     });
 
-    it('records all four migration ids in the migrations tracking table', () => {
+    it('records the four 001-004 migration ids first, in order, in the migrations tracking table', () => {
       const rows = db
         .prepare('SELECT id FROM migrations ORDER BY rowid')
         .all() as Array<{ id: string }>;
-      expect(rows.map((r) => r.id)).toEqual([
+      // Only assert on the 001-004 prefix here — later phases (005+) append
+      // additional ids to the shared `migrations` array and have their own
+      // dedicated schema-*.test.ts files. This test owns 001-004 only.
+      expect(rows.map((r) => r.id).slice(0, 4)).toEqual([
         '001-core',
         '002-projects',
         '003-channels',
