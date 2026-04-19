@@ -3,6 +3,13 @@
  *
  * Translates SSM's grant_worker / revoke_worker / revoke_all actions
  * into concrete permission changes on the PermissionService.
+ *
+ * TODO(R2-Task21): Legacy v2 PermissionService API consumer. The v2
+ * getPermissions/setPermissions surface was removed in R2 Task 6 during
+ * PermissionService redesign. This listener is compile-fenced with
+ * @ts-expect-error markers until Task 21 either ports it to the new
+ * path-guard API or deletes it. See
+ * docs/superpowers/plans/2026-04-18-rolestra-phase-r2.md §Task 21.
  */
 
 import type { PermissionAction } from '../../shared/session-state-types';
@@ -46,8 +53,9 @@ function grantWorkerPermissions(
   workerId: string,
   projectPath: string,
 ): void {
+  // @ts-expect-error R2-Task21: legacy v2 API (getPermissions) removed in Task 6.
   const existing = service.getPermissions();
-  const updated = existing.filter(p => p.participantId !== workerId);
+  const updated = existing.filter((p: FilePermission) => p.participantId !== workerId);
   updated.push({
     participantId: workerId,
     folderPath: projectPath,
@@ -55,6 +63,7 @@ function grantWorkerPermissions(
     write: true,
     execute: true,
   });
+  // @ts-expect-error R2-Task21: legacy v2 API (setPermissions) removed in Task 6.
   service.setPermissions(updated);
 }
 
@@ -64,13 +73,15 @@ function revokeWorkerPermissions(
   workerId: string,
   projectPath: string,
 ): void {
+  // @ts-expect-error R2-Task21: legacy v2 API (getPermissions) removed in Task 6.
   const existing = service.getPermissions();
-  const updated = existing.filter(p => p.participantId !== workerId);
+  const updated = existing.filter((p: FilePermission) => p.participantId !== workerId);
   updated.push({
     participantId: workerId,
     folderPath: projectPath,
     ...DEFAULT_FILE_PERMISSION,
   });
+  // @ts-expect-error R2-Task21: legacy v2 API (setPermissions) removed in Task 6.
   service.setPermissions(updated);
 }
 
@@ -79,15 +90,17 @@ function revokeAllPermissions(
   service: PermissionService,
   projectPath: string,
 ): void {
+  // @ts-expect-error R2-Task21: legacy v2 API (getPermissions) removed in Task 6.
   const existing = service.getPermissions();
-  const participantIds = new Set(existing.map(p => p.participantId));
+  const participantIds = new Set(existing.map((p: FilePermission) => p.participantId));
   const updated: FilePermission[] = [];
   for (const id of participantIds) {
     updated.push({
-      participantId: id,
+      participantId: id as string,
       folderPath: projectPath,
       ...DEFAULT_FILE_PERMISSION,
     });
   }
+  // @ts-expect-error R2-Task21: legacy v2 API (setPermissions) removed in Task 6.
   service.setPermissions(updated);
 }

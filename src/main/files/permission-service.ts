@@ -1,192 +1,201 @@
 /**
- * PermissionService enforces per-AI file access control within a project.
+ * PermissionService (v3) — path-guard with realpath re-validation.
  *
- * Security invariants:
- * 1. Paths are resolved to absolute form before any check.
- * 2. Symbolic links are dereferenced via fs.realpathSync to prevent escapes.
- * 3. .arena/workspace/ paths are automatically allowed for all participants.
- * 3b. Consensus folder paths are automatically allowed (read & write) for all participants.
- * 4. Paths outside the project folder are always denied.
- * 5. Path traversal via ".." is explicitly blocked.
- * 6. Per-participant read/write/execute flags are enforced.
+ * Ported from R1 `tools/cli-smoke/src/path-guard.ts` and extended with the
+ * v3 project lifecycle (folder_missing status + external junction TOCTOU
+ * guard, spec §7.6 / CA-3).
+ *
+ * API:
+ *   - validateAccess(targetPath, activeProjectId): enforces that `targetPath`
+ *     resolves inside `consensusPath` or the active project's `cwdPath`.
+ *     Used by Main-routed I/O. CLI-internal filesystem access is outside the
+ *     scope of this service (spec §7.6.1).
+ *   - resolveForCli(projectId): returns the concrete cwd/consensus paths
+ *     that a CLI spawn is allowed to see, after a realpath re-check.
+ *     - Throws if the project row is missing.
+ *     - Throws if the project status is `folder_missing`.
+ *     - For `kind='external'`, throws if the junction/symlink's realpath no
+ *       longer matches `project.externalLink` (CA-3 TOCTOU defence).
+ *
+ * All errors are `PermissionBoundaryError` — callers can distinguish them
+ * from generic I/O failures.
  */
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { AccessCheckResult, FilePermission } from '../../shared/file-types';
-import type { WorkspaceService } from './workspace-service';
-import type { ConsensusFolderService } from './consensus-folder-service';
+import type { Project } from '../../shared/project-types';
+import { resolveProjectPaths } from '../arena/resolve-project-paths';
+import type { ArenaRootService } from '../arena/arena-root-service';
+
+/**
+ * Minimal contract that PermissionService needs from the v3
+ * ProjectRepository (Task 8). Declaring it here (rather than importing the
+ * repository directly) keeps Task 6 independent of Task 8. When Task 8 lands
+ * its repository class can implement this interface without any change here.
+ */
+export interface ProjectLookup {
+  get(projectId: string): Project | null;
+}
+
+/**
+ * Thrown whenever path-guard rejects a request. The message is an internal
+ * audit / log string — callers should not surface it to end-users verbatim.
+ */
+export class PermissionBoundaryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PermissionBoundaryError';
+  }
+}
+
+/**
+ * Returns true iff `candidate` is (a descendant of, or equal to) `root`
+ * after both paths are resolved to absolute + realpath form.
+ *
+ * Behaviour (ported from R1 `tools/cli-smoke/src/path-guard.ts`):
+ *   1. Reject raw `..` traversal based on lexical relation.
+ *   2. realpath(root) and realpath(candidate); non-existent candidates fall
+ *      back to the realpath of their nearest-existing ancestor joined with
+ *      the remaining non-existing suffix. This allows validating writes to
+ *      paths that do not exist yet while still catching symlink escapes on
+ *      existing ancestors.
+ *   3. Re-check the realpath relation: reject if relative path escapes or
+ *      becomes absolute.
+ *
+ * Intentionally synchronous — call sites are on the spawn critical path.
+ */
+export function isPathWithin(root: string, candidate: string): boolean {
+  const normalizedRoot = path.resolve(root);
+  const normalizedCandidate = path.resolve(candidate);
+
+  const rawRel = path.relative(normalizedRoot, normalizedCandidate);
+  if (rawRel.startsWith('..') || path.isAbsolute(rawRel)) return false;
+
+  let realRoot: string;
+  try {
+    realRoot = fs.realpathSync(normalizedRoot);
+  } catch {
+    // Root itself must exist. If it doesn't, nothing can be "within" it.
+    return false;
+  }
+
+  let realCandidate: string;
+  try {
+    realCandidate = fs.realpathSync(normalizedCandidate);
+  } catch {
+    realCandidate = resolveNearestExistingAncestor(normalizedCandidate);
+  }
+
+  const rel = path.relative(realRoot, realCandidate);
+  return !rel.startsWith('..') && !path.isAbsolute(rel);
+}
+
+/**
+ * For a non-existent path, walk upward until an existing ancestor is found,
+ * realpath it, then re-join the remaining suffix. Falls through to the raw
+ * input if no ancestor exists (e.g. invalid drive).
+ */
+function resolveNearestExistingAncestor(p: string): string {
+  let current = p;
+  while (current && current !== path.dirname(current)) {
+    try {
+      const real = fs.realpathSync(current);
+      const remaining = path.relative(current, p);
+      return path.join(real, remaining);
+    } catch {
+      current = path.dirname(current);
+    }
+  }
+  return p;
+}
 
 export class PermissionService {
-  private permissions: FilePermission[] = [];
-  private projectFolder: string | null = null;
-  private temporaryGrants = new Map<string, number>();
-
-  /**
-   * @param workspaceService - Used to determine arena workspace boundaries.
-   * @param consensusFolderService - Used to determine consensus folder boundaries (optional for backwards compat).
-   */
   constructor(
-    private readonly workspaceService: WorkspaceService,
-    private readonly consensusFolderService?: ConsensusFolderService,
+    private readonly arenaRoot: ArenaRootService,
+    private readonly projectRepo: ProjectLookup,
   ) {}
 
   /**
-   * Set the project folder that defines the allowed root boundary.
-   * All access outside this folder (after symlink resolution) is denied.
-   */
-  setProjectFolder(projectFolder: string): void {
-    this.projectFolder = path.resolve(projectFolder);
-  }
-
-  /**
-   * Replace the full permission set.
+   * Validate that a Main-process I/O target falls inside the allowed roots
+   * for the currently active project.
    *
-   * @param permissions - Array of per-participant permission entries.
-   */
-  setPermissions(permissions: FilePermission[]): void {
-    this.permissions = [...permissions];
-  }
-
-  /**
-   * Return a copy of all current permissions.
-   */
-  getPermissions(): FilePermission[] {
-    return [...this.permissions];
-  }
-
-  /**
-   * Get the permission entry for a specific participant, or null if none exists.
-   */
-  getPermissionsForParticipant(participantId: string): FilePermission | null {
-    return this.permissions.find((p) => p.participantId === participantId) ?? null;
-  }
-
-  /**
-   * Validate whether an AI participant may perform the given action on a path.
+   * Allowed roots:
+   *   - consensusPath (always)
+   *   - cwdPath of `activeProjectId` (if provided)
    *
-   * Check order:
-   * 1. Project folder must be configured.
-   * 2. Path is resolved to absolute.
-   * 3. Explicit ".." traversal is blocked.
-   * 4. Symbolic link target is resolved and re-checked against project boundary.
-   * 5. .arena/workspace/ paths are auto-allowed (read & write; execute still needs permission).
-   * 6. Path must be within the project folder.
-   * 7. Participant-specific permission flags are checked.
+   * @throws PermissionBoundaryError when the target escapes all allowed roots.
    */
-  validateAccess(
-    aiId: string,
-    targetPath: string,
-    action: 'read' | 'write' | 'execute',
-  ): AccessCheckResult {
-    const base: Pick<AccessCheckResult, 'participantId' | 'targetPath' | 'action'> = {
-      participantId: aiId,
-      targetPath,
-      action,
+  validateAccess(targetPath: string, activeProjectId: string | null): void {
+    const allowed = this.getAllowedRoots(activeProjectId);
+    for (const root of allowed) {
+      if (isPathWithin(root, targetPath)) return;
+    }
+    throw new PermissionBoundaryError(
+      `Access denied: ${targetPath} (allowed roots: ${allowed.join(', ')})`,
+    );
+  }
+
+  /**
+   * Prepare the spawn context for a CLI process targeting `projectId`.
+   *
+   * Performs the final realpath re-check one call before spawn (spec CA-3
+   * TOCTOU defence). Callers must pass the returned `cwd`/`consensusPath`
+   * directly to the child process — re-resolving later re-introduces the
+   * race window this method exists to close.
+   *
+   * @throws PermissionBoundaryError if:
+   *   - project row is missing,
+   *   - project.status === 'folder_missing',
+   *   - external link is missing on disk,
+   *   - external link's realpath no longer matches project.externalLink.
+   */
+  resolveForCli(projectId: string): {
+    cwd: string;
+    consensusPath: string;
+    project: Project;
+  } {
+    const project = this.projectRepo.get(projectId);
+    if (!project) {
+      throw new PermissionBoundaryError(`Project not found: ${projectId}`);
+    }
+    if (project.status === 'folder_missing') {
+      throw new PermissionBoundaryError(`Project folder missing: ${project.slug}`);
+    }
+
+    const paths = resolveProjectPaths(project, this.arenaRoot.getPath());
+
+    if (project.kind === 'external') {
+      if (!fs.existsSync(paths.cwdPath)) {
+        throw new PermissionBoundaryError(
+          `External link missing: ${paths.cwdPath}`,
+        );
+      }
+      const realLink = fs.realpathSync(paths.cwdPath);
+      if (realLink !== project.externalLink) {
+        throw new PermissionBoundaryError(
+          `External link TOCTOU mismatch: expected ${project.externalLink}, got ${realLink}`,
+        );
+      }
+    }
+
+    return {
+      cwd: paths.cwdPath,
+      consensusPath: paths.consensusPath,
+      project,
     };
-
-    // 1. Project folder must be set
-    if (!this.projectFolder) {
-      return { ...base, allowed: false, reason: 'No project folder configured' };
-    }
-
-    // 2. Resolve to absolute path
-    const resolved = path.resolve(targetPath);
-
-    // 2b. Consensus folder auto-allow (read & write) — checked before project
-    //     boundary because the consensus folder is intentionally outside the project.
-    if (this.consensusFolderService?.isConsensusPath(resolved)) {
-      if (action === 'read' || action === 'write') {
-        return { ...base, allowed: true };
-      }
-      // Execute in consensus folder is denied (no fall-through to project checks)
-      return { ...base, allowed: false, reason: 'Execute permission denied in consensus folder' };
-    }
-
-    // 3. Block explicit ".." traversal in the original input
-    const normalized = path.normalize(targetPath);
-    const relative = path.relative(this.projectFolder, resolved);
-    if (relative.startsWith('..') || path.isAbsolute(relative)) {
-      return { ...base, allowed: false, reason: 'Path traversal outside project folder' };
-    }
-
-    // Also check raw input for suspicious patterns
-    if (normalized.includes('..')) {
-      return { ...base, allowed: false, reason: 'Path traversal detected' };
-    }
-
-    // 4. Resolve symbolic links to real path and re-check boundary
-    let realPath: string;
-    try {
-      realPath = fs.realpathSync(resolved);
-    } catch {
-      // Path doesn't exist yet -- use the resolved path.
-      // This allows write operations to new files within the project.
-      realPath = resolved;
-    }
-
-    const realRelative = path.relative(this.projectFolder, realPath);
-    if (realRelative.startsWith('..') || path.isAbsolute(realRelative)) {
-      return { ...base, allowed: false, reason: 'Symbolic link escapes project folder' };
-    }
-
-    // 5a. .arena/workspace/ auto-allow for read & write
-    if (this.workspaceService.isArenaPath(realPath)) {
-      if (action === 'read' || action === 'write') {
-        return { ...base, allowed: true };
-      }
-      // Execute in arena still requires explicit permission -- fall through
-    }
-
-    // 6. Verify path is inside project folder
-    const projectWithSep = this.projectFolder + path.sep;
-    if (realPath !== this.projectFolder && !realPath.startsWith(projectWithSep)) {
-      return { ...base, allowed: false, reason: 'Path is outside project folder' };
-    }
-
-    // 7. Check participant-specific permissions
-    const perm = this.getPermissionsForParticipant(aiId);
-    if (!perm) {
-      return { ...base, allowed: false, reason: 'No permissions configured for participant' };
-    }
-
-    if (action === 'read' && !perm.read) {
-      if (this.consumeTemporaryGrant(aiId, realPath, action)) return { ...base, allowed: true };
-      return { ...base, allowed: false, reason: 'Read permission denied' };
-    }
-    if (action === 'write' && !perm.write) {
-      if (this.consumeTemporaryGrant(aiId, realPath, action)) return { ...base, allowed: true };
-      return { ...base, allowed: false, reason: 'Write permission denied' };
-    }
-    if (action === 'execute' && !perm.execute) {
-      if (this.consumeTemporaryGrant(aiId, realPath, action)) return { ...base, allowed: true };
-      return { ...base, allowed: false, reason: 'Execute permission denied' };
-    }
-
-    return { ...base, allowed: true };
   }
 
-  /** Grant one-time temporary access for a specific participant/path/action. */
-  grantTemporaryAccess(
-    participantId: string,
-    targetPath: string,
-    action: 'read' | 'write' | 'execute',
-    ttlMs = 5 * 60 * 1000,
-  ): void {
-    const resolved = path.resolve(targetPath);
-    const key = `${participantId}|${action}|${resolved}`;
-    this.temporaryGrants.set(key, Date.now() + Math.max(1, ttlMs));
-  }
-
-  private consumeTemporaryGrant(
-    participantId: string,
-    resolvedPath: string,
-    action: 'read' | 'write' | 'execute',
-  ): boolean {
-    const key = `${participantId}|${action}|${resolvedPath}`;
-    const expiresAt = this.temporaryGrants.get(key);
-    if (!expiresAt) return false;
-    this.temporaryGrants.delete(key);
-    return expiresAt >= Date.now();
+  /**
+   * Compute the allowed-roots set for `validateAccess`. Always includes the
+   * consensus path; includes the project cwd only when an active project is
+   * provided and passes the same lifecycle checks as `resolveForCli`.
+   */
+  private getAllowedRoots(activeProjectId: string | null): string[] {
+    const roots = [this.arenaRoot.consensusPath()];
+    if (activeProjectId) {
+      const { cwd } = this.resolveForCli(activeProjectId);
+      roots.push(cwd);
+    }
+    return roots;
   }
 }
