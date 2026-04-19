@@ -1122,6 +1122,7 @@ interface SsmContext {
   - CLI builder (자동승인 플래그): `packages/core/src/cli-worker/cli-builder.ts`
   - Permission adapter 아이디어: `packages/core/src/cli-provider-base.ts`
 - 리뷰 합의본: `.agestra/workspace/synthesis/rolestra-synthesis_20260418_001.md` (claude/gemini + 로컬 codex. BLOCK → 본 문서 개정의 근거)
+- 실측 매트릭스 (Phase R1): `docs/superpowers/specs/appendix-cli-matrix.md`
 
 ---
 
