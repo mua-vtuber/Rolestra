@@ -80,25 +80,12 @@ export class ExternalAutoForbiddenError extends ProjectError {
  * race (another process swapped the link between `createLink` and the
  * verification) or a bug in the junction helper.
  */
-export class JunctionTocToUMismatchError extends ProjectError {
+export class JunctionTOCTOUMismatchError extends ProjectError {
   constructor(expected: string, actual: string) {
     super(
       `junction realpath mismatch after creation: expected ${expected}, got ${actual}`,
     );
-    this.name = 'JunctionTocToUMismatchError';
-  }
-}
-
-/**
- * Raised when `resolveForCli`-style callers hit a project whose on-disk
- * folder has disappeared. `list()` surfaces the same condition as a status
- * flip rather than an exception, but programmatic callers of other
- * methods may want the strict variant.
- */
-export class FolderMissingError extends ProjectError {
-  constructor(slug: string, rootPath: string) {
-    super(`Project folder missing for "${slug}": ${rootPath}`);
-    this.name = 'FolderMissingError';
+    this.name = 'JunctionTOCTOUMismatchError';
   }
 }
 
@@ -111,6 +98,26 @@ export class ProjectInputError extends ProjectError {
     super(message);
     this.name = 'ProjectInputError';
   }
+}
+
+// ── Error-mapping helpers ──────────────────────────────────────────────
+
+/**
+ * True when `err` is a better-sqlite3 SqliteError that specifically
+ * reflects a UNIQUE violation on `projects.slug`. Matches both the
+ * default ("UNIQUE constraint failed: projects.slug") and named-index
+ * ("idx_projects_slug") phrasings so this keeps working if we add an
+ * explicit index later.
+ */
+function isSlugUniqueViolation(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as { code?: unknown; message?: unknown };
+  if (e.code !== 'SQLITE_CONSTRAINT_UNIQUE') return false;
+  if (typeof e.message !== 'string') return false;
+  return (
+    e.message.includes('projects.slug') ||
+    e.message.includes('idx_projects_slug')
+  );
 }
 
 // ── Options ────────────────────────────────────────────────────────────
@@ -171,7 +178,7 @@ export class ProjectService {
    * @throws {ProjectInputError}          missing external/imported input
    * @throws {ExternalAutoForbiddenError} external + permissionMode='auto'
    * @throws {DuplicateSlugError}         slug already registered
-   * @throws {JunctionTocToUMismatchError} external link did not realpath
+   * @throws {JunctionTOCTOUMismatchError} external link did not realpath
    *                                       back to `externalPath`
    */
   async create(input: ProjectCreateInput): Promise<Project> {
@@ -237,10 +244,11 @@ export class ProjectService {
     //    failure restores DB state to pre-create.
     this.insertProjectWithMembers(project, input.initialMemberProviderIds ?? []);
 
-    let createdRoot = false;
     try {
       await this.materialiseFs(project, paths, input);
-      createdRoot = true;
+      // Invariant: past this point materialisation succeeded — any earlier
+      // failure would have thrown into the catch below and rolled back both
+      // the FS root and the DB row before returning.
     } catch (err) {
       // FS rollback — best-effort rmdir, then DB row removal.
       try {
@@ -251,12 +259,6 @@ export class ProjectService {
       }
       this.repo.delete(project.id);
       throw err;
-    }
-
-    // Guard against an impossible code path (createdRoot==false but no throw).
-    if (!createdRoot) {
-      this.repo.delete(project.id);
-      throw new ProjectError('internal: project root creation completed without confirmation');
     }
 
     // 6. Fire the post-create hook (Task 10 will use this for system
@@ -344,18 +346,31 @@ export class ProjectService {
    * Insert project row and any initial members in a single DB transaction.
    * Splitting this out lets us keep the async FS phase outside the
    * transaction scope while still guaranteeing DB atomicity.
+   *
+   * Race safety: `create()` pre-checks `getBySlug`, but two concurrent
+   * creates on the same DB handle can both pass that check before either
+   * INSERTs. The UNIQUE constraint on `projects.slug` catches the loser;
+   * we translate the raw SqliteError into `DuplicateSlugError` so callers
+   * see a single error class regardless of which path lost the race.
    */
   private insertProjectWithMembers(
     project: Project,
     memberProviderIds: string[],
   ): void {
-    this.repo.transaction(() => {
-      this.repo.insert(project);
-      const addedAt = project.createdAt;
-      for (const providerId of memberProviderIds) {
-        this.repo.addMember(project.id, providerId, null, addedAt);
+    try {
+      this.repo.transaction(() => {
+        this.repo.insert(project);
+        const addedAt = project.createdAt;
+        for (const providerId of memberProviderIds) {
+          this.repo.addMember(project.id, providerId, null, addedAt);
+        }
+      });
+    } catch (err) {
+      if (isSlugUniqueViolation(err)) {
+        throw new DuplicateSlugError(project.slug);
       }
-    });
+      throw err;
+    }
   }
 
   /**
@@ -389,7 +404,7 @@ export class ProjectService {
         // baseline.
         const resolved = resolveLink(paths.cwdPath);
         if (resolved !== project.externalLink) {
-          throw new JunctionTocToUMismatchError(
+          throw new JunctionTOCTOUMismatchError(
             project.externalLink as string,
             resolved,
           );

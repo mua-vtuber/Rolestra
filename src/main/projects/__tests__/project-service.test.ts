@@ -21,7 +21,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArenaRootService,
   type ArenaRootConfigAccessor,
@@ -29,10 +29,10 @@ import {
 import { runMigrations } from '../../database/migrator';
 import { migrations } from '../../database/migrations/index';
 import { ProjectRepository } from '../project-repository';
+import * as projectMetaModule from '../project-meta';
 import {
   DuplicateSlugError,
   ExternalAutoForbiddenError,
-  FolderMissingError,
   ProjectInputError,
   ProjectService,
   generateSlug,
@@ -515,13 +515,104 @@ describe('ProjectService', () => {
     });
   });
 
-  // ── FolderMissingError is exported and assignable ────────────────────
-  //
-  // The error class is declared for use by downstream services (e.g. Task
-  // 18 IPC handlers); we verify it at least constructs correctly here.
-  it('exports FolderMissingError for downstream use', () => {
-    const err = new FolderMissingError('slug', '/path');
-    expect(err).toBeInstanceOf(Error);
-    expect(err.message).toMatch(/folder missing/i);
+  // ── partial-FS-rollback path ─────────────────────────────────────────
+
+  describe('partial-FS failure rollback', () => {
+    it('cleans up root folder + DB row when meta.json write fails, and slug is reusable', async () => {
+      const name = 'Partially Broken';
+      const slug = generateSlug(name);
+      const rootPath = path.join(arenaRoot, 'projects', slug);
+
+      // First call to writeProjectMeta throws; subsequent calls (the
+      // successful second create) use the real implementation.
+      const real = projectMetaModule.writeProjectMeta;
+      const spy = vi
+        .spyOn(projectMetaModule, 'writeProjectMeta')
+        .mockImplementationOnce(() => {
+          throw new Error('synthetic meta.json write failure');
+        });
+
+      let threw: unknown;
+      try {
+        await service.create({
+          name,
+          kind: 'new',
+          permissionMode: 'hybrid',
+        });
+      } catch (err) {
+        threw = err;
+      }
+      expect(threw).toBeInstanceOf(Error);
+      expect((threw as Error).message).toMatch(/synthetic/);
+
+      // FS rolled back.
+      expect(fs.existsSync(rootPath)).toBe(false);
+      // DB row rolled back — no projects at all on this fresh arena.
+      expect(repo.list()).toHaveLength(0);
+      // Slug reusable: the spy only throws once, so the retry goes through.
+      expect(spy).toHaveBeenCalledTimes(1);
+
+      const retried = await service.create({
+        name,
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      expect(retried.slug).toBe(slug);
+      expect(fs.existsSync(rootPath)).toBe(true);
+      expect(repo.get(retried.id)).not.toBeNull();
+
+      spy.mockRestore();
+      // Sanity: the module export is the original function again.
+      expect(projectMetaModule.writeProjectMeta).toBe(real);
+    });
+  });
+
+  // ── SQLite UNIQUE → DuplicateSlugError mapping ───────────────────────
+
+  describe('SQLite UNIQUE constraint mapping', () => {
+    it('translates a UNIQUE violation on projects.slug into DuplicateSlugError', async () => {
+      // Seed a row directly so the slug is taken at the SQL layer.
+      const baseline: Project = {
+        id: 'baseline-id',
+        slug: 'clashing-slug',
+        name: 'Baseline',
+        description: '',
+        kind: 'new',
+        externalLink: null,
+        permissionMode: 'hybrid',
+        autonomyMode: 'manual',
+        status: 'active',
+        createdAt: Date.now(),
+        archivedAt: null,
+      };
+      repo.insert(baseline);
+
+      // Bypass the service-level pre-check (getBySlug) so the INSERT is
+      // the first layer to see the collision — this simulates the
+      // concurrent-create race where two callers both pass the pre-check
+      // before either commits.
+      const realGetBySlug = repo.getBySlug.bind(repo);
+      vi.spyOn(repo, 'getBySlug').mockReturnValue(null);
+
+      try {
+        let threw: unknown;
+        try {
+          await service.create({
+            name: 'clashing-slug', // generateSlug('clashing-slug') === 'clashing-slug'
+            kind: 'new',
+            permissionMode: 'hybrid',
+          });
+        } catch (err) {
+          threw = err;
+        }
+        expect(threw).toBeInstanceOf(DuplicateSlugError);
+        expect((threw as Error).message).toMatch(/clashing-slug/);
+      } finally {
+        vi.mocked(repo.getBySlug).mockRestore();
+        // Confirm the restore put the real impl back.
+        expect(repo.getBySlug('clashing-slug')?.id).toBe('baseline-id');
+        void realGetBySlug;
+      }
+    });
   });
 });
