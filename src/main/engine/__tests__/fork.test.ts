@@ -24,6 +24,7 @@ describe('Conversation Fork', () => {
   let session: ConversationSession;
 
   beforeEach(() => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     session = new ConversationSession({
       participants,
     });

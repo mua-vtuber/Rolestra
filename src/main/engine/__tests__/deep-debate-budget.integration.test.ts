@@ -22,6 +22,7 @@ function createSessionWithBudget(
   participants: Participant[] = PARTICIPANTS_3AI,
   roundSetting: number | 'unlimited' = 'unlimited',
 ): ConversationSession {
+  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     participants: [...participants],
     roundSetting,

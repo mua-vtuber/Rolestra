@@ -25,6 +25,7 @@ import type {
 } from '../../shared/session-state-types';
 import { DEFAULT_SESSION_CONFIG } from '../../shared/session-state-types';
 import type { Participant } from '../../shared/engine-types';
+import type { SsmContext } from '../../shared/ssm-context-types';
 import { ModeJudgmentCollector } from './mode-judgment-collector';
 import { createHash } from 'node:crypto';
 
@@ -118,6 +119,7 @@ export class SessionStateMachine {
   private _config: SessionConfig;
   private _conversationId: string;
   private _snapshots: SessionSnapshot[] = [];
+  private readonly _ctx: SsmContext;
 
   private readonly _modeJudgmentCollector = new ModeJudgmentCollector();
 
@@ -136,16 +138,37 @@ export class SessionStateMachine {
   constructor(options: {
     conversationId: string;
     participants: Participant[];
+    /**
+     * v3 execution context — required. Carries meetingId/channelId/
+     * projectId/projectPath + permission & autonomy modes. See
+     * `src/shared/ssm-context-types.ts` for semantics.
+     */
+    ctx: SsmContext;
     projectPath?: string | null;
     config?: Partial<SessionConfig>;
   }) {
     this._conversationId = options.conversationId;
     this._participants = [...options.participants];
-    this._projectPath = options.projectPath ?? null;
+    this._ctx = options.ctx;
+    // `projectPath` kept as a separate field because the v2 code paths
+    // (tests, turn-executor legacy branches) still read
+    // `machine.projectPath` directly. We source the default from the
+    // ctx when the caller doesn't provide one, so the two views stay
+    // consistent. Explicit `projectPath: null` wins — used in tests
+    // that need to exercise the "no workspace" branch.
+    this._projectPath =
+      options.projectPath === undefined
+        ? (options.ctx.projectPath || null)
+        : options.projectPath;
     this._config = { ...DEFAULT_SESSION_CONFIG, ...options.config };
 
     // Save initial snapshot
     this.saveSnapshot(null);
+  }
+
+  /** v3 execution context — immutable for the life of the SSM. */
+  get ctx(): SsmContext {
+    return this._ctx;
   }
 
   // ── Read-only accessors ──────────────────────────────────────────

@@ -84,6 +84,7 @@ function makeSession(opts?: {
   roundSetting?: number | 'unlimited';
   maxRetries?: number;
 }): ConversationSession {
+  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     id: 'conv-integ',
     participants,

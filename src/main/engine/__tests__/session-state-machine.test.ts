@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { SessionStateMachine } from '../session-state-machine';
 import type { Participant } from '../../../shared/engine-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 const makeParticipants = (): Participant[] => [
   { id: 'ai-1', displayName: 'Alpha', isActive: true, providerId: 'claude' },
@@ -8,6 +9,11 @@ const makeParticipants = (): Participant[] => [
   { id: 'ai-3', displayName: 'Gamma', isActive: true, providerId: 'codex' },
   { id: 'user', displayName: 'User', isActive: true },
 ];
+
+const TEST_CTX = createDefaultSsmContext({
+  projectId: 'proj-test',
+  projectPath: '/test/project',
+});
 
 /** Helper: record majority work votes to trigger mode transition via ROUND_COMPLETE guard. */
 function voteWorkMajority(m: SessionStateMachine): void {
@@ -22,6 +28,7 @@ describe('SessionStateMachine', () => {
     machine = new SessionStateMachine({
       conversationId: 'conv-1',
       participants: makeParticipants(),
+      ctx: TEST_CTX,
       projectPath: '/test/project',
     });
   });
@@ -49,6 +56,7 @@ describe('SessionStateMachine', () => {
     const m = new SessionStateMachine({
       conversationId: 'test',
       participants: makeParticipants(),
+      ctx: createDefaultSsmContext(),
     });
     expect(m.projectPath).toBeNull();
     m.setProjectPath('/new/path');
@@ -141,6 +149,7 @@ describe('SessionStateMachine', () => {
     machine = new SessionStateMachine({
       conversationId: 'conv-1',
       participants: makeParticipants(),
+      ctx: TEST_CTX,
       projectPath: '/test/project',
       config: { maxRetries: 0 },
     });

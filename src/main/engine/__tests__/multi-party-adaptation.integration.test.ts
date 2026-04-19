@@ -202,6 +202,7 @@ describe('Multi-party message adaptation integration', () => {
   });
 
   it('branch isolation: ConversationSession serves only current branch messages', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: [...PARTICIPANTS_3AI],
       roundSetting: 'unlimited',

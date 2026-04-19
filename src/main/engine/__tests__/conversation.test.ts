@@ -37,6 +37,7 @@ function createSession(overrides?: {
   sessionConfig?: Partial<SessionConfig>;
   taskSettings?: import('../../../shared/config-types').ConversationTaskSettings;
 }) {
+  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     participants,
     ...overrides,

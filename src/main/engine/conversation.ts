@@ -24,6 +24,7 @@ import type {
 } from '../../shared/engine-types';
 import { DEFAULT_BRANCH_ID } from '../../shared/engine-types';
 import type { SessionConfig } from '../../shared/session-state-types';
+import type { SsmContext } from '../../shared/ssm-context-types';
 import type { ConversationTaskSettings } from '../../shared/config-types';
 import { TurnManager } from './turn-manager';
 import { SessionStateMachine } from './session-state-machine';
@@ -58,6 +59,16 @@ export class ConversationSession {
     roundSetting?: RoundSetting;
     sessionConfig?: Partial<SessionConfig>;
     taskSettings?: ConversationTaskSettings;
+    /**
+     * v3 execution context for the SSM. Required when the conversation
+     * will spawn an SSM (2+ AI participants). For 1:1 DM conversations
+     * the ctx is ignored — no SSM is created.
+     *
+     * During the R2 bridge period, IPC call sites that don't yet know
+     * meetingId/channelId pass empty strings for those fields; Task 18
+     * will wire them up for real. See `src/shared/ssm-context-types.ts`.
+     */
+    ssmCtx: SsmContext;
   }) {
     this.id = options.id ?? randomUUID();
     this._title = options.title ?? '';
@@ -74,6 +85,7 @@ export class ConversationSession {
       this._sessionMachine = new SessionStateMachine({
         conversationId: this.id,
         participants: options.participants,
+        ctx: options.ssmCtx,
         projectPath: null,
         config: options.sessionConfig,
       });

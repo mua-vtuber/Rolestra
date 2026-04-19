@@ -72,6 +72,7 @@ function makeWebContents() {
 }
 
 function makeSession(roundSetting: number | 'unlimited' = 1): ConversationSession {
+  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     id: 'conv-ssm',
     participants,

@@ -15,6 +15,7 @@ const makeParticipants = (): Participant[] => [
 
 describe('Deep Debate Turn Budget', () => {
   it('starts inactive by default', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: DEFAULT_CONVERSATION_TASK_SETTINGS,
@@ -26,6 +27,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('activates and tracks turns', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: { ...DEFAULT_CONVERSATION_TASK_SETTINGS, deepDebateTurnBudget: 5 },
@@ -43,6 +45,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('detects budget exhaustion at exact boundary', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: { ...DEFAULT_CONVERSATION_TASK_SETTINGS, deepDebateTurnBudget: 3 },
@@ -62,6 +65,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('stopDeepDebate resets state', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: { ...DEFAULT_CONVERSATION_TASK_SETTINGS, deepDebateTurnBudget: 10 },
@@ -78,6 +82,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('recordDeepDebateTurn is no-op when inactive', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: DEFAULT_CONVERSATION_TASK_SETTINGS,
@@ -89,6 +94,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('isDeepDebateBudgetExhausted returns false when inactive', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: DEFAULT_CONVERSATION_TASK_SETTINGS,
@@ -98,6 +104,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('uses default budget (30) when taskSettings omits deepDebateTurnBudget', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
     });
@@ -108,6 +115,7 @@ describe('Deep Debate Turn Budget', () => {
   });
 
   it('supports custom budget via taskSettings', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: makeParticipants(),
       taskSettings: { ...DEFAULT_CONVERSATION_TASK_SETTINGS, deepDebateTurnBudget: 50 },

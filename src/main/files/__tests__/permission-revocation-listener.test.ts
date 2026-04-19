@@ -9,6 +9,7 @@ import { attachPermissionRevocationListener } from '../permission-revocation-lis
 import { DEFAULT_FILE_PERMISSION } from '../../../shared/file-types';
 import type { ModeJudgment } from '../../../shared/session-state-types';
 import type { VoteRecord } from '../../../shared/consensus-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'arena-revoke-test-'));
@@ -54,6 +55,7 @@ function createSSM(tmpDir: string, opts?: { projectPath?: string | null }): Sess
   return new SessionStateMachine({
     conversationId: `test-conv-${Date.now()}`,
     participants: [...PARTICIPANTS],
+    ctx: createDefaultSsmContext({ projectPath: tmpDir }),
     projectPath: opts?.projectPath !== undefined ? opts.projectPath : tmpDir,
     config: { maxRetries: 3, phaseTimeout: 0 },
   });

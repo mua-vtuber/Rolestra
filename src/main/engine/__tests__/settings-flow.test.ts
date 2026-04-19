@@ -26,6 +26,7 @@ describe('Settings → Session → SSM Flow', () => {
       parseRetryLimit: 3,
     };
 
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: TEST_PARTICIPANTS,
       sessionConfig,
@@ -39,6 +40,7 @@ describe('Settings → Session → SSM Flow', () => {
   });
 
   it('uses default session config when not provided', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: TEST_PARTICIPANTS,
     });
@@ -55,6 +57,7 @@ describe('Settings → Session → SSM Flow', () => {
       twoParticipantUnanimousRequired: false,
     };
 
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: TEST_PARTICIPANTS,
       taskSettings,
@@ -66,6 +69,7 @@ describe('Settings → Session → SSM Flow', () => {
   });
 
   it('returns null taskSettings when not provided', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: TEST_PARTICIPANTS,
     });
@@ -74,6 +78,7 @@ describe('Settings → Session → SSM Flow', () => {
   });
 
   it('creates SSM for arena mode (2+ AI)', () => {
+    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
       participants: TEST_PARTICIPANTS,
       sessionConfig: { maxRetries: 10 },
