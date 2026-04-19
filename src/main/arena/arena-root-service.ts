@@ -144,11 +144,15 @@ export class ArenaRootService extends EventEmitter {
       const probe = path.join(absRoot, WRITABLE_PROBE_FILENAME);
       try {
         await fsp.writeFile(probe, '');
-        await fsp.unlink(probe);
         writable = true;
       } catch {
         writable = false;
       }
+      // Always attempt cleanup so a failed unlink earlier (or a concurrent
+      // writer) does not leave the probe file behind in the user's ArenaRoot.
+      // Best-effort — ignore errors (file may never have been written, or a
+      // concurrent caller may have already removed it).
+      await fsp.unlink(probe).catch(() => {});
     }
 
     const consensusBase = path.join(absRoot, CONSENSUS_DIR);

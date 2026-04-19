@@ -59,56 +59,64 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(async () => {
-  // Initialize ArenaRoot before anything that touches the DB or logs.
-  // ConfigService is required because the root path is read from settings.
-  const config = getConfigService();
-  const arenaRoot = new ArenaRootService(config);
-  await arenaRoot.ensure();
-  initDatabaseRoot(arenaRoot);
-
-  // Run database migrations before anything else.
-  // Throws on failure, blocking app startup with inconsistent schema.
-  runMigrations();
-
-  // Restore persisted providers from DB into in-memory registry.
-  // Must run after migrations (DB schema ready) and before IPC handlers (renderer may query).
-  restoreProvidersFromDb();
-
-  // Block all hardware permission requests (camera, mic, geolocation, etc.)
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-    callback(false);
-  });
-
-  // Register typed IPC handlers before creating windows.
-  // Handlers must be ready before any renderer can invoke them.
-  registerIpcHandlers();
-  configureApplicationMenu();
-
-  // Wire lazy accessors for cross-module dependencies (C1, I2)
-  const logger = createLogger();
-  setLoggerAccessor(() => logger);
-  setPermissionServiceAccessor(() => permissionService);
-
-  // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
   try {
-    const settings = getConfigService().getSettings();
-    const customPath = settings.consensusFolderPath || null;
-    void consensusFolderService.initFolder(customPath).then((info) => {
-      console.info(`[consensus-folder] Initialized: ${info.folderPath} (default=${String(info.isDefault)})`);
-    }).catch((err) => {
-      console.error('[consensus-folder] Failed to initialize:', err);
+    // Initialize ArenaRoot before anything that touches the DB or logs.
+    // ConfigService is required because the root path is read from settings.
+    const config = getConfigService();
+    const arenaRoot = new ArenaRootService(config);
+    await arenaRoot.ensure();
+    initDatabaseRoot(arenaRoot);
+
+    // Run database migrations before anything else.
+    // Throws on failure, blocking app startup with inconsistent schema.
+    runMigrations();
+
+    // Restore persisted providers from DB into in-memory registry.
+    // Must run after migrations (DB schema ready) and before IPC handlers (renderer may query).
+    restoreProvidersFromDb();
+
+    // Block all hardware permission requests (camera, mic, geolocation, etc.)
+    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+      callback(false);
+    });
+
+    // Register typed IPC handlers before creating windows.
+    // Handlers must be ready before any renderer can invoke them.
+    registerIpcHandlers();
+    configureApplicationMenu();
+
+    // Wire lazy accessors for cross-module dependencies (C1, I2)
+    const logger = createLogger();
+    setLoggerAccessor(() => logger);
+    setPermissionServiceAccessor(() => permissionService);
+
+    // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
+    try {
+      const settings = getConfigService().getSettings();
+      const customPath = settings.consensusFolderPath || null;
+      void consensusFolderService.initFolder(customPath).then((info) => {
+        console.info(`[consensus-folder] Initialized: ${info.folderPath} (default=${String(info.isDefault)})`);
+      }).catch((err) => {
+        console.error('[consensus-folder] Failed to initialize:', err);
+      });
+    } catch (err) {
+      console.error('[consensus-folder] Failed to read settings for consensus folder:', err);
+    }
+
+    createWindow();
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        createWindow();
+      }
     });
   } catch (err) {
-    console.error('[consensus-folder] Failed to read settings for consensus folder:', err);
+    // Fatal bootstrap failure (ArenaRoot ensure, migration, or any registration
+    // above). Abort startup rather than letting the app run in a broken state.
+    // Mirrors the "migration failure blocks startup" rule from CLAUDE.md §7.
+    console.error('[bootstrap] Fatal startup error:', err);
+    app.exit(1);
   }
-
-  createWindow();
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow();
-    }
-  });
 });
 
 app.on('before-quit', async () => {

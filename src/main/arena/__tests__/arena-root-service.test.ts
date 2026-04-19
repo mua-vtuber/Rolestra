@@ -126,6 +126,20 @@ describe('ArenaRootService', () => {
     expect(status.projectsCount).toBe(0);
   });
 
+  it('getStatus() does not leak the writable probe file on success', async () => {
+    const config = createConfigStub({ arenaRoot: tmpRoot });
+    const svc = new ArenaRootService(config);
+    await svc.ensure();
+
+    const status = await svc.getStatus();
+    expect(status.writable).toBe(true);
+
+    // Root directory must not contain any `.arena-writable-test*` leftovers.
+    const entries = fs.readdirSync(tmpRoot);
+    const probeResidue = entries.filter((name) => name.startsWith('.arena-writable-test'));
+    expect(probeResidue).toEqual([]);
+  });
+
   it('getStatus() reflects the count of entries under projects/', async () => {
     const config = createConfigStub({ arenaRoot: tmpRoot });
     const svc = new ArenaRootService(config);
