@@ -4,18 +4,18 @@
  * - exportDatabase: VACUUM INTO a copy at user-chosen path.
  * - importDatabase: validate then replace the DB file (requires app restart).
  * - getStats: table names + row counts + file size.
+ *
+ * The live DB path is resolved through the ArenaRoot-backed connection module
+ * ({@link getDatabase}); better-sqlite3 exposes it via `.name`. This avoids
+ * duplicating the `<ArenaRoot>/db/arena.sqlite` computation here.
  */
 
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { app } from 'electron';
 import { getDatabase } from './connection';
 
-const DB_FILENAME = 'arena.db';
-
-/** Return the path to the live database file. */
+/** Return the path to the live database file (resolved from ArenaRoot). */
 export function getDatabasePath(): string {
-  return path.join(app.getPath('userData'), DB_FILENAME);
+  return getDatabase().name;
 }
 
 /** Export (VACUUM INTO) to targetPath. Returns the written path. */

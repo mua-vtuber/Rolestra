@@ -1,7 +1,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import { join } from 'path';
 import { runMigrations } from './database/migrator';
-import { closeDatabase } from './database/connection';
+import { closeDatabase, initDatabaseRoot } from './database/connection';
 import { registerIpcHandlers } from './ipc/router';
 import { providerRegistry } from './providers/registry';
 import { setMainWindow } from './ipc/handlers/chat-handler';
@@ -13,6 +13,7 @@ import { restoreProvidersFromDb } from './providers/provider-restore';
 import { createLogger } from './log/structured-logger';
 import { permissionService, consensusFolderService } from './ipc/handlers/workspace-handler';
 import { getConfigService } from './config/instance';
+import { ArenaRootService } from './arena/arena-root-service';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -57,7 +58,14 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // Initialize ArenaRoot before anything that touches the DB or logs.
+  // ConfigService is required because the root path is read from settings.
+  const config = getConfigService();
+  const arenaRoot = new ArenaRootService(config);
+  await arenaRoot.ensure();
+  initDatabaseRoot(arenaRoot);
+
   // Run database migrations before anything else.
   // Throws on failure, blocking app startup with inconsistent schema.
   runMigrations();

@@ -102,6 +102,8 @@ export interface SettingsConfig {
   conversationTask: ConversationTaskSettings;
   /** Custom path for consensus folder. Empty string = platform default (~/Documents/AI_Chat_Arena). */
   consensusFolderPath: string;
+  /** Custom path for ArenaRoot directory. Empty string = platform default (~/Documents/arena). */
+  arenaRoot: string;
 }
 
 /** Default settings values. */
@@ -120,6 +122,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
   memorySettings: DEFAULT_MEMORY_SETTINGS,
   conversationTask: DEFAULT_CONVERSATION_TASK_SETTINGS,
   consensusFolderPath: '',
+  arenaRoot: '',
 };
 
 // ── Secrets Layer ──────────────────────────────────────────────────
