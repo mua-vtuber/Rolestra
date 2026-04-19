@@ -24,7 +24,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArenaRootService,
   type ArenaRootConfigAccessor,
@@ -284,6 +284,53 @@ describe('MessageService', () => {
       }
       expect(received).toHaveLength(0);
     });
+
+    it('isolates listener errors from the append return path', async () => {
+      const { channelId } = await makeChannel();
+      // A subscriber that throws — simulates a buggy downstream listener.
+      messageService.on(MESSAGE_EVENT, () => {
+        throw new Error('listener exploded');
+      });
+      // Spy on console.warn so we can verify the failure was logged instead
+      // of propagated. Restore after the assertion to avoid polluting other
+      // tests' output.
+      const warnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+
+      let saved: Message | undefined;
+      try {
+        // (a) `append` must return normally — the listener throw must NOT
+        // become the caller's problem.
+        saved = messageService.append({
+          channelId,
+          authorId: 'user',
+          authorKind: 'user',
+          role: 'user',
+          content: 'survives the listener',
+        });
+
+        // (b) the Message is returned with a real id.
+        expect(saved).toBeDefined();
+        expect(saved!.id).toMatch(/^[0-9a-f-]{36}$/);
+
+        // (c) the row is actually in the DB (insert committed before emit).
+        expect(messageRepo.get(saved!.id)).toEqual(saved);
+
+        // (d) the failure was routed through console.warn with the expected
+        // rolestra marker — this is what replaces "listener error crashes
+        // the caller" in option (c) of the fix.
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const [marker, payload] = warnSpy.mock.calls[0]!;
+        expect(marker).toBe('[rolestra.channels.message] listener threw:');
+        expect(payload).toMatchObject({
+          name: 'Error',
+          message: 'listener exploded',
+        });
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
   });
 
   // ── listByChannel ──────────────────────────────────────────────────
@@ -494,6 +541,42 @@ describe('MessageService', () => {
       expect(() =>
         messageService.search('"unterminated phrase', { channelId }),
       ).toThrow(InvalidQueryError);
+    });
+
+    it('does NOT wrap a non-FTS SQLITE_ERROR (e.g. column typo) as InvalidQueryError', () => {
+      // Regression guard for the tightened `isFtsQueryError` mapper.
+      // `SQLITE_ERROR` is SQLite's generic catch-all and fires for code
+      // bugs like a column typo in a future edit. Before the tightening
+      // we would have mis-wrapped that as InvalidQueryError and blamed
+      // the user's query string. Now the error must bubble up unwrapped.
+      //
+      // We simulate a real SQLITE_ERROR via a stub repo (constructing an
+      // actual column typo would require owning the repo's SQL, which is
+      // not the service's layer to poke at).
+      const nonFtsError = Object.assign(
+        new Error('no such column: messages.missing_col'),
+        { code: 'SQLITE_ERROR' },
+      );
+      const stubRepo = {
+        insert: () => {
+          throw new Error('not used in this test');
+        },
+        get: () => null,
+        listByChannel: () => [],
+        search: () => {
+          throw nonFtsError;
+        },
+      } as unknown as MessageRepository;
+      const svc = new MessageService(stubRepo);
+
+      let caught: unknown;
+      try {
+        svc.search('any query');
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBe(nonFtsError);
+      expect(caught).not.toBeInstanceOf(InvalidQueryError);
     });
 
     it('orders results by bm25 ascending (most relevant first)', async () => {

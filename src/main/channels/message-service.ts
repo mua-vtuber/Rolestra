@@ -166,14 +166,46 @@ function asAuthorTriggerError(err: unknown): string | null {
 
 /**
  * Matches SQLite's generic `SQLITE_ERROR` for a malformed FTS5 query.
- * MATCH syntax errors surface as `SQLITE_ERROR` with a message that
- * starts with "fts5:" — we do not rely on that text, we only need to
- * know whether the error came from the SQL layer rather than our code.
+ *
+ * `SQLITE_ERROR` is SQLite's catch-all code — it fires for column typos,
+ * missing tables, malformed SQL, AND malformed FTS5 `MATCH` queries.
+ * Matching on the code alone would mis-wrap a developer-caused bug (e.g.
+ * a future edit that fat-fingers a column) as `InvalidQueryError` and
+ * mislead the caller into blaming the user's query string.
+ *
+ * To keep the wrapper targeted, we ALSO require the SQLite message text
+ * to carry an FTS5-specific signal:
+ *   - `fts5:` prefix               — FTS5 module's own error messages
+ *   - `syntax error near`          — FTS5 query parser
+ *   - `malformed MATCH expression` — SQLite's MATCH validator
+ *   - `unterminated string`        — FTS5 parser on an unterminated
+ *                                    phrase. Safe to match here because
+ *                                    the query arrives as a BOUND
+ *                                    parameter (see
+ *                                    `message-repository.ts` — every
+ *                                    `MATCH ?` uses a placeholder), so
+ *                                    this message cannot be produced by
+ *                                    a stray SQL-literal typo in our
+ *                                    code; it must come from the FTS5
+ *                                    query parser processing caller
+ *                                    input.
+ *
+ * When none of those appear, the error bubbles up unwrapped so callers
+ * (and tests) see the raw SQLite error — which is what you want for an
+ * actual code bug.
  */
 function isFtsQueryError(err: unknown): boolean {
   const e = asSqliteErr(err);
   if (!e) return false;
-  return e.code === 'SQLITE_ERROR';
+  if (e.code !== 'SQLITE_ERROR') return false;
+  if (typeof e.message !== 'string') return false;
+  const msg = e.message;
+  return (
+    msg.includes('fts5:') ||
+    msg.includes('syntax error near') ||
+    msg.includes('malformed MATCH expression') ||
+    msg.includes('unterminated string')
+  );
 }
 
 // ── Input shapes ──────────────────────────────────────────────────────
@@ -276,7 +308,26 @@ export class MessageService extends EventEmitter {
       throw err;
     }
 
-    this.emit(MESSAGE_EVENT, message);
+    // Emit is strictly a broadcast — listener failures must not rewrite
+    // the contract of `append()`, which is "row is saved, you get the
+    // Message back". Without this guard, a bad subscriber would propagate
+    // its error up the return path and the caller would never see the
+    // Message (even though the INSERT committed). We swallow the throw
+    // and log it so the listener bug is still observable.
+    //
+    // This pattern mirrors `shell-env.ts` (Task 7): console.warn with a
+    // TODO R2-log marker so the later structured-logger pass picks this
+    // site up too.
+    try {
+      this.emit(MESSAGE_EVENT, message);
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      // TODO R2-log: swap for structured logger (src/main/log/)
+      console.warn('[rolestra.channels.message] listener threw:', {
+        name: err instanceof Error ? err.name : undefined,
+        message: errMessage,
+      });
+    }
     return message;
   }
 
