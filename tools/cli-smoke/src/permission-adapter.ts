@@ -74,3 +74,18 @@ export class CodexPermissionAdapter implements CliPermissionAdapter {
     return ['exec', '-a', 'never', '--sandbox', 'read-only', '-C', ctx.cwd, '-'];
   }
 }
+
+export class GeminiPermissionAdapter implements CliPermissionAdapter {
+  buildArgs(ctx: AdapterContext): string[] {
+    assertExternalNotAuto(ctx);
+    switch (ctx.permissionMode) {
+      case 'auto':    return ['--approval-mode', 'yolo'];
+      case 'hybrid':  return ['--approval-mode', 'auto_edit'];
+      case 'approval': return ['--approval-mode', 'default'];
+    }
+  }
+
+  buildReadOnlyArgs(_ctx: AdapterContext): string[] {
+    return ['--approval-mode', 'default'];
+  }
+}

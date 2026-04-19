@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ClaudePermissionAdapter, CodexPermissionAdapter } from '../src/permission-adapter';
+import { ClaudePermissionAdapter, CodexPermissionAdapter, GeminiPermissionAdapter } from '../src/permission-adapter';
 import type { CliKind, PermissionMode, ProjectKind } from '../src/types';
 
 function ctx(over: Partial<{
@@ -74,5 +74,29 @@ describe('CodexPermissionAdapter', () => {
   it('read-only sandbox', () => {
     const args = a.buildReadOnlyArgs(ctx({ cliKind: 'codex' }));
     expect(args).toEqual(['exec', '-a', 'never', '--sandbox', 'read-only', '-C', '/tmp/proj', '-']);
+  });
+});
+
+describe('GeminiPermissionAdapter', () => {
+  const a = new GeminiPermissionAdapter();
+
+  it('auto: yolo', () => {
+    expect(a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'auto' })))
+      .toEqual(['--approval-mode', 'yolo']);
+  });
+
+  it('hybrid: auto_edit', () => {
+    expect(a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'hybrid' })))
+      .toEqual(['--approval-mode', 'auto_edit']);
+  });
+
+  it('approval: default', () => {
+    expect(a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'approval' })))
+      .toEqual(['--approval-mode', 'default']);
+  });
+
+  it('external + auto는 throw', () => {
+    expect(() => a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'auto', projectKind: 'external' })))
+      .toThrow(/external/i);
   });
 });
