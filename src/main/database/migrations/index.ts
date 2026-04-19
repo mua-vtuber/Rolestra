@@ -16,9 +16,25 @@ import { migration as m004 } from './004-meetings';
 import { migration as m005 } from './005-messages';
 import { migration as m006 } from './006-approval-inbox';
 import { migration as m007 } from './007-queue';
+import { migration as m008 } from './008-memory';
+import { migration as m009 } from './009-audit';
+import { migration as m010 } from './010-remote';
+import { migration as m011 } from './011-notifications';
 
 /**
  * Ordered list of all v3 migrations.
  * The migrator will apply them sequentially, skipping any already applied.
  */
-export const migrations: Migration[] = [m001, m002, m003, m004, m005, m006, m007];
+export const migrations: Migration[] = [
+  m001,
+  m002,
+  m003,
+  m004,
+  m005,
+  m006,
+  m007,
+  m008,
+  m009,
+  m010,
+  m011,
+];

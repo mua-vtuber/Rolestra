@@ -112,10 +112,13 @@ describe('v3 migrations 005-007 — schema contract', () => {
     });
 
     it('records 005/006/007 migration ids in the migrations tracking table', () => {
+      // The full chain may grow as new migrations are added (008+ in Task 3,
+      // and beyond). This test only owns 005-007, so we slice off the first
+      // seven rows and assert that prefix.
       const rows = db
         .prepare('SELECT id FROM migrations ORDER BY rowid')
         .all() as Array<{ id: string }>;
-      expect(rows.map((r) => r.id)).toEqual([
+      expect(rows.map((r) => r.id).slice(0, 7)).toEqual([
         '001-core',
         '002-projects',
         '003-channels',
