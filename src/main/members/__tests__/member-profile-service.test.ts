@@ -35,7 +35,7 @@ import { MemberProfileRepository } from '../member-profile-repository';
 import {
   MemberProfileService,
   ProviderNotFoundError,
-  type ProviderLookup,
+  type MemberProviderLookup,
 } from '../member-profile-service';
 import { DEFAULT_AVATARS } from '../default-avatars';
 
@@ -70,7 +70,7 @@ function seedProvider(
 }
 
 /**
- * Build a stub ProviderLookup whose `get()` returns a rows-backed shape and
+ * Build a stub MemberProviderLookup whose `get()` returns a rows-backed shape and
  * whose `warmup()` behaviour is caller-controlled. We default to a
  * resolving warmup so "happy-path" callers don't have to pass a stub each
  * time; failure-path tests override the resolver.
@@ -78,7 +78,7 @@ function seedProvider(
 function makeProviderLookup(
   rows: Record<string, { displayName: string; persona: string }>,
   warmup?: (providerId: string) => Promise<void>,
-): ProviderLookup {
+): MemberProviderLookup {
   return {
     get(providerId) {
       const meta = rows[providerId];
@@ -271,6 +271,25 @@ describe('MemberProfileService', () => {
 
       expect(service.getProfile('p1').statusOverride).toBeNull();
     });
+
+    it('setStatus("online") drops the stale runtime entry so getWorkStatus reverts to offline-connection default', async () => {
+      // Guards the stale-runtime decision: once the user flips offline-manual
+      // then online, we refuse to report a cached 'online' from a pre-flip
+      // reconnect. The caller must re-probe via reconnect() to learn truth.
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers);
+
+      await service.reconnect('p1'); // runtime = 'online'
+      expect(service.getWorkStatus('p1')).toBe('online');
+
+      service.setStatus('p1', 'offline-manual');
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+
+      service.setStatus('p1', 'online');
+      // Override cleared AND runtime entry cleared → falls back to default.
+      expect(service.getWorkStatus('p1')).toBe('offline-connection');
+    });
   });
 
   // ── reconnect ───────────────────────────────────────────────────────
@@ -308,6 +327,124 @@ describe('MemberProfileService', () => {
       expect(warmup).toHaveBeenCalledWith('p1');
       expect(status).toBe('offline-connection');
       expect(service.getWorkStatus('p1')).toBe('offline-connection');
+    });
+
+    it('coalesces concurrent reconnect calls on the same providerId onto a single probe', async () => {
+      // Build a warmup that we can hold mid-flight so the second call lands
+      // while the first is still pending — that's the coalescing window.
+      seedProvider(db, 'p1', 'Ada');
+      let resolveWarmup!: () => void;
+      const warmupGate = new Promise<void>((resolve) => {
+        resolveWarmup = resolve;
+      });
+      const warmup = vi.fn(async (_id: string) => {
+        await warmupGate;
+      });
+      const providers = makeProviderLookup(
+        { p1: { displayName: 'Ada', persona: '' } },
+        warmup,
+      );
+      const service = new MemberProfileService(repo, providers);
+
+      // Two concurrent calls BEFORE awaiting — this is the coalescing check.
+      const p1a = service.reconnect('p1');
+      const p1b = service.reconnect('p1');
+
+      // Release the single in-flight warmup.
+      resolveWarmup();
+      const [a, b] = await Promise.all([p1a, p1b]);
+
+      expect(warmup).toHaveBeenCalledTimes(1);
+      expect(warmup).toHaveBeenCalledWith('p1');
+      expect(a).toBe('online');
+      expect(b).toBe(a);
+
+      // A reconnect issued AFTER the in-flight one settled should start a
+      // fresh probe (the map entry is cleared in finally). We don't make
+      // that a hard assertion here since the spec only demands "concurrent"
+      // coalescing, but we do verify it is not stuck.
+      const p1c = service.reconnect('p1');
+      expect(await p1c).toBe('online');
+      expect(warmup).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT coalesce across different providerIds', async () => {
+      seedProvider(db, 'p1', 'Ada');
+      seedProvider(db, 'p2', 'Bea');
+      const warmup = vi.fn(async () => undefined);
+      const providers = makeProviderLookup(
+        {
+          p1: { displayName: 'Ada', persona: '' },
+          p2: { displayName: 'Bea', persona: '' },
+        },
+        warmup,
+      );
+      const service = new MemberProfileService(repo, providers);
+
+      await Promise.all([service.reconnect('p1'), service.reconnect('p2')]);
+
+      expect(warmup).toHaveBeenCalledTimes(2);
+      expect(warmup).toHaveBeenCalledWith('p1');
+      expect(warmup).toHaveBeenCalledWith('p2');
+    });
+  });
+
+  // ── forget ──────────────────────────────────────────────────────────
+
+  describe('forget', () => {
+    it('clears runtime status so getWorkStatus reverts to the default', async () => {
+      // Task 18's IPC layer calls forget() on provider deletion so stale
+      // runtime state cannot leak into UI that happens to query by the
+      // recycled providerId.
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers);
+
+      await service.reconnect('p1'); // runtime = online
+      expect(service.getWorkStatus('p1')).toBe('online');
+
+      service.forget('p1');
+
+      // Absent runtime entry + no override → default.
+      expect(service.getWorkStatus('p1')).toBe('offline-connection');
+    });
+
+    it('drops the in-flight reconnect entry mid-flight so a concurrent caller does NOT share the stale promise', async () => {
+      // Task 18 may invoke forget() while a warmup is still pending (e.g. a
+      // provider is deleted mid-reconnect). A reconnect issued AFTER the
+      // forget but BEFORE the first probe settles must kick a fresh probe
+      // — not piggy-back on the about-to-be-discarded result.
+      seedProvider(db, 'p1', 'Ada');
+      let resolveFirstWarmup!: () => void;
+      const firstGate = new Promise<void>((resolve) => {
+        resolveFirstWarmup = resolve;
+      });
+      let warmupCount = 0;
+      const warmup = vi.fn(async (_id: string) => {
+        warmupCount += 1;
+        if (warmupCount === 1) {
+          // The first call is held until we explicitly release it.
+          await firstGate;
+        }
+        // Subsequent calls resolve immediately.
+      });
+      const providers = makeProviderLookup(
+        { p1: { displayName: 'Ada', persona: '' } },
+        warmup,
+      );
+      const service = new MemberProfileService(repo, providers);
+
+      const firstProbe = service.reconnect('p1');
+      service.forget('p1'); // drops the in-flight entry mid-flight
+
+      // Immediately ask to reconnect again. Because forget() cleared the
+      // map, this must issue a NEW warmup rather than reusing firstProbe.
+      const secondProbe = service.reconnect('p1');
+      expect(warmup).toHaveBeenCalledTimes(2);
+
+      // Release the first probe so both promises can settle.
+      resolveFirstWarmup();
+      await Promise.all([firstProbe, secondProbe]);
     });
   });
 
@@ -352,7 +489,12 @@ describe('MemberProfileService', () => {
       expect(service.getWorkStatus('p1')).toBe('offline-manual');
     });
 
-    it('falls back to runtime after the user clears the override', async () => {
+    it('reverts to offline-connection default after setStatus("online") clears the override AND the stale runtime', async () => {
+      // Rationale: a cached 'online' from 10 min ago is a lie once the user
+      // has signalled "come back to work". `setStatus('online')` drops both
+      // the override and the runtime map entry so getWorkStatus returns the
+      // honest default until the caller (or Task 18 IPC) follows up with
+      // reconnect().
       seedProvider(db, 'p1', 'Ada');
       const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
       const service = new MemberProfileService(repo, providers);
@@ -361,8 +503,9 @@ describe('MemberProfileService', () => {
       service.setStatus('p1', 'offline-manual');
       expect(service.getWorkStatus('p1')).toBe('offline-manual');
 
-      service.setStatus('p1', 'online'); // clears override, runtime still online
-      expect(service.getWorkStatus('p1')).toBe('online');
+      service.setStatus('p1', 'online'); // clears override AND runtime entry
+      expect(service.getProfile('p1').statusOverride).toBeNull();
+      expect(service.getWorkStatus('p1')).toBe('offline-connection');
     });
   });
 

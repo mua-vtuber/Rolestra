@@ -15,16 +15,23 @@
  *   - Drive the work-status machine: manual override beats everything
  *     else; otherwise the runtime map decides.
  *   - Drive `reconnect` — warmup the provider via the injected
- *     {@link ProviderLookup} and update the runtime map on success or
- *     failure.
+ *     {@link MemberProviderLookup} and update the runtime map on success or
+ *     failure. Concurrent `reconnect` calls for the same providerId are
+ *     coalesced onto a single in-flight probe (see {@link MemberProfileService.reconnect}).
+ *   - Provide {@link MemberProfileService.forget} for provider-deletion
+ *     cleanup (Task 18 IPC layer wires this on provider delete).
  *
  * Provider dependency (structural):
- *   The service intentionally depends on a narrow {@link ProviderLookup}
+ *   The service intentionally depends on a narrow {@link MemberProviderLookup}
  *   interface rather than the production `ProviderRegistry`. This mirrors
  *   the `ProjectLookup` pattern from Task 6 and keeps tests simple — they
  *   pass a stub with a `get()` and `warmup()` implementation without
  *   pulling the whole provider tree. Task 18's IPC wiring injects the
  *   real adapter.
+ *
+ *   The interface is named `MemberProviderLookup` (not plain `ProviderLookup`)
+ *   to avoid a name clash with the differently-shaped `ProviderLookup`
+ *   exported from `src/main/files/cli-permission-bridge.ts`.
  *
  * Runtime vs. persisted state:
  *   The runtime status map (`Map<providerId, WorkStatus>`) lives in the
@@ -77,7 +84,7 @@ export class ProviderNotFoundError extends MemberError {
  * shape; tests pass a stub. The service MUST NOT reach past this
  * interface.
  */
-export interface ProviderLookup {
+export interface MemberProviderLookup {
   /**
    * Return the minimal provider shape the member layer cares about, or
    * `null` when `providerId` is unknown. Keep this object shape stable
@@ -141,9 +148,24 @@ export class MemberProfileService {
    */
   private readonly runtimeStatus = new Map<string, WorkStatus>();
 
+  /**
+   * In-flight {@link reconnect} probes per provider. Used to coalesce
+   * concurrent `reconnect(providerId)` calls onto a single underlying
+   * {@link MemberProviderLookup.warmup} invocation so we do not:
+   *   - issue redundant network probes,
+   *   - race on the runtime status map (last-write-wins),
+   *   - return divergent {@link WorkStatus} values to concurrent callers.
+   *
+   * Entry is inserted by the first caller; subsequent concurrent callers
+   * receive the same `Promise<WorkStatus>`. The entry is removed in a
+   * `finally` block so the next `reconnect(providerId)` issued AFTER the
+   * in-flight probe settles starts a fresh probe.
+   */
+  private readonly reconnectInFlight = new Map<string, Promise<WorkStatus>>();
+
   constructor(
     private readonly repo: MemberProfileRepository,
-    private readonly providers: ProviderLookup,
+    private readonly providers: MemberProviderLookup,
   ) {}
 
   /**
@@ -213,9 +235,18 @@ export class MemberProfileService {
    * Toggle the manual work status.
    *   - `target='offline-manual'` → persist `statusOverride='offline-manual'`.
    *     Survives app restart (spec §7.2).
-   *   - `target='online'`         → clear the override. Runtime status
-   *     takes over immediately; callers typically follow up with
-   *     {@link reconnect} to actually bring the member online.
+   *   - `target='online'`         → clear BOTH the manual override AND the
+   *     runtime status entry. After this call {@link getWorkStatus}
+   *     reverts to the {@link DEFAULT_RUNTIME_STATUS} default (`'offline-connection'`)
+   *     until {@link reconnect} probes the provider again. Rationale: a
+   *     stale runtime value (e.g. `'online'` from ten minutes ago) is a
+   *     lie once the user has signalled intent to "come back to work" —
+   *     we would rather report "unknown / unreachable" honestly than
+   *     display a cached truth. We deliberately do NOT auto-trigger
+   *     `reconnect` here: this method is synchronous and adding an async
+   *     side-effect would surprise callers and tests. Callers who want
+   *     immediate reachability feedback should call {@link reconnect}
+   *     right after.
    *
    * Returns the updated profile so the caller can push it straight to UI.
    */
@@ -223,27 +254,78 @@ export class MemberProfileService {
     const nextOverride = target === 'offline-manual' ? 'offline-manual' : null;
     const now = Date.now();
     this.repo.setStatusOverride(providerId, nextOverride, now);
+    if (target === 'online') {
+      // Drop any stale runtime value so getWorkStatus falls through to the
+      // honest default instead of reporting a cached 'online'/'connecting'.
+      this.runtimeStatus.delete(providerId);
+    }
     return this.getProfile(providerId);
   }
 
   /**
    * Probe the provider to refresh its runtime status.
    *
-   * Flow:
+   * Concurrency: concurrent calls to `reconnect(providerId)` for the same
+   * providerId are COALESCED onto a single in-flight probe (see
+   * {@link reconnectInFlight}). The second caller does NOT start another
+   * `warmup`; it receives the same `Promise<WorkStatus>` as the first.
+   * This guarantees exactly one {@link MemberProviderLookup.warmup} call
+   * per probe cycle and eliminates a last-write-wins race on the runtime
+   * status map. Different providerIds do not coalesce — they run in
+   * parallel as usual.
+   *
+   * Flow (first caller):
    *   1. Mark runtime status `'connecting'` so concurrent reads see the
    *      in-flight state.
    *   2. Await `provider.warmup()`.
    *      - Resolve ⇒ runtime status `'online'`.
    *      - Reject  ⇒ runtime status `'offline-connection'`. The original
    *        rejection cause is discarded intentionally (see
-   *        {@link ProviderLookup.warmup}).
+   *        {@link MemberProviderLookup.warmup}).
    *   3. Return the computed {@link WorkStatus} — which still considers
    *      a persisted `'offline-manual'` override. A user who toggled
    *      "leave work" mid-reconnect stays offline-manual in the UI
    *      regardless of warmup outcome. This is deliberate: manual intent
    *      wins.
+   *   4. Regardless of success/failure, remove the in-flight entry so a
+   *      future call issues a fresh probe.
    */
-  async reconnect(providerId: string): Promise<WorkStatus> {
+  reconnect(providerId: string): Promise<WorkStatus> {
+    const existing = this.reconnectInFlight.get(providerId);
+    if (existing) return existing;
+
+    const pending = this.runProbe(providerId).finally(() => {
+      this.reconnectInFlight.delete(providerId);
+    });
+    this.reconnectInFlight.set(providerId, pending);
+    return pending;
+  }
+
+  /**
+   * Drop all in-memory state tied to `providerId`. Intended to be called
+   * by the Task 18 IPC layer immediately AFTER a provider is deleted from
+   * the registry, so:
+   *   - a stale runtime `WorkStatus` cannot surface from a later lookup,
+   *   - a concurrent in-flight `reconnect` promise stops being shared
+   *     with new callers (the promise itself still runs to completion —
+   *     we cannot abort `warmup` — but its result will not be returned
+   *     by a subsequent `reconnect` for a re-created provider with the
+   *     same id).
+   *
+   * Persisted rows are NOT touched here — row deletion is the provider
+   * registry's job via FK `ON DELETE CASCADE`.
+   */
+  forget(providerId: string): void {
+    this.runtimeStatus.delete(providerId);
+    this.reconnectInFlight.delete(providerId);
+  }
+
+  /**
+   * Internal worker for {@link reconnect}. Performs the actual warmup +
+   * runtime-map updates. Extracted so {@link reconnect} can wrap it in
+   * the coalescing `Map` without duplicating the probe logic.
+   */
+  private async runProbe(providerId: string): Promise<WorkStatus> {
     this.runtimeStatus.set(providerId, 'connecting');
     try {
       await this.providers.warmup(providerId);
