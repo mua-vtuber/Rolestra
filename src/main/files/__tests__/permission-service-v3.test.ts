@@ -246,6 +246,35 @@ describe('PermissionService v3', () => {
     );
 
     it.skipIf(isWindows)(
+      'tolerates trailing slash in stored externalLink (defensive normalization)',
+      async () => {
+        const realSource = makeTmpDir('rolestra-ext-slash-');
+        try {
+          const realSourceResolved = fs.realpathSync(realSource);
+          // Simulate Task 8 persisting the link with a trailing separator.
+          // realpathSync() never returns one, so without normalization this
+          // would be a permanent TOCTOU-mismatch DoS.
+          const storedWithSlash = realSourceResolved + path.sep;
+          const ext = makeProject({
+            id: 'ext-slash-id',
+            slug: 'extproj-slash',
+            kind: 'external',
+            externalLink: storedWithSlash,
+          });
+          await materialiseProject(arenaRoot, ext, realSourceResolved);
+          service = new PermissionService(
+            arenaRootService,
+            createProjectRepo([ext]),
+          );
+
+          expect(() => service.resolveForCli('ext-slash-id')).not.toThrow();
+        } finally {
+          cleanupDir(realSource);
+        }
+      },
+    );
+
+    it.skipIf(isWindows)(
       'throws when the external link file is missing entirely',
       async () => {
         const realSource = makeTmpDir('rolestra-ext-gone-');

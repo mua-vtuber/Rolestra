@@ -1,5 +1,5 @@
 {
-  "last_turn_at": "2026-04-18T13:40:08.065Z",
-  "turn_count": 2,
-  "last_agent_output": "추가로 남길 만한 리뷰는 3건이었습니다. `projects/<slug>`와 `projects/<id>`가 문서 안에서 섞여 있어 `cwd`/path-guard/재스캔 기준이 충돌하"
+  "last_turn_at": "2026-04-19T12:26:53.447Z",
+  "turn_count": 44,
+  "last_agent_output": "맞습니다. `06`도 한 줄 DOS 요약으로 가도 수치는 정상적으로 반영됩니다. 지금 코드도 `selectedCount`, `detectedCount`, `missingCount`"
 }

@@ -123,6 +123,11 @@ export class PermissionService {
    *   - consensusPath (always)
    *   - cwdPath of `activeProjectId` (if provided)
    *
+   * **Performance note:** When `activeProjectId != null`, this method runs
+   * the same TOCTOU re-validation as `resolveForCli` — a project DB lookup
+   * plus one or two `fs.realpathSync` calls. Not a cheap/cached guard.
+   * Callers that hot-loop on this should batch or precompute allowedRoots.
+   *
    * @throws PermissionBoundaryError when the target escapes all allowed roots.
    */
   validateAccess(targetPath: string, activeProjectId: string | null): void {
@@ -142,6 +147,11 @@ export class PermissionService {
    * TOCTOU defence). Callers must pass the returned `cwd`/`consensusPath`
    * directly to the child process — re-resolving later re-introduces the
    * race window this method exists to close.
+   *
+   * The returned `cwd` for an `external` project is the symlink path
+   * (e.g. `<arena>/projects/<slug>/link`), not the resolved target. Child
+   * processes follow the symlink at spawn time; keeping `cwd` as the
+   * symlink preserves the ability to detect future TOCTOU swaps.
    *
    * @throws PermissionBoundaryError if:
    *   - project row is missing,
@@ -171,9 +181,20 @@ export class PermissionService {
         );
       }
       const realLink = fs.realpathSync(paths.cwdPath);
-      if (realLink !== project.externalLink) {
+      // Defensive normalization: Task 8's ProjectRepository SHOULD store
+      // externalLink in realpathSync-normalized form, but we normalize the
+      // stored baseline here so that a trailing slash, mixed separators,
+      // or an unresolved `/var` → `/private/var` prefix cannot silently
+      // DoS every external-project spawn. Security unchanged — the LHS is
+      // still a fresh realpathSync of the symlink at spawn time.
+      // `externalLink` is typed `string | null`; for kind='external' it is a
+      // non-null invariant (enforced by resolveProjectPaths above), but we
+      // guard defensively to satisfy the type system.
+      const normalizedStored =
+        project.externalLink !== null ? path.resolve(project.externalLink) : '';
+      if (realLink !== normalizedStored) {
         throw new PermissionBoundaryError(
-          `External link TOCTOU mismatch: expected ${project.externalLink}, got ${realLink}`,
+          `External link TOCTOU mismatch: expected ${normalizedStored}, got ${realLink}`,
         );
       }
     }

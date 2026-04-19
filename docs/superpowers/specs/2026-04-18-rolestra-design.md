@@ -577,8 +577,8 @@ Expertise: {expertise}
 |---|---|---|---|
 | `online` | 🟢 녹색 | 연결 OK + 활성 | warmup 성공 |
 | `connecting` | 🟡 노랑 애니 | 재연결 시도 중 | warmup 진행 |
-| `offline-connection` | 🔴 빨강 | ping/warmup 실패 | warmup 실패 |
-| `offline-manual` | ⚪ 회색 | 사용자 수동 퇴근 | "퇴근" 토글 |
+| `offline-connection` | 🔴 빨강 | ping/warmup 실패, UI 라벨은 "점검 필요" | warmup 실패 |
+| `offline-manual` | ⚪ 회색 | 사용자 수동 퇴근, UI 라벨은 "외근" | "퇴근" 토글 |
 
 - 앱 시작 시 모든 provider에 대해 warmup 병렬 실행, 실패 시 `offline-connection`.
 - 사용자가 수동 퇴근시키면 DB `member_profiles.status_override = 'offline-manual'` 저장. 수동 출근 토글 전까지 자동 재연결 시도 제외.
