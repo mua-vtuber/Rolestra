@@ -13,6 +13,7 @@
 
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { migrations as liveChain } from '../migrations/index';
 import {
   assertNoLegacyMigrations,
   runMigrations,
@@ -98,12 +99,15 @@ describe('runMigrations (injected DB + chain)', () => {
   });
 
   it('uses the module-level chain when only `db` is provided', () => {
-    // The live v3 chain is currently empty (Phase R2 Task 0 baseline).
-    // Calling the single-arg form should behave identically to passing [].
+    // The live v3 chain grows as Phase R2 tasks land. This test asserts only
+    // that the single-arg overload wires through to the module-level chain —
+    // every recorded id must match the exported chain, in order.
     expect(() => runMigrations(db)).not.toThrow();
 
-    const count = db.prepare('SELECT COUNT(*) as c FROM migrations').get() as { c: number };
-    expect(count.c).toBe(0);
+    const rows = db
+      .prepare('SELECT id FROM migrations ORDER BY rowid')
+      .all() as Array<{ id: string }>;
+    expect(rows.map((r) => r.id)).toEqual(liveChain.map((m) => m.id));
   });
 
   it('applies an injected chain and records each id', () => {

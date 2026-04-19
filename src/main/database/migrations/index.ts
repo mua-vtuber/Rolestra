@@ -9,9 +9,13 @@
  */
 
 import type { Migration } from '../migrator';
+import { migration as m001 } from './001-core';
+import { migration as m002 } from './002-projects';
+import { migration as m003 } from './003-channels';
+import { migration as m004 } from './004-meetings';
 
 /**
  * Ordered list of all v3 migrations.
  * The migrator will apply them sequentially, skipping any already applied.
  */
-export const migrations: Migration[] = [];
+export const migrations: Migration[] = [m001, m002, m003, m004];
