@@ -56,3 +56,21 @@ export class ClaudePermissionAdapter implements CliPermissionAdapter {
     ];
   }
 }
+
+export class CodexPermissionAdapter implements CliPermissionAdapter {
+  buildArgs(ctx: AdapterContext): string[] {
+    assertExternalNotAuto(ctx);
+    switch (ctx.permissionMode) {
+      case 'auto':
+        return ['exec', '-a', 'never', '--sandbox', 'danger-full-access', '-C', ctx.cwd, '--skip-git-repo-check', '-'];
+      case 'hybrid':
+        return ['exec', '--full-auto', '-C', ctx.cwd, '-'];
+      case 'approval':
+        return ['exec', '-a', 'on-failure', '--sandbox', 'workspace-write', '-C', ctx.cwd, '-'];
+    }
+  }
+
+  buildReadOnlyArgs(ctx: AdapterContext): string[] {
+    return ['exec', '-a', 'never', '--sandbox', 'read-only', '-C', ctx.cwd, '-'];
+  }
+}
