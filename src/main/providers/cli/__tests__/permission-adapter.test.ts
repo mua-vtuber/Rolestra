@@ -5,13 +5,11 @@ import {
   GeminiPermissionAdapter,
   assertExternalNotAuto,
   type AdapterContext,
-  type CliKind,
 } from '../permission-adapter';
 import type { PermissionMode, ProjectKind } from '../../../../shared/project-types';
 
 function ctx(over: Partial<AdapterContext> = {}): AdapterContext {
   return {
-    cliKind: 'claude' as CliKind,
     permissionMode: 'hybrid' as PermissionMode,
     projectKind: 'new' as ProjectKind,
     cwd: '/tmp/proj',
@@ -70,7 +68,7 @@ describe('CodexPermissionAdapter', () => {
   const a = new CodexPermissionAdapter();
 
   it('auto: danger-full-access sandbox with skip-git-repo-check', () => {
-    const args = a.buildArgs(ctx({ cliKind: 'codex', permissionMode: 'auto' }));
+    const args = a.buildArgs(ctx({ permissionMode: 'auto' }));
     expect(args).toEqual([
       'exec', '-a', 'never', '--sandbox', 'danger-full-access',
       '-C', '/tmp/proj', '--skip-git-repo-check', '-',
@@ -78,12 +76,12 @@ describe('CodexPermissionAdapter', () => {
   });
 
   it('hybrid: --full-auto alias', () => {
-    const args = a.buildArgs(ctx({ cliKind: 'codex', permissionMode: 'hybrid' }));
+    const args = a.buildArgs(ctx({ permissionMode: 'hybrid' }));
     expect(args).toEqual(['exec', '--full-auto', '-C', '/tmp/proj', '-']);
   });
 
   it('approval: on-failure + workspace-write', () => {
-    const args = a.buildArgs(ctx({ cliKind: 'codex', permissionMode: 'approval' }));
+    const args = a.buildArgs(ctx({ permissionMode: 'approval' }));
     expect(args).toEqual([
       'exec', '-a', 'on-failure', '--sandbox', 'workspace-write',
       '-C', '/tmp/proj', '-',
@@ -91,7 +89,7 @@ describe('CodexPermissionAdapter', () => {
   });
 
   it('buildReadOnlyArgs: read-only sandbox', () => {
-    const args = a.buildReadOnlyArgs(ctx({ cliKind: 'codex' }));
+    const args = a.buildReadOnlyArgs(ctx());
     expect(args).toEqual([
       'exec', '-a', 'never', '--sandbox', 'read-only', '-C', '/tmp/proj', '-',
     ]);
@@ -99,7 +97,7 @@ describe('CodexPermissionAdapter', () => {
 
   it('external + auto throws', () => {
     expect(() =>
-      a.buildArgs(ctx({ cliKind: 'codex', permissionMode: 'auto', projectKind: 'external' })),
+      a.buildArgs(ctx({ permissionMode: 'auto', projectKind: 'external' })),
     ).toThrow(/external/i);
   });
 });
@@ -108,28 +106,28 @@ describe('GeminiPermissionAdapter', () => {
   const a = new GeminiPermissionAdapter();
 
   it('auto: yolo', () => {
-    expect(a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'auto' })))
+    expect(a.buildArgs(ctx({ permissionMode: 'auto' })))
       .toEqual(['--approval-mode', 'yolo']);
   });
 
   it('hybrid: auto_edit', () => {
-    expect(a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'hybrid' })))
+    expect(a.buildArgs(ctx({ permissionMode: 'hybrid' })))
       .toEqual(['--approval-mode', 'auto_edit']);
   });
 
   it('approval: default', () => {
-    expect(a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'approval' })))
+    expect(a.buildArgs(ctx({ permissionMode: 'approval' })))
       .toEqual(['--approval-mode', 'default']);
   });
 
   it('buildReadOnlyArgs: default', () => {
-    expect(a.buildReadOnlyArgs(ctx({ cliKind: 'gemini' })))
+    expect(a.buildReadOnlyArgs(ctx()))
       .toEqual(['--approval-mode', 'default']);
   });
 
   it('external + auto throws', () => {
     expect(() =>
-      a.buildArgs(ctx({ cliKind: 'gemini', permissionMode: 'auto', projectKind: 'external' })),
+      a.buildArgs(ctx({ permissionMode: 'auto', projectKind: 'external' })),
     ).toThrow(/external/i);
   });
 });

@@ -24,7 +24,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 
-import { getShellEnv } from './shell-env';
+import {
+  defaultShellEnvResolver,
+  type ShellEnvResolver,
+} from './shell-env';
 
 export interface RunCliOptions {
   command: string;
@@ -50,13 +53,19 @@ const DEFAULT_TIMEOUT = 5 * 60_000;
  *   2. `shell-env` dump — only populated on darwin; `{}` elsewhere.
  *   3. `overrides` — Rolestra-controlled values (e.g. `ROLESTRA_PROJECT_SLUG`).
  *
- * The shell-env layer is read-through cached by {@link getShellEnv}, so repeat
- * calls cost nothing after the first invocation.
+ * The shell-env layer is read-through cached by the resolver, so repeat calls
+ * cost nothing after the first invocation.
+ *
+ * @param overrides Highest-precedence env values merged on top.
+ * @param resolver  Optional shell-env resolver (defaults to the module
+ *                  singleton). Tests pass a fresh resolver to keep platform
+ *                  branches isolated.
  */
 export async function buildSpawnEnv(
   overrides: Record<string, string> = {},
+  resolver: ShellEnvResolver = defaultShellEnvResolver,
 ): Promise<NodeJS.ProcessEnv> {
-  const shellEnv = await getShellEnv();
+  const shellEnv = await resolver.get();
   return {
     ...process.env,
     ...shellEnv,
@@ -93,17 +102,24 @@ export async function runCli(opts: RunCliOptions): Promise<RunCliResult> {
     proc.stdout.on('data', (c: Buffer) => outChunks.push(c.toString('utf-8')));
     proc.stderr.on('data', (c: Buffer) => errChunks.push(c.toString('utf-8')));
 
+    // Two timers: the outer timeout fires SIGTERM; if the child is still
+    // alive 3s later the inner timer escalates to SIGKILL. Both are cleared
+    // on `exit` / `error` so a normally-exiting child does not hold the
+    // event loop open waiting for a SIGKILL that will never fire.
+    let killTimer: NodeJS.Timeout | null = null;
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
-      setTimeout(() => proc.kill('SIGKILL'), 3000);
+      killTimer = setTimeout(() => proc.kill('SIGKILL'), 3000);
     }, opts.timeoutMs ?? DEFAULT_TIMEOUT);
 
     proc.on('error', (err) => {
       clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
       reject(err);
     });
     proc.on('exit', (code) => {
       clearTimeout(timeout);
+      if (killTimer) clearTimeout(killTimer);
       resolve({ stdout: outChunks.join(''), stderr: errChunks.join(''), exitCode: code ?? 1 });
     });
 

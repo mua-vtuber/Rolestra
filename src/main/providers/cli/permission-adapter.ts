@@ -16,13 +16,14 @@
  * R2-Task21` and will be migrated in Task 21.
  */
 
+import type { CliKind } from '../../../shared/cli-types';
 import type { PermissionMode, ProjectKind } from '../../../shared/project-types';
 
-/** Supported CLI kinds for the Rolestra permission matrix. */
-export type CliKind = 'claude' | 'codex' | 'gemini';
+// Re-export for backwards compatibility with existing Main-side call sites;
+// Task 17 will wire the shared `CliKind` into IPC schemas directly.
+export type { CliKind };
 
 export interface AdapterContext {
-  cliKind: CliKind;
   permissionMode: PermissionMode;
   projectKind: ProjectKind;
   /** Absolute spawn cwd (project-scoped; see PermissionService.resolveForCli). */

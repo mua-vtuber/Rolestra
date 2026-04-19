@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { runCli, buildSpawnEnv, escapeWindowsArg } from '../cli-spawn';
-import { _resetShellEnvCacheForTests } from '../shell-env';
+import { createShellEnvResolver } from '../shell-env';
 
 // ── Shared tmp dir ─────────────────────────────────────────────
 let cwd: string;
@@ -20,7 +20,6 @@ afterAll(() => rmSync(cwd, { recursive: true, force: true }));
 // Keep the platform branch deterministic per test.
 const ORIGINAL_PLATFORM = process.platform;
 beforeEach(() => {
-  _resetShellEnvCacheForTests();
   Object.defineProperty(process, 'platform', {
     value: ORIGINAL_PLATFORM,
     configurable: true,
@@ -83,11 +82,13 @@ describe('runCli: execution', () => {
 describe('buildSpawnEnv: merge priority', () => {
   it('overrides win over process.env (non-darwin)', async () => {
     Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-    _resetShellEnvCacheForTests();
 
     process.env.ROLESTRA_TEST_ONLY = 'from-process';
     try {
-      const env = await buildSpawnEnv({ ROLESTRA_TEST_ONLY: 'from-override' });
+      const env = await buildSpawnEnv(
+        { ROLESTRA_TEST_ONLY: 'from-override' },
+        createShellEnvResolver(),
+      );
       expect(env.ROLESTRA_TEST_ONLY).toBe('from-override');
     } finally {
       delete process.env.ROLESTRA_TEST_ONLY;
@@ -96,11 +97,10 @@ describe('buildSpawnEnv: merge priority', () => {
 
   it('process.env values flow through when not overridden', async () => {
     Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
-    _resetShellEnvCacheForTests();
 
     process.env.ROLESTRA_PASSTHROUGH = 'hello';
     try {
-      const env = await buildSpawnEnv({});
+      const env = await buildSpawnEnv({}, createShellEnvResolver());
       expect(env.ROLESTRA_PASSTHROUGH).toBe('hello');
     } finally {
       delete process.env.ROLESTRA_PASSTHROUGH;
@@ -109,7 +109,6 @@ describe('buildSpawnEnv: merge priority', () => {
 
   it('shell-env overlay wins over process.env, overrides win over shell-env (darwin)', async () => {
     Object.defineProperty(process, 'platform', { value: 'darwin', configurable: true });
-    _resetShellEnvCacheForTests();
 
     // Intercept the dynamic import of shell-env so we do not actually spawn
     // a login shell.
@@ -123,7 +122,10 @@ describe('buildSpawnEnv: merge priority', () => {
 
     process.env.ROLESTRA_BASE = 'from-process';
     try {
-      const env = await buildSpawnEnv({ ROLESTRA_OVERRIDE_TARGET: 'from-override' });
+      const env = await buildSpawnEnv(
+        { ROLESTRA_OVERRIDE_TARGET: 'from-override' },
+        createShellEnvResolver(),
+      );
       // shell-env layered on top of process.env
       expect(env.ROLESTRA_BASE).toBe('from-process-should-lose');
       // shell-env-only key visible
@@ -133,13 +135,11 @@ describe('buildSpawnEnv: merge priority', () => {
     } finally {
       delete process.env.ROLESTRA_BASE;
       vi.doUnmock('shell-env');
-      _resetShellEnvCacheForTests();
     }
   });
 
   it('non-darwin skips shell-env entirely — override still wins, no shell-only keys leak in', async () => {
     Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
-    _resetShellEnvCacheForTests();
 
     // If shell-env were accidentally invoked we would see this throw mapped
     // into a warn; but getShellEnv returns {} synchronously-by-logic on
@@ -148,13 +148,38 @@ describe('buildSpawnEnv: merge priority', () => {
     vi.doMock('shell-env', () => ({ shellEnv: shellEnvMock }));
 
     try {
-      const env = await buildSpawnEnv({ ROLESTRA_FOO: 'bar' });
+      const env = await buildSpawnEnv(
+        { ROLESTRA_FOO: 'bar' },
+        createShellEnvResolver(),
+      );
       expect(env.ROLESTRA_FOO).toBe('bar');
       expect(shellEnvMock).not.toHaveBeenCalled();
     } finally {
       vi.doUnmock('shell-env');
-      _resetShellEnvCacheForTests();
     }
+  });
+
+  it('two fresh resolvers keep independent caches', async () => {
+    Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+
+    const a = createShellEnvResolver();
+    const b = createShellEnvResolver();
+
+    process.env.ROLESTRA_RESOLVER_ISOLATION = 'first';
+    const envA1 = await a.get();
+    expect(envA1).toEqual({});
+
+    // Mutating process.env between the two resolvers does not affect either —
+    // each resolver's cache is independent, and on non-darwin both cache `{}`.
+    process.env.ROLESTRA_RESOLVER_ISOLATION = 'second';
+    const envB1 = await b.get();
+    expect(envB1).toEqual({});
+
+    // And the cache is stable across repeat calls on the same resolver.
+    const envA2 = await a.get();
+    expect(envA2).toBe(envA1);
+
+    delete process.env.ROLESTRA_RESOLVER_ISOLATION;
   });
 });
 
