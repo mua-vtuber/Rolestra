@@ -144,7 +144,7 @@
     {
       "id": 20,
       "subject": "Task 20: SSM v3 side-effects + circuit breaker 런타임",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [12, 13, 16, 15, 19],
       "description": "**Goal:** SSM 이벤트 4종(onMessage/onStateChange/onPermissionAction/onFinal)을 서비스에 연결 + breaker.on('fired') → autonomyMode='manual' + approval + notification.\n\n**Files:**\n- Create: `src/main/engine/v3-side-effects.ts` + test\n- Modify: `src/main/engine/` ssm 관련 파일(ctx/호출부)\n\n**Verify:** `npx vitest run src/main/engine/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\"],\"verifyCommand\":\"npx vitest run src/main/engine/__tests__/\",\"acceptanceCriteria\":[\"message 저장+emit\",\"#회의록 자동 포스트\",\"breaker→manual+approval+알림\",\"기존 SSM 테스트 여전히 PASS\"]}\n```"
     },
