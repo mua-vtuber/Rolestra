@@ -112,9 +112,6 @@ export function assertNoLegacyMigrations(db: Database.Database): void {
  *   migration caused the failure. This is intentionally fatal to prevent
  *   the app from running with an inconsistent schema.
  */
-export function runMigrations(): void;
-export function runMigrations(db: Database.Database): void;
-export function runMigrations(db: Database.Database, migrations: readonly Migration[]): void;
 export function runMigrations(
   db?: Database.Database,
   migrations: readonly Migration[] = defaultMigrations,

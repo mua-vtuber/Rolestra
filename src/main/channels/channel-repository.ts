@@ -44,9 +44,9 @@ interface ChannelMemberRow {
  * Columns `update()` is allowed to mutate. Everything else — `id`,
  * `project_id`, `kind`, `created_at` — stays read-only after insertion.
  */
-const UPDATABLE_COLUMNS = ['name', 'read_only'] as const;
+const _UPDATABLE_COLUMNS = ['name', 'read_only'] as const;
 
-type UpdatableColumn = (typeof UPDATABLE_COLUMNS)[number];
+type UpdatableColumn = (typeof _UPDATABLE_COLUMNS)[number];
 
 /** Camel-case patch accepted by `update()`. */
 export interface ChannelUpdatePatch {

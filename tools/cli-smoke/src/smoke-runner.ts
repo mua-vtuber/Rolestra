@@ -75,7 +75,7 @@ async function runScenario(
         name: scenarioId,
         description: '',
         permissionMode: mode,
-        externalPath: externalSrc!,
+        externalPath: externalSrc ?? '',
       });
     } else {
       project = await svc.createNewProject({

@@ -390,7 +390,6 @@ function main(): void {
   const win = evaluateSample();
   writeFileSync(outTs, generateTs(win));
   writeFileSync(outCss, generateCss(win));
-  // eslint-disable-next-line no-console
   console.log(`theme:build — wrote ${outTs} + ${outCss}`);
 }
 

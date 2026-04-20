@@ -54,7 +54,7 @@ interface ProjectMemberRow {
  * Columns `update()` is allowed to mutate. `id` / `slug` / `created_at` are
  * structural invariants and stay read-only after insertion.
  */
-const UPDATABLE_COLUMNS = [
+const _UPDATABLE_COLUMNS = [
   'name',
   'description',
   'kind',
@@ -65,7 +65,7 @@ const UPDATABLE_COLUMNS = [
   'archived_at',
 ] as const;
 
-type UpdatableColumn = (typeof UPDATABLE_COLUMNS)[number];
+type UpdatableColumn = (typeof _UPDATABLE_COLUMNS)[number];
 
 /** Camel-case patch accepted by `update()`. */
 export interface ProjectUpdatePatch {

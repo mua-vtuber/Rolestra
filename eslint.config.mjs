@@ -7,7 +7,16 @@ import globals from 'globals';
 export default tseslint.config(
   // ── Global ignores ──
   {
-    ignores: ['out/**', 'dist/**', 'node_modules/**'],
+    ignores: [
+      'out/**',
+      'dist/**',
+      'node_modules/**',
+      '_legacy/**',
+      'docs/Rolestra_sample/**',
+      '.omx/**',
+      '.playwright-cli/**',
+      'output/**',
+    ],
   },
 
   // ── Base: recommended JS + strict TS ──

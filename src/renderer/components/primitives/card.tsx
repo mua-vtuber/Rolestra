@@ -3,7 +3,7 @@ import { forwardRef, type HTMLAttributes } from 'react';
 
 import { useTheme } from '../../theme/use-theme';
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {}
+export type CardProps = HTMLAttributes<HTMLDivElement>;
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(({ className, ...rest }, ref) => (
   <div

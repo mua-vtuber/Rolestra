@@ -1,25 +1,8 @@
 {
-  "app": {
-    "mainPlaceholder": "R4에서 대시보드가 여기에 들어옵니다."
-  },
   "shell": {
     "rail": {
-      "projects": "프로젝트",
-      "direct": "다이렉트 메시지"
-    },
-    "topbar": {
-      "title": "사무실",
-      "subtitle": "환영합니다"
-    }
-  },
-  "theme": {
-    "switcher": {
-      "label": "테마",
-      "warm": "따뜻함",
-      "tactical": "관제실",
-      "retro": "레트로",
-      "light": "라이트",
-      "dark": "다크"
+      "direct": "다이렉트 메시지",
+      "projects": "프로젝트"
     }
   }
 }

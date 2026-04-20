@@ -284,9 +284,8 @@ const legacyChannelsWarned = new Set<string>();
 function warnOnceLegacy(channel: string): void {
   if (legacyChannelsWarned.has(channel)) return;
   legacyChannelsWarned.add(channel);
-  // eslint-disable-next-line no-console
   console.warn(
-    `[IPC] legacy v2 channel "${channel}" invoked — scheduled for removal in R3`,
+    `[IPC] legacy v2 channel "${channel}" invoked — scheduled for removal in R11`,
   );
 }
 
