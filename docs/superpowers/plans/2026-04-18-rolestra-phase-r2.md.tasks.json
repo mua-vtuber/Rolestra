@@ -1,6 +1,6 @@
 {
   "planPath": "docs/superpowers/plans/2026-04-18-rolestra-phase-r2.md",
-  "lastUpdated": "2026-04-20T17:20:00Z",
+  "lastUpdated": "2026-04-20T23:15:00Z",
   "tasks": [
     {
       "id": 0,
@@ -46,84 +46,84 @@
     {
       "id": 6,
       "subject": "Task 6: PermissionService 재설계 (path-guard + realpath 재검증)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** R1 path-guard 로직을 Main PermissionService로 이식, CLI spawn 직전 `resolveForCli(projectId)`로 TOCTOU 재검증, allowedRoots = [consensusPath, activeProject cwdPath].\n\n**Files:**\n- Modify: `src/main/files/permission-service.ts`\n- Create: `permission-service-v3.test.ts`\n\n**Verify:** `npx vitest run src/main/files/__tests__/permission-service-v3.test.ts`\n\n```json:metadata\n{\"files\":[\"src/main/files/permission-service.ts\"],\"verifyCommand\":\"npx vitest run src/main/files/__tests__/permission-service-v3.test.ts\",\"acceptanceCriteria\":[\"consensusPath 통과\",\"/etc/passwd 차단\",\"external junction TOCTOU 검증\",\"folder_missing throw\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: CliPermissionAdapter + CliSpawn + shell-env PATH 병합",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6],
       "description": "**Goal:** R1 adapter + spawn을 `src/main/providers/cli/`로 이식, macOS GUI PATH 상속 문제를 shell-env 패키지로 해결, `process.env ← shell-env ← rolestra overrides` 병합.\n\n**Files:**\n- Create: `src/main/providers/cli/{permission-adapter,cli-spawn,shell-env}.ts` + tests\n- Modify: `package.json` (dep shell-env)\n\n**Verify:** `npx vitest run src/main/providers/cli/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/providers/cli/permission-adapter.ts\",\"src/main/providers/cli/cli-spawn.ts\",\"src/main/providers/cli/shell-env.ts\"],\"verifyCommand\":\"npx vitest run src/main/providers/cli/__tests__/\",\"acceptanceCriteria\":[\"3 CLI × 3 mode arg 일치\",\"external+auto throw\",\"env 병합 우선순위\",\"non-darwin shell-env 생략\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 8: ProjectService + junction + meta.json",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** 프로젝트 3종 생성 CRUD + folder + meta.json + junction/symlink + `kind=external, mode=auto` 거부 + folder_missing 감지.\n\n**Files:**\n- Create: `src/main/projects/{project-service,project-repository,project-meta,junction}.ts` + tests\n\n**Verify:** `npx vitest run src/main/projects/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/projects/project-service.ts\",\"src/main/projects/project-repository.ts\",\"src/main/projects/project-meta.ts\",\"src/main/projects/junction.ts\"],\"verifyCommand\":\"npx vitest run src/main/projects/__tests__/\",\"acceptanceCriteria\":[\"3종 생성 DB+FS 동시\",\"external+auto throw\",\"슬러그 중복 throw\",\"folder_missing 자동 감지\"]}\n```"
     },
     {
       "id": 9,
       "subject": "Task 9: MemberProfileService + 출근 상태 머신 + PersonaBuilder",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** MemberProfile CRUD + 4종 workStatus 머신(runtime warmup + status_override 병합) + 구조화 필드 기반 PersonaBuilder + 기본 아바타 8종 상수.\n\n**Files:**\n- Create: `src/main/members/{member-profile-service,member-profile-repository,persona-builder}.ts` + tests\n\n**Verify:** `npx vitest run src/main/members/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/members/member-profile-service.ts\",\"src/main/members/persona-builder.ts\"],\"verifyCommand\":\"npx vitest run src/main/members/__tests__/\",\"acceptanceCriteria\":[\"setStatus offline-manual 지속\",\"reconnect warmup 실패→offline-connection\",\"PersonaBuilder 포맷 일치\",\"아바타 8종\"]}\n```"
     },
     {
       "id": 10,
       "subject": "Task 10: ChannelService + 시스템 채널 자동 생성",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8],
       "description": "**Goal:** Channel CRUD + 프로젝트 생성 시 `#일반/#승인-대기/#회의록` 자동 생성 + DM 중복 에러 + 시스템 채널 삭제/rename 금지.\n\n**Files:**\n- Create: `src/main/channels/{channel-service,channel-repository}.ts` + test\n- Modify: `src/main/projects/project-service.ts` (ChannelService 주입)\n\n**Verify:** `npx vitest run src/main/channels/__tests__/channel-service.test.ts`\n\n```json:metadata\n{\"files\":[\"src/main/channels/channel-service.ts\",\"src/main/channels/channel-repository.ts\"],\"verifyCommand\":\"npx vitest run src/main/channels/__tests__/channel-service.test.ts\",\"acceptanceCriteria\":[\"3 system 채널 자동\",\"시스템 삭제 throw\",\"DM partial unique\",\"project_members 복합 FK\"]}\n```"
     },
     {
       "id": 11,
       "subject": "Task 11: MessageService + FTS5 검색",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10],
       "description": "**Goal:** 메시지 append + 채널별 역순 list + FTS bm25 검색(프로젝트/채널 scope) + author literal 검증 + 서비스 내부 message 이벤트 emit.\n\n**Files:**\n- Create: `src/main/channels/{message-service,message-repository}.ts` + test\n\n**Verify:** `npx vitest run src/main/channels/__tests__/message-service.test.ts`\n\n```json:metadata\n{\"files\":[\"src/main/channels/message-service.ts\",\"src/main/channels/message-repository.ts\"],\"verifyCommand\":\"npx vitest run src/main/channels/__tests__/message-service.test.ts\",\"acceptanceCriteria\":[\"FTS rank 포함\",\"user author literal\",\"list 역순 페이지\",\"EventEmitter emit\"]}\n```"
     },
     {
       "id": 12,
       "subject": "Task 12: MeetingService + SsmContext v3 확장",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10],
       "description": "**Goal:** Meeting CRUD + active unique 보장 + SsmContext에 6개 v3 필드 추가(projectId/channelId/meetingId/projectPath/permissionMode/autonomyMode) + 모든 기존 ctx 호출부 수정.\n\n**Files:**\n- Create: `src/main/meetings/{meeting-service,meeting-repository}.ts` + test\n- Modify: `src/main/engine/` SsmContext 정의 파일\n\n**Verify:** `npx vitest run src/main/meetings/__tests__/` && `npx tsc --noEmit`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/meeting-service.ts\",\"src/main/meetings/meeting-repository.ts\"],\"verifyCommand\":\"npx vitest run src/main/meetings/__tests__/\",\"acceptanceCriteria\":[\"채널당 1 active unique\",\"updateState snapshot 반영\",\"SsmContext 6 필드 필수\"]}\n```"
     },
     {
       "id": 13,
       "subject": "Task 13: ApprovalService (5종 kind)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** 5종 approval kind 생성·결정·조회. hard DELETE 없음, supersede/expire로 종료. conditional은 status=approved + comment 저장 + event에 decision 함께.\n\n**Files:**\n- Create: `src/main/approvals/{approval-service,approval-repository}.ts` + test\n\n**Verify:** `npx vitest run src/main/approvals/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/approvals/approval-service.ts\",\"src/main/approvals/approval-repository.ts\"],\"verifyCommand\":\"npx vitest run src/main/approvals/__tests__/\",\"acceptanceCriteria\":[\"create pending\",\"decide approve/reject/conditional\",\"재결정 throw\",\"supersede/expire 보존\"]}\n```"
     },
     {
       "id": 14,
       "subject": "Task 14: ConsensusFolderService (atomic rename + advisory lock)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** `<ArenaRoot>/consensus/` atomic rename + mkdir-based advisory lock + 10s timeout + stale lock 자동 제거(pid 사라짐 또는 30s 초과).\n\n**Files:**\n- Create: `src/main/consensus/consensus-folder-service.ts` + test\n\n**Verify:** `npx vitest run src/main/consensus/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/consensus/consensus-folder-service.ts\"],\"verifyCommand\":\"npx vitest run src/main/consensus/__tests__/\",\"acceptanceCriteria\":[\"tmp+rename atomic\",\"동시 2 writer 직렬화\",\"stale lock 자동 제거\",\"10s timeout throw\"]}\n```"
     },
     {
       "id": 15,
       "subject": "Task 15: QueueService + CircuitBreaker (4종 상한)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8],
       "description": "**Goal:** queue CRUD + orderIndex 1000 간격 + claimNext 트랜잭션 + recoverInProgress + CircuitBreaker 4종(파일 변경 20/CLI 30분/큐 연속 5/같은 에러 3회) + breaker fire 이벤트.\n\n**Files:**\n- Create: `src/main/queue/{queue-service,queue-repository,circuit-breaker}.ts` + tests\n\n**Verify:** `npx vitest run src/main/queue/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/queue/queue-service.ts\",\"src/main/queue/queue-repository.ts\",\"src/main/queue/circuit-breaker.ts\"],\"verifyCommand\":\"npx vitest run src/main/queue/__tests__/\",\"acceptanceCriteria\":[\"orderIndex 1000 간격\",\"claimNext atomic\",\"recoverInProgress 복원\",\"breaker 4종 fire\"]}\n```"
     },
     {
       "id": 16,
       "subject": "Task 16: NotificationService (Electron Notification + DB 로그)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** OS 알림 + 포커스 체크 + prefs per kind + DB 로그 + 클릭 라우팅 + NotifierAdapter 분리(Electron/Mock).\n\n**Files:**\n- Create: `src/main/notifications/{notification-service,notification-repository}.ts` + test\n\n**Verify:** `npx vitest run src/main/notifications/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/notifications/notification-service.ts\",\"src/main/notifications/notification-repository.ts\"],\"verifyCommand\":\"npx vitest run src/main/notifications/__tests__/\",\"acceptanceCriteria\":[\"focus=true skip\",\"enabled=false skip\",\"click→event\",\"test force 발송\"]}\n```"
     },
     {
       "id": 17,
       "subject": "Task 17: IPC 타입·스키마 확장 (IpcChannelMap + zod + stream events)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** spec §6 9개 도메인 40+ 채널을 IpcChannelMap에 추가 + 각 채널 zod 스키마 + stream 이벤트 8종 discriminated union. 기존 v2 채널은 유지.\n\n**Files:**\n- Modify: `src/shared/ipc-types.ts`, `src/shared/ipc-schemas.ts`\n- Create: `src/shared/stream-events.ts`, `src/shared/__tests__/ipc-schemas-v3.test.ts`\n\n**Verify:** `npx vitest run src/shared/__tests__/ipc-schemas-v3.test.ts && npx tsc --noEmit`\n\n```json:metadata\n{\"files\":[\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\",\"src/shared/stream-events.ts\"],\"verifyCommand\":\"npx vitest run src/shared/__tests__/ipc-schemas-v3.test.ts\",\"acceptanceCriteria\":[\"40+ 채널 추가\",\"project external+auto refine\",\"stream 이벤트 discriminated union\",\"v2 채널 유지\"]}\n```"
     },
