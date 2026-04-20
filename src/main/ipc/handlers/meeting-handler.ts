@@ -1,10 +1,16 @@
 /**
  * meeting:* IPC handlers.
  *
- * The only channel exposed on this domain is `meeting:abort` — start
- * flows through `channel:start-meeting`, finish happens inside the SSM
- * engine. Abort is surfaced as a user gesture so the user can tear down
- * a stuck meeting without waiting for the SSM to reach a terminal state.
+ * Exposed channels:
+ *   - `meeting:abort`       — user gesture to tear down a stuck meeting.
+ *   - `meeting:list-active` — R4 dashboard TasksWidget fetch (spec §7.5).
+ *
+ * Start flows through `channel:start-meeting`; finish happens inside the
+ * SSM engine. Abort is surfaced here so the user can exit a stuck meeting
+ * without waiting for the SSM to reach a terminal state.
+ *
+ * Both active-listing and abort share the same MeetingService accessor
+ * — the service owns the repository handle and list semantics.
  */
 
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
@@ -31,4 +37,16 @@ export function handleMeetingAbort(
 ): IpcResponse<'meeting:abort'> {
   getService().finish(data.meetingId, 'aborted', null);
   return { success: true };
+}
+
+/** meeting:list-active — R4 dashboard TasksWidget. */
+export function handleMeetingListActive(
+  data: IpcRequest<'meeting:list-active'>,
+): IpcResponse<'meeting:list-active'> {
+  // `data` is `{ limit? } | undefined` — preserve the distinction between
+  // "caller omitted the field" and "caller passed 0" (the repository
+  // clamp treats 0 as "at least 1" rather than "unset default"). Passing
+  // `undefined` through lets the repo's default (10) kick in.
+  const meetings = getService().listActive(data?.limit);
+  return { meetings };
 }

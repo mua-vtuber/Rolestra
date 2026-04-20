@@ -150,9 +150,13 @@ import {
 import {
   handleMessageAppend,
   handleMessageListByChannel,
+  handleMessageListRecent,
   handleMessageSearch,
 } from './handlers/message-handler';
-import { handleMeetingAbort } from './handlers/meeting-handler';
+import {
+  handleMeetingAbort,
+  handleMeetingListActive,
+} from './handlers/meeting-handler';
 import {
   handleMemberList,
   handleMemberGetProfile,
@@ -498,10 +502,12 @@ export function registerIpcHandlers(): void {
   // ── v3: Message ─────────────────────────────────────────────────
   handle('message:append', isDev, (data) => handleMessageAppend(data));
   handle('message:list-by-channel', isDev, (data) => handleMessageListByChannel(data));
+  handle('message:list-recent', isDev, (data) => handleMessageListRecent(data));
   handle('message:search', isDev, (data) => handleMessageSearch(data));
 
   // ── v3: Meeting ─────────────────────────────────────────────────
   handle('meeting:abort', isDev, (data) => handleMeetingAbort(data));
+  handle('meeting:list-active', isDev, (data) => handleMeetingListActive(data));
 
   // ── v3: Member Profile ──────────────────────────────────────────
   handle('member:list', isDev, () => handleMemberList());

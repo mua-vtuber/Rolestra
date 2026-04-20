@@ -46,11 +46,13 @@ import {
 import {
   handleMessageAppend,
   handleMessageListByChannel,
+  handleMessageListRecent,
   handleMessageSearch,
   setMessageServiceAccessor,
 } from '../handlers/message-handler';
 import {
   handleMeetingAbort,
+  handleMeetingListActive,
   setMeetingAbortServiceAccessor,
 } from '../handlers/meeting-handler';
 import {
@@ -262,6 +264,7 @@ describe('channel + meeting handlers', () => {
   let meetingSvc: {
     start: ReturnType<typeof vi.fn>;
     finish: ReturnType<typeof vi.fn>;
+    listActive: ReturnType<typeof vi.fn>;
   };
 
   beforeEach(() => {
@@ -282,6 +285,7 @@ describe('channel + meeting handlers', () => {
         endedAt: 2,
         outcome: 'aborted',
       }),
+      listActive: vi.fn().mockReturnValue([]),
     };
     setChannelServiceAccessor(() => channelSvc as never);
     setMeetingServiceAccessor(() => meetingSvc as never);
@@ -346,6 +350,14 @@ describe('channel + meeting handlers', () => {
     handleMeetingAbort({ meetingId: 'm1' });
     expect(meetingSvc.finish).toHaveBeenCalledWith('m1', 'aborted', null);
   });
+
+  it('meeting:list-active forwards optional limit to the service', () => {
+    handleMeetingListActive(undefined);
+    expect(meetingSvc.listActive).toHaveBeenLastCalledWith(undefined);
+
+    handleMeetingListActive({ limit: 7 });
+    expect(meetingSvc.listActive).toHaveBeenLastCalledWith(7);
+  });
 });
 
 // ───────────────────────────────────────────────────────────────
@@ -355,12 +367,14 @@ describe('message handlers', () => {
   let svc: {
     append: ReturnType<typeof vi.fn>;
     listByChannel: ReturnType<typeof vi.fn>;
+    listRecent: ReturnType<typeof vi.fn>;
     search: ReturnType<typeof vi.fn>;
   };
   beforeEach(() => {
     svc = {
       append: vi.fn().mockReturnValue({ id: 'msg', content: 'x' }),
       listByChannel: vi.fn().mockReturnValue([]),
+      listRecent: vi.fn().mockReturnValue([]),
       search: vi.fn().mockReturnValue([]),
     };
     setMessageServiceAccessor(() => svc as never);
@@ -418,6 +432,14 @@ describe('message handlers', () => {
         content: '',
       }),
     ).toThrow(ZodError);
+  });
+
+  it('message:list-recent forwards optional limit to the service', () => {
+    handleMessageListRecent(undefined);
+    expect(svc.listRecent).toHaveBeenLastCalledWith(undefined);
+
+    handleMessageListRecent({ limit: 5 });
+    expect(svc.listRecent).toHaveBeenLastCalledWith(5);
   });
 });
 

@@ -8,14 +8,52 @@
       "startMeeting": "Start meeting →",
       "startMeetingDisabled": "Select a project first"
     },
+    "approvals": {
+      "count": "{{count}} pending",
+      "empty": "No pending approvals.",
+      "error": "Could not load approvals.",
+      "kind": {
+        "cli_permission": "CLI permission",
+        "consensus_decision": "Consensus decision",
+        "failure_report": "Failure report",
+        "mode_transition": "Mode transition",
+        "review_outcome": "Review outcome"
+      },
+      "loading": "Loading approvals…",
+      "title": "Approvals"
+    },
     "error": {
       "kpi": "Could not load KPIs. Please retry."
+    },
+    "grid": {
+      "ariaLabel": "Dashboard widgets"
     },
     "kpi": {
       "activeMeetings": "Active meetings",
       "activeProjects": "Active projects",
       "completedToday": "Completed today",
       "pendingApprovals": "Pending approvals"
+    },
+    "people": {
+      "empty": "No team members yet.",
+      "error": "Could not load team members.",
+      "loading": "Loading team members…",
+      "title": "Team"
+    },
+    "recent": {
+      "empty": "No recent messages.",
+      "error": "Could not load recent messages.",
+      "loading": "Loading recent messages…",
+      "system": "System",
+      "title": "Recent",
+      "you": "You"
+    },
+    "tasks": {
+      "elapsed": "{{minutes}}m {{seconds}}s",
+      "empty": "No active meetings.",
+      "error": "Could not load active meetings.",
+      "loading": "Loading active meetings…",
+      "title": "Active meetings"
     }
   },
   "shell": {

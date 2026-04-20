@@ -35,7 +35,11 @@
  */
 
 import { randomUUID } from 'node:crypto';
-import type { Meeting, MeetingOutcome } from '../../shared/meeting-types';
+import type {
+  ActiveMeetingSummary,
+  Meeting,
+  MeetingOutcome,
+} from '../../shared/meeting-types';
 import type { SessionState } from '../../shared/session-state-types';
 import { MeetingRepository } from './meeting-repository';
 
@@ -236,5 +240,15 @@ export class MeetingService {
   /** Per-id lookup. Returns `null` when `id` is unknown. */
   get(id: string): Meeting | null {
     return this.repo.get(id);
+  }
+
+  /**
+   * R4 dashboard TasksWidget accessor. Delegates to the repository — the
+   * summary is computed at the SQL layer (join) + by
+   * {@link sessionStateToIndex} at read time. `limit` is forwarded
+   * verbatim; the repository applies its own clamp.
+   */
+  listActive(limit?: number): ActiveMeetingSummary[] {
+    return this.repo.listActive(limit);
   }
 }

@@ -41,7 +41,9 @@ import type {
   MessageMeta,
   MessageRole,
   MessageSearchResult,
+  RecentMessage,
 } from '../../shared/message-types';
+import { RECENT_MESSAGE_EXCERPT_LEN } from '../../shared/constants';
 
 /** Snake-case row shape as returned by better-sqlite3. */
 interface MessageRow {
@@ -92,6 +94,10 @@ export const MESSAGE_LIST_MAX_LIMIT = 200;
 export const MESSAGE_LIST_DEFAULT_LIMIT = 50;
 export const MESSAGE_SEARCH_MAX_LIMIT = 100;
 export const MESSAGE_SEARCH_DEFAULT_LIMIT = 30;
+
+/** R4 dashboard RecentWidget — limits for `listRecent`. */
+export const RECENT_MESSAGE_DEFAULT_LIMIT = 10;
+export const RECENT_MESSAGE_MAX_LIMIT = 50;
 
 export interface ListByChannelOptions {
   /** Maximum rows to return. Clamped to `[1, MESSAGE_LIST_MAX_LIMIT]`. */
@@ -268,6 +274,98 @@ export class MessageRepository {
       )
       .all(query, limit) as MessageSearchRow[];
     return rows.map(rowToSearchResult);
+  }
+
+  /**
+   * Returns the last N messages across all channels for the R4 dashboard
+   * RecentWidget (spec §7.5). Joins `messages` with `channels` (for the
+   * channel name) and LEFT-joins `providers` (for the member sender's
+   * `display_name`). Content is truncated to `RECENT_MESSAGE_EXCERPT_LEN`
+   * at the SQL layer via `substr` so we don't ship multi-kB rows across
+   * IPC for a sidebar widget; an ellipsis is appended in JS when the
+   * original message exceeded the cap.
+   *
+   * Author label rules:
+   *   - `author_kind='user'`   → label is the literal `'user'` (the
+   *     renderer maps this to a localized "Me"/"나" string — we do not
+   *     i18n at the repository boundary).
+   *   - `author_kind='member'` → label is `providers.display_name`. If
+   *     the provider row is missing (defensive — FK is conditional via
+   *     the `messages_author_fk_check` trigger, not the schema), the
+   *     raw `author_id` falls back as the label.
+   *   - `author_kind='system'` → label is the literal `'system'`; again
+   *     the renderer chooses the user-facing string.
+   *
+   * Ordering: `created_at DESC, rowid DESC` — same tiebreaker as
+   * `listByChannel` so duplicate-millisecond rows stay deterministic.
+   */
+  listRecent(
+    limit: number = RECENT_MESSAGE_DEFAULT_LIMIT,
+  ): RecentMessage[] {
+    const clamped = clampLimit(
+      limit,
+      RECENT_MESSAGE_DEFAULT_LIMIT,
+      RECENT_MESSAGE_MAX_LIMIT,
+    );
+    interface RecentRow {
+      id: string;
+      channel_id: string;
+      channel_name: string;
+      author_id: string;
+      author_kind: MessageAuthorKind;
+      sender_display: string | null;
+      full_len: number;
+      excerpt: string;
+      created_at: number;
+    }
+    // `substr(content, 1, N+1)` + `length(content)` so we can detect
+    // whether truncation happened without reading the full blob back.
+    // N+1 lets us distinguish "exactly N chars" from "more than N chars"
+    // when we format the ellipsis in JS.
+    const rows = this.db
+      .prepare(
+        `SELECT m.id AS id,
+                m.channel_id AS channel_id,
+                c.name AS channel_name,
+                m.author_id AS author_id,
+                m.author_kind AS author_kind,
+                p.display_name AS sender_display,
+                length(m.content) AS full_len,
+                substr(m.content, 1, ?) AS excerpt,
+                m.created_at AS created_at
+         FROM messages m
+         JOIN channels c ON m.channel_id = c.id
+         LEFT JOIN providers p
+           ON m.author_kind = 'member' AND m.author_id = p.id
+         ORDER BY m.created_at DESC, m.rowid DESC
+         LIMIT ?`,
+      )
+      .all(RECENT_MESSAGE_EXCERPT_LEN + 1, clamped) as RecentRow[];
+
+    return rows.map((row) => {
+      const truncated = row.full_len > RECENT_MESSAGE_EXCERPT_LEN;
+      const excerpt = truncated
+        ? row.excerpt.slice(0, RECENT_MESSAGE_EXCERPT_LEN) + '\u2026'
+        : row.excerpt;
+      let senderLabel: string;
+      if (row.author_kind === 'user') {
+        senderLabel = 'user';
+      } else if (row.author_kind === 'member') {
+        senderLabel = row.sender_display ?? row.author_id;
+      } else {
+        senderLabel = 'system';
+      }
+      return {
+        id: row.id,
+        channelId: row.channel_id,
+        channelName: row.channel_name,
+        senderId: row.author_id,
+        senderKind: row.author_kind,
+        senderLabel,
+        excerpt,
+        createdAt: row.created_at,
+      };
+    });
   }
 }
 

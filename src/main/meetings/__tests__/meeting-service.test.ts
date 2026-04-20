@@ -287,4 +287,57 @@ describe('MeetingService', () => {
       ).toThrow(MeetingNotFoundError);
     });
   });
+
+  // ── listActive (R4-Task7) ─────────────────────────────────────────
+
+  describe('listActive', () => {
+    it('returns only active (ended_at IS NULL) meetings, newest first', async () => {
+      const channelA = await seedChannel();
+      const channelB = await seedChannel();
+      const a = meetingService.start({ channelId: channelA, topic: 'A' });
+      // Small delay to guarantee distinct started_at.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      const b = meetingService.start({ channelId: channelB, topic: 'B' });
+
+      const summaries = meetingService.listActive();
+      expect(summaries).toHaveLength(2);
+      // Newest first — b started after a.
+      expect(summaries[0].id).toBe(b.id);
+      expect(summaries[1].id).toBe(a.id);
+
+      // elapsedMs is a positive value; project/channel names are joined.
+      expect(summaries[0].elapsedMs).toBeGreaterThanOrEqual(0);
+      expect(summaries[0].channelName).toBe('회의');
+      expect(summaries[0].projectName).toBeTruthy();
+
+      // Finish one meeting → it should drop out of the listing.
+      meetingService.finish(a.id, 'accepted');
+      const remaining = meetingService.listActive();
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].id).toBe(b.id);
+    });
+
+    it('derives stateIndex from the SSM state name', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId });
+      meetingService.updateState(meeting.id, 'VOTING', null);
+      const [summary] = meetingService.listActive();
+      // SESSION_STATE_ORDER: ..., VOTING is index 4.
+      expect(summary.stateName).toBe('VOTING');
+      expect(summary.stateIndex).toBe(4);
+    });
+
+    it('respects limit', async () => {
+      const channels = await Promise.all([
+        seedChannel(),
+        seedChannel(),
+        seedChannel(),
+      ]);
+      for (const ch of channels) {
+        meetingService.start({ channelId: ch });
+      }
+      const first = meetingService.listActive(2);
+      expect(first).toHaveLength(2);
+    });
+  });
 });

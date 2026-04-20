@@ -260,6 +260,30 @@ export const meetingAbortSchema = z.object({
   meetingId: z.string().min(1).max(128),
 });
 
+/**
+ * `meeting:list-active` input schema (R4 dashboard TasksWidget).
+ *
+ * `limit` is optional; the handler clamps to the repository's internal
+ * [1, ACTIVE_MEETING_MAX_LIMIT] range. Omitting `limit` falls back to
+ * the default (10 rows).
+ */
+export const meetingListActiveSchema = z
+  .object({
+    limit: z.number().int().positive().max(50).optional(),
+  })
+  .optional();
+
+/**
+ * `message:list-recent` input schema (R4 dashboard RecentWidget).
+ *
+ * Same shape as `meeting:list-active` — single optional numeric `limit`.
+ */
+export const messageListRecentSchema = z
+  .object({
+    limit: z.number().int().positive().max(50).optional(),
+  })
+  .optional();
+
 export const memberSetStatusSchema = z.object({
   providerId: z.string().min(1).max(128),
   status: z.enum(['online', 'offline-manual']),
@@ -344,7 +368,9 @@ export const v3ChannelSchemas = {
   'channel:start-meeting': channelStartMeetingSchema,
   'message:append': messageAppendSchema,
   'message:search': messageSearchSchema,
+  'message:list-recent': messageListRecentSchema,
   'meeting:abort': meetingAbortSchema,
+  'meeting:list-active': meetingListActiveSchema,
   'member:set-status': memberSetStatusSchema,
   'approval:decide': approvalDecideSchema,
   'queue:add': queueAddSchema,

@@ -624,4 +624,72 @@ describe('MessageService', () => {
       expect(limited).toHaveLength(2);
     });
   });
+
+  // ── listRecent (R4-Task7 RecentWidget) ────────────────────────────
+
+  describe('listRecent', () => {
+    it('returns messages newest-first with channelName + senderLabel joined', async () => {
+      seedProvider(db, 'prov-x');
+      const { channelId } = await makeChannel();
+
+      messageService.append({
+        channelId,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: 'first message',
+      });
+      // Guarantee a later created_at.
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      messageService.append({
+        channelId,
+        authorId: 'prov-x',
+        authorKind: 'member',
+        role: 'assistant',
+        content: 'member response',
+      });
+
+      const recent = messageService.listRecent();
+      expect(recent).toHaveLength(2);
+      // Newest first.
+      expect(recent[0].excerpt).toBe('member response');
+      expect(recent[0].senderLabel).toBe('Provider prov-x');
+      expect(recent[0].senderKind).toBe('member');
+      expect(recent[0].channelName).toBe('chat');
+      // Older user row.
+      expect(recent[1].senderKind).toBe('user');
+      expect(recent[1].senderLabel).toBe('user');
+    });
+
+    it('truncates long content with an ellipsis', async () => {
+      const { channelId } = await makeChannel();
+      const long = 'a'.repeat(200);
+      messageService.append({
+        channelId,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: long,
+      });
+      const [row] = messageService.listRecent();
+      // RECENT_MESSAGE_EXCERPT_LEN = 140 — excerpt is 140 chars + ellipsis.
+      expect(row.excerpt.endsWith('\u2026')).toBe(true);
+      expect(row.excerpt.length).toBe(141);
+    });
+
+    it('respects limit', async () => {
+      const { channelId } = await makeChannel();
+      for (let i = 0; i < 5; i += 1) {
+        messageService.append({
+          channelId,
+          authorId: 'user',
+          authorKind: 'user',
+          role: 'user',
+          content: `m${i}`,
+        });
+      }
+      const two = messageService.listRecent(2);
+      expect(two).toHaveLength(2);
+    });
+  });
 });

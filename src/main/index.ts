@@ -20,6 +20,11 @@ import { MeetingRepository } from './meetings/meeting-repository';
 import { ApprovalRepository } from './approvals/approval-repository';
 import { DashboardService } from './dashboard/dashboard-service';
 import { setDashboardServiceAccessor } from './ipc/handlers/dashboard-handler';
+import { MessageRepository } from './channels/message-repository';
+import { MessageService } from './channels/message-service';
+import { MeetingService } from './meetings/meeting-service';
+import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
+import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -101,12 +106,24 @@ app.whenReady().then(async () => {
     // service itself holds no DB handle; it only delegates to the
     // repos' indexed COUNT queries.
     const db = getDatabase();
+    const meetingRepo = new MeetingRepository(db);
     const dashboardService = new DashboardService({
       projectRepo: new ProjectRepository(db),
-      meetingRepo: new MeetingRepository(db),
+      meetingRepo,
       approvalRepo: new ApprovalRepository(db),
     });
     setDashboardServiceAccessor(() => dashboardService);
+
+    // R4-Task7 wires `meeting:list-active` + `message:list-recent` —
+    // the widget-facing channels need MessageService / MeetingService
+    // accessors. We instantiate the services here so the repo handles
+    // stay co-located with dashboardService (all three R4 domains come
+    // off the same `db` handle). The channel-handler still carries the
+    // full CRUD surface; these accessors feed only the dashboard reads.
+    const meetingService = new MeetingService(meetingRepo);
+    const messageService = new MessageService(new MessageRepository(db));
+    setMeetingAbortServiceAccessor(() => meetingService);
+    setMessageServiceAccessor(() => messageService);
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {

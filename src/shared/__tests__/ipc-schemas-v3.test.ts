@@ -11,6 +11,8 @@ import {
   queueReorderSchema,
   notificationUpdatePrefsSchema,
   meetingAbortSchema,
+  meetingListActiveSchema,
+  messageListRecentSchema,
   memberSetStatusSchema,
   v3ChannelSchemas,
 } from '../ipc-schemas';
@@ -291,5 +293,43 @@ describe('v3 IPC schemas — v3ChannelSchemas map', () => {
 
   it('exposes dashboard:get-kpis (R4)', () => {
     expect(v3ChannelSchemas['dashboard:get-kpis']).toBeDefined();
+  });
+
+  it('exposes meeting:list-active and message:list-recent (R4 widgets)', () => {
+    expect(v3ChannelSchemas['meeting:list-active']).toBeDefined();
+    expect(v3ChannelSchemas['message:list-recent']).toBeDefined();
+  });
+});
+
+describe('v3 IPC schemas — meetingListActiveSchema / messageListRecentSchema', () => {
+  it('meetingListActiveSchema accepts an omitted payload (undefined)', () => {
+    expect(meetingListActiveSchema.safeParse(undefined).success).toBe(true);
+  });
+
+  it('meetingListActiveSchema accepts {} and explicit limit', () => {
+    expect(meetingListActiveSchema.safeParse({}).success).toBe(true);
+    expect(
+      meetingListActiveSchema.safeParse({ limit: 5 }).success,
+    ).toBe(true);
+  });
+
+  it('meetingListActiveSchema rejects non-positive / oversized limit', () => {
+    expect(meetingListActiveSchema.safeParse({ limit: 0 }).success).toBe(false);
+    expect(meetingListActiveSchema.safeParse({ limit: -1 }).success).toBe(false);
+    expect(meetingListActiveSchema.safeParse({ limit: 999 }).success).toBe(false);
+  });
+
+  it('messageListRecentSchema accepts omitted / empty / valid limit', () => {
+    expect(messageListRecentSchema.safeParse(undefined).success).toBe(true);
+    expect(messageListRecentSchema.safeParse({}).success).toBe(true);
+    expect(
+      messageListRecentSchema.safeParse({ limit: 25 }).success,
+    ).toBe(true);
+  });
+
+  it('messageListRecentSchema rejects non-integer limit', () => {
+    expect(
+      messageListRecentSchema.safeParse({ limit: 1.5 }).success,
+    ).toBe(false);
   });
 });

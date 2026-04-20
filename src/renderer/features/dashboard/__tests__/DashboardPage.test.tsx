@@ -42,6 +42,44 @@ vi.mock('../../../hooks/use-active-project', () => ({
   }),
 }));
 
+// The 2×2 grid mounts 4 widgets, each with its own fetch hook. We stub
+// them to a "loading but not yet populated" shape so the DashboardPage
+// suite can keep asserting on layout without fabricating backend data
+// for every widget. Widget-specific state transitions live in their
+// own per-widget test files.
+vi.mock('../../../hooks/use-active-meetings', () => ({
+  useActiveMeetings: () => ({
+    meetings: null,
+    loading: true,
+    error: null,
+    refresh: async () => {},
+  }),
+}));
+vi.mock('../../../hooks/use-recent-messages', () => ({
+  useRecentMessages: () => ({
+    messages: null,
+    loading: true,
+    error: null,
+    refresh: async () => {},
+  }),
+}));
+vi.mock('../../../hooks/use-members', () => ({
+  useMembers: () => ({
+    members: null,
+    loading: true,
+    error: null,
+    refresh: async () => {},
+  }),
+}));
+vi.mock('../../../hooks/use-pending-approvals', () => ({
+  usePendingApprovals: () => ({
+    items: null,
+    loading: true,
+    error: null,
+    refresh: async () => {},
+  }),
+}));
+
 // Import after vi.mock so the hooks are intercepted.
 import { DashboardPage } from '../DashboardPage';
 
@@ -169,13 +207,25 @@ describe('DashboardPage — quick actions wiring', () => {
   });
 });
 
-describe('DashboardPage — layout placeholders', () => {
-  it('renders Task7 grid + Task8 insight placeholders', () => {
+describe('DashboardPage — layout', () => {
+  it('renders the 2x2 widget grid (Task7) and the insight placeholder (Task8)', () => {
     kpisState.data = SUCCESS_SNAPSHOT;
     kpisState.loading = false;
     renderPage(<DashboardPage />);
 
-    expect(screen.getByTestId('dashboard-grid-placeholder')).toBeTruthy();
+    const grid = screen.getByTestId('dashboard-grid');
+    expect(grid).toBeTruthy();
+    // Spec §7.5: 2 rows × 3 cols with "approvals" spanning both rows.
+    expect(grid.style.gridTemplateAreas).toContain('tasks tasks approvals');
+    expect(grid.style.gridTemplateAreas).toContain('people recent approvals');
+
+    // All four widgets mount under the grid.
+    expect(screen.getByTestId('tasks-widget')).toBeTruthy();
+    expect(screen.getByTestId('people-widget')).toBeTruthy();
+    expect(screen.getByTestId('recent-widget')).toBeTruthy();
+    expect(screen.getByTestId('approvals-widget')).toBeTruthy();
+
+    // Task 8 insight strip stays as a placeholder for the next task.
     expect(screen.getByTestId('dashboard-insight-placeholder')).toBeTruthy();
   });
 });

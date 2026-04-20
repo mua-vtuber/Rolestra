@@ -8,14 +8,52 @@
       "startMeeting": "회의 소집 →",
       "startMeetingDisabled": "먼저 프로젝트를 선택하세요"
     },
+    "approvals": {
+      "count": "{{count}}건 대기",
+      "empty": "대기 중인 승인이 없습니다.",
+      "error": "승인 목록을 불러오지 못했습니다.",
+      "kind": {
+        "cli_permission": "CLI 권한 요청",
+        "consensus_decision": "합의 결정",
+        "failure_report": "실패 리포트",
+        "mode_transition": "모드 전환",
+        "review_outcome": "리뷰 결과"
+      },
+      "loading": "승인 목록을 불러오는 중…",
+      "title": "승인 대기"
+    },
     "error": {
       "kpi": "지표를 불러오지 못했습니다. 다시 시도해 주세요."
+    },
+    "grid": {
+      "ariaLabel": "대시보드 위젯"
     },
     "kpi": {
       "activeMeetings": "진행 회의",
       "activeProjects": "활성 프로젝트",
       "completedToday": "오늘 완료",
       "pendingApprovals": "승인 대기"
+    },
+    "people": {
+      "empty": "등록된 팀원이 없습니다.",
+      "error": "팀원 목록을 불러오지 못했습니다.",
+      "loading": "팀원 목록을 불러오는 중…",
+      "title": "팀원"
+    },
+    "recent": {
+      "empty": "최근 메시지가 없습니다.",
+      "error": "최근 메시지를 불러오지 못했습니다.",
+      "loading": "최근 메시지를 불러오는 중…",
+      "system": "시스템",
+      "title": "최근 대화",
+      "you": "나"
+    },
+    "tasks": {
+      "elapsed": "{{minutes}}분 {{seconds}}초",
+      "empty": "진행 중인 회의가 없습니다.",
+      "error": "회의 목록을 불러오지 못했습니다.",
+      "loading": "회의 목록을 불러오는 중…",
+      "title": "진행 중인 회의"
     }
   },
   "shell": {

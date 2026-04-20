@@ -26,8 +26,8 @@ import type {
   AutonomyMode,
 } from './project-types';
 import type { Channel, ChannelKind } from './channel-types';
-import type { Message, MessageSearchResult } from './message-types';
-import type { Meeting } from './meeting-types';
+import type { Message, MessageSearchResult, RecentMessage } from './message-types';
+import type { Meeting, ActiveMeetingSummary } from './meeting-types';
 import type {
   ApprovalItem,
   ApprovalStatus,
@@ -592,11 +592,19 @@ export type IpcChannelMap = {
     request: MessageSearchInput;
     response: { results: MessageSearchResult[] };
   };
+  'message:list-recent': {
+    request: { limit?: number } | undefined;
+    response: { messages: RecentMessage[] };
+  };
 
   // ── v3: Meeting ─────────────────────────────────────────────────
   'meeting:abort': {
     request: { meetingId: string };
     response: { success: true };
+  };
+  'meeting:list-active': {
+    request: { limit?: number } | undefined;
+    response: { meetings: ActiveMeetingSummary[] };
   };
 
   // ── v3: Member Profile ──────────────────────────────────────────

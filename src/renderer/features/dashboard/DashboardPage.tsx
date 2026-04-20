@@ -21,6 +21,10 @@ import { useTranslation } from 'react-i18next';
 
 import { HeroKpiTile } from './HeroKpiTile';
 import { HeroQuickActions } from './HeroQuickActions';
+import { TasksWidget } from './widgets/TasksWidget';
+import { PeopleWidget } from './widgets/PeopleWidget';
+import { RecentWidget } from './widgets/RecentWidget';
+import { ApprovalsWidget } from './widgets/ApprovalsWidget';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useDashboardKpis } from '../../hooks/use-dashboard-kpis';
 
@@ -106,13 +110,29 @@ export function DashboardPage({
         />
       </section>
 
-      {/* Placeholder for R4-Task7 — 2×2 widget grid (tasks/people/recent/approvals). */}
-      <div
+      {/*
+        R4-Task7 — 2×2 widget grid. The CSS `grid-template-areas` encodes
+        spec §7.5: `tasks` spans two columns on row 1, `people` + `recent`
+        sit under it on row 2, and `approvals` spans both rows on the
+        right. Columns: 1fr / 1fr / minmax(20rem, 24rem) — the right
+        column has a generous min/max so approval payload previews stay
+        readable without hogging the full width on ultrawide displays.
+      */}
+      <section
         role="region"
-        aria-label="tasks/people/recent/approvals grid (R4-Task7)"
-        data-testid="dashboard-grid-placeholder"
-        className="min-h-[12rem] border border-dashed border-panel-border rounded-panel"
-      />
+        aria-label={t('dashboard.grid.ariaLabel')}
+        data-testid="dashboard-grid"
+        className="grid gap-3"
+        style={{
+          gridTemplateAreas: '"tasks tasks approvals" "people recent approvals"',
+          gridTemplateColumns: '1fr 1fr minmax(20rem, 24rem)',
+        }}
+      >
+        <TasksWidget className="[grid-area:tasks] min-h-[12rem]" />
+        <PeopleWidget className="[grid-area:people] min-h-[10rem]" />
+        <RecentWidget className="[grid-area:recent] min-h-[10rem]" />
+        <ApprovalsWidget className="[grid-area:approvals] min-h-[22rem]" />
+      </section>
 
       {/* Placeholder for R4-Task8 — insight strip. */}
       <div

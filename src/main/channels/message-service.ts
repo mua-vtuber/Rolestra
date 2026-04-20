@@ -55,6 +55,7 @@ import type {
   MessageMeta,
   MessageRole,
   MessageSearchResult,
+  RecentMessage,
 } from '../../shared/message-types';
 import { MessageRepository } from './message-repository';
 
@@ -363,6 +364,15 @@ export class MessageService extends EventEmitter {
       }
       throw err;
     }
+  }
+
+  /**
+   * R4 dashboard RecentWidget accessor — last N messages across ALL
+   * channels, with channel name + sender label joined at the SQL layer.
+   * Delegates to the repository; the limit clamp lives there.
+   */
+  listRecent(limit?: number): RecentMessage[] {
+    return this.repo.listRecent(limit);
   }
 
   // ── typed EventEmitter overloads ───────────────────────────────────

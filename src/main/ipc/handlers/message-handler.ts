@@ -67,3 +67,13 @@ export function handleMessageSearch(
   const results = svc.search(data.query, opts);
   return { results };
 }
+
+/** message:list-recent — R4 dashboard RecentWidget. */
+export function handleMessageListRecent(
+  data: IpcRequest<'message:list-recent'>,
+): IpcResponse<'message:list-recent'> {
+  // `data` is `{ limit? } | undefined`. Forward the optional limit to
+  // the service so the repo's clamp/default pipeline owns the semantics.
+  const messages = getService().listRecent(data?.limit);
+  return { messages };
+}

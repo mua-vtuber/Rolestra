@@ -20,7 +20,16 @@
  */
 
 import type Database from 'better-sqlite3';
-import type { Meeting, MeetingOutcome } from '../../shared/meeting-types';
+import type {
+  ActiveMeetingSummary,
+  Meeting,
+  MeetingOutcome,
+} from '../../shared/meeting-types';
+import { sessionStateToIndex } from '../../shared/constants';
+
+/** Default/Max for `listActive` (spec §7.5 R4 TasksWidget). */
+export const ACTIVE_MEETING_DEFAULT_LIMIT = 10;
+export const ACTIVE_MEETING_MAX_LIMIT = 50;
 
 /** Snake-case row shape as returned by better-sqlite3. */
 interface MeetingRow {
@@ -170,6 +179,76 @@ export class MeetingRepository {
   }
 
   /**
+   * Returns up to `limit` active meetings (ended_at IS NULL) joined with
+   * their owning channel + project for the R4 dashboard TasksWidget.
+   *
+   * `projects.name` is surfaced at the query level so the widget doesn't
+   * need a second IPC round-trip to look it up. DM channels have
+   * `channel.project_id IS NULL`, which flows through as `projectId =
+   * null`/`projectName = null` in the summary.
+   *
+   * `stateIndex` is derived from `state` via the shared
+   * {@link sessionStateToIndex} helper — the `meetings.state` column is
+   * a free-text string (no CHECK), so unknown values safely map to 0.
+   *
+   * Ordering: `started_at DESC` so the newest active meeting is first.
+   * `limit` is clamped to `[1, ACTIVE_MEETING_MAX_LIMIT]`.
+   */
+  listActive(
+    limit: number = ACTIVE_MEETING_DEFAULT_LIMIT,
+  ): ActiveMeetingSummary[] {
+    const clamped = clampLimit(
+      limit,
+      ACTIVE_MEETING_DEFAULT_LIMIT,
+      ACTIVE_MEETING_MAX_LIMIT,
+    );
+    interface ActiveRow {
+      id: string;
+      topic: string;
+      state: string;
+      started_at: number;
+      channel_id: string;
+      channel_name: string;
+      project_id: string | null;
+      project_name: string | null;
+    }
+    const rows = this.db
+      .prepare(
+        `SELECT m.id AS id,
+                m.topic AS topic,
+                m.state AS state,
+                m.started_at AS started_at,
+                m.channel_id AS channel_id,
+                c.name AS channel_name,
+                c.project_id AS project_id,
+                p.name AS project_name
+         FROM meetings m
+         JOIN channels c ON m.channel_id = c.id
+         LEFT JOIN projects p ON c.project_id = p.id
+         WHERE m.ended_at IS NULL
+         ORDER BY m.started_at DESC
+         LIMIT ?`,
+      )
+      .all(clamped) as ActiveRow[];
+
+    const now = Date.now();
+    return rows.map((row) => ({
+      id: row.id,
+      projectId: row.project_id,
+      projectName: row.project_name,
+      channelId: row.channel_id,
+      channelName: row.channel_name,
+      topic: row.topic,
+      stateIndex: sessionStateToIndex(row.state),
+      stateName: row.state,
+      startedAt: row.started_at,
+      // Guard against clock skew on persisted rows — never surface negative
+      // elapsed time to the UI (a gauge with a negative label is noise).
+      elapsedMs: Math.max(0, now - row.started_at),
+    }));
+  }
+
+  /**
    * Updates the in-flight meeting state + snapshot. Only valid while
    * `ended_at IS NULL`; finished meetings cannot have their state
    * mutated. Returns `true` when a row was actually updated.
@@ -183,4 +262,23 @@ export class MeetingRepository {
       .run(state, stateSnapshotJson, id);
     return result.changes > 0;
   }
+}
+
+/**
+ * Clamps an optional user-supplied limit to `[1, max]`, falling back to
+ * `defaultValue` when the caller passes a non-finite number. Mirrors the
+ * helper in `message-repository.ts` — kept local here so the repository
+ * stays self-contained and doesn't reach across domain boundaries.
+ */
+function clampLimit(
+  raw: number | undefined,
+  defaultValue: number,
+  max: number,
+): number {
+  if (raw === undefined) return defaultValue;
+  if (!Number.isFinite(raw)) return defaultValue;
+  const n = Math.floor(raw);
+  if (n < 1) return 1;
+  if (n > max) return max;
+  return n;
 }

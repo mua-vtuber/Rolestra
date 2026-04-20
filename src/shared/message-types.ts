@@ -31,3 +31,25 @@ export interface MessageSearchResult extends Message {
   /** FTS rank (작을수록 정밀), SQLite bm25 음수값 */
   rank: number;
 }
+
+/**
+ * Recent message summary for the R4 dashboard RecentWidget (spec §7.5).
+ *
+ * Joins `messages` with `channels` (for name) and `providers` (for sender
+ * label) so the widget renders a row without extra IPC lookups. `excerpt`
+ * is the first N chars of `content` (see RECENT_MESSAGE_EXCERPT_LEN in
+ * `src/shared/constants.ts`).
+ */
+export interface RecentMessage {
+  id: string;
+  channelId: string;
+  channelName: string;
+  /** `providers.id` for member/system authors; literal `'user'` for user. */
+  senderId: string;
+  senderKind: MessageAuthorKind;
+  /** Human label — provider.display_name for member, `'user'` literal for user. */
+  senderLabel: string;
+  /** First N chars of `content`; trailing ellipsis when truncated. */
+  excerpt: string;
+  createdAt: number;
+}
