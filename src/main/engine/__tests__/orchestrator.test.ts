@@ -50,6 +50,7 @@ vi.mock('../../recovery/recovery-manager', () => ({
 import { ConversationOrchestrator } from '../orchestrator';
 import { ConversationSession } from '../conversation';
 import type { Participant } from '../../../shared/engine-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -67,9 +68,9 @@ function makeWebContents() {
 }
 
 function makeSession(roundSetting: number | 'unlimited' = 1): ConversationSession {
-  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     id: 'conv-1',
+    ssmCtx: createDefaultSsmContext(),
     participants,
     roundSetting,
   });

@@ -23,6 +23,7 @@ import { ConversationRepository } from '../../database/conversation-repository';
 import { getConfigService } from '../../config/instance';
 import { PatchExtractor } from '../../engine/patch-extractor';
 import type { OrchestratorDeps } from '../../engine/orchestrator';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 const patchExtractor = new PatchExtractor({ parseRetryLimit: 2 });
 
@@ -114,12 +115,26 @@ function getOrCreateSession(): ConversationSession {
       sessionConfig: {
         maxRetries: settings.maxRetries,
         phaseTimeout: settings.phaseTimeoutMs,
-        aggregatorStrategy: settings.aggregatorStrategy ?? 'designated',
+        // Runtime only implements 'designated'; the wider union in
+        // SettingsConfig exists because the UI picker exposes planned
+        // strategies that the engine hasn't grown yet. Collapse to
+        // 'designated' at the call site rather than leaking the
+        // mismatch into the SSM.
+        aggregatorStrategy: 'designated',
         designatedAggregatorId: settings.designatedAggregatorId || undefined,
         parseRetryLimit: taskSettings.aiDecisionParseRetryLimit,
-        deepDebateTurnBudget: taskSettings.deepDebateTurnBudget,
+        // `deepDebateTurnBudget` lives on `taskSettings` (passed
+        // separately below) and on the v2 ConsensusConfig shape; it is
+        // NOT a field of the v3 SessionConfig interface, so we do not
+        // forward it here.
       },
       taskSettings,
+      // R2-bridge: no real meeting/channel yet — the v2 chat UI has
+      // no project selector. Task 18 IPC wiring and Task 20 SSM
+      // side-effects consume the ctx with the sentinel empty strings
+      // and skip DB writes. A future R3 pass will inject real ids
+      // when the project-aware chat view lands.
+      ssmCtx: createDefaultSsmContext(),
     });
     // Persist conversation to DB
     try {

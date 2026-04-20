@@ -15,6 +15,7 @@ import { DEFAULT_BRANCH_ID } from '../../../shared/engine-types';
 import type { Participant } from '../../../shared/engine-types';
 import type { ParticipantMessage } from '../history';
 import type { SessionConfig } from '../../../shared/session-state-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -37,9 +38,9 @@ function createSession(overrides?: {
   sessionConfig?: Partial<SessionConfig>;
   taskSettings?: import('../../../shared/config-types').ConversationTaskSettings;
 }) {
-  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     participants,
+    ssmCtx: createDefaultSsmContext(),
     ...overrides,
   });
 }

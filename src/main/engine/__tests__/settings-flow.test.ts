@@ -10,6 +10,7 @@ import { ConversationSession } from '../conversation';
 import type { SessionConfig } from '../../../shared/session-state-types';
 import type { ConversationTaskSettings } from '../../../shared/config-types';
 import { DEFAULT_CONVERSATION_TASK_SETTINGS } from '../../../shared/config-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 const TEST_PARTICIPANTS = [
   { id: 'user', displayName: 'User', isActive: true },
@@ -26,8 +27,8 @@ describe('Settings → Session → SSM Flow', () => {
       parseRetryLimit: 3,
     };
 
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: TEST_PARTICIPANTS,
       sessionConfig,
     });
@@ -40,8 +41,8 @@ describe('Settings → Session → SSM Flow', () => {
   });
 
   it('uses default session config when not provided', () => {
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: TEST_PARTICIPANTS,
     });
 
@@ -57,8 +58,8 @@ describe('Settings → Session → SSM Flow', () => {
       twoParticipantUnanimousRequired: false,
     };
 
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: TEST_PARTICIPANTS,
       taskSettings,
     });
@@ -69,8 +70,8 @@ describe('Settings → Session → SSM Flow', () => {
   });
 
   it('returns null taskSettings when not provided', () => {
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: TEST_PARTICIPANTS,
     });
 
@@ -78,8 +79,8 @@ describe('Settings → Session → SSM Flow', () => {
   });
 
   it('creates SSM for arena mode (2+ AI)', () => {
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: TEST_PARTICIPANTS,
       sessionConfig: { maxRetries: 10 },
     });
@@ -93,7 +94,7 @@ describe('Settings → Session → SSM Flow', () => {
     const settings = {
       maxRetries: 7,
       phaseTimeoutMs: 90_000,
-      aggregatorStrategy: 'designated',
+      aggregatorStrategy: 'designated' as const,
     };
     const taskSettings = {
       ...DEFAULT_CONVERSATION_TASK_SETTINGS,
@@ -102,6 +103,7 @@ describe('Settings → Session → SSM Flow', () => {
     };
 
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: TEST_PARTICIPANTS,
       sessionConfig: {
         maxRetries: settings.maxRetries,

@@ -13,6 +13,7 @@ import { adaptMessagesForProvider, type ParticipantMessage } from '../history';
 import { ConversationSession } from '../conversation';
 import { PARTICIPANTS_3AI } from '../../../test-utils';
 import type { Message } from '../../../shared/provider-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -202,8 +203,8 @@ describe('Multi-party message adaptation integration', () => {
   });
 
   it('branch isolation: ConversationSession serves only current branch messages', () => {
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     const session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants: [...PARTICIPANTS_3AI],
       roundSetting: 'unlimited',
     });

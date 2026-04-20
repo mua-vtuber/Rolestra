@@ -14,6 +14,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ConversationSession } from '../conversation';
 import { DEFAULT_BRANCH_ID } from '../../../shared/engine-types';
 import type { Participant } from '../../../shared/engine-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 const participants: Participant[] = [
   { id: 'ai-1', providerId: 'ai-1', displayName: 'AI-1', isActive: true },
@@ -24,8 +25,8 @@ describe('Conversation Fork', () => {
   let session: ConversationSession;
 
   beforeEach(() => {
-    // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
     session = new ConversationSession({
+      ssmCtx: createDefaultSsmContext(),
       participants,
     });
   });

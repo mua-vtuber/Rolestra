@@ -235,6 +235,62 @@ function classifyError(err: unknown): IpcErrorCode {
 const registeredChannels: string[] = [];
 
 /**
+ * Channels that are still wired but scheduled for removal in R3 once
+ * the renderer migrates to the v3 shape. Invocations keep working so
+ * the app stays bootable — we only surface a console warning the first
+ * time each channel is called, so ops can spot leftover callers in
+ * logs without getting spammed on every invocation.
+ *
+ * Keep this list additive only: R3 removes, R2 annotates. Adding or
+ * removing entries here MUST be paired with an IpcChannelMap change or
+ * a handler removal to stay honest.
+ */
+const LEGACY_V2_CHANNELS: ReadonlySet<string> = new Set([
+  // Chat / conversation UI still drives a v2-shaped session today.
+  'chat:send',
+  'chat:pause',
+  'chat:resume',
+  'chat:stop',
+  'chat:set-rounds',
+  'chat:deep-debate',
+  'chat:continue',
+  'chat:fork',
+  'chat:list-branches',
+  'chat:switch-branch',
+  'conversation:list',
+  'conversation:load',
+  'conversation:new',
+  'conversation:delete',
+  // Workspace/consensus folder flow predates the Rolestra ArenaRoot.
+  'workspace:pick-folder',
+  'workspace:init',
+  'workspace:status',
+  'consensus-folder:status',
+  'consensus-folder:pick',
+  'consensus-folder:init',
+  // Consensus + session v2 surface; replaced in v3 by approval + meeting.
+  'consensus:respond',
+  'consensus:status',
+  'consensus:set-facilitator',
+  'session:mode-transition-respond',
+  'session:select-worker',
+  'session:user-decision',
+  'session:status',
+]);
+
+/** Channels we've already warned about — console is warned once per run. */
+const legacyChannelsWarned = new Set<string>();
+
+function warnOnceLegacy(channel: string): void {
+  if (legacyChannelsWarned.has(channel)) return;
+  legacyChannelsWarned.add(channel);
+  // eslint-disable-next-line no-console
+  console.warn(
+    `[IPC] legacy v2 channel "${channel}" invoked — scheduled for removal in R3`,
+  );
+}
+
+/**
  * Register a typed IPC handler with validation.
  *
  * - Critical channel payloads are always validated (dev + production).
@@ -250,6 +306,13 @@ function handle<C extends IpcChannel>(
   ipcMain.handle(channel, async (_event, envelope: IpcEnvelope<C>) => {
     await validateMeta(envelope.meta);
     checkSchemaVersion(envelope.meta, channel);
+
+    // Legacy v2 channel warning (once per channel per run). Keeps the
+    // call working so the v2 renderer stays bootable; the log is a
+    // migration signal for R3 cleanup.
+    if (LEGACY_V2_CHANNELS.has(channel)) {
+      warnOnceLegacy(channel);
+    }
 
     // Critical channels: always validate payload (dev + production)
     validateCriticalPayload(channel, envelope.data);

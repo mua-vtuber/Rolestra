@@ -1,6 +1,6 @@
 {
   "planPath": "docs/superpowers/plans/2026-04-18-rolestra-phase-r2.md",
-  "lastUpdated": "2026-04-20T13:00:00Z",
+  "lastUpdated": "2026-04-20T15:00:00Z",
   "tasks": [
     {
       "id": 0,
@@ -151,7 +151,7 @@
     {
       "id": 21,
       "subject": "Task 21: v2 Renderer 호환 배너 + R2 통합 smoke",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [20, 18],
       "description": "**Goal:** v2 Renderer는 배너만 추가하고 그대로 유지 + router에 legacy 채널 warn + Vitest 기반 통합 smoke 1개(마이그레이션→서비스→bridge 전 흐름).\n\n**Files:**\n- Modify: renderer 최상단 배너\n- Modify: `src/main/ipc/router.ts` legacy warn\n- Create: `src/main/__tests__/r2-integration-smoke.test.ts`\n\n**Verify:** `npx vitest run && npx tsc --noEmit`\n\n```json:metadata\n{\"files\":[\"src/main/__tests__/r2-integration-smoke.test.ts\",\"src/main/ipc/router.ts\"],\"verifyCommand\":\"npx vitest run\",\"acceptanceCriteria\":[\"11 마이그레이션 통과\",\"시스템 채널 3개 자동\",\"external+auto 거부 smoke\",\"legacy 채널 warn 로그\",\"전체 vitest PASS\"]}\n```"
     }

@@ -64,6 +64,7 @@ vi.mock('../../recovery/recovery-manager', () => ({
 import { ConversationOrchestrator } from '../orchestrator';
 import { ConversationSession } from '../conversation';
 import type { Participant } from '../../../shared/engine-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -84,9 +85,9 @@ function makeSession(opts?: {
   roundSetting?: number | 'unlimited';
   maxRetries?: number;
 }): ConversationSession {
-  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
     id: 'conv-integ',
+    ssmCtx: createDefaultSsmContext(),
     participants,
     roundSetting: opts?.roundSetting ?? 1,
     sessionConfig: {
@@ -103,13 +104,13 @@ function recordWorkJudgments(session: ConversationSession): void {
     participantId: 'ai-1',
     participantName: 'Claude',
     judgment: 'work',
-    reason: 'test',
+    reason: 'code_change',
   });
   ssm.recordModeJudgment({
     participantId: 'ai-2',
     participantName: 'Gemini',
     judgment: 'work',
-    reason: 'test',
+    reason: 'code_change',
   });
 }
 

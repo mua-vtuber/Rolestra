@@ -14,6 +14,7 @@ import { ConversationSession } from '../conversation';
 import { DEFAULT_CONVERSATION_TASK_SETTINGS } from '../../../shared/config-types';
 import { PARTICIPANTS_3AI, PARTICIPANTS_2AI } from '../../../test-utils';
 import type { Participant } from '../../../shared/engine-types';
+import { createDefaultSsmContext } from '../../../shared/ssm-context-types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -22,8 +23,8 @@ function createSessionWithBudget(
   participants: Participant[] = PARTICIPANTS_3AI,
   roundSetting: number | 'unlimited' = 'unlimited',
 ): ConversationSession {
-  // @ts-expect-error R2-Task21 — SsmContext now required; cleanup pending
   return new ConversationSession({
+    ssmCtx: createDefaultSsmContext(),
     participants: [...participants],
     roundSetting,
     taskSettings: { ...DEFAULT_CONVERSATION_TASK_SETTINGS, deepDebateTurnBudget: budget },
