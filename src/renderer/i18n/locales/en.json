@@ -1,1 +1,25 @@
-{}
+{
+  "app": {
+    "mainPlaceholder": "The dashboard will move in here during R4."
+  },
+  "shell": {
+    "rail": {
+      "projects": "Projects",
+      "direct": "Direct Messages"
+    },
+    "topbar": {
+      "title": "Office",
+      "subtitle": "Welcome"
+    }
+  },
+  "theme": {
+    "switcher": {
+      "label": "Theme",
+      "warm": "Warm",
+      "tactical": "Tactical",
+      "retro": "Retro",
+      "light": "Light",
+      "dark": "Dark"
+    }
+  }
+}
