@@ -516,6 +516,16 @@ export type IpcChannelMap = {
   };
 
   // ── v3: Project ─────────────────────────────────────────────────
+  /**
+   * v3 replacement for the legacy `workspace:pick-folder` channel.
+   * Opens the OS directory picker and returns the selected absolute
+   * path (or `null` when the user cancels). Used by the project
+   * create/link/import modal to pick `externalPath` / `sourcePath`.
+   */
+  'project:pick-folder': {
+    request: undefined;
+    response: { folderPath: string | null };
+  };
   'project:list': {
     request: { includeArchived?: boolean } | undefined;
     response: { projects: Project[] };

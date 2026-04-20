@@ -129,6 +129,7 @@ import {
   handleArenaRootStatus,
 } from './handlers/arena-root-handler';
 import {
+  handleProjectPickFolder,
   handleProjectList,
   handleProjectCreate,
   handleProjectLinkExternal,
@@ -481,6 +482,7 @@ export function registerIpcHandlers(): void {
   handle('arena-root:status', isDev, () => handleArenaRootStatus());
 
   // ── v3: Project ─────────────────────────────────────────────────
+  handle('project:pick-folder', isDev, () => handleProjectPickFolder());
   handle('project:list', isDev, (data) => handleProjectList(data));
   handle('project:create', isDev, (data) => handleProjectCreate(data));
   handle('project:link-external', isDev, (data) => handleProjectLinkExternal(data));

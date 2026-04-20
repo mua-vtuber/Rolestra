@@ -1,18 +1,26 @@
 /**
  * project:* IPC handlers.
  *
- * Map the 8 project channels (list / create / link-external / import /
- * update / archive / open / set-autonomy) onto {@link ProjectService}.
- * Every business rule — slug derivation, external+auto rejection,
- * filesystem materialisation, folder_missing reconciliation — lives in
- * the service; these wrappers only translate shapes.
+ * Map the project channels (pick-folder / list / create / link-external /
+ * import / update / archive / open / set-autonomy) onto
+ * {@link ProjectService}. Every business rule — slug derivation,
+ * external+auto rejection, filesystem materialisation, folder_missing
+ * reconciliation — lives in the service; these wrappers only translate
+ * shapes.
  *
  * `link-external` and `import` are sugar over `create` with a fixed
  * `kind`; spec §6 exposes them as discrete channels so the renderer UX
  * can diverge without branching here.
+ *
+ * `pick-folder` is the v3 replacement for the legacy
+ * `workspace:pick-folder` channel. It is scoped to the project-create
+ * modal and returns the raw OS dialog result — validation/realpath
+ * baselining stays inside `ProjectService.create` (spec §7.6 CA-3).
  */
 
-import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
+import { dialog } from 'electron';
+
+import type { IpcResponse, IpcRequest } from '../../../shared/ipc-types';
 import type { ProjectService } from '../../projects/project-service';
 
 let projectAccessor: (() => ProjectService) | null = null;
@@ -26,6 +34,22 @@ function getService(): ProjectService {
     throw new Error('project handler: service not initialized');
   }
   return projectAccessor();
+}
+
+/**
+ * project:pick-folder — open the OS directory picker.
+ * Returns `{ folderPath: null }` on cancel.
+ */
+export async function handleProjectPickFolder(): Promise<
+  IpcResponse<'project:pick-folder'>
+> {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return { folderPath: null };
+  }
+  return { folderPath: result.filePaths[0] };
 }
 
 /** project:list */

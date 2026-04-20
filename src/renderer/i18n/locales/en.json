@@ -64,6 +64,59 @@
       "title": "Active meetings"
     }
   },
+  "project": {
+    "create": {
+      "cancel": "Cancel",
+      "description": "Description",
+      "descriptionPlaceholder": "(optional) one-liner",
+      "externalPath": {
+        "choose": "Choose folder",
+        "label": "External folder",
+        "notSelected": "No folder selected"
+      },
+      "kind": {
+        "external": "Link external folder",
+        "externalHint": "Link to existing folder via junction/symlink (original untouched)",
+        "imported": "Import external folder",
+        "importedHint": "Copy external folder into arena root (original untouched)",
+        "label": "Type",
+        "new": "New empty project",
+        "newHint": "Create a new folder under <ArenaRoot>/projects"
+      },
+      "members": {
+        "empty": "No members yet (add in settings)",
+        "label": "Initial members"
+      },
+      "name": "Name",
+      "namePlaceholder": "Project name",
+      "permissionMode": {
+        "approval": "Approval (every time)",
+        "approvalHint": "User approval on every op",
+        "auto": "Autonomous",
+        "autoHint": "Apply file changes automatically",
+        "hybrid": "Hybrid (read auto)",
+        "hybridHint": "Auto reads, approvals on writes",
+        "label": "Permission mode"
+      },
+      "sourcePath": {
+        "choose": "Choose folder",
+        "label": "Folder to import"
+      },
+      "submit": "Create",
+      "title": "Create new project"
+    },
+    "errors": {
+      "duplicateSlug": "A project with the same name already exists",
+      "externalAutoForbidden": "Autonomous mode is forbidden for external links (spec §7.3)",
+      "externalPathRequired": "Select an external folder",
+      "folderMissing": "External folder not found",
+      "generic": "Error while creating project",
+      "junctionTOCTOU": "Folder path differs from link time. Try again.",
+      "nameRequired": "Name is required",
+      "nameTooLong": "Name must be ≤ 200 characters",
+      "sourcePathRequired": "Select a folder to import"
+    }
+  },
   "shell": {
     "rail": {
       "direct": "Direct Messages",
