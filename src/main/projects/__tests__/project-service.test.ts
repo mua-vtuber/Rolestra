@@ -30,9 +30,11 @@ import { runMigrations } from '../../database/migrator';
 import { migrations } from '../../database/migrations/index';
 import { ProjectRepository } from '../project-repository';
 import * as projectMetaModule from '../project-meta';
+import * as junctionModule from '../junction';
 import {
   DuplicateSlugError,
   ExternalAutoForbiddenError,
+  JunctionTOCTOUMismatchError,
   ProjectInputError,
   ProjectService,
   generateSlug,
@@ -614,5 +616,153 @@ describe('ProjectService', () => {
         void realGetBySlug;
       }
     });
+  });
+
+  // ── R4-Task3: external+auto defensive post-conditions ────────────────
+  //
+  // The earlier `create({kind:"external"}) > rejects permissionMode="auto"`
+  // case asserts error class + absence of the specific slug folder. This
+  // case hardens the assertion surface: after the throw, the ENTIRE
+  // projects subtree must be untouched — no half-written DB rows, no stray
+  // subdirectory under <arena>/projects, no junction/symlink anywhere
+  // inside the arena root. Spec §7.3: rejection happens before any FS or
+  // DB state is mutated.
+
+  describe('create({kind:"external", permissionMode:"auto"}) — full defensive post-conditions', () => {
+    it('throws ExternalAutoForbiddenError and leaves DB + FS pristine', async () => {
+      const target = makeTmpDir('rolestra-ext-auto-defense-');
+      try {
+        let threw: unknown;
+        try {
+          await service.create({
+            name: 'x',
+            kind: 'external',
+            externalPath: target,
+            permissionMode: 'auto',
+          });
+        } catch (err) {
+          threw = err;
+        }
+        expect(threw).toBeInstanceOf(ExternalAutoForbiddenError);
+
+        // DB invariant: no rows at all — the rejection must run before
+        // any INSERT.
+        expect(repo.list()).toEqual([]);
+
+        // FS invariant: the `projects/` subdir holds zero entries.
+        // `ArenaRootService.ensure()` precreates the empty directory, so
+        // readdirSync on it is safe and must return `[]`.
+        const projectsDir = path.join(arenaRoot, 'projects');
+        expect(fs.existsSync(projectsDir)).toBe(true);
+        expect(fs.readdirSync(projectsDir)).toEqual([]);
+
+        // No junction/symlink created anywhere inside the arena root.
+        // Walk the arena tree and assert `lstat(...)` reports no symlinks.
+        // (On Windows this would also catch junctions, but junctions are
+        //  reported as directories by lstat — the `readdir projects === []`
+        //  assertion above covers that case.)
+        const findSymlinks = (dir: string): string[] => {
+          const hits: string[] = [];
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isSymbolicLink()) {
+              hits.push(full);
+              continue;
+            }
+            if (entry.isDirectory()) {
+              hits.push(...findSymlinks(full));
+            }
+          }
+          return hits;
+        };
+        expect(findSymlinks(arenaRoot)).toEqual([]);
+      } finally {
+        cleanupDir(target);
+      }
+    });
+  });
+
+  // ── R4-Task3: junction TOCTOU mismatch rollback ──────────────────────
+  //
+  // Spec §7.6 CA-3: after `createLink` materialises the junction/symlink,
+  // `ProjectService.create` re-invokes `resolveLink(cwdPath)` and compares
+  // against the `externalLink` baseline captured before link creation.
+  // A mismatch means the target was swapped mid-creation (TOCTOU race).
+  // Production behaviour on mismatch: throw `JunctionTOCTOUMismatchError`,
+  // `rm -rf rootPath`, and DELETE the project row. Status does NOT flip to
+  // `folder_missing` because the project never finished creation — it's
+  // as if `create()` was never called.
+  //
+  // We drive the mismatch by stubbing `resolveLink` (the module export used
+  // by project-service.ts) to return a forged path. That's a less invasive
+  // and more deterministic simulator than deleting the external folder on
+  // disk mid-call, and it matches the existing spy pattern used for
+  // `projectMetaModule.writeProjectMeta` above.
+
+  describe('create({kind:"external"}) — TOCTOU mismatch triggers rollback', () => {
+    it.skipIf(isWindows)(
+      'throws JunctionTOCTOUMismatchError and rolls back FS + DB entirely',
+      async () => {
+        const target = makeTmpDir('rolestra-ext-toctou-');
+        try {
+          const targetReal = fs.realpathSync(target);
+          const name = 'TOCTOU Proj';
+          const slug = generateSlug(name);
+          const rootPath = path.join(arenaRoot, 'projects', slug);
+
+          // Stub resolveLink to return a path that does NOT match the
+          // stored externalLink baseline. This is exactly what would
+          // happen if another process swapped the junction target between
+          // createLink and the post-create verification.
+          const spy = vi
+            .spyOn(junctionModule, 'resolveLink')
+            .mockReturnValue('/tmp/not-the-real-target-/mismatched');
+
+          let threw: unknown;
+          try {
+            await service.create({
+              name,
+              kind: 'external',
+              externalPath: target,
+              permissionMode: 'hybrid',
+            });
+          } catch (err) {
+            threw = err;
+          }
+
+          expect(threw).toBeInstanceOf(JunctionTOCTOUMismatchError);
+          const msg = (threw as Error).message;
+          expect(msg).toMatch(/realpath mismatch/);
+          // Error carries both the baseline (expected) and the forged
+          // (actual) values so an operator can tell what drifted.
+          expect(msg).toContain(targetReal);
+          expect(msg).toContain('/tmp/not-the-real-target-/mismatched');
+
+          // Rollback invariants (production behaviour — NOT folder_missing):
+          //  1. FS root for this project is gone (rm -rf rootPath).
+          expect(fs.existsSync(rootPath)).toBe(false);
+          //  2. DB row is gone (delete-by-id) — no orphan rows.
+          expect(repo.list()).toEqual([]);
+          expect(repo.getBySlug(slug)).toBeNull();
+
+          spy.mockRestore();
+
+          // Sanity: slug is reusable — a retry without the forged stub
+          // succeeds cleanly, which it wouldn't if rollback had left a
+          // stale row or folder behind.
+          const retried = await service.create({
+            name,
+            kind: 'external',
+            externalPath: target,
+            permissionMode: 'hybrid',
+          });
+          expect(retried.slug).toBe(slug);
+          expect(retried.externalLink).toBe(targetReal);
+          expect(fs.existsSync(rootPath)).toBe(true);
+        } finally {
+          cleanupDir(target);
+        }
+      },
+    );
   });
 });
