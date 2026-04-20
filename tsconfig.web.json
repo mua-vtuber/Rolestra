@@ -20,5 +20,11 @@
     "src/renderer/**/*.tsx",
     "src/renderer/**/*.json",
     "src/shared/**/*.ts"
+  ],
+  "exclude": [
+    "src/**/__tests__/**",
+    "_legacy/**",
+    "out/**",
+    "dist/**"
   ]
 }
