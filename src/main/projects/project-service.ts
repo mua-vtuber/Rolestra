@@ -33,6 +33,8 @@ import type {
   Project,
   ProjectCreateInput,
   ProjectMember,
+  AutonomyMode,
+  PermissionMode,
 } from '../../shared/project-types';
 import type { ArenaRootService } from '../arena/arena-root-service';
 import { resolveProjectPaths } from '../arena/resolve-project-paths';
@@ -310,6 +312,75 @@ export class ProjectService {
    */
   get(id: string): Project | null {
     return this.repo.get(id);
+  }
+
+  /**
+   * Apply a partial update. Only `name`, `description`, `permissionMode`,
+   * and `autonomyMode` are patchable via IPC (`project:update`); slug /
+   * kind / externalLink are structural and stay locked. Re-asserts the
+   * external+auto guard (spec §7.3 CA-1) in case the caller flips the
+   * permission mode on an `external` project.
+   *
+   * @throws {ProjectError}                  unknown id.
+   * @throws {ExternalAutoForbiddenError}    permissionMode='auto' on an
+   *                                         `external` project.
+   */
+  update(
+    id: string,
+    patch: {
+      name?: string;
+      description?: string;
+      permissionMode?: PermissionMode;
+      autonomyMode?: AutonomyMode;
+    },
+  ): Project {
+    const existing = this.repo.get(id);
+    if (!existing) {
+      throw new ProjectError(`update: project not found: ${id}`);
+    }
+    if (
+      existing.kind === 'external' &&
+      patch.permissionMode === 'auto'
+    ) {
+      throw new ExternalAutoForbiddenError();
+    }
+    this.repo.update(id, patch);
+    const next = this.repo.get(id);
+    if (!next) {
+      throw new ProjectError(`update: project disappeared after update: ${id}`);
+    }
+    return next;
+  }
+
+  /**
+   * Change the autonomy mode only. Exposed as a distinct method because
+   * the IPC surface (`project:set-autonomy`) drives it directly from the
+   * autonomy toggle UI and the audit trail keeps this action separated
+   * from full `project:update` calls.
+   *
+   * @throws {ProjectError} unknown id.
+   */
+  setAutonomy(id: string, mode: AutonomyMode): Project {
+    return this.update(id, { autonomyMode: mode });
+  }
+
+  /**
+   * Marks a project as "opened" for the current session. Today this only
+   * verifies the row exists and returns it — persistent active-project
+   * state lives upstream (Task 20 SSM side-effects). Having a dedicated
+   * method keeps the IPC contract stable if that policy changes later.
+   *
+   * @throws {ProjectError} unknown id or archived.
+   */
+  open(id: string): Project {
+    const project = this.repo.get(id);
+    if (!project) {
+      throw new ProjectError(`open: project not found: ${id}`);
+    }
+    if (project.status === 'archived') {
+      throw new ProjectError(`open: project is archived: ${id}`);
+    }
+    return project;
   }
 
   // ── Member management (thin pass-throughs to the repository) ─────────

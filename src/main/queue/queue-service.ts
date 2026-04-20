@@ -333,6 +333,28 @@ export class QueueService extends EventEmitter {
     return this.repo.revertAllInProgressToPending();
   }
 
+  /**
+   * Hard-delete a pending item. Only valid for `status='pending'` or
+   * `'paused'` rows — IPC `queue:remove` is meant for the user dismissing
+   * a queue entry they no longer want to run. In-flight rows must go
+   * through {@link cancel}; terminal rows are kept so the audit trail
+   * survives. Emits `'changed'` on success.
+   *
+   * @throws {QueueItemNotFoundError} unknown id.
+   * @throws {QueueError}             status is not removable.
+   */
+  remove(id: string): void {
+    const existing = this.repo.get(id);
+    if (!existing) throw new QueueItemNotFoundError(id);
+    if (existing.status !== 'pending' && existing.status !== 'paused') {
+      throw new QueueError(
+        `remove: status must be pending or paused (got ${existing.status}); use cancel() for in-flight items`,
+      );
+    }
+    this.repo.delete(id);
+    this.safeEmit(QUEUE_CHANGED_EVENT, { projectId: existing.projectId });
+  }
+
   /** Per-id lookup. Returns `null` when unknown. */
   get(id: string): QueueItem | null {
     return this.repo.get(id);

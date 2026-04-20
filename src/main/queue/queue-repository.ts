@@ -278,6 +278,19 @@ export class QueueRepository {
   }
 
   /**
+   * Hard-deletes a queue row. Only called by the service's `remove()` for
+   * pending rows the user dismissed before they ran. In-flight or
+   * terminal rows should use `finish()` instead so the status + timing
+   * columns stay consistent for audit.
+   */
+  delete(id: string): boolean {
+    const result = this.database
+      .prepare('DELETE FROM queue_items WHERE id = ?')
+      .run(id);
+    return result.changes > 0;
+  }
+
+  /**
    * Bulk-revert any `status='in_progress'` row to `pending`. Used on app
    * startup (spec §5.2 recovery rule). Clears `started_at` so the next
    * claim re-stamps it. Returns the number of rows reverted.

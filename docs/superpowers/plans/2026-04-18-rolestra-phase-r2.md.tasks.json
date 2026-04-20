@@ -1,6 +1,6 @@
 {
   "planPath": "docs/superpowers/plans/2026-04-18-rolestra-phase-r2.md",
-  "lastUpdated": "2026-04-20T23:15:00Z",
+  "lastUpdated": "2026-04-20T13:00:00Z",
   "tasks": [
     {
       "id": 0,
@@ -130,7 +130,7 @@
     {
       "id": 18,
       "subject": "Task 18: IPC 핸들러 9종 + router 등록",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [17, 5, 8, 10, 11, 12, 9, 13, 16, 15],
       "description": "**Goal:** 9개 도메인 핸들러를 서비스와 연결하고 router에 register + 개발 모드 zod 검증 + 프로덕션 stream drop+5회 차단.\n\n**Files:**\n- Create: `src/main/ipc/handlers/{arena-root,project,channel,message,meeting,member,approval,notification,queue}-handler.ts`\n- Modify: `src/main/ipc/router.ts`\n- Create: `handlers-v3.test.ts`\n\n**Verify:** `npx vitest run src/main/ipc/__tests__/handlers-v3.test.ts`\n\n```json:metadata\n{\"files\":[\"src/main/ipc/handlers/arena-root-handler.ts\",\"src/main/ipc/handlers/project-handler.ts\",\"src/main/ipc/handlers/channel-handler.ts\",\"src/main/ipc/handlers/message-handler.ts\",\"src/main/ipc/handlers/meeting-handler.ts\",\"src/main/ipc/handlers/member-handler.ts\",\"src/main/ipc/handlers/approval-handler.ts\",\"src/main/ipc/handlers/notification-handler.ts\",\"src/main/ipc/handlers/queue-handler.ts\",\"src/main/ipc/router.ts\"],\"verifyCommand\":\"npx vitest run src/main/ipc/__tests__/handlers-v3.test.ts\",\"acceptanceCriteria\":[\"9 도메인 handler register\",\"zod 검증 실패 IpcError\",\"서비스 호출 round-trip\"]}\n```"
     },

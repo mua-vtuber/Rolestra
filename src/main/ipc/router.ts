@@ -15,7 +15,7 @@
 import { ipcMain } from 'electron';
 import type { IpcMeta, IpcChannel, IpcChannelMap } from '../../shared/ipc-types';
 import { CURRENT_SCHEMA_VERSION } from '../../shared/ipc-types';
-import { validateCriticalPayload } from '../../shared/ipc-schemas';
+import { validateCriticalPayload, v3ChannelSchemas } from '../../shared/ipc-schemas';
 import type { IpcErrorCode } from '../../shared/ipc-error';
 import { handlePing, handleGetInfo } from './handlers/app-handler';
 import {
@@ -123,6 +123,62 @@ import {
   handleDbImport,
   handleDbStats,
 } from './handlers/database-handler';
+import {
+  handleArenaRootGet,
+  handleArenaRootSet,
+  handleArenaRootStatus,
+} from './handlers/arena-root-handler';
+import {
+  handleProjectList,
+  handleProjectCreate,
+  handleProjectLinkExternal,
+  handleProjectImport,
+  handleProjectUpdate,
+  handleProjectArchive,
+  handleProjectOpen,
+  handleProjectSetAutonomy,
+} from './handlers/project-handler';
+import {
+  handleChannelList,
+  handleChannelCreate,
+  handleChannelRename,
+  handleChannelDelete,
+  handleChannelAddMembers,
+  handleChannelRemoveMembers,
+  handleChannelStartMeeting,
+} from './handlers/channel-handler';
+import {
+  handleMessageAppend,
+  handleMessageListByChannel,
+  handleMessageSearch,
+} from './handlers/message-handler';
+import { handleMeetingAbort } from './handlers/meeting-handler';
+import {
+  handleMemberList,
+  handleMemberGetProfile,
+  handleMemberUpdateProfile,
+  handleMemberSetStatus,
+  handleMemberReconnect,
+  handleMemberListAvatars,
+} from './handlers/member-handler';
+import {
+  handleApprovalList,
+  handleApprovalDecide,
+} from './handlers/approval-handler';
+import {
+  handleNotificationGetPrefs,
+  handleNotificationUpdatePrefs,
+  handleNotificationTest,
+} from './handlers/notification-handler';
+import {
+  handleQueueList,
+  handleQueueAdd,
+  handleQueueReorder,
+  handleQueueRemove,
+  handleQueueCancel,
+  handleQueuePause,
+  handleQueueResume,
+} from './handlers/queue-handler';
 
 /** Envelope shape sent by preload's typedInvoke. */
 interface IpcEnvelope<C extends IpcChannel> {
@@ -197,6 +253,15 @@ function handle<C extends IpcChannel>(
 
     // Critical channels: always validate payload (dev + production)
     validateCriticalPayload(channel, envelope.data);
+
+    // v3 channels: validate payload in development only — production
+    // trusts the TS types at the renderer boundary and skips the zod
+    // cost. Errors throw and get translated into VALIDATION_ERROR by
+    // the catch below.
+    if (isDev && channel in v3ChannelSchemas) {
+      const schema = v3ChannelSchemas[channel as keyof typeof v3ChannelSchemas];
+      schema.parse(envelope.data);
+    }
 
     try {
       return await handler(envelope.data);
@@ -342,6 +407,64 @@ export function registerIpcHandlers(): void {
   handle('db:export', isDev, () => handleDbExport());
   handle('db:import', isDev, () => handleDbImport());
   handle('db:stats', isDev, () => handleDbStats());
+
+  // ── v3: Arena Root ──────────────────────────────────────────────
+  handle('arena-root:get', isDev, () => handleArenaRootGet());
+  handle('arena-root:set', isDev, (data) => handleArenaRootSet(data));
+  handle('arena-root:status', isDev, () => handleArenaRootStatus());
+
+  // ── v3: Project ─────────────────────────────────────────────────
+  handle('project:list', isDev, (data) => handleProjectList(data));
+  handle('project:create', isDev, (data) => handleProjectCreate(data));
+  handle('project:link-external', isDev, (data) => handleProjectLinkExternal(data));
+  handle('project:import', isDev, (data) => handleProjectImport(data));
+  handle('project:update', isDev, (data) => handleProjectUpdate(data));
+  handle('project:archive', isDev, (data) => handleProjectArchive(data));
+  handle('project:open', isDev, (data) => handleProjectOpen(data));
+  handle('project:set-autonomy', isDev, (data) => handleProjectSetAutonomy(data));
+
+  // ── v3: Channel ─────────────────────────────────────────────────
+  handle('channel:list', isDev, (data) => handleChannelList(data));
+  handle('channel:create', isDev, (data) => handleChannelCreate(data));
+  handle('channel:rename', isDev, (data) => handleChannelRename(data));
+  handle('channel:delete', isDev, (data) => handleChannelDelete(data));
+  handle('channel:add-members', isDev, (data) => handleChannelAddMembers(data));
+  handle('channel:remove-members', isDev, (data) => handleChannelRemoveMembers(data));
+  handle('channel:start-meeting', isDev, (data) => handleChannelStartMeeting(data));
+
+  // ── v3: Message ─────────────────────────────────────────────────
+  handle('message:append', isDev, (data) => handleMessageAppend(data));
+  handle('message:list-by-channel', isDev, (data) => handleMessageListByChannel(data));
+  handle('message:search', isDev, (data) => handleMessageSearch(data));
+
+  // ── v3: Meeting ─────────────────────────────────────────────────
+  handle('meeting:abort', isDev, (data) => handleMeetingAbort(data));
+
+  // ── v3: Member Profile ──────────────────────────────────────────
+  handle('member:list', isDev, () => handleMemberList());
+  handle('member:get-profile', isDev, (data) => handleMemberGetProfile(data));
+  handle('member:update-profile', isDev, (data) => handleMemberUpdateProfile(data));
+  handle('member:set-status', isDev, (data) => handleMemberSetStatus(data));
+  handle('member:reconnect', isDev, (data) => handleMemberReconnect(data));
+  handle('member:list-avatars', isDev, () => handleMemberListAvatars());
+
+  // ── v3: Approval Inbox ──────────────────────────────────────────
+  handle('approval:list', isDev, (data) => handleApprovalList(data));
+  handle('approval:decide', isDev, (data) => handleApprovalDecide(data));
+
+  // ── v3: Notification ────────────────────────────────────────────
+  handle('notification:get-prefs', isDev, () => handleNotificationGetPrefs());
+  handle('notification:update-prefs', isDev, (data) => handleNotificationUpdatePrefs(data));
+  handle('notification:test', isDev, (data) => handleNotificationTest(data));
+
+  // ── v3: Queue ───────────────────────────────────────────────────
+  handle('queue:list', isDev, (data) => handleQueueList(data));
+  handle('queue:add', isDev, (data) => handleQueueAdd(data));
+  handle('queue:reorder', isDev, (data) => handleQueueReorder(data));
+  handle('queue:remove', isDev, (data) => handleQueueRemove(data));
+  handle('queue:cancel', isDev, (data) => handleQueueCancel(data));
+  handle('queue:pause', isDev, (data) => handleQueuePause(data));
+  handle('queue:resume', isDev, (data) => handleQueueResume(data));
 }
 
 /**
