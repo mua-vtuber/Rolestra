@@ -14,8 +14,7 @@
  */
 
 import type { CliRuntimeConfig } from './cli-provider';
-// @ts-expect-error R2-Task21 — v2 PromptOnlyPermissionAdapter removed; cleanup pending
-import { PromptOnlyPermissionAdapter } from './permission-adapter';
+import { GeminiPermissionAdapter } from './permission-adapter';
 
 export const GEMINI_CLI_CONFIG: CliRuntimeConfig = {
   command: 'gemini',
@@ -62,5 +61,5 @@ export const GEMINI_CLI_CONFIG: CliRuntimeConfig = {
     );
   },
 
-  permissionAdapter: new PromptOnlyPermissionAdapter(),
+  permissionAdapter: new GeminiPermissionAdapter(),
 };
