@@ -53,3 +53,8 @@ tools/cli-smoke/matrix-results/
 
 # Superpowers brainstorm sessions (local)
 .superpowers/
+
+# Scratch working dirs (local only)
+output/
+.omx/
+.playwright-cli/

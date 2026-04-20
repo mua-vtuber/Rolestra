@@ -1116,7 +1116,7 @@ interface SsmContext {
 - [x] App 루트 Shell 와이어업 + dev-only theme-switcher(`import.meta.env.DEV`) — 산출물: `src/renderer/App.tsx`, `src/renderer/components/shell/theme-switcher.tsx`
 - [x] i18n 도메인 네임스페이스 15종 (`I18N_NAMESPACES`) + 실 사용 도메인부터 JSON 채움 — 산출물: `src/renderer/i18n/keys.ts`, `src/renderer/i18n/locales/{ko,en}.json`
 - [x] Legacy channel warning 현황 문서화 + 격리 테스트(제거는 R11) — 산출물: `docs/superpowers/specs/appendix-legacy-channels.md`, `src/renderer/__tests__/legacy-channel-isolation.test.ts`
-- [ ] 6 테마 × 2 모드 스크린샷 증빙 — 수동 캡처 대기, 목표 경로: `docs/superpowers/specs/appendix-r3-evidence/{warm,tactical,retro}-{light,dark}.png`. R4 진입 전 시각 사인오프 필요, 코드 정합성 검증엔 비차단.
+- [x] 6 테마 × 2 모드 스크린샷 증빙 — 산출물: `docs/superpowers/specs/appendix-r3-evidence/{warm,tactical,retro}-{light,dark}.png` + README. 실제 Electron 런타임 캡처 완료 (2026-04-20).
 - [x] typecheck/lint/i18n:check/theme:check/build exit 0 + test 64 pre-existing fail 유지(R3 신규 30+ 테스트 전부 green) — 산출물: `docs/superpowers/specs/r3-done-checklist.md`
 
 **scope 경계 (R3에서 하지 않는 것, R4+ 이연):**

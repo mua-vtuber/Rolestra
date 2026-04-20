@@ -57,9 +57,9 @@ Supporting commits:
 
 §10 R3 checklist updated inline with ✓ marks + artifact paths. See `docs/superpowers/specs/2026-04-18-rolestra-design.md` §10 at R3 tip.
 
-## Manual verification still pending
+## Manual verification
 
-- **6 테마 × 2 모드 screenshot capture** — requires running `npm run dev` (Electron window) and capturing each of the 6 data-theme × data-mode combinations. Recommended target directory: `docs/superpowers/specs/appendix-r3-evidence/` (warm-light.png, warm-dark.png, tactical-light.png, tactical-dark.png, retro-light.png, retro-dark.png). The DevThemeSwitcher (top-right, DEV-only) switches combos live. Blocking for visual sign-off before R4 entry; non-blocking for code correctness.
+- **6 테마 × 2 모드 screenshot capture** — ✅ 완료 (2026-04-20). `docs/superpowers/specs/appendix-r3-evidence/` 에 6 PNG + README. 실제 Electron 런타임에서 DevThemeSwitcher 전환으로 캡처. 모든 테마 조합이 동일 레이아웃 유지하고 정보 밀도 동일, 시각 정체성(Warm amber / Tactical cool gray + cyan / Retro sepia·green)만 달라지는 것 확인.
 
 ## R4 entry conditions
 
@@ -69,8 +69,8 @@ Ready to enter **Phase R4 — 대시보드 + 프로젝트 관리** when:
 - [x] Tokens pipeline deterministic — changes to `docs/Rolestra_sample/theme-tokens.jsx` regenerate both .ts and .css with no drift.
 - [x] IPC boundary clean — no legacy channel literals in v3 renderer (legacy-channel-isolation pass).
 - [x] Design primitives ready for Dashboard blocks — Button/Card/Badge surfaces cover dashboard widget skeletons.
-- [ ] **Manual screenshot pass** (pending, see above).
-- [ ] **R2 + R3 merge to main** after screenshots accepted.
+- [x] **Manual screenshot pass** — 6 PNG committed under `appendix-r3-evidence/`.
+- [ ] **R3 merge to main** — pending user decision.
 
 Once screenshots land and R3 is merged, R4 can begin. R4 work opens `dashboard.*` i18n domain, populates Hero 4 KPI tiles + 4 widgets + Insight strip + ProjectSwitcher block, wires IPC `project:*` / `member:*` / `meeting:*` from R2.
 
