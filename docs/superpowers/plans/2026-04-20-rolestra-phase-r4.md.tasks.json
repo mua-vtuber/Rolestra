@@ -1,0 +1,103 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-20-rolestra-phase-r4.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: 브랜치 분기 + spec §7.3/§7.5/§10 R4 점검",
+      "status": "pending",
+      "description": "**Goal:** `rolestra-phase-r4` 브랜치를 `main`에서 생성. spec §7.3(3 kind 생성 + external+auto 금지 + TOCTOU) / §7.5(Hero 4 KPI + 비대칭 2x2 + Insight + 게이지 테마 분기) / §10 Phase R4 체크박스가 본 plan 태스크와 정확히 대응하는지 교차 확인. 모호한 문구 발견 시 spec을 먼저 갱신(문서 리드 원칙). §10 Phase R4 블록을 R3 포맷(체크박스+산출물)으로 확장.\n\n**Files:** docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 Phase R4만, 필요 시)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r4\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r4 브랜치 생성+origin push\",\"§7.5 KPI 4행이 DashboardService 집계와 1:1 일치\",\"§7.3 모달 mockup이 Task 9와 일치\",\"§10 Phase R4 체크박스+산출물 템플릿 확장\",\"Legacy IPC 제거 시점은 R11 재확인\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Shared types + IpcChannelMap 확장 (dashboard:*)",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** `dashboard:get-kpis` IPC 계약을 먼저 선언한다. KpiSnapshot 타입 + zod schema + IpcChannelMap 엔트리. Main 구현 없이도 Renderer 타입 체크가 통과되는 상태까지.\n\n**Files:** src/shared/dashboard-types.ts, src/shared/ipc-types.ts, src/shared/ipc-schemas.ts, src/shared/__tests__/dashboard-types.test.ts\n\n**Verify:** `npm run typecheck && npm run test -- ipc-schemas-v3`\n\n```json:metadata\n{\"files\":[\"src/shared/dashboard-types.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\",\"src/shared/__tests__/dashboard-types.test.ts\"],\"verifyCommand\":\"npm run typecheck && npm run test -- ipc-schemas-v3\",\"acceptanceCriteria\":[\"dashboard:get-kpis가 IpcChannelMap에 존재\",\"zod schema가 projectId optional+nullable 허용\",\"typecheck 0 errors\",\"ipc-schemas-v3 테스트 통과\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Main — DashboardService + IPC 핸들러",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** 4 KPI(activeProjects/activeMeetings/pendingApprovals/completedToday)를 단일 집계 호출로 반환하는 DashboardService. N+1 방지. 기존 ProjectRepository/MeetingRepository/ApprovalRepository 경유만 허용(raw SQL 금지). IPC 핸들러 + router 등록. DST 엣지 케이스(오늘 00:00 계산)를 테스트로 고정.\n\n**Files:** src/main/dashboard/dashboard-service.ts, src/main/dashboard/__tests__/dashboard-service.test.ts, src/main/ipc/handlers/dashboard-handler.ts, src/main/ipc/router.ts, src/main/projects/project-repository.ts (count 메서드 누락 시만), src/main/meetings/meeting-repository.ts, src/main/approvals/approval-repository.ts\n\n**Verify:** `npm run test -- dashboard-service && npm run typecheck:node`\n\n```json:metadata\n{\"files\":[\"src/main/dashboard/dashboard-service.ts\",\"src/main/dashboard/__tests__/dashboard-service.test.ts\",\"src/main/ipc/handlers/dashboard-handler.ts\",\"src/main/ipc/router.ts\"],\"verifyCommand\":\"npm run test -- dashboard-service && npm run typecheck:node\",\"acceptanceCriteria\":[\"getKpis SQL 호출 4번 이하\",\"KPI 필드가 spec §7.5 표와 1:1\",\"completedToday DST 엣지 통과\",\"handler 미초기화 에러 명시\",\"vitest all green\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Main — 프로젝트 생성 flow 테스트 보강",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** ProjectService.create + junction TOCTOU는 R2 완료 상태. 신규 로직 추가 금지. 엣지 케이스 2건(external+auto 거부 / TOCTOU 미스매치 rollback) 테스트만 보강. junction.test.ts 플랫폼 skip 확인.\n\n**Files:** src/main/projects/__tests__/project-service.test.ts, src/main/projects/__tests__/junction.test.ts\n\n**Verify:** `npm run test -- project-service junction` + ProjectService.ts diff 0\n\n```json:metadata\n{\"files\":[\"src/main/projects/__tests__/project-service.test.ts\",\"src/main/projects/__tests__/junction.test.ts\"],\"verifyCommand\":\"npm run test -- project-service junction\",\"acceptanceCriteria\":[\"external+auto 거부 테스트 + DB/FS 흔적 0 검증\",\"TOCTOU mismatch rollback 테스트\",\"project-service.ts 구현 파일 변경 0 lines\",\"플랫폼 skip 정확\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Renderer IPC wrapper + 3 hooks + active-project-store",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** Renderer 전용 invoke wrapper(src/renderer/ipc/invoke.ts) + useDashboardKpis / useProjects / useActiveProject 3 hooks + active-project-store(zustand persist, key 'rolestra.activeProject.v1'). 에러는 반드시 전파(사일런트 폴백 금지). ipcRenderer 직접 호출 금지 — guard grep.\n\n**Files:** src/renderer/ipc/invoke.ts, src/renderer/ipc/__tests__/invoke.test.ts, src/renderer/hooks/{use-dashboard-kpis,use-projects,use-active-project}.ts, src/renderer/hooks/__tests__/*.test.tsx, src/renderer/stores/active-project-store.ts, src/renderer/stores/__tests__/active-project-store.test.ts\n\n**Verify:** `npm run test -- hooks stores ipc/__tests__`\n\n```json:metadata\n{\"files\":[\"src/renderer/ipc/invoke.ts\",\"src/renderer/ipc/__tests__/invoke.test.ts\",\"src/renderer/hooks/use-dashboard-kpis.ts\",\"src/renderer/hooks/use-projects.ts\",\"src/renderer/hooks/use-active-project.ts\",\"src/renderer/hooks/__tests__/use-dashboard-kpis.test.tsx\",\"src/renderer/hooks/__tests__/use-projects.test.tsx\",\"src/renderer/hooks/__tests__/use-active-project.test.tsx\",\"src/renderer/stores/active-project-store.ts\",\"src/renderer/stores/__tests__/active-project-store.test.ts\"],\"verifyCommand\":\"npm run test -- hooks stores ipc\",\"acceptanceCriteria\":[\"invoke 외 ipcRenderer 호출 0건\",\"useDashboardKpis strict mode 중복 fetch 방지\",\"createNew 성공 후 projects refetch\",\"setActive IPC 실패 시 store 미갱신\",\"persist key 정확\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: ProgressGauge — 테마별 3 variant",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** warm=round bar / tactical=12-seg diamond(clip-path + alpha) / retro=ASCII `[████░░░░]` 12 slot. useTheme().token.gaugeStyle 기반 자동 분기. 외부 API는 `<ProgressGauge value total label? />`. 하드코딩 색 0건. Tactical clip-path inline-style은 예외 허용 + 이유 주석.\n\n**Files:** src/renderer/features/dashboard/ProgressGauge.tsx, src/renderer/features/dashboard/__tests__/ProgressGauge.test.tsx\n\n**Verify:** `npm run test -- ProgressGauge` + grep hex 색 0\n\n```json:metadata\n{\"files\":[\"src/renderer/features/dashboard/ProgressGauge.tsx\",\"src/renderer/features/dashboard/__tests__/ProgressGauge.test.tsx\"],\"verifyCommand\":\"npm run test -- ProgressGauge\",\"acceptanceCriteria\":[\"3 테마 DOM 구조 snapshot 상이\",\"retro 정확히 12 slot\",\"tactical activeSegments=ceil(value/total*12)\",\"warm border-radius var(--radius-panel)\",\"하드코딩 색 0건\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Dashboard Hero — 4 KPI 타일 + 빠른 액션",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** Hero 블록 구현. 4 KPI 타일(HeroKpiTile) + 빠른 액션 2개(+ 새 프로젝트 / 회의 소집). loading/error/empty 3상태 명시 렌더. 에러는 반드시 화면에 노출(사일런트 폴백 금지). 회의 소집 버튼은 active project 없으면 aria-disabled. 문자열 전부 i18n.\n\n**Files:** src/renderer/features/dashboard/HeroKpiTile.tsx, HeroQuickActions.tsx, DashboardPage.tsx, __tests__/HeroKpiTile.test.tsx\n\n**Verify:** `npm run test -- HeroKpiTile && npm run lint`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/dashboard/HeroKpiTile.tsx\",\"src/renderer/features/dashboard/HeroQuickActions.tsx\",\"src/renderer/features/dashboard/DashboardPage.tsx\",\"src/renderer/features/dashboard/__tests__/HeroKpiTile.test.tsx\"],\"verifyCommand\":\"npm run test -- HeroKpiTile && npm run lint\",\"acceptanceCriteria\":[\"loading=skeleton / error=visible / empty=placeholder\",\"회의 소집 active project null 시 aria-disabled+tooltip\",\"모든 문자열 t() 경유\",\"하드코딩 색 0건\",\"4 KPI variant 렌더 스냅샷\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: 비대칭 2x2 위젯 4종 (Tasks/People/Recent/Approvals)",
+      "status": "pending",
+      "blockedBy": [6],
+      "description": "**Goal:** 위젯 4종 골격 + 각자 fetch 훅. CSS grid `\"tasks tasks approvals\" \"people recent approvals\"` (Approvals 2-row span). 각 위젯 loading/error/empty 명시. 누락된 IPC 채널 발견 시 Task 1로 돌아가 shared 먼저 선언. 게이미피케이션 단어 0건.\n\n**Files:** src/renderer/features/dashboard/widgets/{TasksWidget,PeopleWidget,RecentWidget,ApprovalsWidget}.tsx, src/renderer/features/dashboard/__tests__/ApprovalsWidget.test.tsx, DashboardPage.tsx (grid)\n\n**Verify:** `npm run test -- widgets` + game 용어 grep 0\n\n```json:metadata\n{\"files\":[\"src/renderer/features/dashboard/widgets/TasksWidget.tsx\",\"src/renderer/features/dashboard/widgets/PeopleWidget.tsx\",\"src/renderer/features/dashboard/widgets/RecentWidget.tsx\",\"src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx\",\"src/renderer/features/dashboard/__tests__/ApprovalsWidget.test.tsx\",\"src/renderer/features/dashboard/DashboardPage.tsx\"],\"verifyCommand\":\"npm run test -- widgets\",\"acceptanceCriteria\":[\"4 위젯 loading/error/empty 3상태\",\"grid template 시안과 일치 (Approvals 2-row)\",\"각 위젯 독립 fetch 훅\",\"존재 채널만 호출\",\"game 용어 0건\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Insight 띠",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** 대시보드 하단 4 셀 띠(주간 +N% / 평균 응답 / 누적 승인 / 리뷰 완료율). R4는 KPI snapshot 확장으로 실값 일부 + placeholder. tone up/down/neutral 토큰 class 분기. 빈 값은 `—`로 명시.\n\n**Files:** src/renderer/features/dashboard/InsightStrip.tsx, __tests__/InsightStrip.test.tsx, DashboardPage.tsx\n\n**Verify:** `npm run test -- InsightStrip`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/dashboard/InsightStrip.tsx\",\"src/renderer/features/dashboard/__tests__/InsightStrip.test.tsx\",\"src/renderer/features/dashboard/DashboardPage.tsx\"],\"verifyCommand\":\"npm run test -- InsightStrip\",\"acceptanceCriteria\":[\"4 셀 렌더 + 간격/폰트 토큰 참조\",\"tone up=text-success / down=text-danger\",\"데이터 부족 시 `—` 표시\",\"문자열 t() 경유\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: ProjectCreateModal — Radix Dialog 3 kinds",
+      "status": "pending",
+      "blockedBy": [8],
+      "description": "**Goal:** Radix Dialog + RadioGroup으로 프로젝트 생성 모달. kind 3종(new/external/imported) + permission radio(external 시 auto 비활성, aria-disabled+tooltip) + ExternalPathPicker. submit 에러는 모달 inline 표시(토스트 아님). 양쪽 거부(client+server) 재확인.\n\n**Files:** src/renderer/features/projects/{ProjectCreateModal,ProjectKindTabs,ProjectPermissionRadio,ExternalPathPicker}.tsx, __tests__/{ProjectCreateModal,ProjectPermissionRadio}.test.tsx, HeroQuickActions.tsx (open 트리거), package.json (@radix-ui/react-dialog, react-radio-group 추가)\n\n**Verify:** `npm run test -- ProjectCreate && npm run typecheck:web`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/projects/ProjectCreateModal.tsx\",\"src/renderer/features/projects/ProjectKindTabs.tsx\",\"src/renderer/features/projects/ProjectPermissionRadio.tsx\",\"src/renderer/features/projects/ExternalPathPicker.tsx\",\"src/renderer/features/projects/__tests__/ProjectCreateModal.test.tsx\",\"src/renderer/features/projects/__tests__/ProjectPermissionRadio.test.tsx\",\"src/renderer/features/dashboard/HeroQuickActions.tsx\",\"package.json\"],\"verifyCommand\":\"npm run test -- ProjectCreate && npm run typecheck:web\",\"acceptanceCriteria\":[\"external kind 시 auto 라디오 aria-disabled+tooltip\",\"이름 1~64자 validation\",\"submit 성공 → useProjects.refresh + setActive\",\"submit 에러 모달 inline 표시\",\"focus trap/ESC/overlay click 동작\",\"모든 라벨 t() 경유\",\"game 용어 0건\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: 활성 프로젝트 전환 UI (ProjectRail + ShellTopBar + App)",
+      "status": "pending",
+      "blockedBy": [8],
+      "description": "**Goal:** ProjectRail이 활성 스토어 연결 + `+ 새 프로젝트` 버튼 노출. ShellTopBar subtitle에 활성 프로젝트 이름(없으면 `shell.topbar.noActiveProject`). App.tsx가 R3 placeholder 제거 + DashboardPage 마운트. Persist로 새로고침 후 유지.\n\n**Files:** src/renderer/components/shell/ProjectRail.tsx, ShellTopBar.tsx, src/renderer/App.tsx, src/renderer/components/shell/__tests__/ProjectRail.active.test.tsx\n\n**Verify:** `npm run test -- ProjectRail.active` + placeholder 제거 확인\n\n```json:metadata\n{\"files\":[\"src/renderer/components/shell/ProjectRail.tsx\",\"src/renderer/components/shell/ShellTopBar.tsx\",\"src/renderer/App.tsx\",\"src/renderer/components/shell/__tests__/ProjectRail.active.test.tsx\"],\"verifyCommand\":\"npm run test -- ProjectRail.active\",\"acceptanceCriteria\":[\"클릭→setActive→ShellTopBar 1 frame 반영\",\"+ 새 프로젝트 버튼 ProjectRail 내 노출 + 모달 오픈\",\"새로고침 후 active 유지(persist)\",\"app.mainPlaceholder DOM 비노출\",\"하드코딩 색 0건\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: i18n populate (dashboard.* / project.*)",
+      "status": "pending",
+      "blockedBy": [9, 10],
+      "description": "**Goal:** R3에서 빈 객체만 선언된 dashboard/project 도메인을 실제 키로 채운다. ko/en 동기. shell.topbar.noActiveProject 추가. eslint-plugin-i18next / i18next-parser 통과.\n\n**Files:** src/renderer/i18n/locales/ko.json, en.json, src/renderer/i18n/keys.ts, i18next-parser.config.js (필요 시)\n\n**Verify:** `npm run i18n:check && npm run lint`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"src/renderer/i18n/keys.ts\"],\"verifyCommand\":\"npm run i18n:check && npm run lint\",\"acceptanceCriteria\":[\"dashboard.kpi/action/tasks/people/recent/approvals/insight/gauge 전부 populated\",\"project.create.* + project.errors.* populated\",\"shell.topbar.noActiveProject 등록\",\"ko/en key set deep equal\",\"en 값 빈 문자열 0건\",\"i18n:check exit 0\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: Playwright Electron E2E — 외부 프로젝트 연결 → 대시보드",
+      "status": "pending",
+      "blockedBy": [11],
+      "description": "**Goal:** @playwright/test의 _electron.launch로 실제 앱 기동. tmp ArenaRoot + 더미 외부 폴더 → 모달 열기 → external 선택(auto disabled 확인) → 제출 → junction/symlink 생성 확인(fs.lstat) → ProjectRail active + Hero activeProjects 증가. 실패 시 스크린샷 자동 저장. CI 통합은 R10으로 이연.\n\n**Files:** e2e/playwright.config.ts, e2e/electron-launch.ts, e2e/fixtures/external-sample/README.md, e2e/external-project-flow.spec.ts, package.json (devDeps + scripts), vitest.config.ts (exclude e2e/**)\n\n**Verify:** `npm run e2e -- external-project-flow`\n\n```json:metadata\n{\"files\":[\"e2e/playwright.config.ts\",\"e2e/electron-launch.ts\",\"e2e/fixtures/external-sample/README.md\",\"e2e/external-project-flow.spec.ts\",\"package.json\",\"vitest.config.ts\"],\"verifyCommand\":\"npm run e2e -- external-project-flow\",\"acceptanceCriteria\":[\"로컬 exit 0\",\"prod build 기동(e2e dev 서버 아님)\",\"tmp ArenaRoot 정리\",\"junction fs.lstat 확인\",\"Hero activeProjects 증가 확인\",\"실패 시 screenshot 저장\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: R4 종료 확인 + R5 진입 체크리스트",
+      "status": "pending",
+      "blockedBy": [12],
+      "description": "**Goal:** 전체 typecheck/lint/test/i18n:check/theme:check/build + e2e 통과. 6 테마 대시보드 스크린샷(최소 3장) + Playwright external-link-flow 캡처. spec §10 Phase R4 체크박스 ✓ + 산출물 링크 채움. r4-done-checklist.md 작성. tools/cli-smoke/README 갱신.\n\n**Files:** docs/superpowers/specs/appendix-r4-evidence/*.png, docs/superpowers/specs/appendix-r4-evidence/README.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R4), docs/superpowers/specs/r4-done-checklist.md, tools/cli-smoke/README.md\n\n**Verify:** `npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build`\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/appendix-r4-evidence/\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\",\"docs/superpowers/specs/r4-done-checklist.md\",\"tools/cli-smoke/README.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build\",\"acceptanceCriteria\":[\"6 checks exit 0\",\"e2e 1회 pass\",\"스크린샷 3장 이상\",\"§10 R4 체크박스 전부 ✓ + 산출물 링크\",\"r4-done-checklist 작성\",\"tasks.json completed 마킹\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-20T00:00:00.000Z"
+}
