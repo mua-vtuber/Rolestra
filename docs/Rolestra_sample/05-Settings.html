@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Rolestra · Settings — 3 themes × 2 modes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>html,body{margin:0;padding:0;background:#f0eee9}*{box-sizing:border-box}</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f0eee9">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#f0eee9"/>
+    <g transform="translate(200,180)">
+      <rect x="0" y="0" width="220" height="440" fill="#f4ecd6"/>
+      <rect x="230" y="0" width="570" height="440" fill="#fff" stroke="#d9cbb3" stroke-width="2"/>
+      <rect x="250" y="40" width="300" height="14" rx="4" fill="#2a1f14"/>
+      <rect x="250" y="80" width="520" height="72" fill="none" stroke="#d9cbb3"/>
+      <rect x="250" y="170" width="520" height="72" fill="none" stroke="#d9cbb3"/>
+      <rect x="250" y="260" width="520" height="72" fill="none" stroke="#d9cbb3"/>
+      <circle cx="750" cy="115" r="11" fill="#7a8f4e"/>
+      <circle cx="750" cy="205" r="11" fill="#7a8f4e"/>
+      <rect x="20" y="40" width="180" height="30" fill="#c96f3a" opacity="0.15"/>
+      <rect x="20" y="75" width="180" height="30" fill="none"/>
+    </g>
+    <text x="600" y="680" font-family="serif" font-size="38" fill="#2a1f14" text-anchor="middle" font-weight="600">설정</text>
+  </svg>
+</template>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="theme-tokens.jsx"></script>
+<script type="text/babel" src="shared-components.jsx"></script>
+<!-- 01-dash-variants: DashCard / DashMiniBtn 재사용 (shared 이전은 시안 안정 후 진행 — A 옵션 유지) -->
+<script type="text/babel" src="01-dash-variants.jsx"></script>
+<script type="text/babel" src="05-set-variants.jsx"></script>
+<script type="text/babel">
+const W=1280,H=820;
+function App(){return(
+  <DesignCanvas>
+    <div style={{padding:'0 60px 36px',maxWidth:1600}}>
+      <div style={{fontSize:34,fontWeight:700,letterSpacing:-0.8,fontFamily:'"Fraunces",serif',color:'#2a1f14'}}>05. 설정 — 3 테마 × 2 모드</div>
+      <div style={{fontSize:14,color:'rgba(60,50,40,0.65)',marginTop:8,maxWidth:860,lineHeight:1.6}}>
+        조직/직원/권한 정책 관리. 직원 테이블 + 기본 권한 정책 폼(토글, 셀렉트, 시간대) + 저장되지 않은 변경사항 경고.
+      </div>
+    </div>
+    <DCSection title="Warm"><DCArtboard label="Light" width={W} height={H}><SV_WarmLight/></DCArtboard><DCArtboard label="Dark" width={W} height={H}><SV_WarmDark/></DCArtboard></DCSection>
+    <DCSection title="Tactical"><DCArtboard label="Light" width={W} height={H}><SV_TacticalLight/></DCArtboard><DCArtboard label="Dark" width={W} height={H}><SV_TacticalDark/></DCArtboard></DCSection>
+    <DCSection title="Retro"><DCArtboard label="Light" width={W} height={H}><SV_RetroLight/></DCArtboard><DCArtboard label="Dark" width={W} height={H}><SV_RetroDark/></DCArtboard></DCSection>
+  </DesignCanvas>);
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

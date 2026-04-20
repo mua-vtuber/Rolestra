@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Rolestra · Dashboard — 3 themes × 2 modes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f0eee9">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#f0eee9"/>
+    <g transform="translate(160,180)">
+      <rect x="0" y="0" width="260" height="180" rx="10" fill="#c96f3a"/>
+      <rect x="280" y="0" width="260" height="180" rx="0" fill="#10141e"/>
+      <rect x="560" y="0" width="260" height="180" rx="0" fill="#0a0d09" stroke="#89f09a" stroke-width="2"/>
+      <rect x="0" y="200" width="260" height="180" rx="10" fill="#1f1611"/>
+      <rect x="280" y="200" width="260" height="180" rx="0" fill="#eef2f8" stroke="#c6d3e3" stroke-width="2"/>
+      <rect x="560" y="200" width="260" height="180" rx="0" fill="#f4ecd6" stroke="#c7a87a" stroke-width="2"/>
+    </g>
+    <text x="600" y="540" font-family="serif" font-size="38" fill="#2a1f14" text-anchor="middle" font-weight="600">대시보드 · 3 × 2</text>
+    <text x="600" y="580" font-family="sans-serif" font-size="18" fill="#7a6a55" text-anchor="middle">Warm · Tactical · Retro</text>
+  </svg>
+</template>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="theme-tokens.jsx"></script>
+<script type="text/babel" src="shared-components.jsx"></script>
+<script type="text/babel" src="01-dash-variants.jsx"></script>
+
+<script type="text/babel">
+const DASH_W = 1280;
+const DASH_H = 820;
+
+function App() {
+  return (
+    <DesignCanvas>
+      <div style={{ padding: '0 60px 36px', maxWidth: 1600 }}>
+        <div style={{
+          fontSize: 34, fontWeight: 700, letterSpacing: -0.8,
+          fontFamily: '"Fraunces", serif', color: '#2a1f14',
+        }}>01. 대시보드 — 3 테마 × 2 모드</div>
+        <div style={{
+          fontSize: 14, color: 'rgba(60,50,40,0.65)', marginTop: 8, maxWidth: 820, lineHeight: 1.6,
+        }}>
+          동일 데이터를 <b>Warm</b>(거실 같은 사무실) · <b>Tactical</b>(관제실) · <b>Retro</b>(터미널/매뉴얼) 세 방향으로,
+          각각 <b>Light / Dark</b> 두 모드로 렌더링했습니다. 같은 행이 동일 테마, 왼쪽이 Light · 오른쪽이 Dark 입니다.
+          <br />
+          <span style={{ color: 'rgba(60,50,40,0.5)' }}>
+            — Warm Light는 기존 V1의 완성형, Tactical Dark는 V2의 완성형, Retro Dark는 V5의 완성형입니다. 나머지 3개(Warm Dark, Tactical Light, Retro Light)는 이번 라운드 신규.
+          </span>
+        </div>
+      </div>
+
+      <DCSection title="Warm — 거실 같은 사무실" subtitle="Fraunces serif + 따뜻한 orange/amber · 이모지 시스템 · 일상 업무 톤">
+        <DCArtboard label="Light · 기본 (V1 완성형)" width={DASH_W} height={DASH_H}>
+          <V_WarmLight />
+        </DCArtboard>
+        <DCArtboard label="Dark · 우디 야간 모드" width={DASH_W} height={DASH_H}>
+          <V_WarmDark />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection title="Tactical — 관제실 / 오퍼레이션 센터" subtitle="clip-path 모서리 + 12분절 SSM 게이지 · 다이아몬드 아바타 · 라인 아이콘">
+        <DCArtboard label="Light · 주간 관제 (신규)" width={DASH_W} height={DASH_H}>
+          <V_TacticalLight />
+        </DCArtboard>
+        <DCArtboard label="Dark · V2 완성형" width={DASH_W} height={DASH_H}>
+          <V_TacticalDark />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection title="Retro — 터미널 / 매뉴얼" subtitle="Mono 전용 · ASCII 게이지 · 상태 점(dot) 아바타 · 개발자 정체성">
+        <DCArtboard label="Light · 도트매트릭스 프린터 출력 (신규)" width={DASH_W} height={DASH_H}>
+          <V_RetroLight />
+        </DCArtboard>
+        <DCArtboard label="Dark · V5 완성형 (CRT)" width={DASH_W} height={DASH_H}>
+          <V_RetroDark />
+        </DCArtboard>
+      </DCSection>
+
+      <div style={{ padding: '0 60px 120px', maxWidth: 900 }}>
+        <div style={{
+          background: '#fff', border: '1px solid rgba(0,0,0,0.08)',
+          borderRadius: 12, padding: '20px 24px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+          fontSize: 14, lineHeight: 1.65, color: '#2a1f14',
+        }}>
+          <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 10 }}>다음 단계 (Step B)</div>
+          <div style={{ color: 'rgba(60,50,40,0.75)' }}>
+            <b>테마 × 모드 조합을 선택</b>해 주시면 <b>02. 메신저 / 회의 진행</b>을 동일 토큰으로 이어서 디자인합니다.
+            혹은 어느 테마의 어느 토큰을 빼거나 섞고 싶은 지점이 있으면 말씀 주세요
+            (예: "Tactical Light의 레이아웃 + Warm의 색감", "Retro Light에서 폰트만 Sans").
+          </div>
+        </div>
+      </div>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

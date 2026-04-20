@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Rolestra · 전체 화면 목차</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600;700;800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f0eee9;
+    --card-bg: #fdfbf4;
+    --ink: #2a1f14;
+    --ink-muted: rgba(42, 31, 20, 0.6);
+    --ink-subtle: rgba(42, 31, 20, 0.4);
+    --brand: #c96f3a;
+    --success: #7a8f4e;
+    --line: #d9cbb3;
+    --line-soft: rgba(217, 203, 179, 0.5);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: 'Inter', sans-serif; }
+  body {
+    background-image:
+      radial-gradient(ellipse 900px 500px at 20% -8%, rgba(201, 111, 58, 0.06), transparent 60%),
+      radial-gradient(ellipse 700px 400px at 100% 120%, rgba(122, 143, 78, 0.05), transparent 55%);
+    min-height: 100vh;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+  .serif { font-family: 'Fraunces', serif; font-weight: 600; letter-spacing: -0.02em; }
+
+  /* Header */
+  header {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 64px 56px 36px;
+    border-bottom: 1px solid var(--line);
+  }
+  .eyebrow {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2.5px;
+    color: var(--brand);
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  h1 {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 72px;
+    letter-spacing: -0.035em;
+    line-height: 1;
+    margin: 14px 0 0;
+  }
+  h1 em {
+    font-style: italic;
+    color: var(--brand);
+    font-weight: 500;
+  }
+  .lede {
+    margin-top: 20px;
+    font-size: 17px;
+    line-height: 1.6;
+    color: var(--ink-muted);
+    max-width: 640px;
+  }
+  .lede strong { color: var(--ink); font-weight: 600; }
+  .meta {
+    display: flex; gap: 28px;
+    margin-top: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--ink-subtle);
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+  }
+  .meta span strong { color: var(--brand); font-weight: 700; }
+
+  /* Grid */
+  main {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 48px 56px 80px;
+  }
+  .section-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--ink-subtle);
+    font-weight: 700;
+    margin: 0 0 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .section-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--line);
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  @media (max-width: 1000px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--card-bg);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+    text-decoration: none;
+    color: inherit;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+    cursor: pointer;
+  }
+  .card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 32px rgba(42, 31, 20, 0.08);
+    border-color: var(--brand);
+  }
+  .thumb {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 10;
+    overflow: hidden;
+    background: #f7f3ec;
+    border-bottom: 1px solid var(--line);
+  }
+  .thumb iframe {
+    position: absolute;
+    top: 0; left: 0;
+    width: 1920px;  /* render iframe at larger size */
+    height: 1200px;
+    transform-origin: 0 0;
+    transform: scale(0.3125); /* 1920 * 0.3125 = 600 */
+    border: 0;
+    pointer-events: none;
+  }
+  .thumb-cover {
+    position: absolute; inset: 0;
+    cursor: pointer;
+  }
+  .thumb-tag {
+    position: absolute;
+    top: 12px; left: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 4px 9px;
+    background: rgba(42, 31, 20, 0.85);
+    color: #fff;
+    border-radius: 999px;
+    z-index: 2;
+  }
+  .card-body {
+    padding: 18px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .card-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--brand);
+    letter-spacing: 1px;
+  }
+  .card-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    line-height: 1.2;
+  }
+  .card-sub {
+    font-size: 13px;
+    color: var(--ink-muted);
+    line-height: 1.55;
+  }
+  .card-tags {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 3px 8px;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--ink-muted);
+    border-radius: 4px;
+  }
+  .tag.accent { color: var(--brand); border-color: var(--brand); }
+
+  footer {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 24px 56px 64px;
+    border-top: 1px solid var(--line);
+    color: var(--ink-subtle);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 1px;
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+    flex-wrap: wrap;
+  }
+  footer a { color: inherit; text-decoration: none; }
+  footer a:hover { color: var(--brand); }
+
+  /* Brand bar */
+  .brand-row {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .brand-mark {
+    width: 44px; height: 44px;
+    background: var(--brand); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Fraunces', serif; font-weight: 700; font-size: 20px;
+    border-radius: 10px;
+  }
+  .brand-word {
+    font-family: 'Fraunces', serif; font-weight: 600;
+    font-size: 20px; letter-spacing: -0.01em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-row">
+    <div class="brand-mark">R</div>
+    <div class="brand-word">Rolestra</div>
+  </div>
+
+  <div class="eyebrow" style="margin-top: 40px;">Screens · v0.1 · 2026-04-19</div>
+  <h1>
+    <em>AI 직원</em>들과<br>
+    함께 일하는 사무실.
+  </h1>
+  <p class="lede">
+    Rolestra는 Claude Code / Gemini / Codex 같은 AI 에이전트를 <strong>직원</strong>처럼 고용하고,
+    메신저로 지시하고, 결재로 권한을 조절하는 <strong>AI 사무실 OS</strong>입니다. 아래는 6개 핵심 화면의
+    디자인 탐색 — 3가지 테마(Warm / Tactical / Retro) × 2가지 모드(Light / Dark).
+  </p>
+
+  <div class="meta">
+    <span><strong>6</strong> 화면</span>
+    <span><strong>36</strong> 변형 (6×6)</span>
+    <span><strong>3</strong> 테마</span>
+    <span><strong>1280×820</strong> 아트보드</span>
+  </div>
+</header>
+
+<main>
+  <div class="section-title">./screens</div>
+
+  <div class="grid">
+
+    <a href="01-Dashboard.html" class="card">
+      <div class="thumb">
+        <span class="thumb-tag">01</span>
+        <iframe src="01-Dashboard.html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb-cover"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-num">01 ·</span>
+          <span class="card-title">사무실 대시보드</span>
+        </div>
+        <div class="card-sub">
+          진행 중인 프로젝트 · 결재 대기 · 직원 상태 · 최근 대화를 한 화면에. 위젯 박스(DashCard)가
+          모든 화면의 기본 형태로 사용됩니다.
+        </div>
+        <div class="card-tags">
+          <span class="tag accent">홈</span>
+          <span class="tag">위젯 그리드</span>
+          <span class="tag">SSM 12단계</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="02-Messenger.html" class="card">
+      <div class="thumb">
+        <span class="thumb-tag">02</span>
+        <iframe src="02-Messenger.html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb-cover"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-num">02 ·</span>
+          <span class="card-title">메신저 스레드</span>
+        </div>
+        <div class="card-sub">
+          대표(사람)와 AI 직원들 사이의 실시간 대화. 결재 버튼 · 합의 지표 · SSM 스테이지가 메시지
+          안에 그대로 녹아 있습니다.
+        </div>
+        <div class="card-tags">
+          <span class="tag accent">실시간</span>
+          <span class="tag">합의 지표</span>
+          <span class="tag">인라인 결재</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="03-Approvals.html" class="card">
+      <div class="thumb">
+        <span class="thumb-tag">03</span>
+        <iframe src="03-Approvals.html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb-cover"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-num">03 ·</span>
+          <span class="card-title">결재함</span>
+        </div>
+        <div class="card-sub">
+          쌓인 결재 요청을 한 번에. 좌측 큐 + 우측 상세(디프 · 변경 사유 · 영향 범위) + 한 번의 키로
+          허가 · 조건부 · 거절.
+        </div>
+        <div class="card-tags">
+          <span class="tag accent">결재</span>
+          <span class="tag">디프 뷰어</span>
+          <span class="tag">키보드 우선</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="04-Queue.html" class="card">
+      <div class="thumb">
+        <span class="thumb-tag">04</span>
+        <iframe src="04-Queue.html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb-cover"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-num">04 ·</span>
+          <span class="card-title">작업 큐</span>
+        </div>
+        <div class="card-sub">
+          대표가 내린 지시사항이 쌓이고 한 건씩 실행. 상단 통계 · 현재 작업 스포트라이트 ·
+          완료 / 진행 / 대기 / 실패 전체 테이블.
+        </div>
+        <div class="card-tags">
+          <span class="tag accent">큐</span>
+          <span class="tag">실행 현황</span>
+          <span class="tag">타임라인</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="05-Settings.html" class="card">
+      <div class="thumb">
+        <span class="thumb-tag">05</span>
+        <iframe src="05-Settings.html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb-cover"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-num">05 ·</span>
+          <span class="card-title">설정</span>
+        </div>
+        <div class="card-sub">
+          조직 · 직원 · 권한 정책 · 외부 연결 관리. 기본 권한 모드 (auto / hybrid / manual)와
+          SSM 마감 단계를 테이블 + 폼으로 조정.
+        </div>
+        <div class="card-tags">
+          <span class="tag accent">어드민</span>
+          <span class="tag">권한 정책</span>
+          <span class="tag">직원 관리</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="06-Onboarding.html" class="card">
+      <div class="thumb">
+        <span class="thumb-tag">06</span>
+        <iframe src="06-Onboarding.html" scrolling="no" loading="lazy"></iframe>
+        <div class="thumb-cover"></div>
+      </div>
+      <div class="card-body">
+        <div class="card-head">
+          <span class="card-num">06 ·</span>
+          <span class="card-title">온보딩</span>
+        </div>
+        <div class="card-sub">
+          5단계 마법사 중 "직원 선택" 단계. 설치된 CLI를 자동 감지해서 입사 후보로 제시.
+          체크해서 고용 → 역할 부여 → 권한 설정 → 첫 프로젝트.
+        </div>
+        <div class="card-tags">
+          <span class="tag accent">첫 실행</span>
+          <span class="tag">5단계 마법사</span>
+          <span class="tag">CLI 감지</span>
+        </div>
+      </div>
+    </a>
+
+  </div>
+</main>
+
+<footer>
+  <div>rolestra / screens v0.1</div>
+  <div>6 screens · 3 themes · 2 modes · 1280×820</div>
+  <div>hello@rolestra.app</div>
+</footer>
+
+</body>
+</html>

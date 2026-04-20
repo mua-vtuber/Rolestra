@@ -1,0 +1,89 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-20-rolestra-phase-r3.md",
+  "tasks": [
+    {
+      "id": 1,
+      "subject": "Task 1: Spec 갱신 (§7.2 / §7.5 / §7.10 / §10)",
+      "status": "pending",
+      "description": "**Goal:** 시안 lock 결정사항을 spec에 반영. §7.2 출근 라벨('퇴근'→'외근', '연결끊김'→'점검 필요') + §7.5 대시보드(위젯 5→4, Hero 4 KPI + 빠른 액션, 비대칭 2x2 그리드, Insight 띠, 진행률 게이지 테마별 분기) + §7.10 디자인 시스템(6 테마 토큰 schema, CSS variable + data-theme/data-mode, 폰트 매트릭스, 금지사항) + §10 R3 템플릿(체크박스 + 산출물 필드).\n\n**Files:** docs/superpowers/specs/2026-04-18-rolestra-design.md\n\n**Verify:** `git diff`로 네 구간 변경 확인 + 시안 정본과 용어·키 일치\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git diff --stat docs/superpowers/specs/2026-04-18-rolestra-design.md\",\"acceptanceCriteria\":[\"§7.2 4상태 UI 라벨 명시\",\"§7.5 위젯 4종 + 비대칭 그리드 + Insight 띠 + 게이지 테마 분기\",\"§7.10 6 테마 token schema + CSS var 규칙 + 금지사항\",\"§10 R3 체크박스+산출물 템플릿\",\"게이미피케이션 단어 0건\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: v2 renderer를 _legacy/renderer-v1/로 격리",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** `src/renderer/` 전체를 `git mv`로 `_legacy/renderer-v1/`에 이동(히스토리 보존). vitest/i18next-parser include 갱신. electron.vite.config 수정 없음.\n\n**Files:** src/renderer/* (→ _legacy/renderer-v1/*), vitest.config.ts, i18next-parser.config.js\n\n**Verify:** `npm run typecheck:node` + `_legacy/renderer-v1/` 9 엔트리 + main/shared/preload에서 legacy 경로 import 0건\n\n```json:metadata\n{\"files\":[\"_legacy/renderer-v1/\",\"vitest.config.ts\",\"i18next-parser.config.js\"],\"verifyCommand\":\"npm run typecheck:node && test -d _legacy/renderer-v1\",\"acceptanceCriteria\":[\"9 엔트리 이동 완료\",\"git log --follow로 히스토리 보존 확인\",\"src/main·shared·preload에서 legacy import 0건\",\"typecheck:node 0 errors\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: 새 src/renderer/ 빈 껍데기",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** 부팅 가능한 최소 렌더러 껍데기. index.html(data-theme/data-mode 기본) + main.tsx + App.tsx(Rolestra R3 1줄) + env.d.ts + i18n(빈 locales) + styles/global.css(최소 reset).\n\n**Files:** src/renderer/index.html, main.tsx, App.tsx, env.d.ts, i18n/index.ts, i18n/locales/{ko,en}.json, styles/global.css\n\n**Verify:** `npm run build && npm run typecheck`\n\n```json:metadata\n{\"files\":[\"src/renderer/index.html\",\"src/renderer/main.tsx\",\"src/renderer/App.tsx\",\"src/renderer/env.d.ts\",\"src/renderer/i18n/index.ts\",\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"src/renderer/styles/global.css\"],\"verifyCommand\":\"npm run build && npm run typecheck\",\"acceptanceCriteria\":[\"electron-vite dev 부팅 성공\",\"Rolestra R3 1줄 렌더\",\"typecheck:web 0 errors\",\"IPC 호출 0건\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: 패키지 추가 + Tailwind/PostCSS 설정",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** tailwindcss/postcss/autoprefixer + @radix-ui(slot/tooltip/separator) + framer-motion + cva + clsx 설치. tailwind.config.ts는 **하드코딩 색 0건**(모두 var 참조), darkMode ['selector', '[data-mode=\"dark\"]']. global.css에 @tailwind 지시문 추가.\n\n**Files:** package.json, tailwind.config.ts, postcss.config.js, src/renderer/styles/global.css\n\n**Verify:** `npm install && npm run build` + tailwind.config.ts에 `#|rgb(` 0건\n\n```json:metadata\n{\"files\":[\"package.json\",\"tailwind.config.ts\",\"postcss.config.js\",\"src/renderer/styles/global.css\"],\"verifyCommand\":\"npm install && npm run build\",\"acceptanceCriteria\":[\"8 패키지 추가 설치 성공\",\"tailwind.config에 하드코딩 색 0건\",\"darkMode 셀렉터 [data-mode=dark]\",\"build exit 0\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: theme-tokens.jsx → TS 정식화 + tokens.css 자동 생성",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** `docs/Rolestra_sample/theme-tokens.jsx`의 6 토큰 객체를 TypeScript 정식화(`theme-tokens.ts` + `THEMES` 맵). 동시에 `tokens.css` 6 블록(`[data-theme][data-mode]`) 자동 생성. `tools/theme/extract-tokens.ts` 스크립트 + `npm run theme:build` / `theme:check`(idempotent 검증).\n\n**Files:** src/renderer/theme/theme-tokens.ts, src/renderer/styles/tokens.css, tools/theme/extract-tokens.ts, package.json (scripts), src/renderer/styles/global.css (import tokens.css), src/renderer/index.html (font imports)\n\n**Verify:** `npm run theme:build && npm run theme:check` exit 0 + `grep -rE '#[0-9a-fA-F]{3,6}' src/renderer/components` → 0\n\n```json:metadata\n{\"files\":[\"src/renderer/theme/theme-tokens.ts\",\"src/renderer/styles/tokens.css\",\"tools/theme/extract-tokens.ts\",\"package.json\",\"src/renderer/styles/global.css\",\"src/renderer/index.html\"],\"verifyCommand\":\"npm run theme:build && npm run theme:check\",\"acceptanceCriteria\":[\"THEMES 6 키 정확\",\"tokens.css 6 블록 + :root 폴백\",\"theme:build deterministic (재실행 diff 0)\",\"game 용어 0건\",\"components 하드코딩 색 0건\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: ThemeProvider + themeStore + tests",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** zustand persist store(rolestra.theme.v1) + ThemeProvider(document.documentElement.dataset.theme/mode 세팅) + useTheme() 훅. index.html에 깜빡임 방지 inline script(localStorage 선로드). Vitest 스냅샷/동작 테스트 2파일.\n\n**Files:** src/renderer/theme/theme-store.ts, theme-provider.tsx, use-theme.ts, __tests__/theme-provider.test.tsx, __tests__/theme-tokens.test.ts, src/renderer/main.tsx (provider wrap), src/renderer/index.html (inline script)\n\n**Verify:** `npm run test -- theme && npm run typecheck:web`\n\n```json:metadata\n{\"files\":[\"src/renderer/theme/theme-store.ts\",\"src/renderer/theme/theme-provider.tsx\",\"src/renderer/theme/use-theme.ts\",\"src/renderer/theme/__tests__/theme-provider.test.tsx\",\"src/renderer/theme/__tests__/theme-tokens.test.ts\",\"src/renderer/main.tsx\",\"src/renderer/index.html\"],\"verifyCommand\":\"npm run test -- theme && npm run typecheck:web\",\"acceptanceCriteria\":[\"setTheme/setMode가 attribute+localStorage 동기\",\"initial 깜빡임 방지 inline script\",\"THEMES 6 키 + 필수 필드 테스트\",\"main/preload 참조 0건\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Shell 컴포넌트 (Shell/NavRail/ProjectRail/ShellTopBar/ProfileAvatar/LineIcon)",
+      "status": "pending",
+      "blockedBy": [6],
+      "description": "**Goal:** 시안 shared-components.jsx의 6 컴포넌트를 React+TS+Tailwind로 정식화. 의미 중심 props + 시각은 useTheme() 토큰에서만 분기. 하드코딩 색 0건. 3 테스트 파일(Shell/NavRail/ProfileAvatar). i18n 키 플레이스홀더(shell.rail.*, shell.topbar.*) ko/en 등록.\n\n**Files:** src/renderer/components/shell/{Shell,NavRail,ProjectRail,ShellTopBar,ProfileAvatar,LineIcon}.tsx, src/renderer/components/shell/__tests__/{Shell,NavRail,ProfileAvatar}.test.tsx, src/renderer/i18n/locales/{ko,en}.json\n\n**Verify:** `npm run test -- shell` + `grep -rE '#[0-9a-fA-F]{3,6}' src/renderer/components/shell` 0\n\n```json:metadata\n{\"files\":[\"src/renderer/components/shell/Shell.tsx\",\"src/renderer/components/shell/NavRail.tsx\",\"src/renderer/components/shell/ProjectRail.tsx\",\"src/renderer/components/shell/ShellTopBar.tsx\",\"src/renderer/components/shell/ProfileAvatar.tsx\",\"src/renderer/components/shell/LineIcon.tsx\",\"src/renderer/components/shell/__tests__/Shell.test.tsx\",\"src/renderer/components/shell/__tests__/NavRail.test.tsx\",\"src/renderer/components/shell/__tests__/ProfileAvatar.test.tsx\",\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\"],\"verifyCommand\":\"npm run test -- shell\",\"acceptanceCriteria\":[\"6 테마×2 모드 snapshot pass\",\"shell 디렉토리 하드코딩 색 0건\",\"game 용어 0건\",\"i18n 키 ko/en 동기\",\"ShellTopBar 마케팅 카피 없음\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Primitive 스텁 (Button/Card/Badge/Separator/Tooltip)",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** R4+ 사용 primitive 5종. Button(shape=auto → miniBtnStyle 자동 매핑), Card(cardTitleStyle bar/divider/ascii), Badge, Separator(Radix), Tooltip(Radix, portal). barrel export. 2 테스트 파일(Button/Card variant snapshot).\n\n**Files:** src/renderer/components/primitives/{button,card,badge,separator,tooltip}.tsx, __tests__/{button,card}.test.tsx, src/renderer/components/index.ts\n\n**Verify:** `npm run test -- primitives && npm run typecheck:web`\n\n```json:metadata\n{\"files\":[\"src/renderer/components/primitives/button.tsx\",\"src/renderer/components/primitives/card.tsx\",\"src/renderer/components/primitives/badge.tsx\",\"src/renderer/components/primitives/separator.tsx\",\"src/renderer/components/primitives/tooltip.tsx\",\"src/renderer/components/primitives/__tests__/button.test.tsx\",\"src/renderer/components/primitives/__tests__/card.test.tsx\",\"src/renderer/components/index.ts\"],\"verifyCommand\":\"npm run test -- primitives && npm run typecheck:web\",\"acceptanceCriteria\":[\"Button shape=auto 3 테마 분기 snapshot\",\"Card cardTitleStyle 3종 분기\",\"Tooltip Radix portal 동작\",\"하드코딩 색 0건\",\"barrel export 성공\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: App 루트 — Shell 와이어업 + dev theme-switcher",
+      "status": "pending",
+      "blockedBy": [8, 10],
+      "description": "**Goal:** App.tsx가 Shell 렌더. Shell에 placeholder 데이터 주입, 메인은 t('app.mainPlaceholder') 1줄. ShellTopBar 우측에 dev(`import.meta.env.DEV`)에서만 노출되는 theme-switcher(6 조합). IPC 호출 0건.\n\n**Files:** src/renderer/App.tsx, src/renderer/components/shell/theme-switcher.tsx, src/renderer/i18n/locales/{ko,en}.json\n\n**Verify:** `npm run dev` 수동 + `grep -rE 'XP|CREDITS|\\\\bLV\\\\b|MISSION|REWARD|UNLOCK' src/renderer` 0\n\n```json:metadata\n{\"files\":[\"src/renderer/App.tsx\",\"src/renderer/components/shell/theme-switcher.tsx\",\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\"],\"verifyCommand\":\"npm run build && npm run typecheck\",\"acceptanceCriteria\":[\"Shell 모든 구역 렌더\",\"theme-switcher 6 조합 전환\",\"persist로 새로고침 후 유지\",\"IPC 호출 0건\",\"game 용어 0건\",\"placeholder t() 경유\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: i18n 도메인 네임스페이스 사전 선언",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** R4~R10 대상 도메인(dashboard|messenger|channel|member|project|approval|queue|notification|settings|onboarding|common|error|shell|theme|app) top-level key 선언. ko/en 동기. parser/eslint-plugin 가드 통과.\n\n**Files:** src/renderer/i18n/index.ts, src/renderer/i18n/keys.ts, src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js\n\n**Verify:** `npm run i18n:check && npm run lint`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/index.ts\",\"src/renderer/i18n/keys.ts\",\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"i18next-parser.config.js\"],\"verifyCommand\":\"npm run i18n:check && npm run lint\",\"acceptanceCriteria\":[\"15 도메인 top-level 빈 객체\",\"ko/en 동일 key set\",\"eslint-plugin-i18next 하드코딩 0건\",\"parser 고아 키 0건\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: legacy channel warning 현황 문서화 + 격리 테스트",
+      "status": "pending",
+      "blockedBy": [9],
+      "description": "**Goal:** router.ts LEGACY_V2_CHANNELS의 5 prefix(chat:*, workspace:*, consensus-folder:*, consensus:*, session:*)를 appendix-legacy-channels.md에 표로 기록(현재 호출 위치는 _legacy/renderer-v1/ 파일 path). R11 마이그레이션 계획 컬럼. 새 renderer가 이 채널들을 호출하지 않음을 legacy-channel-isolation.test.ts로 고정. 제거는 R11.\n\n**Files:** docs/superpowers/specs/appendix-legacy-channels.md, src/renderer/__tests__/legacy-channel-isolation.test.ts\n\n**Verify:** `npm run test -- legacy-channel-isolation`\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/appendix-legacy-channels.md\",\"src/renderer/__tests__/legacy-channel-isolation.test.ts\"],\"verifyCommand\":\"npm run test -- legacy-channel-isolation\",\"acceptanceCriteria\":[\"5 prefix 하위 채널 전수 열거 (router.ts와 일치)\",\"R11 계획 컬럼 명시\",\"테스트가 새 renderer 호출 0건 확인\",\"negative guard case 포함\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: R3 종료 확인 + R4 진입 체크리스트",
+      "status": "pending",
+      "blockedBy": [11],
+      "description": "**Goal:** 전체 typecheck/lint/test/i18n:check/theme:check/build 통과. 6 테마×2 모드 스크린샷(Playwright 자동 또는 수동). spec §10 R3 체크박스 ✓ + 산출물 링크. r3-done-checklist.md. tools/cli-smoke/README 업데이트.\n\n**Files:** docs/superpowers/specs/appendix-r3-evidence/{warm-light,warm-dark,tactical-light,tactical-dark,retro-light,retro-dark}.png, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R3), docs/superpowers/specs/r3-done-checklist.md, tools/cli-smoke/README.md\n\n**Verify:** `npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build` 전부 exit 0\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/appendix-r3-evidence/\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\",\"docs/superpowers/specs/r3-done-checklist.md\",\"tools/cli-smoke/README.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build\",\"acceptanceCriteria\":[\"6 checks exit 0\",\"스크린샷 6장 이상\",\"§10 R3 체크박스 전부 ✓\",\"산출물 링크 채움\",\"R4 진입 체크리스트 문서\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-20T00:00:00.000Z"
+}

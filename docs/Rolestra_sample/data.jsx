@@ -1,0 +1,306 @@
+// Shared sample data for Rolestra prototype
+// Comedic cast: Korean names + roles. Several sample projects.
+
+const MEMBERS = [
+  {
+    id: 'jiwoo',
+    name: '지우',
+    role: '시니어 개발자',
+    personality: '직설적. 코드리뷰에서 사정 안 봐줌. 커피 3잔째.',
+    expertise: 'TypeScript, Rust, DB 최적화',
+    color: '#6366f1',
+    emoji: '🧑‍💻',
+    initials: '지',
+    cli: 'Claude Code',
+    cliId: 'claude',
+    status: 'online',
+  },
+  {
+    id: 'harin',
+    name: '하린',
+    role: 'UX 디자이너',
+    personality: '공감형. 여백과 마이크로 인터랙션 집착.',
+    expertise: 'Figma, Motion, 디자인 시스템',
+    color: '#ec4899',
+    emoji: '🎨',
+    initials: '하',
+    cli: 'Gemini',
+    cliId: 'gemini',
+    status: 'online',
+  },
+  {
+    id: 'minjun',
+    name: '민준',
+    role: '백엔드 엔지니어',
+    personality: '과묵. 주석으로 농담함.',
+    expertise: 'Go, Postgres, 분산 시스템',
+    color: '#10b981',
+    emoji: '🛠️',
+    initials: '민',
+    cli: 'Codex',
+    cliId: 'codex',
+    status: 'online',
+  },
+  {
+    id: 'seoyeon',
+    name: '서연',
+    role: 'PM / 기획',
+    personality: '논리적, 질문 많음. 회의록 장인.',
+    expertise: '제품 전략, 사용자 리서치',
+    color: '#f59e0b',
+    emoji: '📋',
+    initials: '서',
+    cli: 'Claude Code',
+    cliId: 'claude',
+    status: 'connecting',
+  },
+  {
+    id: 'daeho',
+    name: '대호',
+    role: '로컬 모델 (인턴)',
+    personality: '느리지만 성실. 인터넷 없이도 일함.',
+    expertise: '문서 요약, 간단한 리팩토링',
+    color: '#6b7280',
+    emoji: '🤖',
+    initials: '대',
+    cli: 'Local (Ollama)',
+    cliId: 'local',
+    status: 'offline-manual',
+  },
+  {
+    id: 'yuna',
+    name: '유나',
+    role: 'QA / 테스터',
+    personality: '꼼꼼함. 엣지 케이스 발굴가.',
+    expertise: 'Playwright, 회귀 테스트',
+    color: '#8b5cf6',
+    emoji: '🔍',
+    initials: '유',
+    cli: 'Gemini',
+    cliId: 'gemini',
+    status: 'offline-connection',
+  },
+];
+
+const PROJECTS = [
+  {
+    id: 'p-blog',
+    slug: 'my-blog-api',
+    name: '블로그 API 리팩토링',
+    icon: '📝',
+    kind: 'new',
+    permission: 'hybrid',
+    autonomy: 'manual',
+    members: ['jiwoo', 'minjun', 'yuna'],
+    path: '~/Documents/arena/projects/my-blog-api',
+    status: 'active',
+    unread: 12,
+  },
+  {
+    id: 'p-landing',
+    slug: 'landing-v3',
+    name: '랜딩페이지 v3',
+    icon: '🎨',
+    kind: 'external',
+    permission: 'hybrid',
+    autonomy: 'queue',
+    members: ['harin', 'jiwoo', 'seoyeon'],
+    path: '~/Dev/company/landing → link',
+    status: 'active',
+    unread: 3,
+  },
+  {
+    id: 'p-invoice',
+    slug: 'invoice-generator',
+    name: '청구서 생성기',
+    icon: '🧾',
+    kind: 'imported',
+    permission: 'approval',
+    autonomy: 'manual',
+    members: ['jiwoo', 'minjun'],
+    path: '~/Documents/arena/projects/invoice-generator',
+    status: 'active',
+    unread: 0,
+  },
+  {
+    id: 'p-research',
+    slug: 'llm-bench-research',
+    name: 'LLM 벤치마크 조사',
+    icon: '🧪',
+    kind: 'new',
+    permission: 'auto',
+    autonomy: 'auto_toggle',
+    members: ['seoyeon', 'daeho', 'harin'],
+    path: '~/Documents/arena/projects/llm-bench-research',
+    status: 'active',
+    unread: 1,
+  },
+  {
+    id: 'p-cat',
+    slug: 'cat-photo-sorter',
+    name: '고양이 사진 분류기',
+    icon: '🐈',
+    kind: 'new',
+    permission: 'auto',
+    autonomy: 'queue',
+    members: ['jiwoo', 'harin', 'daeho'],
+    path: '~/Documents/arena/projects/cat-photo-sorter',
+    status: 'folder_missing',
+    unread: 0,
+  },
+];
+
+const CHANNELS_BY_PROJECT = {
+  'p-blog': [
+    { id: 'c-blog-general', name: '일반', kind: 'system_general', readOnly: false, unread: 2 },
+    { id: 'c-blog-approval', name: '승인-대기', kind: 'system_approval', readOnly: true, unread: 3, badge: 3 },
+    { id: 'c-blog-minutes', name: '회의록', kind: 'system_minutes', readOnly: true, unread: 0 },
+    { id: 'c-blog-refactor', name: '리팩토링', kind: 'user', readOnly: false, unread: 7, active: true },
+    { id: 'c-blog-bugs', name: '버그-사냥', kind: 'user', readOnly: false, unread: 0 },
+    { id: 'c-blog-perf', name: '성능', kind: 'user', readOnly: false, unread: 0 },
+  ],
+  'p-landing': [
+    { id: 'c-land-general', name: '일반', kind: 'system_general', unread: 0 },
+    { id: 'c-land-approval', name: '승인-대기', kind: 'system_approval', readOnly: true, unread: 0 },
+    { id: 'c-land-minutes', name: '회의록', kind: 'system_minutes', readOnly: true, unread: 0 },
+    { id: 'c-land-copy', name: '카피', kind: 'user', unread: 3 },
+    { id: 'c-land-hero', name: '히어로-섹션', kind: 'user', unread: 0 },
+  ],
+};
+
+const DMS = [
+  { id: 'dm-jiwoo', memberId: 'jiwoo', unread: 1 },
+  { id: 'dm-harin', memberId: 'harin', unread: 0 },
+  { id: 'dm-seoyeon', memberId: 'seoyeon', unread: 0 },
+];
+
+// Meeting in progress in #리팩토링
+const MEETING_THREAD = [
+  {
+    id: 'm1', author: 'system', kind: 'system',
+    content: '📌 회의가 시작되었습니다 — 주제: "getPosts 쿼리 N+1 문제 해결"',
+    time: '14:02',
+  },
+  {
+    id: 'm2', author: 'jiwoo', kind: 'member',
+    content: '일단 현재 구조부터 훑어봤어요. `PostRepository.findAll()`이 author를 lazy-load하는데, 컨트롤러에서 반복문 돌면서 author.name을 찍으니까 N+1 터지는 거예요.',
+    time: '14:03',
+  },
+  {
+    id: 'm3', author: 'minjun', kind: 'member',
+    content: '조인 테이블로 풀어도 되고, DataLoader 패턴으로 배치 가져와도 됨. 후자가 유연한데 학습곡선 있음.',
+    time: '14:04',
+  },
+  {
+    id: 'm4', author: 'jiwoo', kind: 'member',
+    content: '이 프로젝트 규모에는 overkill. 그냥 `include: { author: true }` 한 줄이면 끝나요.',
+    time: '14:05',
+  },
+  {
+    id: 'm5', author: 'system', kind: 'system',
+    content: '🗳 합의 투표 진행 중 — "Prisma include 방식으로 즉시 수정"',
+    time: '14:06',
+    voteStatus: { yes: 2, no: 0, pending: 1 },
+  },
+  {
+    id: 'm6', author: 'minjun', kind: 'member',
+    content: '👍 찬성',
+    time: '14:06',
+  },
+  {
+    id: 'm7', author: 'yuna', kind: 'member',
+    content: '👍 찬성 — 대신 N+1 재발 방지 테스트 꼭 추가해주세요. `expect(queries).toHaveLength(1)`.',
+    time: '14:07',
+  },
+  {
+    id: 'm8', author: 'system', kind: 'system',
+    content: '✅ 합의 완료 — 작업 시작. 담당: 지우',
+    time: '14:08',
+  },
+  {
+    id: 'm9', author: 'jiwoo', kind: 'member',
+    content: '`src/repositories/post-repository.ts` 수정했고, 테스트 하나 추가했어요. PR 올릴게요.',
+    time: '14:12',
+  },
+  {
+    id: 'm10', author: 'jiwoo', kind: 'approval_request',
+    content: '`src/repositories/post-repository.ts` 파일 수정 + `tests/post-repository.test.ts` 생성 요청합니다.',
+    reason: 'N+1 문제 해결을 위한 eager loading 적용',
+    files: ['src/repositories/post-repository.ts', 'tests/post-repository.test.ts'],
+    time: '14:12',
+  },
+];
+
+const APPROVAL_QUEUE = [
+  {
+    id: 'a1',
+    requester: 'jiwoo',
+    project: 'p-blog',
+    channel: 'c-blog-refactor',
+    kind: 'cli_permission',
+    summary: 'post-repository.ts 수정 + 테스트 파일 생성',
+    reason: 'N+1 쿼리 해결을 위한 eager loading',
+    files: ['src/repositories/post-repository.ts', 'tests/post-repository.test.ts'],
+    time: '방금',
+  },
+  {
+    id: 'a2',
+    requester: 'harin',
+    project: 'p-landing',
+    channel: 'c-land-hero',
+    kind: 'cli_permission',
+    summary: '히어로 섹션 디자인 토큰 업데이트',
+    reason: '브랜드 컬러 변경에 따른 CSS 변수 교체',
+    files: ['src/styles/tokens.css'],
+    time: '3분 전',
+  },
+  {
+    id: 'a3',
+    requester: 'minjun',
+    project: 'p-invoice',
+    channel: 'c-blog-general',
+    kind: 'mode_transition',
+    summary: '권한 모드를 hybrid → auto로 전환 요청',
+    reason: '대량 리팩토링 진행을 위해 자율 모드 필요',
+    time: '12분 전',
+  },
+  {
+    id: 'a4',
+    requester: 'seoyeon',
+    project: 'p-research',
+    kind: 'consensus_decision',
+    summary: '리서치 범위 합의 — 오픈소스 LLM만 포함',
+    reason: '상용 API는 라이선스 제약으로 제외하자는 합의 결과',
+    time: '1시간 전',
+  },
+];
+
+const RECENT_MESSAGES = [
+  { channel: 'p-blog/리팩토링', author: 'jiwoo', content: 'PR 올릴게요.', time: '2분 전' },
+  { channel: 'p-landing/카피', author: 'harin', content: '히어로 카피 3안 뽑았어요, 보실래요?', time: '8분 전' },
+  { channel: 'p-landing/카피', author: 'seoyeon', content: '2안이 가장 명확합니다. 수치가 좀 아쉬워요.', time: '9분 전' },
+  { channel: 'DM/지우', author: 'jiwoo', content: '내일 아침에 다시 보시죠. 퇴근하겠습니다.', time: '어제 18:42' },
+  { channel: 'p-research/일반', author: 'daeho', content: 'MMLU 점수 표 정리 완료.', time: '어제' },
+];
+
+const ACTIVE_MEETINGS = [
+  { id: '#17', topic: 'getPosts N+1 해결', project: 'p-blog', channel: '리팩토링', state: 'WORKING', elapsed: '10분', members: ['jiwoo', 'minjun', 'yuna'] },
+  { id: '#16', topic: '히어로 카피 컨셉', project: 'p-landing', channel: '카피', state: 'CONSENSUS', elapsed: '4분', members: ['harin', 'seoyeon'] },
+  { id: '#15', topic: '오픈소스 LLM 리스트', project: 'p-research', channel: '일반', state: 'REVIEW', elapsed: '22분', members: ['seoyeon', 'daeho'] },
+];
+
+const QUEUE_ITEMS = [
+  { id: 'q1', prompt: '로그인 페이지 다크모드 지원 추가', status: 'done', finishedAt: '14:02' },
+  { id: 'q2', prompt: '회원가입 폼 validation 메시지 i18n 적용', status: 'done', finishedAt: '14:18' },
+  { id: 'q3', prompt: '대시보드 위젯 드래그로 순서 변경', status: 'in_progress', startedAt: '14:22', progress: '합의 진행 중' },
+  { id: 'q4', prompt: '설정 화면에 테마 토글 추가', status: 'pending' },
+  { id: 'q5', prompt: 'README에 스크린샷 삽입', status: 'pending' },
+  { id: 'q6', prompt: 'CI에 lint 단계 추가', status: 'pending' },
+  { id: 'q7', prompt: '오래된 의존성 업데이트 (npm audit)', status: 'failed', error: '테스트 3개 실패', finishedAt: '13:50' },
+];
+
+Object.assign(window, {
+  MEMBERS, PROJECTS, CHANNELS_BY_PROJECT, DMS,
+  MEETING_THREAD, APPROVAL_QUEUE, RECENT_MESSAGES,
+  ACTIVE_MEETINGS, QUEUE_ITEMS,
+});

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Rolestra · Spec-aligned Dashboard Variations</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:wght@500;600;700&family=Nunito:wght@400;600;700;800&family=Fredoka:wght@500;600;700&family=Baloo+2:wght@500;700;800&family=Luckiest+Guy&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  * { box-sizing: border-box; }
+  .theme-warm, .theme-warm * { scrollbar-width: thin; scrollbar-color: #d18642 #efe2ca; }
+  .theme-warm ::-webkit-scrollbar { width: 10px; height: 10px; }
+  .theme-warm ::-webkit-scrollbar-track { background: #f4ead8; }
+  .theme-warm ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, #dda15e, #c96f3a); border-radius: 999px; border: 2px solid #f4ead8; }
+  .theme-tactical, .theme-tactical * { scrollbar-width: thin; scrollbar-color: #61c8ff #101a2b; }
+  .theme-tactical ::-webkit-scrollbar { width: 10px; height: 10px; }
+  .theme-tactical ::-webkit-scrollbar-track { background: rgba(9,17,28,0.88); box-shadow: inset 0 0 0 1px rgba(103,175,255,0.12); }
+  .theme-tactical ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(143,231,255,0.92), rgba(97,200,255,0.82)); border: 1px solid rgba(181,240,255,0.45); box-shadow: 0 0 12px rgba(97,200,255,0.28); }
+  .theme-retro, .theme-retro * { scrollbar-width: thin; scrollbar-color: #f5b467 #121612; }
+  .theme-retro ::-webkit-scrollbar { width: 10px; height: 10px; }
+  .theme-retro ::-webkit-scrollbar-track { background: #101410; box-shadow: inset 0 0 0 1px rgba(91,115,91,0.28); }
+  .theme-retro ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, rgba(245,180,103,0.85), rgba(126,207,139,0.72)); border: 1px solid rgba(245,180,103,0.38); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin="anonymous"></script>
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="dash-variants.jsx"></script>
+<script type="text/babel" src="dash-variants-2.jsx"></script>
+<script type="text/babel" src="dash-variants-spec.jsx"></script>
+<script type="text/babel">
+function App() {
+  return (
+    <DesignCanvas>
+      <div style={{ padding: '0 60px 40px', maxWidth: 1420 }}>
+        <div style={{
+          fontSize: 34,
+          fontWeight: 700,
+          letterSpacing: -0.8,
+          fontFamily: '"Fraunces", serif',
+          color: '#2a1f14',
+        }}>Rolestra — 스펙 반영 추가 3안</div>
+        <div style={{
+          fontSize: 14,
+          color: 'rgba(60,50,40,0.7)',
+          marginTop: 8,
+          maxWidth: 860,
+          lineHeight: 1.65,
+        }}>
+          요청하신 내용대로 <b>1번 구조</b>를 기준으로 다시 잡았습니다.
+          메인 3열은 <b>직원 · 업무 · 최근 대화</b>로 바꾸고, <b>결재 대기 · 공지</b>는 hero 아래 보조 2열로 분리했습니다.
+          상단 글로벌 바에는 <b>활성 프로젝트 드롭다운 · 직원 상태 칩 · 알림 벨 · 글로벌 검색</b>을 추가했고,
+          업무 카드에는 <b>진행 게이지</b>를 넣었습니다.
+        </div>
+      </div>
+
+      <DCSection title="6. Warm Spec Fit" subtitle="1번의 따뜻한 톤을 유지하면서 스펙 누락 요소를 채운 정리형 안">
+        <DCArtboard label="1280 × 820 · 1번 구조 + 상단 글로벌 바 + 최근 대화/공지 반영" width={AB_W} height={AB_H}>
+          <V6_WarmSpec />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection title="7. Tactical HUD Spec Fit" subtitle="1번 구조에 4번의 HUD 언어만 입히고 XP/보상 요소는 제거한 안">
+        <DCArtboard label="1280 × 820 · 1번 구조 + 4번 디자인 어휘만 차용" width={AB_W} height={AB_H}>
+          <V7_GameSpec />
+        </DCArtboard>
+      </DCSection>
+
+      <DCSection title="8. Retro Terminal Spec Fit" subtitle="1번 구조에 5번의 CRT/터미널 무드를 얹고 정보 밀도를 유지한 안">
+        <DCArtboard label="1280 × 820 · 1번 구조 + 5번 레트로 터미널 적용" width={AB_W} height={AB_H}>
+          <V8_RetroSpec />
+        </DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

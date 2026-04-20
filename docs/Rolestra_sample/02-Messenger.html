@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Rolestra · Messenger — 3 themes × 2 modes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Fraunces:wght@500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  html, body { margin: 0; padding: 0; background: #f0eee9; }
+  * { box-sizing: border-box; }
+</style>
+</head>
+<body>
+<template id="__bundler_thumbnail" data-bg-color="#f0eee9">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#f0eee9"/>
+    <g transform="translate(200,220)">
+      <rect x="0" y="0" width="800" height="420" rx="10" fill="#fff" stroke="#d9cbb3" stroke-width="2"/>
+      <rect x="0" y="0" width="180" height="420" fill="#f4ecd6"/>
+      <rect x="600" y="0" width="200" height="420" fill="#f9f5ed"/>
+      <circle cx="230" cy="90" r="14" fill="#c96f3a"/>
+      <rect x="258" y="80" width="300" height="10" rx="5" fill="#d9c9b0"/>
+      <rect x="258" y="98" width="200" height="8" rx="4" fill="#e8dfc8"/>
+      <circle cx="230" cy="170" r="14" fill="#7a8f4e"/>
+      <rect x="258" y="160" width="260" height="10" rx="5" fill="#d9c9b0"/>
+      <rect x="258" y="178" width="180" height="8" rx="4" fill="#e8dfc8"/>
+    </g>
+    <text x="600" y="700" font-family="serif" font-size="38" fill="#2a1f14" text-anchor="middle" font-weight="600">메신저 · 회의 진행</text>
+  </svg>
+</template>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="data.jsx"></script>
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="theme-tokens.jsx"></script>
+<script type="text/babel" src="shared-components.jsx"></script>
+<!-- 01-dash-variants: DashCard / DashMiniBtn 재사용 (shared 이전은 시안 안정 후 진행 — A 옵션 유지) -->
+<script type="text/babel" src="01-dash-variants.jsx"></script>
+<script type="text/babel" src="02-msg-variants.jsx"></script>
+
+<script type="text/babel">
+const MSG_W = 1280;
+const MSG_H = 820;
+
+function App() {
+  return (
+    <DesignCanvas>
+      <div style={{ padding: '0 60px 36px', maxWidth: 1600 }}>
+        <div style={{
+          fontSize: 34, fontWeight: 700, letterSpacing: -0.8,
+          fontFamily: '"Fraunces", serif', color: '#2a1f14',
+        }}>02. 메신저 · 회의 진행 — 3 테마 × 2 모드</div>
+        <div style={{
+          fontSize: 14, color: 'rgba(60,50,40,0.65)', marginTop: 8, maxWidth: 860, lineHeight: 1.6,
+        }}>
+          <b>#리팩토링</b> 채널에서 "getPosts N+1 해결" 회의가 진행 중. 합의 투표가 끝나고 지우 직원의
+          <b> 승인 요청</b>이 스레드에 올라온 상태. 좌측 채널 목록, 중앙 스레드 + 합의/승인 UI, 우측 참여자 +
+          SSM 진행도 3-컬럼 구조.
+        </div>
+      </div>
+
+      <DCSection title="Warm — 거실 같은 사무실">
+        <DCArtboard label="Light" width={MSG_W} height={MSG_H}><MV_WarmLight /></DCArtboard>
+        <DCArtboard label="Dark" width={MSG_W} height={MSG_H}><MV_WarmDark /></DCArtboard>
+      </DCSection>
+
+      <DCSection title="Tactical — 관제실 / 오퍼레이션 센터">
+        <DCArtboard label="Light" width={MSG_W} height={MSG_H}><MV_TacticalLight /></DCArtboard>
+        <DCArtboard label="Dark" width={MSG_W} height={MSG_H}><MV_TacticalDark /></DCArtboard>
+      </DCSection>
+
+      <DCSection title="Retro — 터미널 / 매뉴얼">
+        <DCArtboard label="Light" width={MSG_W} height={MSG_H}><MV_RetroLight /></DCArtboard>
+        <DCArtboard label="Dark" width={MSG_W} height={MSG_H}><MV_RetroDark /></DCArtboard>
+      </DCSection>
+    </DesignCanvas>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
