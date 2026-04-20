@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 
 import { HeroKpiTile } from './HeroKpiTile';
 import { HeroQuickActions } from './HeroQuickActions';
+import { InsightStrip } from './InsightStrip';
 import { TasksWidget } from './widgets/TasksWidget';
 import { PeopleWidget } from './widgets/PeopleWidget';
 import { RecentWidget } from './widgets/RecentWidget';
@@ -134,13 +135,12 @@ export function DashboardPage({
         <ApprovalsWidget className="[grid-area:approvals] min-h-[22rem]" />
       </section>
 
-      {/* Placeholder for R4-Task8 — insight strip. */}
-      <div
-        role="region"
-        aria-label="insight strip (R4-Task8)"
-        data-testid="dashboard-insight-placeholder"
-        className="min-h-[4rem] border border-dashed border-panel-border rounded-panel"
-      />
+      {/*
+        R4-Task8 — Insight strip: 4 aggregate metrics (weekly delta, avg
+        response, cumulative approvals, review completion). Values remain
+        placeholders until R6 wires in the stream aggregates.
+      */}
+      <InsightStrip />
     </div>
   );
 }

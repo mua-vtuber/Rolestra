@@ -208,7 +208,7 @@ describe('DashboardPage — quick actions wiring', () => {
 });
 
 describe('DashboardPage — layout', () => {
-  it('renders the 2x2 widget grid (Task7) and the insight placeholder (Task8)', () => {
+  it('renders the 2x2 widget grid (Task7) and the insight strip (Task8)', () => {
     kpisState.data = SUCCESS_SNAPSHOT;
     kpisState.loading = false;
     renderPage(<DashboardPage />);
@@ -225,8 +225,11 @@ describe('DashboardPage — layout', () => {
     expect(screen.getByTestId('recent-widget')).toBeTruthy();
     expect(screen.getByTestId('approvals-widget')).toBeTruthy();
 
-    // Task 8 insight strip stays as a placeholder for the next task.
-    expect(screen.getByTestId('dashboard-insight-placeholder')).toBeTruthy();
+    // Task 8 insight strip now renders as a real 4-cell strip.
+    expect(screen.queryByTestId('dashboard-insight-placeholder')).toBeNull();
+    const strip = screen.getByTestId('dashboard-insight-strip');
+    expect(strip).toBeTruthy();
+    expect(screen.getAllByTestId('insight-cell')).toHaveLength(4);
   });
 });
 

@@ -28,6 +28,14 @@
     "grid": {
       "ariaLabel": "Dashboard widgets"
     },
+    "insight": {
+      "ariaLabel": "Dashboard insight strip",
+      "avgResponse": "Avg response",
+      "cumApprovals": "Cumulative approvals",
+      "placeholder": "—",
+      "reviewRate": "Review completion",
+      "weeklyDelta": "This week"
+    },
     "kpi": {
       "activeMeetings": "Active meetings",
       "activeProjects": "Active projects",

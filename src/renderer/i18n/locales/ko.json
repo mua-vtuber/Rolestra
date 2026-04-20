@@ -28,6 +28,14 @@
     "grid": {
       "ariaLabel": "대시보드 위젯"
     },
+    "insight": {
+      "ariaLabel": "대시보드 인사이트 스트립",
+      "avgResponse": "평균 응답",
+      "cumApprovals": "누적 승인",
+      "placeholder": "—",
+      "reviewRate": "리뷰 완료율",
+      "weeklyDelta": "이번 주"
+    },
     "kpi": {
       "activeMeetings": "진행 회의",
       "activeProjects": "활성 프로젝트",
