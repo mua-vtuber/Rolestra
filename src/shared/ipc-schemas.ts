@@ -317,9 +317,21 @@ export const arenaRootSetSchema = z.object({
   path: z.string().min(1).max(4096),
 });
 
+/**
+ * `dashboard:get-kpis` input schema.
+ *
+ * `projectId` is optional + nullable to keep the wire contract stable across
+ * phases — R4 always returns global aggregates, R6+ may use this field for
+ * project-scoped snapshots.
+ */
+export const dashboardGetKpisSchema = z.object({
+  projectId: z.string().min(1).max(128).nullable().optional(),
+});
+
 /** Channel-keyed map of v3 schemas for router/handler wiring. */
 export const v3ChannelSchemas = {
   'arena-root:set': arenaRootSetSchema,
+  'dashboard:get-kpis': dashboardGetKpisSchema,
   'project:create': projectCreateSchema,
   'project:link-external': projectLinkExternalSchema,
   'project:import': projectImportSchema,

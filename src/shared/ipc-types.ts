@@ -44,6 +44,7 @@ import type {
   NotificationKind,
 } from './notification-types';
 import type { ArenaRootStatus } from './arena-root-types';
+import type { KpiSnapshot, DashboardGetKpisInput } from './dashboard-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -680,6 +681,12 @@ export type IpcChannelMap = {
   'queue:resume': {
     request: { projectId: string };
     response: { success: true };
+  };
+
+  // ── v3: Dashboard (R4) ──────────────────────────────────────────
+  'dashboard:get-kpis': {
+    request: DashboardGetKpisInput;
+    response: { snapshot: KpiSnapshot };
   };
 
   // ── Database Management ─────────────────────────────────────────

@@ -288,4 +288,8 @@ describe('v3 IPC schemas — v3ChannelSchemas map', () => {
     expect(v3ChannelSchemas['notification:update-prefs']).toBeDefined();
     expect(v3ChannelSchemas['meeting:abort']).toBeDefined();
   });
+
+  it('exposes dashboard:get-kpis (R4)', () => {
+    expect(v3ChannelSchemas['dashboard:get-kpis']).toBeDefined();
+  });
 });
