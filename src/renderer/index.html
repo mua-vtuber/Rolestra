@@ -5,6 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'" />
     <title>Rolestra</title>
+    <script>
+      // Prevent FOUC (flash-of-unstyled-content) by reading persisted theme
+      // BEFORE React mounts. Keep this inline — it must run before tokens.css
+      // selects a theme block. Falls back to defaults on any failure.
+      (function () {
+        try {
+          var raw = localStorage.getItem('rolestra.theme.v1');
+          if (!raw) return;
+          var parsed = JSON.parse(raw);
+          var state = parsed && parsed.state ? parsed.state : parsed;
+          var themeKey = state && state.themeKey;
+          var mode = state && state.mode;
+          if (themeKey === 'warm' || themeKey === 'tactical' || themeKey === 'retro') {
+            document.documentElement.dataset.theme = themeKey;
+          }
+          if (mode === 'light' || mode === 'dark') {
+            document.documentElement.dataset.mode = mode;
+          }
+        } catch (_err) {
+          /* fall through to defaults (data-theme='warm' data-mode='light' from <html>) */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
