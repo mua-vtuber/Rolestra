@@ -137,7 +137,7 @@
     {
       "id": 19,
       "subject": "Task 19: Stream Bridge (stream:* 이벤트 중앙화)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [11, 13, 15, 12, 9, 16, 17],
       "description": "**Goal:** 각 서비스 EventEmitter를 StreamBridge로 funnel + 프로덕션 shape validation + 5회 실패시 30s 차단 + onOutbound→webContents.send 훅.\n\n**Files:**\n- Create: `src/main/streams/stream-bridge.ts` + test\n- Modify: `src/main/index.ts` (bridge 연결)\n\n**Verify:** `npx vitest run src/main/streams/__tests__/`\n\n```json:metadata\n{\"files\":[\"src/main/streams/stream-bridge.ts\"],\"verifyCommand\":\"npx vitest run src/main/streams/__tests__/\",\"acceptanceCriteria\":[\"message→stream:channel-message\",\"invalid 5회 30s 차단\",\"onOutbound 다중 리스너\"]}\n```"
     },
