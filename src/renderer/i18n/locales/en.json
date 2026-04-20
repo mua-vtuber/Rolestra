@@ -10,6 +10,8 @@
     },
     "approvals": {
       "count": "{{count}} pending",
+      "count_one": "{{count}} pending",
+      "count_other": "{{count}} pending",
       "empty": "No pending approvals.",
       "error": "Could not load approvals.",
       "kind": {

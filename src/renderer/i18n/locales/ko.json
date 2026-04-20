@@ -10,6 +10,8 @@
     },
     "approvals": {
       "count": "{{count}}건 대기",
+      "count_one": "{{count}}건 대기",
+      "count_other": "{{count}}건 대기",
       "empty": "대기 중인 승인이 없습니다.",
       "error": "승인 목록을 불러오지 못했습니다.",
       "kind": {
