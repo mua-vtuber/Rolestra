@@ -113,6 +113,236 @@ export const criticalChannelSchemas = {
   }),
 } as const;
 
+// ──────────────────────────────────────────────────────────────────
+// v3 (Rolestra) domain schemas — shared enums + per-channel schemas.
+// External consumers (router/handlers/tests) may import these directly
+// or via v3ChannelSchemas below for channel-keyed lookup.
+// ──────────────────────────────────────────────────────────────────
+
+export const projectKindSchema = z.enum(['new', 'external', 'imported']);
+export const permissionModeSchema = z.enum(['auto', 'hybrid', 'approval']);
+export const autonomyModeSchema = z.enum(['manual', 'auto_toggle', 'queue']);
+export const channelKindSchema = z.enum([
+  'system_general',
+  'system_approval',
+  'system_minutes',
+  'user',
+  'dm',
+]);
+export const approvalStatusSchema = z.enum([
+  'pending',
+  'approved',
+  'rejected',
+  'expired',
+  'superseded',
+]);
+export const approvalDecisionSchema = z.enum([
+  'approve',
+  'reject',
+  'conditional',
+]);
+export const notificationKindSchema = z.enum([
+  'new_message',
+  'approval_pending',
+  'work_done',
+  'error',
+  'queue_progress',
+  'meeting_state',
+]);
+export const workStatusSchema = z.enum([
+  'online',
+  'connecting',
+  'offline-connection',
+  'offline-manual',
+]);
+
+/** project:create — enforces external + auto forbidden (spec §7.3 / CA-1). */
+export const projectCreateSchema = z
+  .object({
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000).optional(),
+    kind: projectKindSchema,
+    externalPath: z.string().min(1).max(4096).optional(),
+    sourcePath: z.string().min(1).max(4096).optional(),
+    permissionMode: permissionModeSchema,
+    autonomyMode: autonomyModeSchema.optional(),
+    initialMemberProviderIds: z.array(z.string().min(1).max(128)).max(64).optional(),
+  })
+  .refine((v) => !(v.kind === 'external' && v.permissionMode === 'auto'), {
+    message: 'external + auto is forbidden per spec §7.3',
+    path: ['permissionMode'],
+  })
+  .refine((v) => !(v.kind === 'external') || !!v.externalPath, {
+    message: 'externalPath is required when kind=external',
+    path: ['externalPath'],
+  })
+  .refine((v) => !(v.kind === 'imported') || !!v.sourcePath, {
+    message: 'sourcePath is required when kind=imported',
+    path: ['sourcePath'],
+  });
+
+export const projectLinkExternalSchema = z.object({
+  name: z.string().min(1).max(200),
+  externalPath: z.string().min(1).max(4096),
+  description: z.string().max(2000).optional(),
+  permissionMode: z.enum(['hybrid', 'approval']),
+  autonomyMode: autonomyModeSchema.optional(),
+  initialMemberProviderIds: z.array(z.string().min(1).max(128)).max(64).optional(),
+});
+
+export const projectImportSchema = z.object({
+  name: z.string().min(1).max(200),
+  sourcePath: z.string().min(1).max(4096),
+  description: z.string().max(2000).optional(),
+  permissionMode: permissionModeSchema,
+  autonomyMode: autonomyModeSchema.optional(),
+  initialMemberProviderIds: z.array(z.string().min(1).max(128)).max(64).optional(),
+});
+
+export const projectUpdateSchema = z.object({
+  id: z.string().min(1).max(128),
+  patch: z
+    .object({
+      name: z.string().min(1).max(200).optional(),
+      description: z.string().max(2000).optional(),
+      permissionMode: permissionModeSchema.optional(),
+      autonomyMode: autonomyModeSchema.optional(),
+    })
+    .refine((p) => Object.keys(p).length > 0, {
+      message: 'patch must contain at least one field',
+    }),
+});
+
+export const projectSetAutonomySchema = z.object({
+  id: z.string().min(1).max(128),
+  mode: autonomyModeSchema,
+});
+
+export const channelCreateSchema = z.object({
+  projectId: z.string().min(1).max(128).nullable(),
+  name: z.string().min(1).max(200),
+  kind: channelKindSchema,
+  memberProviderIds: z.array(z.string().min(1).max(128)).max(64),
+});
+
+export const channelRenameSchema = z.object({
+  id: z.string().min(1).max(128),
+  name: z.string().min(1).max(200),
+});
+
+export const channelMembersPatchSchema = z.object({
+  id: z.string().min(1).max(128),
+  providerIds: z.array(z.string().min(1).max(128)).min(1).max(64),
+});
+
+export const channelStartMeetingSchema = z.object({
+  channelId: z.string().min(1).max(128),
+  topic: z.string().min(1).max(500),
+});
+
+export const messageAppendSchema = z.object({
+  channelId: z.string().min(1).max(128),
+  meetingId: z.string().min(1).max(128).nullable().optional(),
+  content: z.string().min(1).max(100_000),
+  mentions: z.array(z.string().min(1).max(128)).max(64).optional(),
+});
+
+export const messageSearchSchema = z.object({
+  query: z.string().min(1).max(1000),
+  scope: z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('channel'), channelId: z.string().min(1).max(128) }),
+    z.object({ kind: z.literal('project'), projectId: z.string().min(1).max(128) }),
+  ]),
+  limit: z.number().int().positive().max(500).optional(),
+});
+
+export const meetingAbortSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
+export const memberSetStatusSchema = z.object({
+  providerId: z.string().min(1).max(128),
+  status: z.enum(['online', 'offline-manual']),
+});
+
+export const approvalDecideSchema = z
+  .object({
+    id: z.string().min(1).max(128),
+    decision: approvalDecisionSchema,
+    comment: z.string().max(4000).optional(),
+  })
+  .refine(
+    (v) => !(v.decision === 'conditional') || !!(v.comment && v.comment.length > 0),
+    { message: 'comment is required when decision=conditional', path: ['comment'] },
+  );
+
+export const queueAddSchema = z.object({
+  projectId: z.string().min(1).max(128),
+  prompt: z.string().min(1).max(20_000),
+  targetChannelId: z.string().min(1).max(128).nullable().optional(),
+});
+
+export const queueReorderSchema = z.object({
+  projectId: z.string().min(1).max(128),
+  orderedIds: z.array(z.string().min(1).max(128)).min(1).max(500),
+});
+
+const notificationPrefValueSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    soundEnabled: z.boolean().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, { message: 'pref patch must not be empty' });
+
+export const notificationUpdatePrefsSchema = z.object({
+  patch: z
+    .object({
+      new_message: notificationPrefValueSchema.optional(),
+      approval_pending: notificationPrefValueSchema.optional(),
+      work_done: notificationPrefValueSchema.optional(),
+      error: notificationPrefValueSchema.optional(),
+      queue_progress: notificationPrefValueSchema.optional(),
+      meeting_state: notificationPrefValueSchema.optional(),
+    })
+    .refine((p) => Object.keys(p).length > 0, {
+      message: 'patch must update at least one notification kind',
+    }),
+});
+
+export const notificationTestSchema = z.object({
+  kind: notificationKindSchema,
+});
+
+export const arenaRootSetSchema = z.object({
+  path: z.string().min(1).max(4096),
+});
+
+/** Channel-keyed map of v3 schemas for router/handler wiring. */
+export const v3ChannelSchemas = {
+  'arena-root:set': arenaRootSetSchema,
+  'project:create': projectCreateSchema,
+  'project:link-external': projectLinkExternalSchema,
+  'project:import': projectImportSchema,
+  'project:update': projectUpdateSchema,
+  'project:set-autonomy': projectSetAutonomySchema,
+  'channel:create': channelCreateSchema,
+  'channel:rename': channelRenameSchema,
+  'channel:add-members': channelMembersPatchSchema,
+  'channel:remove-members': channelMembersPatchSchema,
+  'channel:start-meeting': channelStartMeetingSchema,
+  'message:append': messageAppendSchema,
+  'message:search': messageSearchSchema,
+  'meeting:abort': meetingAbortSchema,
+  'member:set-status': memberSetStatusSchema,
+  'approval:decide': approvalDecideSchema,
+  'queue:add': queueAddSchema,
+  'queue:reorder': queueReorderSchema,
+  'notification:update-prefs': notificationUpdatePrefsSchema,
+  'notification:test': notificationTestSchema,
+} as const;
+
+export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;
+
 export type CriticalChannel = keyof typeof criticalChannelSchemas;
 
 /** Set of critical channel names for fast lookup. */

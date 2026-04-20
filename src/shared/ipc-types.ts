@@ -20,6 +20,30 @@ import type { SettingsConfig } from './config-types';
 import type { ConversationSnapshot, StateRecoveryData } from './recovery-types';
 import type { RemoteAccessPolicy, RemoteAccessGrant, RemotePermissionSet, RemoteSession, TailscaleStatus } from './remote-types';
 import type { SessionInfo } from './session-state-types';
+import type {
+  Project,
+  ProjectCreateInput,
+  AutonomyMode,
+} from './project-types';
+import type { Channel, ChannelKind } from './channel-types';
+import type { Message, MessageSearchResult } from './message-types';
+import type { Meeting } from './meeting-types';
+import type {
+  ApprovalItem,
+  ApprovalStatus,
+  ApprovalDecision,
+} from './approval-types';
+import type { QueueItem } from './queue-types';
+import type {
+  MemberProfile,
+  MemberView,
+  WorkStatus,
+} from './member-profile-types';
+import type {
+  NotificationPrefs,
+  NotificationKind,
+} from './notification-types';
+import type { ArenaRootStatus } from './arena-root-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -44,6 +68,81 @@ export interface DetectedCli {
   /** WSL distro name if the CLI was found inside WSL (undefined = native). */
   wslDistro?: string;
 }
+
+// ── v3 IPC input shapes ──────────────────────────────────────────
+// These live inline here rather than in each domain-types file because
+// they represent the IPC wire contract rather than a persisted model.
+
+/** project:link-external input (CA-1/CA-3: external + auto forbidden). */
+export interface ProjectLinkExternalInput {
+  name: string;
+  externalPath: string;
+  description?: string;
+  permissionMode: 'hybrid' | 'approval';
+  autonomyMode?: AutonomyMode;
+  initialMemberProviderIds?: string[];
+}
+
+/** project:import input. */
+export interface ProjectImportInput {
+  name: string;
+  sourcePath: string;
+  description?: string;
+  permissionMode: 'auto' | 'hybrid' | 'approval';
+  autonomyMode?: AutonomyMode;
+  initialMemberProviderIds?: string[];
+}
+
+/** project:update input (partial patch). */
+export interface ProjectUpdateInput {
+  name?: string;
+  description?: string;
+  permissionMode?: 'auto' | 'hybrid' | 'approval';
+  autonomyMode?: AutonomyMode;
+}
+
+/** channel:create input. */
+export interface ChannelCreateInput {
+  projectId: string | null;
+  name: string;
+  kind: ChannelKind;
+  memberProviderIds: string[];
+}
+
+/** message:append input (user or system-origin messages from renderer). */
+export interface MessageAppendInput {
+  channelId: string;
+  meetingId?: string | null;
+  content: string;
+  mentions?: string[];
+}
+
+/** message:search input. */
+export interface MessageSearchInput {
+  query: string;
+  scope:
+    | { kind: 'channel'; channelId: string }
+    | { kind: 'project'; projectId: string };
+  limit?: number;
+}
+
+/** queue:add input. */
+export interface QueueAddInput {
+  projectId: string;
+  prompt: string;
+  targetChannelId?: string | null;
+}
+
+/** queue:reorder input. */
+export interface QueueReorderInput {
+  projectId: string;
+  orderedIds: string[];
+}
+
+/** notification:update-prefs input (partial per-kind update). */
+export type NotificationPrefsPatch = Partial<{
+  [K in NotificationKind]: Partial<{ enabled: boolean; soundEnabled: boolean }>;
+}>;
 
 /**
  * Central channel map.
@@ -399,6 +498,188 @@ export type IpcChannelMap = {
   'remote:server-status': {
     request: undefined;
     response: { running: boolean; port: number };
+  };
+
+  // ── v3: Arena Root ──────────────────────────────────────────────
+  'arena-root:get': {
+    request: undefined;
+    response: { path: string };
+  };
+  'arena-root:set': {
+    request: { path: string };
+    response: { success: true; requiresRestart: true };
+  };
+  'arena-root:status': {
+    request: undefined;
+    response: { status: ArenaRootStatus };
+  };
+
+  // ── v3: Project ─────────────────────────────────────────────────
+  'project:list': {
+    request: { includeArchived?: boolean } | undefined;
+    response: { projects: Project[] };
+  };
+  'project:create': {
+    request: ProjectCreateInput;
+    response: { project: Project };
+  };
+  'project:link-external': {
+    request: ProjectLinkExternalInput;
+    response: { project: Project };
+  };
+  'project:import': {
+    request: ProjectImportInput;
+    response: { project: Project };
+  };
+  'project:update': {
+    request: { id: string; patch: ProjectUpdateInput };
+    response: { project: Project };
+  };
+  'project:archive': {
+    request: { id: string };
+    response: { success: true };
+  };
+  'project:open': {
+    request: { id: string };
+    response: { success: true };
+  };
+  'project:set-autonomy': {
+    request: { id: string; mode: AutonomyMode };
+    response: { project: Project };
+  };
+
+  // ── v3: Channel ─────────────────────────────────────────────────
+  'channel:list': {
+    request: { projectId: string | null };
+    response: { channels: Channel[] };
+  };
+  'channel:create': {
+    request: ChannelCreateInput;
+    response: { channel: Channel };
+  };
+  'channel:rename': {
+    request: { id: string; name: string };
+    response: { channel: Channel };
+  };
+  'channel:delete': {
+    request: { id: string };
+    response: { success: true };
+  };
+  'channel:add-members': {
+    request: { id: string; providerIds: string[] };
+    response: { success: true };
+  };
+  'channel:remove-members': {
+    request: { id: string; providerIds: string[] };
+    response: { success: true };
+  };
+  'channel:start-meeting': {
+    request: { channelId: string; topic: string };
+    response: { meeting: Meeting };
+  };
+
+  // ── v3: Message ─────────────────────────────────────────────────
+  'message:append': {
+    request: MessageAppendInput;
+    response: { message: Message };
+  };
+  'message:list-by-channel': {
+    request: { channelId: string; limit?: number; beforeCreatedAt?: number };
+    response: { messages: Message[] };
+  };
+  'message:search': {
+    request: MessageSearchInput;
+    response: { results: MessageSearchResult[] };
+  };
+
+  // ── v3: Meeting ─────────────────────────────────────────────────
+  'meeting:abort': {
+    request: { meetingId: string };
+    response: { success: true };
+  };
+
+  // ── v3: Member Profile ──────────────────────────────────────────
+  'member:list': {
+    request: undefined;
+    response: { members: MemberView[] };
+  };
+  'member:get-profile': {
+    request: { providerId: string };
+    response: { profile: MemberProfile };
+  };
+  'member:update-profile': {
+    request: { providerId: string; patch: Partial<MemberProfile> };
+    response: { profile: MemberProfile };
+  };
+  'member:set-status': {
+    request: { providerId: string; status: 'online' | 'offline-manual' };
+    response: { success: true };
+  };
+  'member:reconnect': {
+    request: { providerId: string };
+    response: { status: WorkStatus };
+  };
+  'member:list-avatars': {
+    request: undefined;
+    response: { avatars: Array<{ key: string; label: string }> };
+  };
+
+  // ── v3: Approval Inbox ──────────────────────────────────────────
+  'approval:list': {
+    request: { status?: ApprovalStatus; projectId?: string } | undefined;
+    response: { items: ApprovalItem[] };
+  };
+  'approval:decide': {
+    request: {
+      id: string;
+      decision: ApprovalDecision;
+      comment?: string;
+    };
+    response: { success: true };
+  };
+
+  // ── v3: Notification ────────────────────────────────────────────
+  'notification:get-prefs': {
+    request: undefined;
+    response: { prefs: NotificationPrefs };
+  };
+  'notification:update-prefs': {
+    request: { patch: NotificationPrefsPatch };
+    response: { prefs: NotificationPrefs };
+  };
+  'notification:test': {
+    request: { kind: NotificationKind };
+    response: { success: true };
+  };
+
+  // ── v3: Queue (CD-2) ────────────────────────────────────────────
+  'queue:list': {
+    request: { projectId: string };
+    response: { items: QueueItem[] };
+  };
+  'queue:add': {
+    request: QueueAddInput;
+    response: { item: QueueItem };
+  };
+  'queue:reorder': {
+    request: QueueReorderInput;
+    response: { success: true };
+  };
+  'queue:remove': {
+    request: { id: string };
+    response: { success: true };
+  };
+  'queue:cancel': {
+    request: { id: string };
+    response: { success: true };
+  };
+  'queue:pause': {
+    request: { projectId: string };
+    response: { success: true };
+  };
+  'queue:resume': {
+    request: { projectId: string };
+    response: { success: true };
   };
 
   // ── Database Management ─────────────────────────────────────────
