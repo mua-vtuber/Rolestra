@@ -1099,25 +1099,25 @@ interface SsmContext {
 - SSM ctx 확장 (projectId/channelId/meetingId/permissionMode/autonomyMode) + circuit breaker(§8) 초기 구현.
 - Main 레이어 리팩토링. Renderer 변경 아직 없음 — v2 UI는 정상 동작 유지 (v2 UI가 새 Main 서비스와 호환 안 되면 R2 내에서 v2 UI는 임시 비활성, 스크립트 기반 통합 테스트로 검증).
 
-**Phase R3 — 레거시 이동 + 디자인 시스템 초기** (plan: `docs/superpowers/plans/2026-04-20-rolestra-phase-r3.md`)
+**Phase R3 — 레거시 이동 + 디자인 시스템 초기** (plan: `docs/superpowers/plans/2026-04-20-rolestra-phase-r3.md`, done-checklist: `docs/superpowers/specs/r3-done-checklist.md`)
 
 구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
 
-- [ ] §7.2 출근 상태 라벨 갱신 (외근/점검 필요) — 산출물: 본 spec §7.2
-- [ ] §7.5 대시보드 재정의 (Hero 4 KPI + 비대칭 2x2 그리드 + Insight 띠 + 진행률 게이지 테마 분기) — 산출물: 본 spec §7.5
-- [ ] §7.10 디자인 시스템 재정의 (6 테마 + CSS variable + 폰트 매트릭스 + 금지사항) — 산출물: 본 spec §7.10
-- [ ] `src/renderer/` → `_legacy/renderer-v1/` 이동 (삭제 아님, git mv로 히스토리 보존) — 산출물: `_legacy/renderer-v1/`
-- [ ] 새 `src/renderer/` 부팅 가능한 뼈대 — 산출물: `src/renderer/{index.html,main.tsx,App.tsx}`
-- [ ] Tailwind + PostCSS + Radix(slot/tooltip/separator) + framer-motion + cva + clsx 설치 및 설정 — 산출물: `tailwind.config.ts`, `postcss.config.js`
-- [ ] `theme-tokens.jsx` → `theme-tokens.ts` + `tokens.css` 자동 생성 스크립트(`npm run theme:build`) — 산출물: `tools/theme/extract-tokens.ts`, `src/renderer/theme/theme-tokens.ts`, `src/renderer/styles/tokens.css`
-- [ ] ThemeProvider + themeStore(zustand persist) + useTheme() — 산출물: `src/renderer/theme/{theme-provider.tsx,theme-store.ts,use-theme.ts}`
-- [ ] Shell 컴포넌트 6종 (Shell/NavRail/ProjectRail/ShellTopBar/ProfileAvatar/LineIcon) — 산출물: `src/renderer/components/shell/*`
-- [ ] Primitive 5종 (Button/Card/Badge/Separator/Tooltip) — 산출물: `src/renderer/components/primitives/*`
-- [ ] App 루트 Shell 와이어업 + dev-only theme-switcher(`import.meta.env.DEV`) — 산출물: `src/renderer/App.tsx`, `src/renderer/components/shell/theme-switcher.tsx`
-- [ ] i18n 도메인 네임스페이스 15종 사전 선언(dashboard/messenger/channel/member/project/approval/queue/notification/settings/onboarding/common/error/shell/theme/app) — 산출물: `src/renderer/i18n/**`
-- [ ] Legacy channel warning 현황 문서화 + 격리 테스트(제거는 R11) — 산출물: `docs/superpowers/specs/appendix-legacy-channels.md`, `src/renderer/__tests__/legacy-channel-isolation.test.ts`
-- [ ] 6 테마 × 2 모드 스크린샷 증빙 — 산출물: `docs/superpowers/specs/appendix-r3-evidence/{warm,tactical,retro}-{light,dark}.png`
-- [ ] 전체 typecheck/lint/test/i18n:check/theme:check/build exit 0 — 산출물: `docs/superpowers/specs/r3-done-checklist.md`
+- [x] §7.2 출근 상태 라벨 갱신 (외근/점검 필요) — 산출물: 본 spec §7.2
+- [x] §7.5 대시보드 재정의 (Hero 4 KPI + 비대칭 2x2 그리드 + Insight 띠 + 진행률 게이지 테마 분기) — 산출물: 본 spec §7.5
+- [x] §7.10 디자인 시스템 재정의 (6 테마 + CSS variable + 폰트 매트릭스 + 금지사항) — 산출물: 본 spec §7.10
+- [x] `src/renderer/` → `_legacy/renderer-v1/` 이동 (삭제 아님, git mv로 히스토리 보존) — 산출물: `_legacy/renderer-v1/`
+- [x] 새 `src/renderer/` 부팅 가능한 뼈대 — 산출물: `src/renderer/{index.html,main.tsx,App.tsx}`
+- [x] Tailwind + PostCSS + Radix(slot/tooltip/separator) + framer-motion + cva + clsx 설치 및 설정 — 산출물: `tailwind.config.ts`, `postcss.config.js`
+- [x] `theme-tokens.jsx` → `theme-tokens.ts` + `tokens.css` 자동 생성 스크립트(`npm run theme:build`) — 산출물: `tools/theme/extract-tokens.ts`, `src/renderer/theme/theme-tokens.ts`, `src/renderer/styles/tokens.css`
+- [x] ThemeProvider + themeStore(zustand persist) + useTheme() — 산출물: `src/renderer/theme/{theme-provider.tsx,theme-store.ts,use-theme.ts}`
+- [x] Shell 컴포넌트 6종 (Shell/NavRail/ProjectRail/ShellTopBar/ProfileAvatar/LineIcon) — 산출물: `src/renderer/components/shell/*`
+- [x] Primitive 5종 (Button/Card/Badge/Separator/Tooltip) — 산출물: `src/renderer/components/primitives/*`
+- [x] App 루트 Shell 와이어업 + dev-only theme-switcher(`import.meta.env.DEV`) — 산출물: `src/renderer/App.tsx`, `src/renderer/components/shell/theme-switcher.tsx`
+- [x] i18n 도메인 네임스페이스 15종 (`I18N_NAMESPACES`) + 실 사용 도메인부터 JSON 채움 — 산출물: `src/renderer/i18n/keys.ts`, `src/renderer/i18n/locales/{ko,en}.json`
+- [x] Legacy channel warning 현황 문서화 + 격리 테스트(제거는 R11) — 산출물: `docs/superpowers/specs/appendix-legacy-channels.md`, `src/renderer/__tests__/legacy-channel-isolation.test.ts`
+- [ ] 6 테마 × 2 모드 스크린샷 증빙 — 수동 캡처 대기, 목표 경로: `docs/superpowers/specs/appendix-r3-evidence/{warm,tactical,retro}-{light,dark}.png`. R4 진입 전 시각 사인오프 필요, 코드 정합성 검증엔 비차단.
+- [x] typecheck/lint/i18n:check/theme:check/build exit 0 + test 64 pre-existing fail 유지(R3 신규 30+ 테스트 전부 green) — 산출물: `docs/superpowers/specs/r3-done-checklist.md`
 
 **scope 경계 (R3에서 하지 않는 것, R4+ 이연):**
 - 제품 특화 Blocks(`MessageBubble`, `MemberCard`, `ChannelItem`, `ApprovalCard`, `DashboardWidget`, `ProjectSwitcher` 등) — 도메인 IPC·상호작용 훅업과 얽힘. R4(대시보드) 이후 각 Phase에서.

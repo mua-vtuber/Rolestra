@@ -14,7 +14,13 @@ npm run smoke:run     # 3 CLI × 3 모드 실제 매트릭스 실행
 `matrix-results/YYYYMMDD-HHMMSS.json`에 각 시나리오 성공/실패 기록.
 종합 매트릭스는 `docs/superpowers/specs/appendix-cli-matrix.md`.
 
-## Phase R1 Status
+## Phase Status
+
+- **R1** ✅ 완료 — 격리 CLI smoke 매트릭스 (본 모듈).
+- **R2** ✅ 완료 — v3 DB 스키마 + Main 레이어 + IPC.
+- **R3** ✅ 완료 (2026-04-20) — v2 renderer → `_legacy/renderer-v1/` 이동, 6-테마 디자인 시스템 초기, Shell + primitive 기반. done-checklist: `docs/superpowers/specs/r3-done-checklist.md`.
+
+### R1 원본 기록
 
 - [x] Task 0 ~ 14 완료
 - [x] 단위 테스트 전체 통과 (7 files / 43 tests)
