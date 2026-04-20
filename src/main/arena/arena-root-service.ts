@@ -70,6 +70,20 @@ export function getDefaultArenaRoot(): string {
 }
 
 /**
+ * Environment variable that overrides the settings-based ArenaRoot path.
+ *
+ * Dev/test only. When set to a non-empty string, the service will prefer
+ * this value over `settings.arenaRoot` at construction time. The override
+ * is *not* persisted to settings — it only affects the in-memory
+ * `currentPath`, so a subsequent `setPath()` from the user still goes
+ * through `updateSettings` and writes to disk as usual.
+ *
+ * Primary consumer: the Playwright Electron E2E harness (R4-Task12),
+ * which launches the app against a fresh temp directory per test.
+ */
+export const ARENA_ROOT_ENV_OVERRIDE = 'ROLESTRA_ARENA_ROOT';
+
+/**
  * ArenaRootService.
  *
  * Emits:
@@ -80,8 +94,21 @@ export class ArenaRootService extends EventEmitter {
 
   constructor(private readonly config: ArenaRootConfigAccessor | ConfigServiceImpl) {
     super();
+    // Resolution order (dev/test first → user settings → platform default):
+    //   1. `ROLESTRA_ARENA_ROOT` env var — set by the E2E harness. Never
+    //      persisted to settings so the next non-test launch restores the
+    //      user's real root.
+    //   2. `settings.arenaRoot` — the user-chosen path from ConfigService.
+    //   3. `getDefaultArenaRoot()` — `~/Documents/arena`.
+    const envOverride = process.env[ARENA_ROOT_ENV_OVERRIDE] ?? '';
     const configured = (config.getSettings() as { arenaRoot?: string }).arenaRoot ?? '';
-    this.currentPath = configured.length > 0 ? configured : getDefaultArenaRoot();
+    if (envOverride.length > 0) {
+      this.currentPath = envOverride;
+    } else if (configured.length > 0) {
+      this.currentPath = configured;
+    } else {
+      this.currentPath = getDefaultArenaRoot();
+    }
   }
 
   /**

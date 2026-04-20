@@ -58,3 +58,7 @@ tools/cli-smoke/matrix-results/
 output/
 .omx/
 .playwright-cli/
+
+# Playwright Electron E2E artifacts (generated per run)
+e2e/test-results/
+e2e/report/

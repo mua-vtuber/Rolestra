@@ -16,6 +16,10 @@ export default tseslint.config(
       '.omx/**',
       '.playwright-cli/**',
       'output/**',
+      // Playwright Electron E2E (R4-Task12). The specs follow
+      // Playwright's conventions (different globals, no i18n rules),
+      // and they run outside the project lint pipeline.
+      'e2e/**',
     ],
   },
 
