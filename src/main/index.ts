@@ -14,6 +14,12 @@ import { createLogger } from './log/structured-logger';
 import { permissionService, consensusFolderService } from './ipc/handlers/workspace-handler';
 import { getConfigService } from './config/instance';
 import { ArenaRootService } from './arena/arena-root-service';
+import { getDatabase } from './database/connection';
+import { ProjectRepository } from './projects/project-repository';
+import { MeetingRepository } from './meetings/meeting-repository';
+import { ApprovalRepository } from './approvals/approval-repository';
+import { DashboardService } from './dashboard/dashboard-service';
+import { setDashboardServiceAccessor } from './ipc/handlers/dashboard-handler';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -89,6 +95,18 @@ app.whenReady().then(async () => {
     const logger = createLogger();
     setLoggerAccessor(() => logger);
     setPermissionServiceAccessor(() => permissionService);
+
+    // R4 dashboard aggregator — repositories are owned by the singleton
+    // DB handle so the three repos are cheap to construct here. The
+    // service itself holds no DB handle; it only delegates to the
+    // repos' indexed COUNT queries.
+    const db = getDatabase();
+    const dashboardService = new DashboardService({
+      projectRepo: new ProjectRepository(db),
+      meetingRepo: new MeetingRepository(db),
+      approvalRepo: new ApprovalRepository(db),
+    });
+    setDashboardServiceAccessor(() => dashboardService);
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {

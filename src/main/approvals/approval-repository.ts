@@ -164,6 +164,18 @@ export class ApprovalRepository {
   }
 
   /**
+   * Counts approval rows in `status`. Used by the dashboard aggregator
+   * (R4 §7.5 `pendingApprovals` KPI) — returning a raw number avoids
+   * materialising + JSON-parsing every payload via `list().length`.
+   */
+  countByStatus(status: ApprovalStatus): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM approval_items WHERE status = ?')
+      .get(status) as { n: number };
+    return row.n;
+  }
+
+  /**
    * Lists approvals newest-first. Both filters are optional and
    * independent — passing both ANDs them. Tiebreaker on same-ms rows
    * is `id DESC` (deterministic UUID string order).

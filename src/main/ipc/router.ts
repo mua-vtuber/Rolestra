@@ -179,6 +179,7 @@ import {
   handleQueuePause,
   handleQueueResume,
 } from './handlers/queue-handler';
+import { handleDashboardGetKpis } from './handlers/dashboard-handler';
 
 /** Envelope shape sent by preload's typedInvoke. */
 interface IpcEnvelope<C extends IpcChannel> {
@@ -518,6 +519,9 @@ export function registerIpcHandlers(): void {
   handle('notification:get-prefs', isDev, () => handleNotificationGetPrefs());
   handle('notification:update-prefs', isDev, (data) => handleNotificationUpdatePrefs(data));
   handle('notification:test', isDev, (data) => handleNotificationTest(data));
+
+  // ── v3: Dashboard (R4) ──────────────────────────────────────────
+  handle('dashboard:get-kpis', isDev, (data) => handleDashboardGetKpis(data));
 
   // ── v3: Queue ───────────────────────────────────────────────────
   handle('queue:list', isDev, (data) => handleQueueList(data));

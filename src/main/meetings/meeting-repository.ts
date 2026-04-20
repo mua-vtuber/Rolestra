@@ -138,6 +138,38 @@ export class MeetingRepository {
   }
 
   /**
+   * Counts in-flight meetings — rows with `ended_at IS NULL`. This is
+   * the canonical "active meeting" predicate (see
+   * `idx_meetings_active_per_channel`); spec §7.5's prose formulation
+   * "state NOT IN ('done','failed','aborted')" maps to this column
+   * condition because the terminal states all stamp `ended_at`.
+   */
+  countActive(): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM meetings WHERE ended_at IS NULL')
+      .get() as { n: number };
+    return row.n;
+  }
+
+  /**
+   * Counts meetings that finished successfully (`outcome = 'accepted'`)
+   * at or after `sinceEpochMs`. Used by the dashboard `completedToday`
+   * KPI — the caller passes the start-of-local-today epoch so DST
+   * boundaries are honoured. 'rejected' / 'aborted' outcomes are NOT
+   * counted as completed; only a positive conclusion qualifies.
+   */
+  countCompletedSince(sinceEpochMs: number): number {
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS n FROM meetings
+         WHERE outcome = 'accepted' AND ended_at IS NOT NULL
+           AND ended_at >= ?`,
+      )
+      .get(sinceEpochMs) as { n: number };
+    return row.n;
+  }
+
+  /**
    * Updates the in-flight meeting state + snapshot. Only valid while
    * `ended_at IS NULL`; finished meetings cannot have their state
    * mutated. Returns `true` when a row was actually updated.

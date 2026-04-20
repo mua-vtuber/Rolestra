@@ -161,6 +161,19 @@ export class ProjectRepository {
     return row ? rowToProject(row) : null;
   }
 
+  /**
+   * Counts rows matching `status`. Used by the dashboard aggregator
+   * (R4 §7.5 `activeProjects` KPI) — returning a raw number keeps the
+   * hot path a single indexed SELECT COUNT rather than `list().length`
+   * which would materialise every row.
+   */
+  countByStatus(status: ProjectStatus): number {
+    const row = this.db
+      .prepare('SELECT COUNT(*) AS n FROM projects WHERE status = ?')
+      .get(status) as { n: number };
+    return row.n;
+  }
+
   /** Lists all projects ordered by `created_at` ascending (stable UI order). */
   list(): Project[] {
     const rows = this.db
