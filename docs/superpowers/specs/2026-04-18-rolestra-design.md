@@ -572,18 +572,24 @@ Expertise: {expertise}
 
 ### 7.2 출근 상태 시스템
 
-**상태 4종:**
-| 값 | UI | 의미 | 전환 |
-|---|---|---|---|
-| `online` | 🟢 녹색 | 연결 OK + 활성 | warmup 성공 |
-| `connecting` | 🟡 노랑 애니 | 재연결 시도 중 | warmup 진행 |
-| `offline-connection` | 🔴 빨강 | ping/warmup 실패, UI 라벨은 "점검 필요" | warmup 실패 |
-| `offline-manual` | ⚪ 회색 | 사용자 수동 퇴근, UI 라벨은 "외근" | "퇴근" 토글 |
+**상태 4종 (1인회사 메타포 — "AI=직원"):**
 
-- 앱 시작 시 모든 provider에 대해 warmup 병렬 실행, 실패 시 `offline-connection`.
-- 사용자가 수동 퇴근시키면 DB `member_profiles.status_override = 'offline-manual'` 저장. 수동 출근 토글 전까지 자동 재연결 시도 제외.
+| 값 | 도트 | UI 라벨 | i18n 키 | 의미 | 전환 |
+|---|---|---|---|---|---|
+| `online` | 🟢 녹색 | "출근" | `member.status.online` | 연결 OK + 활성 | warmup 성공 |
+| `connecting` | 🟡 노랑 애니 | "재연결 중" | `member.status.connecting` | 재연결 시도 중 | warmup 진행 |
+| `offline-connection` | 🔴 빨강 | "점검 필요" | `member.status.offlineConnection` | ping/warmup 실패 — 시스템 이상 | warmup 실패 |
+| `offline-manual` | ⚪ 회색 | "외근" | `member.status.offlineManual` | 사용자가 수동으로 자리 비움 설정 | "외근" 토글 |
+
+- 앱 시작 시 모든 provider에 대해 warmup 병렬 실행, 실패 시 `offline-connection`("점검 필요"로 표시).
+- 사용자가 **"외근"** 토글을 누르면 DB `member_profiles.status_override = 'offline-manual'` 저장. 수동 "출근" 토글 전까지 자동 재연결 시도 제외.
 - 프로필 카드에 "연락해보기" 버튼 → `member:reconnect` IPC → warmup 재실행.
 - 턴매니저는 `online` 상태 멤버만 선발. 다른 상태는 스킵.
+
+**용어 원칙 (1인회사 메타포 일치):**
+- "퇴근"이라는 용어는 **앱 종료**를 연상시키므로 사용하지 않음. 자리를 비우는 일시 상태는 "외근"으로 통일.
+- "연결끊김"은 기술 용어이므로 사용자 노출 UI에서 사용하지 않음. 시스템 이상은 "점검 필요"로 통일(사용자 귀속 표현).
+- 코드 레벨 enum(`offline-manual`, `offline-connection`)은 유지 — DB·IPC 호환.
 
 ### 7.3 프로젝트 관리
 
@@ -674,31 +680,77 @@ Expertise: {expertise}
 
 ### 7.5 대시보드 (사무실 첫 화면)
 
-**3열 레이아웃** (Q6 선택 A):
+> **설계 정본**: `docs/Rolestra_sample/01-Dashboard.html` + `01-dash-variants.jsx` 6 테마 변형. 본 절은 그 시안을 spec 언어로 정식화.
+
+**레이아웃 구성 (위→아래):**
+
+1. **ShellTopBar** — "사무실 · 시간 · 인사" 한 줄. 마케팅 카피·홍보 문구 금지.
+2. **Hero** — 4 KPI 타일 + 빠른 액션 2개.
+3. **비대칭 2x2 콘텐츠 그리드** — 4 위젯.
+4. **Insight 띠** — 주간 지표 한 줄.
+
+**Hero (상단 블록):**
 
 ```
-┌──────────────┬──────────────┬──────────────┐
-│  👥 직원      │  📋 업무      │  💬 최근 대화 │
-│              │              ├──────────────┤
-│  Claude 🟢   │  #12 리팩토링 │  🔔 대기      │
-│  Gemini 🟢   │  #11 설계     │              │
-│  Codex ⚪    │  #10 UI       ├──────────────┤
-│  Local 🔴    │              │  📝 공지      │
-│              │              │              │
-└──────────────┴──────────────┴──────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│  활성 프로젝트 3   │  진행 회의 2   │  승인 대기 5  │  오늘 완료 7 │
+├──────────────────────────────────────────────────────────────┤
+│  [ + 새 프로젝트 ]                        [ 회의 소집 → ]       │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**각 위젯 동작:**
+| KPI | 데이터 소스 | i18n 키 |
+|---|---|---|
+| 활성 프로젝트 | `projects.status='active'` count | `dashboard.kpi.activeProjects` |
+| 진행 회의 | `meetings.state NOT IN ('done','failed')` count | `dashboard.kpi.activeMeetings` |
+| 승인 대기 | `approval_items.status='pending'` count | `dashboard.kpi.pendingApprovals` |
+| 오늘 완료 | `meetings.state='done' AND completed_at >= today_00:00` count | `dashboard.kpi.completedToday` |
 
-| 위젯 | 내용 | 클릭 동작 |
-|------|------|-----------|
-| 👥 직원 | 전체 멤버 목록 + 상태 + 역할 1줄 | 프로필 팝업 |
-| 📋 업무 | 진행 중 Meeting 목록 (상위 10개) + 프로젝트/상태/경과시간 | 해당 채널 이동 |
-| 💬 최근 대화 | 전체 채널 통합 최신 메시지 스트림 (5~10줄) | 해당 채널의 해당 메시지로 이동 |
-| 🔔 대기 | `status=pending` approval items 카운트 + 상위 3건 요약 | 승인함 뷰(전용) 이동 |
-| 📝 공지 | 오늘/이번주 완료 업무 수, 누적 통계 | 통계 상세 뷰 |
+빠른 액션 2개: `+ 새 프로젝트`(신규 생성 모달), `회의 소집 →`(현재 채널 또는 프로젝트 선택 모달). 문구는 i18n 키 `dashboard.action.newProject` / `dashboard.action.startMeeting`.
 
-**상단 글로벌 바**: 현재 활성 프로젝트 드롭다운 / 전체 직원 상태 요약(🟢 3 / ⚪ 1 / 🔴 0) / 알림 벨 / 설정 / 글로벌 메시지 검색.
+**비대칭 2x2 그리드 (중앙 콘텐츠):**
+
+```
+┌──────────────────────────────┬──────────────────┐
+│  📋 업무 (2-col 폭)           │  🔔 결재        │
+│                               │  (풀높이, 2 row) │
+├──────────────────────────────┤                  │
+│  👥 직원    │  💬 최근 대화  │                  │
+└──────────────┴────────────────┴──────────────────┘
+```
+
+CSS grid template: `"tasks tasks approvals" "people recent approvals"`. 결재 위젯은 풀높이(2 row span), 나머지 3 위젯은 단일 row.
+
+**위젯 4종 (기존 5종에서 📝 공지 제거 — Hero + Insight 띠로 흡수):**
+
+| 위젯 | 내용 | 클릭 동작 | i18n 키 prefix |
+|------|------|-----------|-----------------|
+| 📋 업무 | 진행 중 Meeting 목록(상위 10) + 프로젝트·상태·경과시간·진행률 게이지 | 해당 채널 이동 | `dashboard.tasks.*` |
+| 👥 직원 | 전체 멤버 목록 + 출근 상태 도트 + 역할 1줄 | 프로필 팝업 | `dashboard.people.*` |
+| 💬 최근 대화 | 전체 채널 통합 최신 메시지 스트림(5~10줄) + 발신 프로필 썸네일 | 해당 채널·메시지로 이동 | `dashboard.recent.*` |
+| 🔔 결재 | `status=pending` approval items 상위 5건 요약 + 카운트 배지 | ApprovalInbox 이동 | `dashboard.approvals.*` |
+
+**진행률 게이지 — SSM 12상태 기반, 테마별 분기 (시안 lock):**
+
+| 테마 | 렌더 스타일 |
+|---|---|
+| warm (light/dark) | 라운드 바(`border-radius: panel`), 은은한 그라데이션 |
+| tactical (light/dark) | 12분절 다이아 + alpha gradient(`clip-path`), 상태 인덱스에 해당하는 segment까지 활성 |
+| retro (light/dark) | ASCII 패턴 `[████████░░░░]` (12 slots, 모노폰트) |
+
+게이지 값 = `ssm.stateIndex / 12`. 라벨(`"4/12 · REFINEMENT"` 등)은 게이지 오른쪽.
+
+**Insight 띠 (하단):**
+
+```
+이번 주 +21% · 평균 응답 9분 · 누적 승인 142건 · 리뷰 완료율 94%
+```
+
+문구는 i18n 키 (`dashboard.insight.weeklyDelta` 등) + runtime 값 치환. 4 셀 가로 균등 분할.
+
+**상단 글로벌 바 (ShellTopBar와 별개의 도메인 UI — 대시보드 전용):**
+- 활성 프로젝트 드롭다운 / 전체 직원 상태 요약(🟢 3 / ⚪ 1 / 🔴 0) / 알림 벨 / 설정 / 글로벌 메시지 검색.
+- 시안 정본은 `docs/Rolestra_sample/01-dash-variants.jsx`의 `DashTopStrip`.
 
 ### 7.6 CLI 폴더 접근 해결 (핵심)
 
@@ -859,30 +911,75 @@ Codex `exec`는 tool-level UI가 없어서 hybrid/approval의 차이는 **Rolest
 
 ### 7.10 디자인 시스템 개요
 
-> 구체 비주얼은 Claude Design으로 생성. 여기선 구조만 정의.
+> **설계 정본**: `docs/Rolestra_sample/theme-tokens.jsx`(6 테마 토큰) + `docs/Rolestra_sample/shared-components.jsx`(Shell/NavRail/ProjectRail/ShellTopBar/ProfileAvatar/LineIcon) + `docs/Rolestra_sample/2026-04-19-theme-alignment-checklist.md`. 본 절은 시안을 spec 언어로 정식화.
 
-**Tokens** (`src/renderer/design/tokens.ts`):
-- Color: `bg/fg/brand/success/warning/danger` × `primary/secondary/muted` × `light/dark`
-- Spacing: 4px 그리드 (0, 1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48)
-- Radius: `sm(4) md(8) lg(12) xl(16) full`
-- Typography: `xs sm base lg xl 2xl 3xl`, 시스템 폰트 스택
-- Shadow: `sm md lg xl`
-- Duration: `fast(120ms) base(200ms) slow(320ms)`
+#### 7.10.1 테마 매트릭스 (6 조합 = 3 계열 × 2 모드)
 
-**Primitives** (Radix UI 래핑): `Button`, `Input`, `Textarea`, `Select`, `Dialog`, `DropdownMenu`, `Tooltip`, `Tabs`, `Toast`, `Avatar`, `Badge`, `Separator`, `ScrollArea`, `Switch`, `Checkbox`.
+| 계열(`data-theme`) | 모드(`data-mode`) | 정체성 | 기본 추천 |
+|---|---|---|---|
+| `warm` | `light` | "거실 같은 사무실" — 따뜻한 orange/amber + Fraunces serif headline | ✅ 기본값 |
+| `warm` | `dark` | 우디 카페 야간 — `#1f1611` base, amber accent |  |
+| `tactical` | `light` | 항공/우주 관제실 주간 — cool gray + cyan, 글로우 80% 약화 |  |
+| `tactical` | `dark` | 관제실 HUD 야간 — clip-path 모서리, 12분절 SSM 게이지, 다이아몬드 아바타, 라인 아이콘 |  |
+| `retro` | `light` | 도트매트릭스 출력 — cream + sepia 잉크, 본문은 sans, 모노는 헤더·게이지. 스캔라인 제거, grain 텍스처 |  |
+| `retro` | `dark` | CRT 호박색 + 스캔라인 + ASCII 게이지 |  |
 
-**Blocks** (제품 특화):
-- `MemberCard`, `MemberListItem`, `StatusDot`, `PresenceRoster`
-- `ChannelItem`, `ChannelHeader`, `ChannelList`
-- `MessageBubble`(self/member/system), `MessageComposer`, `TypingIndicator`
-- `ApprovalCard`, `ApprovalInbox`
-- `TaskCard`, `MeetingBadge`, `PermissionBadge`
-- `DashboardWidget`(Members/Tasks/RecentChats/Approvals/Notes)
-- `ProjectSwitcher`, `GlobalNav`, `SettingsSection`
+각 테마 엔트리는 시안 `theme-tokens.jsx`의 ThemeToken schema와 1:1 대응(전체 key는 `src/renderer/theme/theme-tokens.ts`의 `ThemeToken` 인터페이스로 정식화).
 
-**Animation**: Framer Motion — 메시지 입장 (0→opacity), 상태 변경 (spring), 알림 토스트 (slide), 사이드바 열림/닫힘.
+#### 7.10.2 토큰 스키마 (schema key set)
 
-**Dark mode**: CSS variable 기반. `document.documentElement.setAttribute('data-theme', 'dark|light')`.
+색(`bgCanvas/bgElev/bgSunk/fg/fgMuted/fgSubtle/border/borderSoft/brand/brandDeep/accent/success/warning/danger`) · 레일(`railBg/railExtra/logoBg/logoFg/logoShadow/iconFg/iconActiveBg/iconActiveFg/iconActiveShadow/badgeBg/badgeFg/unreadBg/unreadFg/projectBg/itemActiveBg/itemActiveFg`) · 상단바·Hero(`topBarBg/topBarBorder/heroBg/heroBorder/heroValue`) · 형태(`avatarShape: circle|diamond|status`, `useLineIcons: boolean`, `panelRadius: number`, `panelClip: string`, `cardTitleStyle: bar|divider|ascii`, `miniBtnStyle: pill|notched|text`, `gaugeGlow: number`) · 폰트(`font`, `displayFont`, `monoFont`).
+
+시안 schema의 모든 key가 `ThemeToken` 인터페이스에 포함되어야 한다(Task 5 auto-extract + Task 6 `theme-tokens.test.ts`가 고정).
+
+#### 7.10.3 CSS variable + `data-theme` / `data-mode` 분기
+
+- 런타임: `document.documentElement` 에 `data-theme`(warm|tactical|retro)와 `data-mode`(light|dark) 두 속성을 attach.
+- CSS: `src/renderer/styles/tokens.css` 에 6 블록(`[data-theme='warm'][data-mode='light'] { --color-* : ... }` 등) + `:root` 기본 폴백(warm-light 복제) 포함.
+- Tailwind: `tailwind.config.ts`의 `theme.extend.colors`는 **모두 `var(--color-*)` 참조**(하드코딩 색 0건). `darkMode: ['selector', '[data-mode="dark"]']`.
+- 컴포넌트: 하드코딩 색 리터럴(`#...`, `rgb(...)`) 금지 — Tailwind utility 클래스 + CSS variable만 사용.
+
+#### 7.10.4 폰트 매트릭스
+
+| 계열 | 본문(body) | 디스플레이(headline) | 모노 |
+|---|---|---|---|
+| warm | sans (IBM Plex Sans) | Fraunces serif | IBM Plex Mono |
+| tactical | sans (Space Grotesk) | 동일 sans | JetBrains Mono (헤더·게이지 전용) |
+| retro | sans (IBM Plex Sans) | 동일 sans | IBM Plex Mono (헤더·게이지 전용) |
+
+**모든 테마에서 본문은 sans-serif.** Retro도 본문 모노폰트 금지 — 모노는 헤더·게이지에만.
+
+#### 7.10.5 Primitives (Radix UI 래핑)
+
+**R3 최소 세트 (R4+ 사용 필수):** `Button`, `Card`(Header/Body/Footer), `Badge`, `Separator`, `Tooltip`. `class-variance-authority` 기반 variants + `useTheme()` 토큰에 따른 자동 매핑(예: Button `shape="auto"` → `miniBtnStyle` pill/notched/text 자동 선택, Card Header 스타일 → `cardTitleStyle` bar/divider/ascii).
+
+**R4+ 이후 추가 예정:** `Input`, `Textarea`, `Select`, `Dialog`, `DropdownMenu`, `Tabs`, `Toast`, `Avatar`(shell의 `ProfileAvatar`와 별도 generic), `ScrollArea`, `Switch`, `Checkbox`.
+
+#### 7.10.6 Blocks (제품 특화 — Phase 분배)
+
+| Block | 담당 Phase |
+|---|---|
+| `MemberCard`, `MemberListItem`, `StatusDot`, `PresenceRoster` | R8 |
+| `ChannelItem`, `ChannelHeader`, `ChannelList` | R5 |
+| `MessageBubble`(self/member/system), `MessageComposer`, `TypingIndicator` | R5 |
+| `ApprovalCard`, `ApprovalInbox` | R7 |
+| `TaskCard`, `MeetingBadge`, `PermissionBadge` | R4/R6 |
+| `DashboardWidget`(Tasks/People/RecentChats/Approvals — 4종) | R4 |
+| `ProjectSwitcher`, `GlobalNav`, `SettingsSection` | R4/R10 |
+
+**R3 범위의 Shell 컴포넌트 (시안 `shared-components.jsx` 정식화):** `Shell`, `NavRail`(64px), `ProjectRail`(240px), `ShellTopBar`(한 줄), `ProfileAvatar`(8 default + custom, `avatarShape` 분기), `LineIcon`(`useLineIcons` 토큰 분기).
+
+#### 7.10.7 Animation
+
+Framer Motion — 메시지 입장(0→opacity), 상태 변경(spring), 알림 토스트(slide), 사이드바 열림/닫힘. R3는 shell 레벨 motion 훅만 스캐폴딩, 실제 애니메이션은 R4+.
+
+#### 7.10.8 금지 사항 (시안 락 — 이탈 즉시 리뷰 반려)
+
+- **게이미피케이션 단어 금지:** `XP`, `CREDITS`, `LV`, `MISSION`, `REWARD`, `UNLOCK` — 토큰·i18n·컴포넌트·테스트 스냅샷 전부에서 0건 (CI grep 가드).
+- **본문 모노폰트 금지:** Retro 테마도 본문은 sans. 모노는 헤더·게이지에만.
+- **마케팅 카피 헤더 금지:** `ShellTopBar`는 "사무실 · 시간 · 인사" 한 줄 외 홍보 문구 금지.
+- **시각 정보 밀도 변경 금지:** 6 테마 전부 동일 레이아웃·동일 정보량. 테마는 시각 스타일만 바꿈, 구조는 안 바꿈.
+- **하드코딩 색·폰트 리터럴 금지:** `#RRGGBB`, `rgb()`, `"Fraunces"` 같은 문자열 리터럴은 `theme-tokens.ts`/`tokens.css`/`tailwind.config.ts` 외에서 등장하면 PR 반려.
 
 ### 7.11 i18n 네이밍 규칙 (v3 재편)
 
@@ -1002,12 +1099,30 @@ interface SsmContext {
 - SSM ctx 확장 (projectId/channelId/meetingId/permissionMode/autonomyMode) + circuit breaker(§8) 초기 구현.
 - Main 레이어 리팩토링. Renderer 변경 아직 없음 — v2 UI는 정상 동작 유지 (v2 UI가 새 Main 서비스와 호환 안 되면 R2 내에서 v2 UI는 임시 비활성, 스크립트 기반 통합 테스트로 검증).
 
-**Phase R3 — 레거시 이동 + 디자인 시스템 초기**
-- `src/renderer/` → `_legacy/renderer-v1/`
-- 새 `src/renderer/` 뼈대: App shell, routes, design tokens, Tailwind/Radix 설정
-- Design System primitives + 5~6개 핵심 blocks (MessageBubble, MemberCard, ChannelItem, ApprovalCard, DashboardWidget, ProjectSwitcher)
-- i18n 설정 (react-i18next, ko 기본)
-- Storybook 또는 최소 플레이그라운드(옵션)
+**Phase R3 — 레거시 이동 + 디자인 시스템 초기** (plan: `docs/superpowers/plans/2026-04-20-rolestra-phase-r3.md`)
+
+구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
+
+- [ ] §7.2 출근 상태 라벨 갱신 (외근/점검 필요) — 산출물: 본 spec §7.2
+- [ ] §7.5 대시보드 재정의 (Hero 4 KPI + 비대칭 2x2 그리드 + Insight 띠 + 진행률 게이지 테마 분기) — 산출물: 본 spec §7.5
+- [ ] §7.10 디자인 시스템 재정의 (6 테마 + CSS variable + 폰트 매트릭스 + 금지사항) — 산출물: 본 spec §7.10
+- [ ] `src/renderer/` → `_legacy/renderer-v1/` 이동 (삭제 아님, git mv로 히스토리 보존) — 산출물: `_legacy/renderer-v1/`
+- [ ] 새 `src/renderer/` 부팅 가능한 뼈대 — 산출물: `src/renderer/{index.html,main.tsx,App.tsx}`
+- [ ] Tailwind + PostCSS + Radix(slot/tooltip/separator) + framer-motion + cva + clsx 설치 및 설정 — 산출물: `tailwind.config.ts`, `postcss.config.js`
+- [ ] `theme-tokens.jsx` → `theme-tokens.ts` + `tokens.css` 자동 생성 스크립트(`npm run theme:build`) — 산출물: `tools/theme/extract-tokens.ts`, `src/renderer/theme/theme-tokens.ts`, `src/renderer/styles/tokens.css`
+- [ ] ThemeProvider + themeStore(zustand persist) + useTheme() — 산출물: `src/renderer/theme/{theme-provider.tsx,theme-store.ts,use-theme.ts}`
+- [ ] Shell 컴포넌트 6종 (Shell/NavRail/ProjectRail/ShellTopBar/ProfileAvatar/LineIcon) — 산출물: `src/renderer/components/shell/*`
+- [ ] Primitive 5종 (Button/Card/Badge/Separator/Tooltip) — 산출물: `src/renderer/components/primitives/*`
+- [ ] App 루트 Shell 와이어업 + dev-only theme-switcher(`import.meta.env.DEV`) — 산출물: `src/renderer/App.tsx`, `src/renderer/components/shell/theme-switcher.tsx`
+- [ ] i18n 도메인 네임스페이스 15종 사전 선언(dashboard/messenger/channel/member/project/approval/queue/notification/settings/onboarding/common/error/shell/theme/app) — 산출물: `src/renderer/i18n/**`
+- [ ] Legacy channel warning 현황 문서화 + 격리 테스트(제거는 R11) — 산출물: `docs/superpowers/specs/appendix-legacy-channels.md`, `src/renderer/__tests__/legacy-channel-isolation.test.ts`
+- [ ] 6 테마 × 2 모드 스크린샷 증빙 — 산출물: `docs/superpowers/specs/appendix-r3-evidence/{warm,tactical,retro}-{light,dark}.png`
+- [ ] 전체 typecheck/lint/test/i18n:check/theme:check/build exit 0 — 산출물: `docs/superpowers/specs/r3-done-checklist.md`
+
+**scope 경계 (R3에서 하지 않는 것, R4+ 이연):**
+- 제품 특화 Blocks(`MessageBubble`, `MemberCard`, `ChannelItem`, `ApprovalCard`, `DashboardWidget`, `ProjectSwitcher` 등) — 도메인 IPC·상호작용 훅업과 얽힘. R4(대시보드) 이후 각 Phase에서.
+- Storybook — 채택 안 함. dev-only theme-switcher가 최소 플레이그라운드 역할.
+- Legacy IPC 채널(chat:*/workspace:*/consensus-folder:*/consensus:*/session:*) 제거 — warn 유지, 제거는 R11.
 
 **Phase R4 — 대시보드 + 프로젝트 관리**
 - Dashboard (3열) + 5개 위젯
