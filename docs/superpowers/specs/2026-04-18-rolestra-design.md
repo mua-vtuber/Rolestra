@@ -702,9 +702,11 @@ Expertise: {expertise}
 | KPI | 데이터 소스 | i18n 키 |
 |---|---|---|
 | 활성 프로젝트 | `projects.status='active'` count | `dashboard.kpi.activeProjects` |
-| 진행 회의 | `meetings.state NOT IN ('done','failed')` count | `dashboard.kpi.activeMeetings` |
+| 진행 회의 | `meetings.ended_at IS NULL` count (진행 중인 회의만 — 모든 종료 경로는 `ended_at`을 stamp) | `dashboard.kpi.activeMeetings` |
 | 승인 대기 | `approval_items.status='pending'` count | `dashboard.kpi.pendingApprovals` |
-| 오늘 완료 | `meetings.state='done' AND completed_at >= today_00:00` count | `dashboard.kpi.completedToday` |
+| 오늘 완료 | `meetings.outcome='accepted' AND ended_at >= startOfLocalToday()` count (실패/abort는 포함 안 함 — 성공 건수만 노출) | `dashboard.kpi.completedToday` |
+
+> **주**: `startOfLocalToday()`는 앱 로컬 타임존 기준 자정. UTC 자정 아님. DST 전환일 엣지는 `DashboardService`의 `startOfLocalDay()` 헬퍼가 Y/M/D 기반 `Date` 생성자로 처리(V8 normalisation 회피).
 
 빠른 액션 2개: `+ 새 프로젝트`(신규 생성 모달), `회의 소집 →`(현재 채널 또는 프로젝트 선택 모달). 문구는 i18n 키 `dashboard.action.newProject` / `dashboard.action.startMeeting`.
 
