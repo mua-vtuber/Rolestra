@@ -23,6 +23,15 @@ export interface ProjectRailProps {
   activeProjectId?: string;
   onSelectProject?: (id: string) => void;
   onSelectDm?: (id: string) => void;
+  /**
+   * When provided, renders a "+ 새 프로젝트" entry at the top of the
+   * PROJECTS section. Clicking it invokes this callback. The visual
+   * treatment is intentionally distinct from project rows — a dashed
+   * border + ghost tone — so the "add" affordance reads as an action
+   * rather than a selectable project. Position: immediately under the
+   * PROJECTS header, before the first project row (R4-Task10).
+   */
+  onCreateProject?: () => void;
   className?: string;
 }
 
@@ -32,6 +41,7 @@ export function ProjectRail({
   activeProjectId,
   onSelectProject,
   onSelectDm,
+  onCreateProject,
   className,
 }: ProjectRailProps) {
   const { t } = useTranslation();
@@ -47,6 +57,26 @@ export function ProjectRail({
       <div className="px-2.5 pb-1.5 pt-0 text-[10px] font-bold tracking-wider uppercase text-fg-subtle font-mono">
         {t('shell.rail.projects', 'Projects')}
       </div>
+      {onCreateProject && (
+        <button
+          type="button"
+          onClick={onCreateProject}
+          data-role="create-project"
+          data-testid="project-rail-create"
+          className={clsx(
+            'flex items-center gap-2 px-2.5 py-2 text-left text-xs rounded-panel',
+            'border border-dashed border-border text-fg-muted',
+            'transition-colors hover:bg-project-item-active-bg/40 hover:text-fg'
+          )}
+        >
+          <span className="text-icon-fg">
+            <LineIcon name="plus" stroke={1.5} />
+          </span>
+          <span className="flex-1 truncate font-medium">
+            {t('shell.rail.newProject', '+ 새 프로젝트')}
+          </span>
+        </button>
+      )}
       {projects.map((project) => {
         const isActive = project.id === activeProjectId;
         return (

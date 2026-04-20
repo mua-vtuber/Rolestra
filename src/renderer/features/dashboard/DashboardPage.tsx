@@ -7,27 +7,25 @@
  * - Render the Hero row: 4 KPI tiles + 2 quick-action buttons.
  * - Surface loading/error states explicitly — never silently substitute
  *   stale or fake data when the snapshot fails to load.
- * - Own the ProjectCreateModal mount + open/close state (R4-Task9).
- *   The dashboard hosts the modal because both the Hero "+ 새 프로젝트"
- *   button and (later, Task 10) the ProjectRail "+ 새 프로젝트" entry
- *   share the same trigger surface; containing the modal here keeps the
- *   form state local without App-level prop drilling. If future work
- *   needs to trigger the modal from a sibling route we can lift this
- *   state to App.tsx — but as of Task 9 the dashboard is the only
- *   trigger source.
  * - Leave structural placeholders for Task 7 (2×2 widget grid) and
  *   Task 8 (insight strip) so App-level routing can mount the page today.
  *
+ * Modal hosting (R4-Task10):
+ * - The `ProjectCreateModal` is no longer owned by DashboardPage. It was
+ *   lifted to `App.tsx` so both the Hero "+ 새 프로젝트" button AND the
+ *   `ProjectRail` "+ 새 프로젝트" entry can share a single open/close
+ *   state without prop-drilling a second instance through.
+ * - `onRequestNewProject` is therefore the ONLY path to open the modal
+ *   from inside the dashboard. R4 production always supplies it. For
+ *   unit tests we fall back to a silent no-op so the page still renders.
+ *
  * Prop escape hatches:
- * - `onRequestNewProject` — when provided, the dashboard delegates to
- *   the caller (useful for tests that assert pass-through behaviour and
- *   for R6 when a deep-link needs to open the modal from outside).
- *   When NOT provided, the Hero button toggles the internally-hosted
- *   modal directly.
+ * - `onRequestNewProject` — invoked when the user clicks the Hero's
+ *   new-project button.
  * - `onRequestStartMeeting` defaults to a no-op; R6 wires the real flow.
  */
 import { clsx } from 'clsx';
-import { useState, type ReactElement } from 'react';
+import { type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { HeroKpiTile } from './HeroKpiTile';
@@ -37,15 +35,14 @@ import { TasksWidget } from './widgets/TasksWidget';
 import { PeopleWidget } from './widgets/PeopleWidget';
 import { RecentWidget } from './widgets/RecentWidget';
 import { ApprovalsWidget } from './widgets/ApprovalsWidget';
-import { ProjectCreateModal } from '../projects/ProjectCreateModal';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useDashboardKpis } from '../../hooks/use-dashboard-kpis';
 
 export interface DashboardPageProps {
   /**
-   * If provided, the "+ 새 프로젝트" button delegates to this callback
-   * instead of opening the internal modal. If omitted, the dashboard
-   * opens its own `<ProjectCreateModal>`.
+   * Invoked when the user clicks the Hero "+ 새 프로젝트" button.
+   * App.tsx owns the `ProjectCreateModal` since R4-Task10 — when this
+   * prop is omitted (unit-test default) the click is a no-op.
    */
   onRequestNewProject?: () => void;
   /** Invoked when the user clicks "회의 소집 →" (requires active project). */
@@ -58,22 +55,13 @@ function noop(): void {
 }
 
 export function DashboardPage({
-  onRequestNewProject,
+  onRequestNewProject = noop,
   onRequestStartMeeting = noop,
   className,
 }: DashboardPageProps): ReactElement {
   const { t } = useTranslation();
   const { data, loading, error } = useDashboardKpis();
   const { activeProjectId } = useActiveProject();
-  const [createModalOpen, setCreateModalOpen] = useState<boolean>(false);
-
-  const handleNewProject = (): void => {
-    if (onRequestNewProject) {
-      onRequestNewProject();
-      return;
-    }
-    setCreateModalOpen(true);
-  };
 
   // `data === null` covers both the initial fetch and the failure case
   // (the hook never fabricates a snapshot on initial error). Loading here
@@ -131,7 +119,7 @@ export function DashboardPage({
         </div>
         <HeroQuickActions
           hasActiveProject={Boolean(activeProjectId)}
-          onNewProject={handleNewProject}
+          onNewProject={onRequestNewProject}
           onStartMeeting={onRequestStartMeeting}
         />
       </section>
@@ -166,19 +154,6 @@ export function DashboardPage({
         placeholders until R6 wires in the stream aggregates.
       */}
       <InsightStrip />
-
-      {/*
-        R4-Task9 — ProjectCreateModal. Only rendered when the dashboard
-        owns the trigger (i.e. `onRequestNewProject` was NOT supplied).
-        This avoids two modals fighting over open state when a parent
-        (future App.tsx/global router) hosts its own copy.
-      */}
-      {!onRequestNewProject && (
-        <ProjectCreateModal
-          open={createModalOpen}
-          onOpenChange={setCreateModalOpen}
-        />
-      )}
     </div>
   );
 }

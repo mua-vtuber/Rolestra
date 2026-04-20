@@ -120,9 +120,12 @@
   "shell": {
     "rail": {
       "direct": "Direct Messages",
+      "newProject": "+ New project",
       "projects": "Projects"
     },
     "topbar": {
+      "activeProjectPrefix": "Current project",
+      "noActiveProject": "No project selected",
       "subtitle": "Welcome",
       "title": "Office"
     }
