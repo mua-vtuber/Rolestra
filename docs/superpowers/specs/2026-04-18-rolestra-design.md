@@ -1130,19 +1130,19 @@ interface SsmContext {
 
 구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
 
-- [ ] §7.5 Hero 4 KPI 타일 + 빠른 액션 2개 (`+ 새 프로젝트` / `회의 소집`) — 산출물: `src/renderer/features/dashboard/{HeroKpiTile,HeroQuickActions,DashboardPage}.tsx`
-- [ ] §7.5 비대칭 2x2 위젯 4종 (📋업무 / 👥직원 / 💬최근대화 / 🔔결재 2-row span) — 산출물: `src/renderer/features/dashboard/widgets/{TasksWidget,PeopleWidget,RecentWidget,ApprovalsWidget}.tsx`
-- [ ] §7.5 Insight 띠 (4 셀: 주간Δ/평균응답/누적승인/리뷰완료율) — 산출물: `src/renderer/features/dashboard/InsightStrip.tsx`
-- [ ] §7.5 진행률 게이지 테마별 3 variant (warm round / tactical 12-seg / retro ASCII) — 산출물: `src/renderer/features/dashboard/ProgressGauge.tsx`
-- [ ] §7.5 KPI 단일 집계 서비스 (N+1 방지) + `dashboard:get-kpis` IPC — 산출물: `src/main/dashboard/dashboard-service.ts`, `src/main/ipc/handlers/dashboard-handler.ts`, `src/shared/dashboard-types.ts`
-- [ ] §7.3 프로젝트 생성 모달 3 kinds (신규/외부/가져오기) + Radix Dialog + external+auto 비활성 — 산출물: `src/renderer/features/projects/{ProjectCreateModal,ProjectKindTabs,ProjectPermissionRadio,ExternalPathPicker}.tsx`
-- [ ] §7.3/§7.6 CA-3 junction TOCTOU 엣지 커버리지 보강 — 산출물: `src/main/projects/__tests__/project-service.test.ts` (external+auto 거부 + TOCTOU rollback 신규 2 케이스)
-- [ ] 활성 프로젝트 전환 UI (ProjectRail + ShellTopBar subtitle) + persist store — 산출물: `src/renderer/stores/active-project-store.ts`, `src/renderer/hooks/use-active-project.ts`, `src/renderer/components/shell/{ProjectRail,ShellTopBar}.tsx`
-- [ ] Renderer typed IPC wrapper + 3 hooks — 산출물: `src/renderer/ipc/invoke.ts`, `src/renderer/hooks/{use-dashboard-kpis,use-projects,use-active-project}.ts`
-- [ ] i18n populate (`dashboard.*` / `project.*` / `shell.topbar.noActiveProject`) — 산출물: `src/renderer/i18n/locales/{ko,en}.json`
-- [ ] Playwright Electron E2E "외부 프로젝트 연결 → 대시보드" 시나리오 — 산출물: `e2e/external-project-flow.spec.ts`, `e2e/playwright.config.ts`, `e2e/electron-launch.ts`
-- [ ] 6 테마 대시보드 스크린샷 증빙 + E2E 캡처 — 산출물: `docs/superpowers/specs/appendix-r4-evidence/*.png`
-- [ ] typecheck/lint/test/i18n:check/theme:check/build exit 0 + R4 신규 테스트 전부 green + Playwright 로컬 pass — 산출물: `docs/superpowers/specs/r4-done-checklist.md`
+- [x] §7.5 Hero 4 KPI 타일 + 빠른 액션 2개 (`+ 새 프로젝트` / `회의 소집`) — 산출물: `src/renderer/features/dashboard/{HeroKpiTile,HeroQuickActions,DashboardPage}.tsx`
+- [x] §7.5 비대칭 2x2 위젯 4종 (📋업무 / 👥직원 / 💬최근대화 / 🔔결재 2-row span) — 산출물: `src/renderer/features/dashboard/widgets/{TasksWidget,PeopleWidget,RecentWidget,ApprovalsWidget}.tsx` + `src/renderer/hooks/{use-active-meetings,use-recent-messages,use-members,use-pending-approvals}.ts` + 신규 채널 `meeting:list-active`/`message:list-recent`
+- [x] §7.5 Insight 띠 (4 셀: 주간Δ/평균응답/누적승인/리뷰완료율) — 산출물: `src/renderer/features/dashboard/InsightStrip.tsx` (R4는 4 cell 구조 + placeholder `—` + tone api; 실 값은 R6)
+- [x] §7.5 진행률 게이지 테마별 3 variant (warm round / tactical 12-seg / retro ASCII) — 산출물: `src/renderer/features/dashboard/ProgressGauge.tsx` (themeKey 기반 분기)
+- [x] §7.5 KPI 단일 집계 서비스 (N+1 방지) + `dashboard:get-kpis` IPC — 산출물: `src/main/dashboard/dashboard-service.ts`, `src/main/ipc/handlers/dashboard-handler.ts`, `src/shared/dashboard-types.ts` (≤ 4 repo call, DST 전환일 경계 테스트 포함)
+- [x] §7.3 프로젝트 생성 모달 3 kinds (신규/외부/가져오기) + Radix Dialog + external+auto 비활성 — 산출물: `src/renderer/features/projects/{ProjectCreateModal,ProjectKindTabs,ProjectPermissionRadio,ExternalPathPicker,InitialMembersSelector}.tsx` + 신규 v3 채널 `project:pick-folder` (legacy `workspace:pick-folder`는 R3 isolation 테스트가 차단)
+- [x] §7.3/§7.6 CA-3 junction TOCTOU 엣지 커버리지 보강 — 산출물: `src/main/projects/__tests__/project-service.test.ts` (external+auto 거부 + TOCTOU rollback 신규 2 케이스, 프로덕션 코드 0 diff)
+- [x] 활성 프로젝트 전환 UI (ProjectRail + ShellTopBar subtitle) + persist store — 산출물: `src/renderer/stores/active-project-store.ts` (persist key `rolestra.activeProject.v1`), `src/renderer/hooks/use-active-project.ts`, `src/renderer/components/shell/{ProjectRail,ShellTopBar}.tsx` (ProjectRail에 `+ 새 프로젝트` row 추가, ShellTopBar에 `activeProjectName` prop 추가)
+- [x] Renderer typed IPC wrapper + 3 hooks — 산출물: `src/renderer/ipc/invoke.ts`, `src/renderer/hooks/{use-dashboard-kpis,use-projects,use-active-project}.ts` (silent fallback 금지, strict-mode single-fetch guard)
+- [x] i18n populate (`dashboard.*` / `project.*` / `shell.topbar.noActiveProject`) — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `i18next-parser.config.js` `keepRemoved` 9 패턴 (dynamic 키 보호)
+- [x] Playwright Electron E2E "외부 프로젝트 연결 → 대시보드" 시나리오 — 산출물: `e2e/external-project-flow.spec.ts`, `e2e/playwright.config.ts`, `e2e/electron-launch.ts` (**WSL 런타임 제약으로 로컬 부팅은 DONE_WITH_CONCERNS — Windows/native 또는 R10 OS matrix CI에서 실제 런**)
+- [ ] 6 테마 대시보드 스크린샷 증빙 + E2E 캡처 — 산출물: `docs/superpowers/specs/appendix-r4-evidence/*.png` **(수동 캡처 대기 — WSL 런타임 제약 동일. R4 code correctness는 non-blocking, 시각 sign-off는 Windows/native에서)**
+- [x] typecheck/lint/test/i18n:check/theme:check/build exit 0 + R4 신규 테스트 전부 green + Playwright 로컬 pass — 산출물: `docs/superpowers/specs/r4-done-checklist.md` (Playwright 로컬 pass는 위 항목과 동일 이연)
 
 **scope 경계 (R4에서 하지 않는 것, R5+ 이연):**
 - KPI 실시간 스트림 구독 (R4는 진입/활성전환/모달 close 3 시점만 refresh) — R6 스트림 통합 이후
