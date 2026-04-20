@@ -42,12 +42,12 @@ export async function handleProviderAdd(
 
   providerRegistry.register(provider);
 
-  // Persist to DB so the provider survives app restart
+  // Persist to DB so the provider survives app restart. v3 schema stores
+  // model inside config_json (§5.2 001_core); no separate column.
   saveProvider(
     provider.id,
     provider.type,
     provider.displayName,
-    provider.model,
     provider.persona,
     data.config,
   );

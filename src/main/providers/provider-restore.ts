@@ -32,10 +32,10 @@ export function restoreProvidersFromDb(): void {
 
   for (const row of rows) {
     try {
-      const config = JSON.parse(row.config) as ProviderConfig;
+      const config = JSON.parse(row.configJson) as ProviderConfig;
       const provider = createProvider({
         id: row.id,
-        displayName: row.name,
+        displayName: row.displayName,
         persona: row.persona ?? undefined,
         config,
         resolveApiKey,
@@ -45,7 +45,7 @@ export function restoreProvidersFromDb(): void {
       // Warmup in background
       void provider.warmup();
 
-      console.log(`[provider-restore] Restored: ${row.name} (${row.id})`);
+      console.log(`[provider-restore] Restored: ${row.displayName} (${row.id})`);
     } catch (err) {
       console.error(`[provider-restore] Failed to restore provider ${row.id}:`, err);
     }

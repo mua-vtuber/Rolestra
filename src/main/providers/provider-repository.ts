@@ -1,39 +1,45 @@
 /**
  * Provider Repository — DB persistence for provider configurations.
  *
- * Reads and writes provider data to the `providers` SQLite table.
- * The registry (in-memory) and repository (DB) are synchronized
- * by provider-handler.ts during add/remove operations.
+ * Reads and writes provider data to the v3 `providers` SQLite table (schema
+ * defined in src/main/database/migrations/001-core.ts — spec §5.2 001_core).
+ * The registry (in-memory) and repository (DB) are synchronized by
+ * provider-handler.ts during add/remove operations.
  */
 
 import { getDatabase } from '../database/connection';
 import type { ProviderConfig, ProviderType } from '../../shared/provider-types';
 
-/** Row shape returned by SELECT from the providers table. */
+/** Row shape returned by SELECT from the v3 providers table. */
 export interface ProviderRow {
   id: string;
-  type: ProviderType;
-  name: string;
-  model: string;
+  kind: ProviderType;
+  displayName: string;
   persona: string | null;
-  config: string; // JSON-serialized ProviderConfig
+  /** JSON-serialized ProviderConfig; model lives inside the config. */
+  configJson: string;
 }
 
 /** Save a provider to the database. Upserts (insert or replace). */
 export function saveProvider(
   id: string,
-  type: ProviderType,
+  kind: ProviderType,
   displayName: string,
-  model: string,
   persona: string | undefined,
   config: ProviderConfig,
 ): void {
   const db = getDatabase();
   const stmt = db.prepare(`
-    INSERT OR REPLACE INTO providers (id, type, name, model, persona, config, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    INSERT INTO providers (id, display_name, kind, config_json, persona, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, unixepoch(), unixepoch())
+    ON CONFLICT(id) DO UPDATE SET
+      display_name = excluded.display_name,
+      kind         = excluded.kind,
+      config_json  = excluded.config_json,
+      persona      = excluded.persona,
+      updated_at   = unixepoch()
   `);
-  stmt.run(id, type, displayName, model, persona ?? null, JSON.stringify(config));
+  stmt.run(id, displayName, kind, JSON.stringify(config), persona ?? '');
 }
 
 /** Remove a provider from the database by ID. */
@@ -45,5 +51,10 @@ export function removeProvider(id: string): void {
 /** Load all providers from the database. */
 export function loadAllProviders(): ProviderRow[] {
   const db = getDatabase();
-  return db.prepare('SELECT id, type, name, model, persona, config FROM providers').all() as ProviderRow[];
+  return db
+    .prepare(
+      `SELECT id, kind, display_name AS displayName, persona, config_json AS configJson
+         FROM providers`,
+    )
+    .all() as ProviderRow[];
 }
