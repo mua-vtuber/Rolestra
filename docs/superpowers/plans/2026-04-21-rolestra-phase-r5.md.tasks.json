@@ -103,23 +103,23 @@
     {
       "id": 10,
       "subject": "Task 10: Channel CRUD 모달 3종 (create/rename/delete)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         3,
         4
       ],
       "description": "**Goal:** ChannelCreateModal(이름 3-50자 + 멤버 선택) + ChannelRenameDialog + ChannelDeleteConfirm. R4 ProjectCreateModal Radix Dialog 패턴 복제. 시스템 채널 rename/delete 버튼 비활성(defence-in-depth). 중복 이름 DuplicateChannelNameError friendly 표면.\n\n**Files:** src/renderer/features/channels/{ChannelCreateModal,ChannelRenameDialog,ChannelDeleteConfirm}.tsx + __tests__\n\n**Verify:** `npm run test -- \"ChannelCreateModal|ChannelRenameDialog|ChannelDeleteConfirm\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/channels/ChannelCreateModal.tsx\",\"src/renderer/features/channels/ChannelRenameDialog.tsx\",\"src/renderer/features/channels/ChannelDeleteConfirm.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"3 모달 기본 동작 + IPC payload 검증\",\"중복 이름 에러 표면\",\"시스템 채널 rename/delete 차단\",\"ESC 닫힘, Enter 제출, role=dialog\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T22:00:00.000Z"
     },
     {
       "id": 11,
       "subject": "Task 11: 시스템 채널 자동 생성 wire-up + DM 시작 UX",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         10
       ],
       "description": "**Goal:** ProjectService.create/linkExternal/importFolder 3 경로에 ChannelService.createSystemChannels 호출 추가. 동일 트랜잭션 선호, 불가 시 후행 호출 + 에러 시 project row 삭제 보상. 생성자에 ChannelService DI. R2 integration-smoke 테스트 조정. DM 시작 버튼(최소 surface) — channel:create kind='dm', DuplicateDmError 시 기존 DM 이동.\n\n**Files:** src/main/projects/project-service.ts + __tests__, src/main/__tests__/r2-integration-smoke.test.ts, src/renderer/features/members/StartDmButton.tsx + __tests__\n\n**Verify:** `npm run test -- \"project-service|r2-integration|StartDmButton\"`\n\n```json:metadata\n{\"files\":[\"src/main/projects/project-service.ts\",\"src/main/__tests__/r2-integration-smoke.test.ts\",\"src/renderer/features/members/StartDmButton.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"create/linkExternal/importFolder 모두 system channel 3 row 자동 생성\",\"실패 시 orphan project row 없음\",\"DM 버튼: 신규/기존 2 경로 동작\",\"integration smoke green\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T22:00:00.000Z"
     },
     {
       "id": 12,
