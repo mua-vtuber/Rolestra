@@ -1181,11 +1181,35 @@ interface SsmContext {
 - Playwright CI integration + OS matrix — R10
 - 6 테마 메신저 스크린샷 시각 sign-off (+ retro 영어 복귀 결정 D8) — Windows/native 수동 또는 R11 릴리스 전
 
-**Phase R6 — 회의(SSM) 연동**
-- "회의 시작" 버튼 → Meeting 생성
-- SSM 이벤트 → 메시지 저장 + 스트림
-- 회의 진행 배지
-- 완료 시 #회의록 자동 포스팅
+**Phase R6 — 회의(SSM) 연동 + v2 engine 잔재 완전 청산** (plan: `docs/superpowers/plans/2026-04-22-rolestra-phase-r6.md`, done-checklist: `docs/superpowers/specs/r6-done-checklist.md`)
+
+구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
+
+- [ ] Shared meeting stream types + stream-bridge v3 이벤트 API (meeting:state-changed / turn-start/token/done / error) — 산출물: `src/shared/meeting-stream-types.ts` + `src/main/streams/stream-bridge.ts` 확장 + `src/preload/index.ts` 화이트리스트
+- [ ] §7.5 MeetingSession v3 — meetingId/channelId/projectId 1급, participants ≥ 2 enforcement, 기존 SSM/TurnManager/history.ts 자산 재사용 — 산출물: `src/main/meetings/engine/meeting-session.ts`
+- [ ] §7.5 MeetingTurnExecutor v3 — permissionService/workspaceService/consensusFolderService singleton 5곳 참조를 생성자 DI로 전환, streamBridge.emitMeetingTurn* 이벤트 발사, CLI permission은 v2 registerPendingCliPermission 흐름 유지(R7 이전) — 산출물: `src/main/meetings/engine/meeting-turn-executor.ts`
+- [ ] §7.5 MeetingOrchestrator v3 — v3-side-effects wireV3SideEffects() per-meeting 호출 + minutesComposer DONE 시 #회의록 포스팅 + main/index.ts DI 배선, v2 stream:* 이벤트 emit 0 — 산출물: `src/main/meetings/engine/meeting-orchestrator.ts` + `src/main/index.ts` + `src/main/ipc/handlers/meeting-handler.ts`
+- [ ] §7.5 MeetingMinutesComposer — 메타 헤더(참여자/주제/SSM/경과/투표) + 합의본 원문 + 종료시각, FAILED 분기, i18n 라벨 경유 — 산출물: `src/main/meetings/engine/meeting-minutes-composer.ts`
+- [ ] v2 singleton 완전 제거 + @deprecated 마킹(workspace-handler 3 singleton + engine/orchestrator + turn-executor + conversation + execution-coordinator + memory-coordinator 5 파일) — 산출물: `src/main/ipc/handlers/workspace-handler.ts` 주석 + `src/main/engine/{orchestrator,turn-executor,conversation,execution-coordinator,memory-coordinator}.ts` 주석 + `src/main/meetings/engine/__tests__/smoke-v3-di.test.ts`
+- [ ] execution-coordinator / memory-coordinator 흡수 — MeetingOrchestrator 메서드 또는 meeting-memory-coordinator 로 이관 — 산출물: `src/main/meetings/engine/meeting-memory-coordinator.ts`
+- [ ] Renderer use-meeting-stream 훅 — meeting:* 5 이벤트 reducer + live turn buffer + DB replace — 산출물: `src/renderer/hooks/use-meeting-stream.ts`
+- [ ] §7.4 Thread 본문 재작성 — placeholder 제거, DateSeparator + Message/SystemMessage/ApprovalBlock 분기 + compact mode + live turn 표시/replace; MeetingBanner 실 데이터(elapsed/ssmState/crewCount) — 산출물: `src/renderer/features/messenger/Thread.tsx` 본문 + `src/renderer/features/messenger/MeetingBanner.tsx`
+- [ ] Legacy typecheck 170건 정리 — `tsconfig.node.json` exclude 조정으로 archived `src/main/{memory,recovery,remote}/__tests__` 배제 + R11 에서 파일 삭제 예약 — 산출물: `tsconfig.node.json`
+- [ ] i18n populate `meeting.*` (minutes.header / state 12 SSM 이름 / error / notification / banner.state) + i18next-parser keepRemoved 2 regex — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `i18next-parser.config.js`
+- [ ] Playwright Electron E2E "프로젝트 → 채널 → 회의 시작 → mock turn → #회의록 포스팅" — 산출물: `e2e/meeting-flow.spec.ts` + `e2e/helpers/mock-provider.ts` (**WSL 런타임 제약 시 R4/R5와 동일 DONE_WITH_CONCERNS**)
+- [ ] typecheck(전체) / typecheck:web / lint / test / i18n:check / theme:check / build exit 0 + R6 신규 테스트 green + done-checklist 작성 — 산출물: `docs/superpowers/specs/r6-done-checklist.md`
+
+**scope 경계 (R6에서 하지 않는 것, R7+ 이연):**
+- ApprovalInbox UX (사용자가 승인 요청을 검토/승인/거절) — R7
+- Approval 버튼 클릭 → 실제 승인/거절 → AI 재시도 wire — R7
+- CLI permission adapter v3 완전 교체 (R6에서는 v2 흐름 보존) — R7
+- DM 완성 기능(read receipt / typing indicator 실 이벤트) — R10
+- FTS5 메시지 검색 — R10
+- 낙관적 업데이트 / Error Boundary 래핑 — R10
+- LLM 요약 기반 회의록 요약 (R6는 원문 + 메타 헤더) — R10
+- Playwright CI integration + OS matrix — R10
+- v2 engine 5 파일 물리적 삭제 (orchestrator/turn-executor/conversation/execution-coordinator/memory-coordinator) — R11
+- Retro 영어 복귀 결정 D8 — R11 릴리스 전
 
 **Phase R7 — 승인 시스템**
 - ApprovalInbox + 3종 승인 (CLI권한/모드전환/투표결정)
