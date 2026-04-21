@@ -16,6 +16,8 @@ export type AvatarShape = 'circle' | 'diamond' | 'status';
 export type CardTitleStyle = 'bar' | 'divider' | 'ascii';
 export type ApprovalBodyStyle = 'plain' | 'quote';
 export type MiniBtnStyle = 'pill' | 'notched' | 'text';
+export type MessengerHeaderPolicy = 'stacked' | 'mono-prefix';
+export type BadgeRadius = 'pill' | 'square';
 
 export interface ThemeToken {
   themeKey: ThemeKey;
@@ -79,6 +81,8 @@ export interface ThemeToken {
   approvalBodyStyle: ApprovalBodyStyle;
   miniBtnStyle: MiniBtnStyle;
   gaugeGlow: number;
+  messengerHeaderPolicy: MessengerHeaderPolicy;
+  badgeRadius: BadgeRadius;
 }
 
 export const FONTS = {
@@ -152,6 +156,8 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     approvalBodyStyle: "plain",
     miniBtnStyle: "pill",
     gaugeGlow: 0,
+    messengerHeaderPolicy: "stacked",
+    badgeRadius: "pill",
   },
   'warm-dark': {
     themeKey: "warm",
@@ -217,6 +223,8 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     approvalBodyStyle: "plain",
     miniBtnStyle: "pill",
     gaugeGlow: 0,
+    messengerHeaderPolicy: "stacked",
+    badgeRadius: "pill",
   },
   'tactical-light': {
     themeKey: "tactical",
@@ -282,6 +290,8 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     approvalBodyStyle: "plain",
     miniBtnStyle: "notched",
     gaugeGlow: 0.4,
+    messengerHeaderPolicy: "stacked",
+    badgeRadius: "square",
   },
   'tactical-dark': {
     themeKey: "tactical",
@@ -347,6 +357,8 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     approvalBodyStyle: "plain",
     miniBtnStyle: "notched",
     gaugeGlow: 1,
+    messengerHeaderPolicy: "stacked",
+    badgeRadius: "square",
   },
   'retro-light': {
     themeKey: "retro",
@@ -412,6 +424,8 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     approvalBodyStyle: "quote",
     miniBtnStyle: "text",
     gaugeGlow: 0,
+    messengerHeaderPolicy: "mono-prefix",
+    badgeRadius: "square",
   },
   'retro-dark': {
     themeKey: "retro",
@@ -477,6 +491,8 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     approvalBodyStyle: "quote",
     miniBtnStyle: "text",
     gaugeGlow: 0,
+    messengerHeaderPolicy: "mono-prefix",
+    badgeRadius: "square",
   },
 };
 

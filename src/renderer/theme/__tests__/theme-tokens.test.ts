@@ -80,6 +80,8 @@ const REQUIRED_TOKEN_FIELDS: ReadonlyArray<keyof ThemeToken> = [
   'approvalBodyStyle',
   'miniBtnStyle',
   'gaugeGlow',
+  'messengerHeaderPolicy',
+  'badgeRadius',
 ];
 
 describe('theme-tokens — 6 combo matrix', () => {
@@ -92,7 +94,7 @@ describe('theme-tokens — 6 combo matrix', () => {
     expect(keys).toEqual([...EXPECTED_COMBO_KEYS].sort());
   });
 
-  it.each(EXPECTED_COMBO_KEYS)('%s token has all 60 required schema fields', (key) => {
+  it.each(EXPECTED_COMBO_KEYS)('%s token has all 62 required schema fields', (key) => {
     const token = THEMES[key];
     for (const field of REQUIRED_TOKEN_FIELDS) {
       expect(token, `missing ${String(field)} on ${key}`).toHaveProperty(field);
@@ -124,5 +126,28 @@ describe('theme-tokens — 6 combo matrix', () => {
     expect(THEMES['tactical-dark'].themeKey).toBe('tactical');
     expect(THEMES['retro-light'].themeKey).toBe('retro');
     expect(THEMES['retro-dark'].themeKey).toBe('retro');
+  });
+
+  // R5 Task 1 — messenger discriminator tokens (D4 / D5 downstream decisions
+  // rely on these values, so pin them explicitly rather than asserting "any
+  // string"). 6 themes × 2 fields = 12 assertions.
+  describe('R5 messenger discriminators', () => {
+    it('messengerHeaderPolicy — retro uses mono-prefix, warm/tactical stack avatar + header', () => {
+      expect(THEMES['warm-light'].messengerHeaderPolicy).toBe('stacked');
+      expect(THEMES['warm-dark'].messengerHeaderPolicy).toBe('stacked');
+      expect(THEMES['tactical-light'].messengerHeaderPolicy).toBe('stacked');
+      expect(THEMES['tactical-dark'].messengerHeaderPolicy).toBe('stacked');
+      expect(THEMES['retro-light'].messengerHeaderPolicy).toBe('mono-prefix');
+      expect(THEMES['retro-dark'].messengerHeaderPolicy).toBe('mono-prefix');
+    });
+
+    it('badgeRadius — only warm is pill, tactical/retro are square', () => {
+      expect(THEMES['warm-light'].badgeRadius).toBe('pill');
+      expect(THEMES['warm-dark'].badgeRadius).toBe('pill');
+      expect(THEMES['tactical-light'].badgeRadius).toBe('square');
+      expect(THEMES['tactical-dark'].badgeRadius).toBe('square');
+      expect(THEMES['retro-light'].badgeRadius).toBe('square');
+      expect(THEMES['retro-dark'].badgeRadius).toBe('square');
+    });
   });
 });

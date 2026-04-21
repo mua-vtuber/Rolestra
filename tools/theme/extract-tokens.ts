@@ -87,6 +87,8 @@ interface RawTheme {
   approvalBodyStyle: 'plain' | 'quote';
   miniBtnStyle: 'pill' | 'notched' | 'text';
   gaugeGlow: number;
+  messengerHeaderPolicy: 'stacked' | 'mono-prefix';
+  badgeRadius: 'pill' | 'square';
 }
 
 interface SandboxWindow {
@@ -257,6 +259,7 @@ function renderThemeObject(theme: RawTheme): string {
     'actionSecondaryBg', 'actionSecondaryFg', 'actionSecondaryBorder',
     'cardTitleStyle', 'approvalBodyStyle', 'miniBtnStyle',
     'gaugeGlow',
+    'messengerHeaderPolicy', 'badgeRadius',
   ];
   const lines: string[] = ['{'];
   for (const key of keyOrder) {
@@ -286,6 +289,8 @@ export type AvatarShape = 'circle' | 'diamond' | 'status';
 export type CardTitleStyle = 'bar' | 'divider' | 'ascii';
 export type ApprovalBodyStyle = 'plain' | 'quote';
 export type MiniBtnStyle = 'pill' | 'notched' | 'text';
+export type MessengerHeaderPolicy = 'stacked' | 'mono-prefix';
+export type BadgeRadius = 'pill' | 'square';
 
 export interface ThemeToken {
   themeKey: ThemeKey;
@@ -349,6 +354,8 @@ export interface ThemeToken {
   approvalBodyStyle: ApprovalBodyStyle;
   miniBtnStyle: MiniBtnStyle;
   gaugeGlow: number;
+  messengerHeaderPolicy: MessengerHeaderPolicy;
+  badgeRadius: BadgeRadius;
 }
 
 export const FONTS = {

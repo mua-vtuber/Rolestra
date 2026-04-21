@@ -28,6 +28,9 @@
 //   approvalBodyStyle: 'plain' | 'quote'             // retro-only quote block
 //   miniBtnStyle: 'pill' | 'notched' | 'text'        // warm=pill, tactical=notched, retro=text
 //   gaugeGlow: number (0-1)                          // tactical segment glow intensity
+//   messengerHeaderPolicy: 'stacked' | 'mono-prefix' // retro=mono-prefix (no avatar, mono name prefix),
+//                                                       warm/tactical=stacked (avatar + name/time/role row)
+//   badgeRadius: 'pill' | 'square'                   // warm=pill, tactical/retro=square
 // ─────────────────────────────────────────────────────────────────────
 
 const BODY_FONT = '"IBM Plex Sans", "Inter", system-ui, sans-serif';
@@ -108,6 +111,8 @@ const themeWarmLight = {
   approvalBodyStyle: 'plain',
   miniBtnStyle: 'pill',
   gaugeGlow: 0,
+  messengerHeaderPolicy: 'stacked',
+  badgeRadius: 'pill',
 };
 
 // ─────────────────────────── WARM · DARK (우디 야간) ─────────────────
@@ -184,6 +189,8 @@ const themeWarmDark = {
   approvalBodyStyle: 'plain',
   miniBtnStyle: 'pill',
   gaugeGlow: 0,
+  messengerHeaderPolicy: 'stacked',
+  badgeRadius: 'pill',
 };
 
 // ─────────────────────────── TACTICAL · DARK (기본) ──────────────────
@@ -260,6 +267,8 @@ const themeTacticalDark = {
   approvalBodyStyle: 'plain',
   miniBtnStyle: 'notched',
   gaugeGlow: 1,
+  messengerHeaderPolicy: 'stacked',
+  badgeRadius: 'square',
 };
 
 // ─────────────────────── TACTICAL · LIGHT (주간 관제) ────────────────
@@ -338,6 +347,8 @@ const themeTacticalLight = {
   approvalBodyStyle: 'plain',
   miniBtnStyle: 'notched',
   gaugeGlow: 0.4,
+  messengerHeaderPolicy: 'stacked',
+  badgeRadius: 'square',
 };
 
 // ─────────────────────────── RETRO · DARK (CRT 기본) ─────────────────
@@ -414,6 +425,8 @@ const themeRetroDark = {
   approvalBodyStyle: 'quote',
   miniBtnStyle: 'text',
   gaugeGlow: 0,
+  messengerHeaderPolicy: 'mono-prefix',
+  badgeRadius: 'square',
 };
 
 // ─────────────── RETRO · LIGHT (도트매트릭스 프린터 출력) ────────────
@@ -492,6 +505,8 @@ const themeRetroLight = {
   approvalBodyStyle: 'quote',
   miniBtnStyle: 'text',
   gaugeGlow: 0,
+  messengerHeaderPolicy: 'mono-prefix',
+  badgeRadius: 'square',
 };
 
 // ─────────────────────────────────────────────────────────────────────
