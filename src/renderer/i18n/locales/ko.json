@@ -133,10 +133,24 @@
       "noActiveChannel": "왼쪽에서 채널을 선택하세요.",
       "noActiveProject": "메신저를 시작하려면 왼쪽에서 프로젝트를 선택하세요."
     },
+    "memberPanel": {
+      "consensusTitle": "합의 상태",
+      "empty": "등록된 참여자가 없습니다.",
+      "error": "참여자 목록을 불러오지 못했습니다.",
+      "loading": "참여자 목록을 불러오는 중…",
+      "noActiveChannel": "참여자를 표시할 채널을 선택하세요.",
+      "participantsTitle": "참여자",
+      "participantsTitleCount_one": "참여자 · {{count}}명",
+      "participantsTitleCount_other": "참여자 · {{count}}명"
+    },
     "pane": {
       "channelRail": "채널 목록",
       "memberPanel": "참여자 및 합의 상태",
       "thread": "메시지 스레드"
+    },
+    "ssmBox": {
+      "description": "\"{{topic}}\" 회의가 진행 중입니다.",
+      "empty": "진행 중인 회의가 없습니다."
     },
     "startMeeting": {
       "cancel": "취소",
@@ -155,6 +169,9 @@
     },
     "thread": {
       "messageListPlaceholder": "Task 6 예정 — 메시지 스트림"
+    },
+    "typing": {
+      "label": "{{names}} — 작성 중"
     }
   },
   "project": {

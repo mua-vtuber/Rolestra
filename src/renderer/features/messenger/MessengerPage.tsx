@@ -17,6 +17,7 @@ import { type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ChannelRail } from './ChannelRail';
+import { MemberPanel } from './MemberPanel';
 import { Thread } from './Thread';
 import { useActiveProject } from '../../hooks/use-active-project';
 
@@ -70,9 +71,9 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
       <aside
         data-testid="messenger-member-panel"
         aria-label={t('messenger.pane.memberPanel')}
-        className="border-l border-border bg-panel-bg min-h-0 overflow-hidden"
+        className="border-l border-border bg-panel-bg min-h-0 overflow-y-auto"
       >
-        {/* Task 9: <MemberPanel /> */}
+        <MemberPanel projectId={activeProjectId} />
       </aside>
     </div>
   );

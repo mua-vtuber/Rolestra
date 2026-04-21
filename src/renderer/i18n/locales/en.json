@@ -133,10 +133,24 @@
       "noActiveChannel": "Select a channel on the left.",
       "noActiveProject": "Select a project on the left to open the messenger."
     },
+    "memberPanel": {
+      "consensusTitle": "Consensus",
+      "empty": "No participants.",
+      "error": "Could not load participants.",
+      "loading": "Loading participants…",
+      "noActiveChannel": "Select a channel to see participants.",
+      "participantsTitle": "Participants",
+      "participantsTitleCount_one": "Participants · {{count}}",
+      "participantsTitleCount_other": "Participants · {{count}}"
+    },
     "pane": {
       "channelRail": "Channel list",
       "memberPanel": "Participants and consensus",
       "thread": "Message thread"
+    },
+    "ssmBox": {
+      "description": "Meeting in progress: \"{{topic}}\".",
+      "empty": "No active meeting."
     },
     "startMeeting": {
       "cancel": "Cancel",
@@ -155,6 +169,9 @@
     },
     "thread": {
       "messageListPlaceholder": "Task 6 pending — message stream placeholder"
+    },
+    "typing": {
+      "label": "{{names}} — typing"
     }
   },
   "project": {
