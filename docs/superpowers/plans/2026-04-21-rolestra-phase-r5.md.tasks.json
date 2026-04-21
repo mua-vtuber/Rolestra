@@ -72,13 +72,13 @@
     {
       "id": 7,
       "subject": "Task 7: MeetingBanner + ApprovalBlock + StartMeetingModal + miniBtnStyle 보강(필요 시)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5,
         6
       ],
       "description": "**Goal:** MeetingBanner 3-way (retro 별도 JSX `[진행중]` strip). ApprovalBlock 3-way container + miniBtnStyle 버튼 재활용 (Task 0 점검 결과 미지원 variant 있으면 이 Task에서 보강). StartMeetingModal(Radix Dialog, 주제 3-200자). 영문 라벨 한국어화 (D4).\n\n**Files:** src/renderer/features/messenger/{MeetingBanner,ApprovalBlock}.tsx + __tests__, src/renderer/features/meetings/StartMeetingModal.tsx + __tests__, (필요 시) src/renderer/components/primitives/button.tsx\n\n**Verify:** `npm run test -- \"MeetingBanner|ApprovalBlock|StartMeetingModal\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/MeetingBanner.tsx\",\"src/renderer/features/messenger/ApprovalBlock.tsx\",\"src/renderer/features/meetings/StartMeetingModal.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"MeetingBanner 3 테마 DOM + retro 별도 JSX([진행중])\",\"ApprovalBlock approvalBodyStyle='quote' retro 단언 + 한국어 라벨([승인 요청])\",\"StartMeetingModal submit IPC payload 검증\",\"miniBtnStyle 3 variant 지원 확인(또는 보강)\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T18:55:00.000Z"
     },
     {
       "id": 8,
