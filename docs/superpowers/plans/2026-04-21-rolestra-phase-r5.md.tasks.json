@@ -26,7 +26,7 @@
         1
       ],
       "description": "**Goal:** use-channels / use-dms / use-channel-messages / use-active-channel / use-channel-members + active-channel-store(zustand persist, project-scoped). R4 use-dashboard-kpis 패턴 답습 — silent fallback 금지, strict-mode single-fetch guard, error surface 투명.\n\n**Files:** src/renderer/hooks/{use-channels,use-dms,use-channel-messages,use-active-channel,use-channel-members}.ts + __tests__, src/renderer/stores/active-channel-store.ts + __tests__\n\n**Verify:** `npm run test -- \"use-channels|use-dms|use-channel-messages|use-active-channel|use-channel-members|active-channel-store\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/hooks/use-channels.ts\",\"src/renderer/hooks/use-dms.ts\",\"src/renderer/hooks/use-channel-messages.ts\",\"src/renderer/hooks/use-active-channel.ts\",\"src/renderer/hooks/use-channel-members.ts\",\"src/renderer/stores/active-channel-store.ts\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"5 hooks + 1 store 구현\",\"각 훅·스토어 __tests__ 3+ 케이스(happy/error/null-scope)\",\"strict-mode single-fetch guard 동작\",\"send 성공 후 refetch invoked\",\"use-channel-members는 useMembers+filter 대체 (D6)\",\"typecheck / eslint exit 0\"]}\n```",
-      "lastUpdated": "2026-04-21T14:45:00.000Z"
+      "lastUpdated": "2026-04-21T15:00:00.000Z"
     },
     {
       "id": 3,
@@ -36,28 +36,28 @@
         2
       ],
       "description": "**Goal:** App.tsx에 `view: 'dashboard' | 'messenger'` 라우터 도입. NavRail 클릭으로 전환. MessengerPage는 token-only 3-pane skeleton (ChannelRail/Thread/MemberPanel placeholder). Active project 없으면 empty state.\n\n**Files:** src/renderer/App.tsx + __tests__, src/renderer/components/shell/NavRail.tsx 수정, src/renderer/features/messenger/MessengerPage.tsx + __tests__\n\n**Verify:** `npm run test -- \"App|MessengerPage|NavRail\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/App.tsx\",\"src/renderer/components/shell/NavRail.tsx\",\"src/renderer/features/messenger/MessengerPage.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"NavRail dashboard ↔ messenger 토글 동작\",\"MessengerPage 3-pane layout, hex literal 0\",\"active project null → empty state\",\"App.test + MessengerPage.test green\",\"typecheck / eslint exit 0\"]}\n```",
-      "lastUpdated": "2026-04-21T14:45:00.000Z"
+      "lastUpdated": "2026-04-21T15:00:00.000Z"
     },
     {
       "id": 4,
       "subject": "Task 4: ChannelRail (themeKey 3-way) + ChannelRow",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2,
         3
       ],
       "description": "**Goal:** 좌측 채널 레일. prep §2.1 3-way 구조 차이 반영(글리프 `#`/`▶·` + radius + clip + 섹션 타이틀). 섹션 순서: system → user → DM. 하단 `+ 새 채널` 버튼. D4 섹션 타이틀 한국어화 (warm=tactical='채널', retro='$ 채널').\n\n**Files:** src/renderer/features/messenger/{ChannelRail,ChannelRow}.tsx + __tests__\n\n**Verify:** `npm run test -- \"ChannelRail|ChannelRow\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/ChannelRail.tsx\",\"src/renderer/features/messenger/ChannelRow.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"3 테마 DOM 차이 단언 (glyph/radius/clip)\",\"섹션 순서 system → user → DM\",\"data-theme-variant={themeKey} 부여\",\"hex literal 0\",\"active click → use-active-channel.set 호출\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T15:45:00.000Z"
     },
     {
       "id": 5,
       "subject": "Task 5: Thread + ChannelHeader",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4
       ],
       "description": "**Goal:** 중앙 pane shell — ChannelHeader(# glyph + 채널명 + 참여자수 + 회의시작 버튼) + 메시지 스크롤 영역 + Composer 영역. Channel kind별 UI 분기 (user=회의시작 활성, system_approval/minutes=읽기전용 배지, dm=회의시작 없음). Meeting 활성이면 상단 MeetingBanner placeholder.\n\n**Files:** src/renderer/features/messenger/{Thread,ChannelHeader}.tsx + __tests__\n\n**Verify:** `npm run test -- \"Thread|ChannelHeader\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/Thread.tsx\",\"src/renderer/features/messenger/ChannelHeader.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"channel kind 분기 동작\",\"meeting 상태별 버튼 enabled/disabled\",\"system 채널 rename/delete 비활성\",\"typecheck / eslint exit 0\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T15:45:00.000Z"
     },
     {
       "id": 6,
