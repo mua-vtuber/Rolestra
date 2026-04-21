@@ -25,6 +25,14 @@ import { MessageService } from './channels/message-service';
 import { MeetingService } from './meetings/meeting-service';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
 import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
+import { ChannelRepository } from './channels/channel-repository';
+import { ChannelService } from './channels/channel-service';
+import { ProjectService } from './projects/project-service';
+import { setProjectServiceAccessor } from './ipc/handlers/project-handler';
+import {
+  setChannelServiceAccessor,
+  setMeetingServiceAccessor,
+} from './ipc/handlers/channel-handler';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -106,9 +114,10 @@ app.whenReady().then(async () => {
     // service itself holds no DB handle; it only delegates to the
     // repos' indexed COUNT queries.
     const db = getDatabase();
+    const projectRepo = new ProjectRepository(db);
     const meetingRepo = new MeetingRepository(db);
     const dashboardService = new DashboardService({
-      projectRepo: new ProjectRepository(db),
+      projectRepo,
       meetingRepo,
       approvalRepo: new ApprovalRepository(db),
     });
@@ -118,12 +127,28 @@ app.whenReady().then(async () => {
     // the widget-facing channels need MessageService / MeetingService
     // accessors. We instantiate the services here so the repo handles
     // stay co-located with dashboardService (all three R4 domains come
-    // off the same `db` handle). The channel-handler still carries the
-    // full CRUD surface; these accessors feed only the dashboard reads.
+    // off the same `db` handle).
     const meetingService = new MeetingService(meetingRepo);
     const messageService = new MessageService(new MessageRepository(db));
     setMeetingAbortServiceAccessor(() => meetingService);
     setMessageServiceAccessor(() => messageService);
+
+    // R5-Task11 wires the full channel + project service graph so the
+    // renderer's channel:* / project:* IPC calls land on a live service.
+    // Projects get the auto-provision hook that materialises the three
+    // system channels (#일반 / #승인-대기 / #회의록) inside the same
+    // create flow — keeps `onProjectCreated` additive and leaves DB/FS
+    // rollback untouched (system channels are DB-only, no FS side).
+    const channelRepo = new ChannelRepository(db);
+    const channelService = new ChannelService(channelRepo, projectRepo);
+    const projectService = new ProjectService(projectRepo, arenaRoot, {
+      onProjectCreated: (project) => {
+        channelService.createSystemChannels(project.id);
+      },
+    });
+    setProjectServiceAccessor(() => projectService);
+    setChannelServiceAccessor(() => channelService);
+    setMeetingServiceAccessor(() => meetingService);
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {
