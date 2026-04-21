@@ -1155,20 +1155,20 @@ interface SsmContext {
 
 구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
 
-- [ ] §7.10 신규 theme token 2개 (`messengerHeaderPolicy`, `badgeRadius`) — 산출물: `docs/Rolestra_sample/theme-tokens.jsx` 확장 + `src/renderer/theme/theme-tokens.ts`(자동생성) + `src/renderer/styles/tokens.css`(자동생성)
-- [ ] Renderer hooks 5종 + active-channel-store (project-scoped persist) — 산출물: `src/renderer/hooks/{use-channels,use-dms,use-channel-messages,use-active-channel,use-channel-members}.ts` + `src/renderer/stores/active-channel-store.ts`
-- [ ] App view router (dashboard ↔ messenger) + MessengerPage skeleton — 산출물: `src/renderer/App.tsx` 수정 + `src/renderer/features/messenger/MessengerPage.tsx`
-- [ ] §7.4 ChannelRail — 프로젝트 시스템 + 사용자 채널 + DM 섹션 (themeKey 3-way 글리프/radius/clip 분기) — 산출물: `src/renderer/features/messenger/{ChannelRail,ChannelRow}.tsx`
-- [ ] §7.4 Thread + ChannelHeader (채널 kind별 UI 분기 + 회의 시작 버튼 메타) — 산출물: `src/renderer/features/messenger/{Thread,ChannelHeader}.tsx`
-- [ ] §7.4 Message + SystemMessage (themeKey 3-way — retro avatar/헤더 생략, mono-prefix 정책) — 산출물: `src/renderer/features/messenger/{Message,SystemMessage}.tsx`
-- [ ] §7.4 MeetingBanner + ApprovalBlock + StartMeetingModal (retro 별도 JSX, 영문 라벨 한국어화) — 산출물: `src/renderer/features/messenger/{MeetingBanner,ApprovalBlock}.tsx` + `src/renderer/features/meetings/StartMeetingModal.tsx`
-- [ ] §7.4 Composer (themeKey 분기 — `panelRadius` 재활용 + glyph 3-way + `message:append` wire) — 산출물: `src/renderer/features/messenger/Composer.tsx`
-- [ ] §7.4 MemberPanel + SsmBox + 공통 small primitive (DateSeparator / TypingIndicator placeholder / VoteTally) — 산출물: `src/renderer/features/messenger/{MemberPanel,MemberRow,SsmBox,TypingIndicator,DateSeparator,VoteTally}.tsx`
-- [ ] §7.4 채널 CRUD 모달 3종 (create/rename/delete — Radix Dialog 재사용, 시스템 채널 비활성) — 산출물: `src/renderer/features/channels/{ChannelCreateModal,ChannelRenameDialog,ChannelDeleteConfirm}.tsx`
-- [ ] §7.4 시스템 채널 자동 생성 wire-up (ProjectService.create/linkExternal/importFolder → ChannelService.createSystemChannels) + DM 시작 UX 최소 surface — 산출물: `src/main/projects/project-service.ts` 수정 + `src/renderer/features/members/StartDmButton.tsx`
-- [ ] i18n populate `messenger.*` (영문 라벨 한국어 통일, retro 터미널 스타일 한국어 `$ 채널` 등) + i18next-parser `keepRemoved` 확장 — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `i18next-parser.config.js`
-- [ ] Playwright Electron E2E "채널 생성 → 메시지 전송 → 렌더" — 산출물: `e2e/messenger-flow.spec.ts` (WSL 제약 시 DONE_WITH_CONCERNS 허용, Windows/native 또는 R10 CI matrix에서 실 런)
-- [ ] typecheck/lint/test/i18n:check/theme:check/build exit 0 + R5 신규 테스트 green + done-checklist 작성 — 산출물: `docs/superpowers/specs/r5-done-checklist.md`
+- [x] §7.10 신규 theme token 2개 (`messengerHeaderPolicy`, `badgeRadius`) — 산출물: `docs/Rolestra_sample/theme-tokens.jsx` 확장 + `src/renderer/theme/theme-tokens.ts`(자동생성) + `src/renderer/styles/tokens.css`(자동생성)
+- [x] Renderer hooks 5종 + active-channel-store (project-scoped persist) — 산출물: `src/renderer/hooks/{use-channels,use-dms,use-channel-messages,use-active-channel,use-channel-members}.ts` + `src/renderer/stores/active-channel-store.ts`
+- [x] App view router (dashboard ↔ messenger) + MessengerPage skeleton — 산출물: `src/renderer/App.tsx` 수정 + `src/renderer/features/messenger/MessengerPage.tsx`
+- [x] §7.4 ChannelRail — 프로젝트 시스템 + 사용자 채널 + DM 섹션 (themeKey 3-way 글리프/radius/clip 분기) — 산출물: `src/renderer/features/messenger/{ChannelRail,ChannelRow}.tsx`
+- [x] §7.4 Thread + ChannelHeader (채널 kind별 UI 분기 + 회의 시작 버튼 메타) — 산출물: `src/renderer/features/messenger/{Thread,ChannelHeader}.tsx`
+- [x] §7.4 Message + SystemMessage (themeKey 3-way — retro avatar/헤더 생략, mono-prefix 정책) — 산출물: `src/renderer/features/messenger/{Message,SystemMessage}.tsx`
+- [x] §7.4 MeetingBanner + ApprovalBlock + StartMeetingModal (retro 별도 JSX, 영문 라벨 한국어화) — 산출물: `src/renderer/features/messenger/{MeetingBanner,ApprovalBlock}.tsx` + `src/renderer/features/meetings/StartMeetingModal.tsx`
+- [x] §7.4 Composer (themeKey 분기 — `panelRadius` 재활용 + glyph 3-way + `message:append` wire) — 산출물: `src/renderer/features/messenger/Composer.tsx`
+- [x] §7.4 MemberPanel + SsmBox + 공통 small primitive (DateSeparator / TypingIndicator placeholder / VoteTally) — 산출물: `src/renderer/features/messenger/{MemberPanel,MemberRow,SsmBox,TypingIndicator,DateSeparator,VoteTally}.tsx`
+- [x] §7.4 채널 CRUD 모달 3종 (create/rename/delete — Radix Dialog 재사용, 시스템 채널 비활성) — 산출물: `src/renderer/features/channels/{ChannelCreateModal,ChannelRenameDialog,ChannelDeleteConfirm}.tsx`
+- [x] §7.4 시스템 채널 자동 생성 wire-up (ProjectService.create/linkExternal/importFolder → ChannelService.createSystemChannels) + DM 시작 UX 최소 surface — 산출물: `src/main/projects/project-service.ts` 수정 + `src/renderer/features/members/StartDmButton.tsx`
+- [x] i18n populate `messenger.*` (영문 라벨 한국어 통일, retro 터미널 스타일 한국어 `$ 채널` 등) + i18next-parser `keepRemoved` 확장 — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `i18next-parser.config.js`
+- [x] Playwright Electron E2E "채널 생성 → 메시지 전송 → 렌더" — 산출물: `e2e/messenger-flow.spec.ts` (**WSL 런타임 제약으로 로컬 부팅은 DONE_WITH_CONCERNS — Windows/native 또는 R10 OS matrix CI에서 실 런; R4 Task12와 동일 정책**)
+- [x] typecheck/lint/test/i18n:check/theme:check/build exit 0 + R5 신규 테스트 green + done-checklist 작성 — 산출물: `docs/superpowers/specs/r5-done-checklist.md` (Playwright 로컬 pass는 위 항목과 동일 이연)
 
 **scope 경계 (R5에서 하지 않는 것, R6+ 이연):**
 - AI 발화 렌더링(SSM 턴 → 메시지) — R6
