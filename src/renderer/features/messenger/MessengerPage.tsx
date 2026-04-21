@@ -17,6 +17,7 @@ import { type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ChannelRail } from './ChannelRail';
+import { Thread } from './Thread';
 import { useActiveProject } from '../../hooks/use-active-project';
 
 export interface MessengerPageProps {
@@ -63,7 +64,7 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
         aria-label={t('messenger.pane.thread')}
         className="flex flex-col min-h-0 bg-canvas"
       >
-        {/* Task 5/6/7/8: <Thread /> */}
+        <Thread projectId={activeProjectId} />
       </main>
 
       <aside

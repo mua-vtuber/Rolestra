@@ -67,6 +67,17 @@
     }
   },
   "messenger": {
+    "channelHeader": {
+      "delete": "삭제",
+      "deleteDisabledSystem": "시스템 채널은 삭제할 수 없습니다",
+      "memberCount_one": "{{count}}명 참여",
+      "memberCount_other": "{{count}}명 참여",
+      "readOnlyBadge": "읽기 전용",
+      "rename": "이름 변경",
+      "renameDisabledSystem": "시스템 채널은 이름을 바꿀 수 없습니다",
+      "startMeeting": "회의 시작",
+      "startMeetingDisabledBusy": "이미 회의 중"
+    },
     "channelRail": {
       "createChannel": "새 채널",
       "dmEmpty": "DM이 없습니다",
@@ -94,12 +105,17 @@
       "userEmpty": "아직 채널이 없습니다"
     },
     "emptyState": {
+      "noActiveChannel": "왼쪽에서 채널을 선택하세요.",
       "noActiveProject": "메신저를 시작하려면 왼쪽에서 프로젝트를 선택하세요."
     },
     "pane": {
       "channelRail": "채널 목록",
       "memberPanel": "참여자 및 합의 상태",
       "thread": "메시지 스레드"
+    },
+    "thread": {
+      "composerPlaceholder": "Task 8 예정 — 메시지 입력창",
+      "messageListPlaceholder": "Task 6 예정 — 메시지 스트림"
     }
   },
   "project": {

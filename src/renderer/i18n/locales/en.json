@@ -67,6 +67,17 @@
     }
   },
   "messenger": {
+    "channelHeader": {
+      "delete": "Delete",
+      "deleteDisabledSystem": "System channels cannot be deleted",
+      "memberCount_one": "{{count}} participant",
+      "memberCount_other": "{{count}} participants",
+      "readOnlyBadge": "Read-only",
+      "rename": "Rename",
+      "renameDisabledSystem": "System channels cannot be renamed",
+      "startMeeting": "Start meeting",
+      "startMeetingDisabledBusy": "A meeting is already active"
+    },
     "channelRail": {
       "createChannel": "New channel",
       "dmEmpty": "No direct messages",
@@ -94,12 +105,17 @@
       "userEmpty": "No channels yet"
     },
     "emptyState": {
+      "noActiveChannel": "Select a channel on the left.",
       "noActiveProject": "Select a project on the left to open the messenger."
     },
     "pane": {
       "channelRail": "Channel list",
       "memberPanel": "Participants and consensus",
       "thread": "Message thread"
+    },
+    "thread": {
+      "composerPlaceholder": "Task 8 pending — composer placeholder",
+      "messageListPlaceholder": "Task 6 pending — message stream placeholder"
     }
   },
   "project": {

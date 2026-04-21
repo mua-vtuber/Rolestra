@@ -38,6 +38,10 @@ function stubEmptyChannelBridge(): void {
         return { channels: [] };
       case 'member:list':
         return { members: [] };
+      case 'meeting:list-active':
+        return { meetings: [] };
+      case 'message:list-by-channel':
+        return { messages: [] };
       default:
         throw new Error(`no mock for channel ${channel}`);
     }
