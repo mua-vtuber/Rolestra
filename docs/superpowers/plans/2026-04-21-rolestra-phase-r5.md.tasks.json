@@ -83,12 +83,12 @@
     {
       "id": 8,
       "subject": "Task 8: Composer (themeKey 분기 + message:append wire)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5
       ],
       "description": "**Goal:** 메시지 입력창. D5 결정 — `panelRadius` 재활용 (warm=12/tactical=0/retro=0). glyph 3-way (`✎`/`✎`/`>`) + placeholder font 3-way. readOnly 지원. Enter=전송, Shift+Enter=개행. 전송 실패 시 입력 유지 + inline 에러.\n\n**Files:** src/renderer/features/messenger/Composer.tsx + __tests__\n\n**Verify:** `npm run test -- Composer`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/Composer.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"3 테마 DOM 단언 (glyph/panelRadius/font)\",\"readOnly 배지 + 입력 비활성\",\"Enter 전송, Shift+Enter 개행\",\"전송 실패 시 입력 유지 + 에러 표면\",\"hex literal 금지 통과\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T19:50:00.000Z"
     },
     {
       "id": 9,
