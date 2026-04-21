@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessengerPage } from '../MessengerPage';
 import { i18next } from '../../../i18n';
@@ -19,13 +19,34 @@ import {
   ACTIVE_PROJECT_STORAGE_KEY,
   useActiveProjectStore,
 } from '../../../stores/active-project-store';
+import {
+  ACTIVE_CHANNEL_STORAGE_KEY,
+  useActiveChannelStore,
+} from '../../../stores/active-channel-store';
 
 function resetStore(): void {
   useActiveProjectStore.setState({ activeProjectId: null });
   localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+  useActiveChannelStore.setState({ channelIdByProject: {} });
+  localStorage.removeItem(ACTIVE_CHANNEL_STORAGE_KEY);
+}
+
+function stubEmptyChannelBridge(): void {
+  const invoke = vi.fn(async (channel: string) => {
+    switch (channel) {
+      case 'channel:list':
+        return { channels: [] };
+      case 'member:list':
+        return { members: [] };
+      default:
+        throw new Error(`no mock for channel ${channel}`);
+    }
+  });
+  vi.stubGlobal('arena', { platform: 'linux', invoke });
 }
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   resetStore();
   void i18next.changeLanguage('ko');
 });
@@ -33,6 +54,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   resetStore();
+  vi.unstubAllGlobals();
 });
 
 describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
@@ -51,6 +73,7 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
   });
 
   it('renders all 3 panes when an active project is selected', () => {
+    stubEmptyChannelBridge();
     useActiveProjectStore.setState({ activeProjectId: 'p-a' });
 
     render(<MessengerPage />);
@@ -62,6 +85,8 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     expect(screen.getByTestId('messenger-thread')).toBeTruthy();
     expect(screen.getByTestId('messenger-member-panel')).toBeTruthy();
     expect(screen.queryByTestId('messenger-empty-state')).toBeNull();
+    // Task 4: ChannelRail 이 실제로 마운트되어야 한다.
+    expect(screen.getByTestId('channel-rail')).toBeTruthy();
   });
 });
 

@@ -67,6 +67,32 @@
     }
   },
   "messenger": {
+    "channelRail": {
+      "createChannel": "New channel",
+      "dmEmpty": "No direct messages",
+      "error": "Could not load channels.",
+      "loading": "Loading channels…",
+      "sectionAria": {
+        "dm": "Direct message list",
+        "system": "System channel list",
+        "user": "User channel list"
+      },
+      "sectionTitle": {
+        "retro": {
+          "channels": "$ Channels",
+          "dm": "$ DM"
+        },
+        "tactical": {
+          "channels": "Channels",
+          "dm": "DM"
+        },
+        "warm": {
+          "channels": "Channels",
+          "dm": "DM"
+        }
+      },
+      "userEmpty": "No channels yet"
+    },
     "emptyState": {
       "noActiveProject": "Select a project on the left to open the messenger."
     },

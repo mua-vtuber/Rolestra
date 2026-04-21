@@ -16,6 +16,7 @@ import { clsx } from 'clsx';
 import { type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { ChannelRail } from './ChannelRail';
 import { useActiveProject } from '../../hooks/use-active-project';
 
 export interface MessengerPageProps {
@@ -52,9 +53,9 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
       <aside
         data-testid="messenger-channel-rail"
         aria-label={t('messenger.pane.channelRail')}
-        className="border-r border-border bg-panel-bg min-h-0 overflow-hidden"
+        className="border-r border-border bg-project-bg min-h-0 overflow-hidden"
       >
-        {/* Task 4: <ChannelRail projectId={activeProjectId} /> */}
+        <ChannelRail projectId={activeProjectId} />
       </aside>
 
       <main
