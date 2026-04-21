@@ -366,3 +366,151 @@ describe('StreamBridge — direct emit helpers', () => {
     warn.mockRestore();
   });
 });
+
+describe('StreamBridge — R6 meeting turn events', () => {
+  let bridge: StreamBridge;
+  let received: StreamEvent[];
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    bridge = new StreamBridge();
+    received = [];
+    bridge.onOutbound((e) => received.push(e));
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it('emitMeetingTurnStart round-trips', () => {
+    bridge.emitMeetingTurnStart({
+      meetingId: 'mt-1',
+      channelId: 'c1',
+      speakerId: 'ai-1',
+      messageId: 'msg-1',
+    });
+
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('stream:meeting-turn-start');
+    const payload = (
+      received[0] as Extract<StreamEvent, { type: 'stream:meeting-turn-start' }>
+    ).payload;
+    expect(payload.speakerId).toBe('ai-1');
+  });
+
+  it('emitMeetingTurnToken carries cumulative + sequence', () => {
+    bridge.emitMeetingTurnToken({
+      meetingId: 'mt-1',
+      channelId: 'c1',
+      messageId: 'msg-1',
+      token: 'Hell',
+      cumulative: 'Hell',
+      sequence: 0,
+    });
+    bridge.emitMeetingTurnToken({
+      meetingId: 'mt-1',
+      channelId: 'c1',
+      messageId: 'msg-1',
+      token: 'o',
+      cumulative: 'Hello',
+      sequence: 1,
+    });
+
+    expect(received).toHaveLength(2);
+    const second = received[1] as Extract<
+      StreamEvent,
+      { type: 'stream:meeting-turn-token' }
+    >;
+    expect(second.payload.cumulative).toBe('Hello');
+    expect(second.payload.sequence).toBe(1);
+  });
+
+  it('emitMeetingTurnDone carries totalTokens', () => {
+    bridge.emitMeetingTurnDone({
+      meetingId: 'mt-1',
+      channelId: 'c1',
+      messageId: 'msg-1',
+      totalTokens: 42,
+    });
+
+    expect(received).toHaveLength(1);
+    const payload = (
+      received[0] as Extract<StreamEvent, { type: 'stream:meeting-turn-done' }>
+    ).payload;
+    expect(payload.totalTokens).toBe(42);
+  });
+
+  it('emitMeetingError carries fatal flag', () => {
+    bridge.emitMeetingError({
+      meetingId: 'mt-1',
+      channelId: 'c1',
+      error: 'provider timeout',
+      fatal: true,
+    });
+
+    expect(received).toHaveLength(1);
+    const payload = (
+      received[0] as Extract<StreamEvent, { type: 'stream:meeting-error' }>
+    ).payload;
+    expect(payload.fatal).toBe(true);
+    expect(payload.error).toBe('provider timeout');
+  });
+
+  it('drops meeting turn-token with missing sequence field', () => {
+    bridge.emit({
+      type: 'stream:meeting-turn-token',
+      payload: {
+        meetingId: 'mt-1',
+        channelId: 'c1',
+        messageId: 'msg-1',
+        token: 'x',
+        cumulative: 'x',
+        // sequence missing
+      },
+    } as never);
+
+    expect(received).toHaveLength(0);
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('drops meeting error with non-boolean fatal', () => {
+    bridge.emit({
+      type: 'stream:meeting-error',
+      payload: {
+        meetingId: 'mt-1',
+        channelId: 'c1',
+        error: 'x',
+        fatal: 'yes',
+      },
+    } as never);
+
+    expect(received).toHaveLength(0);
+  });
+
+  it('turn event cooldown is scoped per-type', () => {
+    vi.useFakeTimers();
+    try {
+      for (let i = 0; i < STREAM_FAILURE_THRESHOLD; i++) {
+        bridge.emit({
+          type: 'stream:meeting-turn-token',
+          payload: {},
+        } as never);
+      }
+      expect(bridge.isCoolingDown('stream:meeting-turn-token')).toBe(true);
+      expect(bridge.isCoolingDown('stream:meeting-turn-start')).toBe(false);
+
+      // Other turn event types still flow.
+      bridge.emitMeetingTurnStart({
+        meetingId: 'mt-1',
+        channelId: 'c1',
+        speakerId: 'ai-1',
+        messageId: 'msg-1',
+      });
+      expect(received).toHaveLength(1);
+      expect(received[0].type).toBe('stream:meeting-turn-start');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

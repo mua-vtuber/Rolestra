@@ -2,6 +2,10 @@ import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 import type { IpcChannelMap, IpcChannel, IpcMeta } from '../shared/ipc-types';
 import { CURRENT_SCHEMA_VERSION } from '../shared/ipc-types';
 import type { StreamEventMap, StreamEventName } from '../shared/stream-types';
+import type {
+  StreamEventType,
+  StreamV3PayloadOf,
+} from '../shared/stream-events';
 
 /**
  * Generate a simple unique ID for request tracking.
@@ -59,6 +63,28 @@ function typedOn<E extends StreamEventName>(
   };
 }
 
+/**
+ * R6: type-safe listener for v3 stream-bridge push events. Payload shape
+ * is narrowed by `StreamV3PayloadOf<T>` so subscribers never cast. Main
+ * sends via `webContents.send(event.type, event.payload)` inside the
+ * StreamBridge outbound hook.
+ */
+function typedOnStream<T extends StreamEventType>(
+  type: T,
+  callback: (payload: StreamV3PayloadOf<T>) => void,
+): () => void {
+  const listener = (
+    _event: IpcRendererEvent,
+    payload: StreamV3PayloadOf<T>,
+  ): void => {
+    callback(payload);
+  };
+  ipcRenderer.on(type, listener);
+  return () => {
+    ipcRenderer.removeListener(type, listener);
+  };
+}
+
 /** The API surface exposed to the renderer via contextBridge. */
 contextBridge.exposeInMainWorld('arena', {
   platform: process.platform,
@@ -70,9 +96,19 @@ contextBridge.exposeInMainWorld('arena', {
   invoke: typedInvoke,
 
   /**
-   * Type-safe event listener for push events from Main process.
+   * Type-safe event listener for v2 conversation/token push events.
    * Usage: window.arena.on('stream:token', (data) => { ... })
    * Returns an unsubscribe function.
+   *
+   * NOTE: `on` is retained for the v2 orchestrator stream (stream:token /
+   * stream:message-start / …). R6+ meeting surfaces use `onStream` below.
    */
   on: typedOn,
+
+  /**
+   * R6: type-safe listener for v3 stream-bridge push events.
+   * Usage: window.arena.onStream('stream:meeting-turn-token', (payload) => { ... })
+   * Returns an unsubscribe function.
+   */
+  onStream: typedOnStream,
 });

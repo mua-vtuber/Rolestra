@@ -6,6 +6,18 @@
  * this file defines the higher-level workspace events (channel messages,
  * member status, approvals, projects, meetings, queue, notifications) that
  * power the persistent chat-app UI.
+ *
+ * R6 addition (meeting turn stream):
+ *   - `stream:meeting-turn-start`  — new AI turn begins; a new Message is
+ *                                    being created with the given messageId.
+ *   - `stream:meeting-turn-token`  — an incremental token arrives. `cumulative`
+ *                                    carries the running buffer so late
+ *                                    subscribers can render immediately.
+ *   - `stream:meeting-turn-done`   — the turn finished; the renderer should
+ *                                    refetch the persisted Message (DB has
+ *                                    the final row) and drop the live buffer.
+ *   - `stream:meeting-error`       — fatal or recoverable error during a
+ *                                    meeting. Renderer shows in MeetingBanner.
  */
 
 import type { Message } from './message-types';
@@ -58,6 +70,56 @@ export interface StreamNotificationPayload {
   channelId: string | null;
 }
 
+/**
+ * R6: AI turn starts in a meeting. `messageId` is the id the Message row
+ * will carry once persisted — renderers use it to correlate live tokens
+ * with the eventual DB row.
+ */
+export interface StreamMeetingTurnStartPayload {
+  meetingId: string;
+  channelId: string;
+  speakerId: string;
+  messageId: string;
+}
+
+/**
+ * R6: Incremental token for an ongoing turn. `cumulative` is the running
+ * buffer — a late subscriber can render the full partial message without
+ * having to replay prior tokens. `sequence` is a monotonically increasing
+ * counter so receivers can detect out-of-order delivery.
+ */
+export interface StreamMeetingTurnTokenPayload {
+  meetingId: string;
+  channelId: string;
+  messageId: string;
+  token: string;
+  cumulative: string;
+  sequence: number;
+}
+
+/**
+ * R6: AI turn completed — the final Message row is persisted in the DB
+ * under `messageId`. Renderers drop the live buffer and refetch via
+ * `message:list-by-channel`.
+ */
+export interface StreamMeetingTurnDonePayload {
+  meetingId: string;
+  channelId: string;
+  messageId: string;
+  totalTokens: number;
+}
+
+/**
+ * R6: Error raised during a meeting. `fatal=true` means the meeting is
+ * finished with outcome='failed'; `fatal=false` is a recoverable retry.
+ */
+export interface StreamMeetingErrorPayload {
+  meetingId: string;
+  channelId: string;
+  error: string;
+  fatal: boolean;
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -69,6 +131,19 @@ export type StreamEvent =
       type: 'stream:meeting-state-changed';
       payload: StreamMeetingStateChangedPayload;
     }
+  | {
+      type: 'stream:meeting-turn-start';
+      payload: StreamMeetingTurnStartPayload;
+    }
+  | {
+      type: 'stream:meeting-turn-token';
+      payload: StreamMeetingTurnTokenPayload;
+    }
+  | {
+      type: 'stream:meeting-turn-done';
+      payload: StreamMeetingTurnDonePayload;
+    }
+  | { type: 'stream:meeting-error'; payload: StreamMeetingErrorPayload }
   | { type: 'stream:queue-progress'; payload: StreamQueueProgressPayload }
   | { type: 'stream:notification'; payload: StreamNotificationPayload };
 
@@ -76,3 +151,17 @@ export type StreamEventType = StreamEvent['type'];
 
 /** Narrow helper for runtime dispatch tables. */
 export type StreamEventOf<T extends StreamEventType> = Extract<StreamEvent, { type: T }>;
+
+/**
+ * Mapping from v3 stream event type → payload shape. Used by preload
+ * `onStream<T>()` so renderer subscribers get the correct payload type
+ * without writing the extraction-type by hand each time.
+ *
+ * NOTE: this is separate from v2 `StreamEventMap` in `stream-types.ts`
+ * — v2 streams flat fields, v3 streams `{ type, payload }` via StreamBridge.
+ * R11 will retire v2 entirely and this can merge.
+ */
+export type StreamV3PayloadOf<T extends StreamEventType> = Extract<
+  StreamEvent,
+  { type: T }
+>['payload'];

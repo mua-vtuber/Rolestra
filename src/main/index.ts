@@ -33,6 +33,8 @@ import {
   setChannelServiceAccessor,
   setMeetingServiceAccessor,
 } from './ipc/handlers/channel-handler';
+import { StreamBridge } from './streams/stream-bridge';
+import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -149,6 +151,27 @@ app.whenReady().then(async () => {
     setProjectServiceAccessor(() => projectService);
     setChannelServiceAccessor(() => channelService);
     setMeetingServiceAccessor(() => meetingService);
+
+    // R6-Task1: StreamBridge — central Main → Renderer v3 push hub.
+    // `onOutbound` is wired to every browser window's webContents; v3
+    // events land on the renderer as `ipcRenderer.on(event.type, payload)`
+    // matching preload's `typedOnStream`. Service connect + per-meeting
+    // side effects land in R6-Task4 when MeetingOrchestrator boots.
+    const streamBridge = new StreamBridge();
+    streamBridge.connect({
+      messages: messageService,
+      // approvals/queue connect in R7/R9 respectively.
+    });
+    streamBridge.onOutbound((event) => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (win.webContents && !win.webContents.isDestroyed()) {
+          win.webContents.send(event.type, event.payload);
+        }
+      }
+    });
+    // Exported for MeetingOrchestrator DI (R6-Task4).
+    // For now the bridge is reachable via `getStreamBridge()` accessor.
+    setStreamBridgeInstance(streamBridge);
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {

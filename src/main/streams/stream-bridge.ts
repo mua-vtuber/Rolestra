@@ -48,6 +48,10 @@ import type {
   StreamApprovalDecidedPayload,
   StreamProjectUpdatedPayload,
   StreamMeetingStateChangedPayload,
+  StreamMeetingTurnStartPayload,
+  StreamMeetingTurnTokenPayload,
+  StreamMeetingTurnDonePayload,
+  StreamMeetingErrorPayload,
   StreamQueueProgressPayload,
   StreamMemberStatusPayload,
   StreamNotificationPayload,
@@ -76,6 +80,10 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:approval-decided',
   'stream:project-updated',
   'stream:meeting-state-changed',
+  'stream:meeting-turn-start',
+  'stream:meeting-turn-token',
+  'stream:meeting-turn-done',
+  'stream:meeting-error',
   'stream:queue-progress',
   'stream:notification',
 ]);
@@ -239,6 +247,22 @@ export class StreamBridge {
     this.emit({ type: 'stream:meeting-state-changed', payload });
   }
 
+  emitMeetingTurnStart(payload: StreamMeetingTurnStartPayload): void {
+    this.emit({ type: 'stream:meeting-turn-start', payload });
+  }
+
+  emitMeetingTurnToken(payload: StreamMeetingTurnTokenPayload): void {
+    this.emit({ type: 'stream:meeting-turn-token', payload });
+  }
+
+  emitMeetingTurnDone(payload: StreamMeetingTurnDonePayload): void {
+    this.emit({ type: 'stream:meeting-turn-done', payload });
+  }
+
+  emitMeetingError(payload: StreamMeetingErrorPayload): void {
+    this.emit({ type: 'stream:meeting-error', payload });
+  }
+
   emitQueueProgress(payload: StreamQueueProgressPayload): void {
     this.emit({ type: 'stream:queue-progress', payload });
   }
@@ -332,6 +356,36 @@ export class StreamBridge {
           typeof payload.meetingId === 'string' &&
           typeof payload.channelId === 'string' &&
           typeof payload.state === 'string'
+        );
+      case 'stream:meeting-turn-start':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          typeof payload.speakerId === 'string' &&
+          typeof payload.messageId === 'string'
+        );
+      case 'stream:meeting-turn-token':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          typeof payload.messageId === 'string' &&
+          typeof payload.token === 'string' &&
+          typeof payload.cumulative === 'string' &&
+          typeof payload.sequence === 'number'
+        );
+      case 'stream:meeting-turn-done':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          typeof payload.messageId === 'string' &&
+          typeof payload.totalTokens === 'number'
+        );
+      case 'stream:meeting-error':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          typeof payload.error === 'string' &&
+          typeof payload.fatal === 'boolean'
         );
       case 'stream:queue-progress':
         return this.isObject(payload.item);
