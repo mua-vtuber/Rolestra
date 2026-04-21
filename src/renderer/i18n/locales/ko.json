@@ -84,6 +84,43 @@
       "metaElapsed": "경과 {{minutes}}분",
       "metaSsm": "SSM {{cur}}/{{total}}"
     },
+    "channelCreate": {
+      "cancel": "취소",
+      "errors": {
+        "duplicateName": "같은 이름의 채널이 이미 있습니다.",
+        "generic": "채널 생성 중 오류가 발생했습니다.",
+        "memberFk": "선택한 참여자가 프로젝트 멤버가 아닙니다.",
+        "nameRequired": "채널 이름을 입력하세요.",
+        "nameTooLong": "채널 이름은 {{max}}자 이하여야 합니다.",
+        "nameTooShort": "채널 이름은 {{min}}자 이상이어야 합니다."
+      },
+      "members": {
+        "empty": "등록된 직원이 없습니다.",
+        "error": "참여자 목록을 불러오지 못했습니다.",
+        "label": "참여 멤버",
+        "loading": "참여자 목록을 불러오는 중…"
+      },
+      "name": "채널 이름",
+      "nameHint": "{{min}}~{{max}}자 사이.",
+      "namePlaceholder": "예: 기획",
+      "submit": "만들기",
+      "title": "새 채널 만들기"
+    },
+    "channelDelete": {
+      "body": "\"{{name}}\" 채널을 삭제하시겠습니까?",
+      "bodyDm": "\"{{name}}\" 대화를 닫으시겠습니까?",
+      "cancel": "취소",
+      "errors": {
+        "generic": "채널을 삭제하지 못했습니다.",
+        "notFound": "채널을 찾을 수 없습니다.",
+        "systemProtected": "시스템 채널은 삭제할 수 없습니다."
+      },
+      "irreversibleHint": "메시지는 영구적으로 사라집니다.",
+      "submit": "삭제",
+      "submitDm": "닫기",
+      "title": "채널 삭제",
+      "titleDm": "대화 닫기"
+    },
     "channelHeader": {
       "delete": "삭제",
       "deleteDisabledSystem": "시스템 채널은 삭제할 수 없습니다",
@@ -121,6 +158,23 @@
       },
       "userEmpty": "아직 채널이 없습니다"
     },
+    "channelRename": {
+      "cancel": "취소",
+      "errors": {
+        "duplicateName": "같은 이름의 채널이 이미 있습니다.",
+        "generic": "채널 이름을 바꾸지 못했습니다.",
+        "nameRequired": "채널 이름을 입력하세요.",
+        "nameTooLong": "채널 이름은 {{max}}자 이하여야 합니다.",
+        "nameTooShort": "채널 이름은 {{min}}자 이상이어야 합니다.",
+        "notFound": "채널을 찾을 수 없습니다.",
+        "systemProtected": "시스템 채널은 이름을 바꿀 수 없습니다."
+      },
+      "name": "새 이름",
+      "nameHint": "{{min}}~{{max}}자 사이.",
+      "namePlaceholder": "새 채널 이름",
+      "submit": "저장",
+      "title": "채널 이름 바꾸기"
+    },
     "composer": {
       "errorSend": "메시지 전송 실패: {{reason}}",
       "hintCommand": "⌘ 명령",
@@ -151,6 +205,14 @@
     "ssmBox": {
       "description": "\"{{topic}}\" 회의가 진행 중입니다.",
       "empty": "진행 중인 회의가 없습니다."
+    },
+    "startDm": {
+      "ariaLabel": "{{name}}와(과) 대화 시작",
+      "errors": {
+        "duplicateUnresolved": "이미 DM 이 존재하지만 목록에서 찾지 못했습니다.",
+        "generic": "DM 을 시작하지 못했습니다."
+      },
+      "label": "연락해보기"
     },
     "startMeeting": {
       "cancel": "취소",

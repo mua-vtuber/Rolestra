@@ -73,6 +73,15 @@ export default {
     // it in the catalogue lets the regression test use a real key instead
     // of a hardcoded literal.
     /^translation:app(\..+)?$/,
+    // R5-Task10 channel CRUD modals use a `mapErrorToI18nKey(reason)` helper
+    // that returns a key *variable*, which the parser cannot statically resolve.
+    // The keys themselves are literal returns so they are safe to keep in sync
+    // with the code — adding them under keepRemoved preserves the catalogue.
+    /^translation:messenger\.channelCreate\.errors(\..+)?$/,
+    /^translation:messenger\.channelRename\.errors(\..+)?$/,
+    /^translation:messenger\.channelDelete\.errors(\..+)?$/,
+    // R5-Task11 StartDmButton `mapErrorToI18nKey` — same variable-key pattern.
+    /^translation:messenger\.startDm\.errors(\..+)?$/,
   ],
   failOnWarnings: false,
 };

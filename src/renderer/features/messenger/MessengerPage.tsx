@@ -1,25 +1,42 @@
 /**
- * MessengerPage — R5 메신저 뷰 shell (Task 3).
+ * MessengerPage — R5 메신저 뷰 shell.
  *
- * 이 스켈레톤은 실제 훅·컴포넌트 마운트 이전 구조만 잡는다. Task 4 이후
- * 좌/중/우 3 pane이 각각 `ChannelRail` / `Thread` / `MemberPanel`로 대체된다.
- * Empty state: active project가 없으면 3 pane을 내리고 안내 문구만 보여준다.
+ * 3 pane 레이아웃(ChannelRail / Thread / MemberPanel) + Task 10 채널 CRUD
+ * 모달 3종(ChannelCreateModal / ChannelRenameDialog / ChannelDeleteConfirm)
+ * 호스팅.
+ *
+ * 모달 소유권은 MessengerPage 에 둔다:
+ * - ChannelRail `+ 새 채널` 버튼 → create modal 오픈
+ * - Thread 의 ChannelHeader rename / delete 버튼 → 해당 모달을 `targetChannel`
+ *   과 함께 오픈 (channelId 만 받아 MessengerPage 가 자체 `useChannels` 인스턴스로
+ *   resolve)
+ * - CRUD 성공 시 `notifyChannelsChanged()` 를 발화해 ChannelRail/Thread/내부
+ *   인스턴스 전원이 refetch 한다(R10 shared cache 이전 단계).
+ * - Create 성공 시 새 채널을 active 로 전환, Delete 성공 시 active 였으면 clear.
+ *
+ * Empty state: active project 가 없으면 3 pane 을 내리고 안내만 보여준다.
  *
  * 디자인 규약:
  * - hex literal 0 — 색/폰트는 전부 token CSS variable 경유.
- * - 3 pane column grid: 좌 16rem fixed / 가운데 1fr / 우 18rem fixed. Thread
- *   영역만 flex-grow. 테마별 column 폭은 Task 4+에서 조정(prep §2.1).
+ * - 3 pane column grid: 좌 16rem fixed / 가운데 1fr / 우 18rem fixed.
  * - `data-testid`: `messenger-page`, `messenger-empty-state`, `messenger-channel-rail`,
  *   `messenger-thread`, `messenger-member-panel`.
  */
 import { clsx } from 'clsx';
-import { type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ChannelRail } from './ChannelRail';
 import { MemberPanel } from './MemberPanel';
 import { Thread } from './Thread';
+import { ChannelCreateModal } from '../channels/ChannelCreateModal';
+import { ChannelDeleteConfirm } from '../channels/ChannelDeleteConfirm';
+import { ChannelRenameDialog } from '../channels/ChannelRenameDialog';
+import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
 import { useActiveProject } from '../../hooks/use-active-project';
+import { useChannels } from '../../hooks/use-channels';
+import { useActiveChannelStore } from '../../stores/active-channel-store';
+import type { Channel } from '../../../shared/channel-types';
 
 export interface MessengerPageProps {
   className?: string;
@@ -44,6 +61,88 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
   }
 
   return (
+    <MessengerPageActive
+      key={activeProjectId}
+      projectId={activeProjectId}
+      className={className}
+    />
+  );
+}
+
+/**
+ * projectId 가 확실히 non-null 인 시점부터 동작하는 inner shell. 모달 state
+ * 와 `useChannels` host 인스턴스를 소유한다. activeProjectId 가 바뀌면 부모가
+ * `key` 로 remount 시켜 modal state 를 함께 리셋한다.
+ */
+function MessengerPageActive({
+  projectId,
+  className,
+}: {
+  projectId: string;
+  className?: string;
+}): ReactElement {
+  const { t } = useTranslation();
+  const { channels } = useChannels(projectId);
+  const setActiveChannelId = useActiveChannelStore((s) => s.setActiveChannelId);
+
+  // Modal state ────────────────────────────────────────────────
+  const [createOpen, setCreateOpen] = useState(false);
+  const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  const renameTarget = useMemo<Channel | null>(
+    () =>
+      renameTargetId === null || channels === null
+        ? null
+        : channels.find((c) => c.id === renameTargetId) ?? null,
+    [renameTargetId, channels],
+  );
+  const deleteTarget = useMemo<Channel | null>(
+    () =>
+      deleteTargetId === null || channels === null
+        ? null
+        : channels.find((c) => c.id === deleteTargetId) ?? null,
+    [deleteTargetId, channels],
+  );
+
+  // Success callbacks ──────────────────────────────────────────
+  const handleCreated = useCallback(
+    (channel: Channel): void => {
+      setActiveChannelId(projectId, channel.id);
+      void notifyChannelsChanged();
+    },
+    [projectId, setActiveChannelId],
+  );
+  const handleRenamed = useCallback((): void => {
+    setRenameTargetId(null);
+    void notifyChannelsChanged();
+  }, []);
+  const handleDeleted = useCallback(
+    (deletedId: string): void => {
+      setDeleteTargetId(null);
+      // active 였다면 clear — 다음 렌더의 useActiveChannel validation 이
+      // 이미 처리하지만, 즉시 반영해서 flash 를 줄인다.
+      const state = useActiveChannelStore.getState();
+      if (state.channelIdByProject[projectId] === deletedId) {
+        setActiveChannelId(projectId, null);
+      }
+      void notifyChannelsChanged();
+    },
+    [projectId, setActiveChannelId],
+  );
+
+  // Child callbacks ────────────────────────────────────────────
+  const handleOpenCreate = useCallback((): void => {
+    setCreateOpen(true);
+  }, []);
+  const handleOpenRename = useCallback((channelId: string): void => {
+    setRenameTargetId(channelId);
+  }, []);
+  const handleOpenDelete = useCallback((channelId: string): void => {
+    setDeleteTargetId(channelId);
+  }, []);
+
+  return (
     <div
       data-testid="messenger-page"
       data-empty="false"
@@ -57,7 +156,10 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
         aria-label={t('messenger.pane.channelRail')}
         className="border-r border-border bg-project-bg min-h-0 overflow-hidden"
       >
-        <ChannelRail projectId={activeProjectId} />
+        <ChannelRail
+          projectId={projectId}
+          onCreateChannel={handleOpenCreate}
+        />
       </aside>
 
       <main
@@ -65,7 +167,11 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
         aria-label={t('messenger.pane.thread')}
         className="flex flex-col min-h-0 bg-canvas"
       >
-        <Thread projectId={activeProjectId} />
+        <Thread
+          projectId={projectId}
+          onRenameChannel={handleOpenRename}
+          onDeleteChannel={handleOpenDelete}
+        />
       </main>
 
       <aside
@@ -73,8 +179,31 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
         aria-label={t('messenger.pane.memberPanel')}
         className="border-l border-border bg-panel-bg min-h-0 overflow-y-auto"
       >
-        <MemberPanel projectId={activeProjectId} />
+        <MemberPanel projectId={projectId} />
       </aside>
+
+      <ChannelCreateModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        projectId={projectId}
+        onCreated={handleCreated}
+      />
+      <ChannelRenameDialog
+        open={renameTargetId !== null}
+        onOpenChange={(next) => {
+          if (!next) setRenameTargetId(null);
+        }}
+        channel={renameTarget}
+        onRenamed={handleRenamed}
+      />
+      <ChannelDeleteConfirm
+        open={deleteTargetId !== null}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTargetId(null);
+        }}
+        channel={deleteTarget}
+        onDeleted={handleDeleted}
+      />
     </div>
   );
 }

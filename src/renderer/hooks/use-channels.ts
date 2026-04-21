@@ -14,6 +14,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { subscribeChannelsInvalidation } from './channel-invalidation-bus';
 import { invoke } from '../ipc/invoke';
 import type { Channel } from '../../shared/channel-types';
 
@@ -88,6 +89,17 @@ export function useChannels(projectId: string | null): UseChannelsResult {
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);
   }, [runFetch]);
+
+  // Task 10 CRUD 동기화: 채널이 바뀔 수 있는 이벤트가 발생하면
+  // `notifyChannelsChanged()` 가 이 콜백을 호출해 refetch 한다. projectId
+  // null 인 idle 인스턴스는 skip (runFetch 내부도 skip 하지만 명시).
+  useEffect(() => {
+    const unsubscribe = subscribeChannelsInvalidation(async () => {
+      if (projectId === null) return;
+      await runFetch(false);
+    });
+    return unsubscribe;
+  }, [projectId, runFetch]);
 
   // projectId=null은 "idle" 상태다. state에는 이전 프로젝트의 값이 남아
   // 있을 수 있지만 소비자에게는 idle shape을 보여줘 stale flash를 차단한다.

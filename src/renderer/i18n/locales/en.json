@@ -84,6 +84,43 @@
       "metaElapsed": "elapsed {{minutes}}m",
       "metaSsm": "SSM {{cur}}/{{total}}"
     },
+    "channelCreate": {
+      "cancel": "Cancel",
+      "errors": {
+        "duplicateName": "A channel with this name already exists.",
+        "generic": "Failed to create the channel.",
+        "memberFk": "Selected participant is not a project member.",
+        "nameRequired": "Please enter a channel name.",
+        "nameTooLong": "Name must be at most {{max}} characters.",
+        "nameTooShort": "Name must be at least {{min}} characters."
+      },
+      "members": {
+        "empty": "No staff registered yet.",
+        "error": "Could not load participants.",
+        "label": "Participants",
+        "loading": "Loading participants…"
+      },
+      "name": "Channel name",
+      "nameHint": "Between {{min}}–{{max}} characters.",
+      "namePlaceholder": "e.g. planning",
+      "submit": "Create",
+      "title": "New channel"
+    },
+    "channelDelete": {
+      "body": "Delete the \"{{name}}\" channel?",
+      "bodyDm": "Close the conversation with \"{{name}}\"?",
+      "cancel": "Cancel",
+      "errors": {
+        "generic": "Failed to delete the channel.",
+        "notFound": "Channel not found.",
+        "systemProtected": "System channels cannot be deleted."
+      },
+      "irreversibleHint": "Messages will be permanently removed.",
+      "submit": "Delete",
+      "submitDm": "Close",
+      "title": "Delete channel",
+      "titleDm": "Close conversation"
+    },
     "channelHeader": {
       "delete": "Delete",
       "deleteDisabledSystem": "System channels cannot be deleted",
@@ -121,6 +158,23 @@
       },
       "userEmpty": "No channels yet"
     },
+    "channelRename": {
+      "cancel": "Cancel",
+      "errors": {
+        "duplicateName": "A channel with this name already exists.",
+        "generic": "Failed to rename the channel.",
+        "nameRequired": "Please enter a channel name.",
+        "nameTooLong": "Name must be at most {{max}} characters.",
+        "nameTooShort": "Name must be at least {{min}} characters.",
+        "notFound": "Channel not found.",
+        "systemProtected": "System channels cannot be renamed."
+      },
+      "name": "New name",
+      "nameHint": "Between {{min}}–{{max}} characters.",
+      "namePlaceholder": "New channel name",
+      "submit": "Save",
+      "title": "Rename channel"
+    },
     "composer": {
       "errorSend": "Message failed to send: {{reason}}",
       "hintCommand": "⌘ command",
@@ -151,6 +205,14 @@
     "ssmBox": {
       "description": "Meeting in progress: \"{{topic}}\".",
       "empty": "No active meeting."
+    },
+    "startDm": {
+      "ariaLabel": "Start a DM with {{name}}",
+      "errors": {
+        "duplicateUnresolved": "A DM already exists but could not be found in the list.",
+        "generic": "Failed to start the DM."
+      },
+      "label": "Message"
     },
     "startMeeting": {
       "cancel": "Cancel",

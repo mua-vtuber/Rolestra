@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { subscribeChannelsInvalidation } from './channel-invalidation-bus';
 import { invoke } from '../ipc/invoke';
 import type { Channel } from '../../shared/channel-types';
 
@@ -64,6 +65,15 @@ export function useDms(): UseDmsResult {
 
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);
+  }, [runFetch]);
+
+  // Task 10 CRUD 동기화 — DM 생성/삭제 시 `notifyChannelsChanged()` 가 이
+  // 콜백을 호출해 refetch 한다.
+  useEffect(() => {
+    const unsubscribe = subscribeChannelsInvalidation(async () => {
+      await runFetch(false);
+    });
+    return unsubscribe;
   }, [runFetch]);
 
   return { dms, loading, error, refresh };

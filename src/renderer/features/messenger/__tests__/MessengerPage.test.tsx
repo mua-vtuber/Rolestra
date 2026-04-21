@@ -10,8 +10,35 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// ── jsdom polyfills for Radix (Task 10 CRUD modals) ───────────────
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  (globalThis as { ResizeObserver: unknown }).ResizeObserver = class {
+    observe(): void {
+      /* noop */
+    }
+    unobserve(): void {
+      /* noop */
+    }
+    disconnect(): void {
+      /* noop */
+    }
+  };
+}
+if (typeof Element !== 'undefined') {
+  const proto = Element.prototype as unknown as {
+    hasPointerCapture?: (id: number) => boolean;
+    releasePointerCapture?: (id: number) => void;
+    setPointerCapture?: (id: number) => void;
+    scrollIntoView?: () => void;
+  };
+  if (!proto.hasPointerCapture) proto.hasPointerCapture = () => false;
+  if (!proto.releasePointerCapture) proto.releasePointerCapture = () => {};
+  if (!proto.setPointerCapture) proto.setPointerCapture = () => {};
+  if (!proto.scrollIntoView) proto.scrollIntoView = () => {};
+}
 
 import { MessengerPage } from '../MessengerPage';
 import { i18next } from '../../../i18n';
@@ -91,6 +118,22 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     expect(screen.queryByTestId('messenger-empty-state')).toBeNull();
     // Task 4: ChannelRail 이 실제로 마운트되어야 한다.
     expect(screen.getByTestId('channel-rail')).toBeTruthy();
+  });
+});
+
+describe('MessengerPage — Task 10 CRUD modal wire-up', () => {
+  it('clicking + 새 채널 opens ChannelCreateModal', async () => {
+    stubEmptyChannelBridge();
+    useActiveProjectStore.setState({ activeProjectId: 'p-wire' });
+
+    render(<MessengerPage />);
+
+    // `+ 새 채널` button lives inside ChannelRail.
+    fireEvent.click(screen.getByTestId('channel-rail-create'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('channel-create-modal')).toBeTruthy();
+    });
   });
 });
 
