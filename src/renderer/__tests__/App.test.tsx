@@ -360,6 +360,89 @@ describe('App — full shell wiring (R4-Task10)', () => {
   });
 });
 
+describe('App — view router (R5-Task3)', () => {
+  it('mounts DashboardPage by default', async () => {
+    stubBridge({ projects: [] });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('messenger-page')).toBeNull();
+  });
+
+  it('clicking the Messenger NavRail item swaps in MessengerPage', async () => {
+    stubBridge({ projects: [] });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    });
+
+    const messengerNav = screen.getByRole('button', { name: 'Messenger' });
+    await act(async () => {
+      fireEvent.click(messengerNav);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('messenger-page')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('dashboard-page')).toBeNull();
+    // aria-current follows the active view.
+    expect(messengerNav.getAttribute('aria-current')).toBe('page');
+  });
+
+  it('clicking Dashboard again returns to the dashboard view', async () => {
+    stubBridge({ projects: [] });
+    render(<App />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Messenger' }));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('messenger-page')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Dashboard' }));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('messenger-page')).toBeNull();
+  });
+
+  it('clicking an unrouted NavRail item (e.g. Settings) keeps the current view', async () => {
+    stubBridge({ projects: [] });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    });
+
+    // No router entry for settings → dashboard stays mounted.
+    expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    expect(screen.queryByTestId('messenger-page')).toBeNull();
+  });
+
+  it('MessengerPage falls back to empty-state when there is no active project', async () => {
+    stubBridge({ projects: [] });
+    render(<App />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Messenger' }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('messenger-empty-state')).toBeTruthy();
+    });
+  });
+});
+
 describe('App — source-level hardcoded color guard', () => {
   it('App.tsx contains zero hex color literals', () => {
     const source = readFileSync(

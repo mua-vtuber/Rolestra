@@ -66,6 +66,16 @@
       "title": "Active meetings"
     }
   },
+  "messenger": {
+    "emptyState": {
+      "noActiveProject": "Select a project on the left to open the messenger."
+    },
+    "pane": {
+      "channelRail": "Channel list",
+      "memberPanel": "Participants and consensus",
+      "thread": "Message thread"
+    }
+  },
   "project": {
     "create": {
       "cancel": "Cancel",
