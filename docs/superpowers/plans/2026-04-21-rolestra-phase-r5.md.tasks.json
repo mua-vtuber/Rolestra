@@ -62,12 +62,12 @@
     {
       "id": 6,
       "subject": "Task 6: Message + SystemMessage (themeKey 3-way)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         5
       ],
       "description": "**Goal:** 메시지 버블 2종. prep §2.3 구조 차 반영. warm/tactical=ProfileAvatar+baseline header+content, retro(messengerHeaderPolicy='mono-prefix')=avatar 없음+mono name prefix 64px minWidth+header 없음. SystemMessage 3-way (warm pill / tactical outline / retro mono dash). compact 모드 지원.\n\n**Files:** src/renderer/features/messenger/{Message,SystemMessage}.tsx + __tests__\n\n**Verify:** `npm run test -- \"Message.test|SystemMessage\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/Message.tsx\",\"src/renderer/features/messenger/SystemMessage.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"warm/tactical: ProfileAvatar + full header 단언\",\"retro: no avatar, mono-prefix 64px minWidth 단언\",\"SystemMessage 3 shape 단언\",\"compact 모드 검증\",\"hex literal 금지 통과\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T17:55:00.000Z"
     },
     {
       "id": 7,
