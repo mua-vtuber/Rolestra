@@ -20,6 +20,10 @@ import type {
   IpcRequest,
   IpcResponse,
 } from '../../shared/ipc-types';
+import type {
+  StreamEventType,
+  StreamV3PayloadOf,
+} from '../../shared/stream-events';
 
 /**
  * The shape the preload contextBridge exposes on `window.arena`.
@@ -39,6 +43,11 @@ interface ArenaBridge {
     data: IpcRequest<C>,
     meta?: Partial<IpcMeta>,
   ): Promise<IpcResponse<C>>;
+  /** R6: subscribe to a v3 stream-bridge push event. */
+  onStream?<T extends StreamEventType>(
+    type: T,
+    cb: (payload: StreamV3PayloadOf<T>) => void,
+  ): () => void;
 }
 
 declare global {
