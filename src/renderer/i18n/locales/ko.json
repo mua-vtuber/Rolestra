@@ -67,6 +67,23 @@
     }
   },
   "messenger": {
+    "approval": {
+      "allow": "허가",
+      "conditional": "조건부",
+      "deny": "거절",
+      "label": "⚠ 승인 요청",
+      "labelRetro": "[승인 요청]"
+    },
+    "banner": {
+      "abortButton": "회의 종료",
+      "aborting": "종료 중…",
+      "labelActive": "회의 진행중",
+      "labelRetroPrefix": "[진행중]",
+      "metaCrew": "참여 {{n}}",
+      "metaCrewUnknown": "참여 —",
+      "metaElapsed": "경과 {{minutes}}분",
+      "metaSsm": "SSM {{cur}}/{{total}}"
+    },
     "channelHeader": {
       "delete": "삭제",
       "deleteDisabledSystem": "시스템 채널은 삭제할 수 없습니다",
@@ -112,6 +129,21 @@
       "channelRail": "채널 목록",
       "memberPanel": "참여자 및 합의 상태",
       "thread": "메시지 스레드"
+    },
+    "startMeeting": {
+      "cancel": "취소",
+      "channelHint": "#{{name}} 채널에서 회의를 시작합니다.",
+      "errors": {
+        "generic": "회의 시작에 실패했습니다",
+        "noChannel": "채널이 선택되지 않았습니다",
+        "topicRequired": "주제를 입력하세요",
+        "topicTooLong": "주제는 {{max}}자 이하여야 합니다",
+        "topicTooShort": "주제는 {{min}}자 이상이어야 합니다"
+      },
+      "submit": "시작",
+      "title": "회의 시작",
+      "topicLabel": "주제",
+      "topicPlaceholder": "무엇을 논의할까요?"
     },
     "thread": {
       "composerPlaceholder": "Task 8 예정 — 메시지 입력창",

@@ -67,6 +67,23 @@
     }
   },
   "messenger": {
+    "approval": {
+      "allow": "Allow",
+      "conditional": "Conditional",
+      "deny": "Deny",
+      "label": "⚠ Approval requested",
+      "labelRetro": "[APPROVAL REQUESTED]"
+    },
+    "banner": {
+      "abortButton": "End meeting",
+      "aborting": "Ending…",
+      "labelActive": "Meeting in progress",
+      "labelRetroPrefix": "[LIVE]",
+      "metaCrew": "{{n}} crew",
+      "metaCrewUnknown": "crew —",
+      "metaElapsed": "elapsed {{minutes}}m",
+      "metaSsm": "SSM {{cur}}/{{total}}"
+    },
     "channelHeader": {
       "delete": "Delete",
       "deleteDisabledSystem": "System channels cannot be deleted",
@@ -112,6 +129,21 @@
       "channelRail": "Channel list",
       "memberPanel": "Participants and consensus",
       "thread": "Message thread"
+    },
+    "startMeeting": {
+      "cancel": "Cancel",
+      "channelHint": "Starting a meeting in #{{name}}.",
+      "errors": {
+        "generic": "Failed to start the meeting",
+        "noChannel": "No channel selected",
+        "topicRequired": "Please enter a topic",
+        "topicTooLong": "Topic must be at most {{max}} characters",
+        "topicTooShort": "Topic must be at least {{min}} characters"
+      },
+      "submit": "Start",
+      "title": "Start meeting",
+      "topicLabel": "Topic",
+      "topicPlaceholder": "What will you discuss?"
     },
     "thread": {
       "composerPlaceholder": "Task 8 pending — composer placeholder",

@@ -1,27 +1,34 @@
 /**
- * Thread — 중앙 메시지 pane shell (R5-Task5).
+ * Thread — 중앙 메시지 pane shell (R5-Task5 → Task7 wire-up).
  *
- * 이 컴포넌트는 레이아웃 + 헤더만 담당한다. 실제 메시지 버블(Task 6),
- * MeetingBanner(Task 7), Composer(Task 8) 는 후속 태스크에서 해당 섹션에
- * 치환된다.
+ * 이 컴포넌트는 레이아웃 + 헤더 + 진행 중 회의 배너 + StartMeetingModal 호스팅을
+ * 담당한다. 실제 메시지 버블(Task 6 컴포넌트 mount 는 후속 Thread render
+ * 개선에서), Composer(Task 8) 는 후속 태스크에서 해당 섹션에 치환된다.
  *
  * 데이터 소스:
  * - `useChannels(projectId)` — active channel 메타(name, kind, readOnly) 조회용.
  *   ChannelRail 과 별개로 hook 인스턴스를 만들지만 strict-mode single-fetch guard
  *   가 있어 각 인스턴스가 각자 1회만 IPC 호출한다. R10 에서 shared cache 로 통합.
  * - `useActiveChannel(projectId, channels)` — 현재 activeChannelId.
- * - `useChannelMembers(channelId, channels)` — 참여자 수 집계.
- * - `useActiveMeetings()` — 이 채널의 진행 중 회의 수를 필터로 구해 헤더 버튼
- *   disabled 여부 결정. 전역 리스트지만 cheap IPC 이므로 R5 범위에서는 허용.
+ * - `useChannelMembers(channelId, channels)` — 참여자 수 집계 (MeetingBanner meta).
+ * - `useActiveMeetings()` — 이 채널의 진행 중 회의 목록(첫 항목을 MeetingBanner 에
+ *   주입). refresh 는 StartMeetingModal 성공 콜백이 호출한다.
  *
  * activeChannelId null / 해당 채널이 리스트에 없으면 empty state 1줄로 대체.
  * hex literal 금지.
  */
 import { clsx } from 'clsx';
-import { useMemo, type ReactElement } from 'react';
+import {
+  useCallback,
+  useMemo,
+  useState,
+  type ReactElement,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ChannelHeader } from './ChannelHeader';
+import { MeetingBanner } from './MeetingBanner';
+import { StartMeetingModal } from '../meetings/StartMeetingModal';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
@@ -30,8 +37,6 @@ import { useChannels } from '../../hooks/use-channels';
 
 export interface ThreadProps {
   projectId: string;
-  /** Task 7: StartMeetingModal 오픈 핸들러. 없으면 버튼 disabled. */
-  onStartMeeting?: (channelId: string) => void;
   /** Task 10: Rename modal 오픈 핸들러. */
   onRenameChannel?: (channelId: string) => void;
   /** Task 10: Delete confirm 오픈 핸들러. */
@@ -41,7 +46,6 @@ export interface ThreadProps {
 
 export function Thread({
   projectId,
-  onStartMeeting,
   onRenameChannel,
   onDeleteChannel,
   className,
@@ -50,15 +54,23 @@ export function Thread({
   const { channels } = useChannels(projectId);
   const { activeChannelId } = useActiveChannel(projectId, channels);
   const { members } = useChannelMembers(activeChannelId, channels);
-  const { meetings } = useActiveMeetings();
+  const { meetings, refresh: refreshMeetings } = useActiveMeetings();
   // activeChannelId 가 있을 때만 messages 를 구독. null 이면 idle.
   const { messages } = useChannelMessages(activeChannelId);
+
+  const [startMeetingOpen, setStartMeetingOpen] = useState(false);
 
   const activeChannel = useMemo(() => {
     if (activeChannelId === null) return null;
     if (channels === null) return null;
     return channels.find((c) => c.id === activeChannelId) ?? null;
   }, [activeChannelId, channels]);
+
+  const activeMeeting = useMemo(() => {
+    if (activeChannelId === null) return null;
+    if (meetings === null) return null;
+    return meetings.find((m) => m.channelId === activeChannelId) ?? null;
+  }, [activeChannelId, meetings]);
 
   const activeMeetingCount = useMemo(() => {
     if (activeChannelId === null) return 0;
@@ -67,6 +79,13 @@ export function Thread({
   }, [activeChannelId, meetings]);
 
   const memberCount = members === null ? null : members.length;
+
+  const handleStartMeeting = useCallback((): void => {
+    setStartMeetingOpen(true);
+  }, []);
+  const handleStartedMeeting = useCallback((): void => {
+    void refreshMeetings();
+  }, [refreshMeetings]);
 
   if (activeChannel === null) {
     return (
@@ -85,10 +104,6 @@ export function Thread({
     );
   }
 
-  const handleStartMeeting =
-    onStartMeeting === undefined
-      ? undefined
-      : (): void => onStartMeeting(activeChannel.id);
   const handleRename =
     onRenameChannel === undefined
       ? undefined
@@ -114,7 +129,12 @@ export function Thread({
         onDelete={handleDelete}
       />
 
-      {/* Task 7: <MeetingBanner meeting={...} /> — activeMeetingCount > 0 시 상단 고정 */}
+      {activeMeeting ? (
+        <MeetingBanner
+          meeting={activeMeeting}
+          memberCount={memberCount}
+        />
+      ) : null}
 
       <div
         data-testid="thread-message-list"
@@ -132,6 +152,14 @@ export function Thread({
         {/* Task 8: <Composer channelId={activeChannel.id} readOnly={activeChannel.readOnly} /> */}
         {t('messenger.thread.composerPlaceholder')}
       </div>
+
+      <StartMeetingModal
+        open={startMeetingOpen}
+        onOpenChange={setStartMeetingOpen}
+        channelId={activeChannel.id}
+        channelName={activeChannel.name}
+        onStarted={handleStartedMeeting}
+      />
     </div>
   );
 }

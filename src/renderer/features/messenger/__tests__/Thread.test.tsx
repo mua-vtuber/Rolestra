@@ -139,7 +139,7 @@ describe('Thread — empty state when no active channel', () => {
 });
 
 describe('Thread — renders ChannelHeader when a user channel is active', () => {
-  it('mounts ChannelHeader with channel name + start meeting button', async () => {
+  it('mounts ChannelHeader with channel name + start meeting button enabled (Task 7 host)', async () => {
     useActiveChannelStore.setState({
       channelIdByProject: { [PROJECT_ID]: 'c-plan' },
     });
@@ -163,10 +163,10 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
     const startBtn = screen.getByTestId(
       'channel-header-start-meeting',
     ) as HTMLButtonElement;
-    // Without onStartMeeting prop the button is disabled by the handler
-    // absence; Task 7 wires a prop.
+    // R5-Task7: Thread 가 StartMeetingModal 을 자체 호스팅하므로 onStartMeeting
+    // prop 이 항상 바인딩된다. 외부 prop 없이도 버튼이 활성화된다.
+    expect(startBtn.disabled).toBe(false);
     expect(startBtn.getAttribute('data-disabled')).toBe('false');
-    expect(startBtn.disabled).toBe(true);
   });
 
   it('disables the start-meeting button when a meeting is active in the channel', async () => {
@@ -186,10 +186,12 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
           topic: 'n+1',
           stateIndex: 1,
           stateName: 'WORK_DISCUSSING',
+          startedAt: 1_700_000_000_000,
+          elapsedMs: 60_000,
         } as ActiveMeetingSummary,
       ],
     });
-    renderThread(<Thread projectId={PROJECT_ID} onStartMeeting={() => undefined} />);
+    renderThread(<Thread projectId={PROJECT_ID} />);
 
     await waitFor(() =>
       expect(screen.queryByTestId('channel-header-start-meeting')).toBeTruthy(),
@@ -198,6 +200,60 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute('data-disabled')).toBe('true');
     expect(btn.getAttribute('title')).toContain('회의');
+  });
+});
+
+describe('Thread — MeetingBanner wire-up (Task 7)', () => {
+  it('renders MeetingBanner when an active meeting exists in the channel', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-plan' },
+    });
+    stubBridge({
+      channels: [makeChannel({ id: 'c-plan', name: '기획', kind: 'user' })],
+      members: [makeMember('a'), makeMember('b')],
+      meetings: [
+        {
+          id: 'm-1',
+          projectId: PROJECT_ID,
+          projectName: 'P',
+          channelId: 'c-plan',
+          channelName: '기획',
+          topic: 'r5 task 7',
+          stateIndex: 2,
+          stateName: 'WORK_DISCUSSING',
+          startedAt: 1_700_000_000_000,
+          elapsedMs: 3 * 60_000,
+        } as ActiveMeetingSummary,
+      ],
+    });
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('meeting-banner')).toBeTruthy(),
+    );
+    expect(screen.getByTestId('meeting-banner').getAttribute('data-meeting-id')).toBe(
+      'm-1',
+    );
+    expect(screen.getByTestId('meeting-banner-topic').textContent).toBe(
+      'r5 task 7',
+    );
+  });
+
+  it('does not render MeetingBanner when no active meeting for this channel', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-plan' },
+    });
+    stubBridge({
+      channels: [makeChannel({ id: 'c-plan', name: '기획', kind: 'user' })],
+      members: [makeMember('a')],
+      meetings: [],
+    });
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('channel-header')).toBeTruthy(),
+    );
+    expect(screen.queryByTestId('meeting-banner')).toBeNull();
   });
 });
 
