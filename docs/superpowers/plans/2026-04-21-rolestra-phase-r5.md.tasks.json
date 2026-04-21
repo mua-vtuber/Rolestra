@@ -93,12 +93,12 @@
     {
       "id": 9,
       "subject": "Task 9: MemberPanel + SsmBox + small primitives",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4
       ],
       "description": "**Goal:** 우측 참여자+합의 pane. DashCard 재사용. MemberRow 3-way (warm=circle avatar, tactical=diamond avatar, retro=status-dot only). SsmBox 2-way (tactical clip-path). ProgressGauge 재사용. 공통 small primitive 3종 (TypingIndicator placeholder, DateSeparator, VoteTally).\n\n**Files:** src/renderer/features/messenger/{MemberPanel,MemberRow,SsmBox,TypingIndicator,DateSeparator,VoteTally}.tsx + __tests__\n\n**Verify:** `npm run test -- \"MemberPanel|MemberRow|SsmBox|TypingIndicator|DateSeparator|VoteTally\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/MemberPanel.tsx\",\"src/renderer/features/messenger/MemberRow.tsx\",\"src/renderer/features/messenger/SsmBox.tsx\",\"src/renderer/features/messenger/TypingIndicator.tsx\",\"src/renderer/features/messenger/DateSeparator.tsx\",\"src/renderer/features/messenger/VoteTally.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"MemberRow 3-way avatar 유무 단언\",\"SsmBox tactical clip 단언\",\"ProgressGauge value/total 정확 전달\",\"typecheck / eslint exit 0\"]}\n```",
-      "lastUpdated": "2026-04-21T00:00:00.000Z"
+      "lastUpdated": "2026-04-21T20:20:00.000Z"
     },
     {
       "id": 10,
