@@ -121,6 +121,14 @@
       },
       "userEmpty": "아직 채널이 없습니다"
     },
+    "composer": {
+      "errorSend": "메시지 전송 실패: {{reason}}",
+      "hintCommand": "⌘ 명령",
+      "hintMention": "@ 멘션",
+      "inputAriaLabel": "메시지 입력",
+      "placeholder": "메시지를 입력하세요…",
+      "readOnlyBadge": "읽기 전용 — 이 채널에는 메시지를 보낼 수 없습니다"
+    },
     "emptyState": {
       "noActiveChannel": "왼쪽에서 채널을 선택하세요.",
       "noActiveProject": "메신저를 시작하려면 왼쪽에서 프로젝트를 선택하세요."
@@ -146,7 +154,6 @@
       "topicPlaceholder": "무엇을 논의할까요?"
     },
     "thread": {
-      "composerPlaceholder": "Task 8 예정 — 메시지 입력창",
       "messageListPlaceholder": "Task 6 예정 — 메시지 스트림"
     }
   },

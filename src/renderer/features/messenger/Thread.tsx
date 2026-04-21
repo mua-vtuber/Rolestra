@@ -1,9 +1,9 @@
 /**
- * Thread — 중앙 메시지 pane shell (R5-Task5 → Task7 wire-up).
+ * Thread — 중앙 메시지 pane shell (R5-Task5 → Task7 → Task8 wire-up).
  *
- * 이 컴포넌트는 레이아웃 + 헤더 + 진행 중 회의 배너 + StartMeetingModal 호스팅을
- * 담당한다. 실제 메시지 버블(Task 6 컴포넌트 mount 는 후속 Thread render
- * 개선에서), Composer(Task 8) 는 후속 태스크에서 해당 섹션에 치환된다.
+ * 이 컴포넌트는 레이아웃 + 헤더 + 진행 중 회의 배너 + StartMeetingModal 호스팅
+ * + Composer 를 담당한다. 메시지 버블 리스트 렌더(Task 6 컴포넌트 mount) 는
+ * 후속 Thread render 개선에서 placeholder 를 대체한다.
  *
  * 데이터 소스:
  * - `useChannels(projectId)` — active channel 메타(name, kind, readOnly) 조회용.
@@ -27,6 +27,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { ChannelHeader } from './ChannelHeader';
+import { Composer } from './Composer';
 import { MeetingBanner } from './MeetingBanner';
 import { StartMeetingModal } from '../meetings/StartMeetingModal';
 import { useActiveChannel } from '../../hooks/use-active-channel';
@@ -56,7 +57,10 @@ export function Thread({
   const { members } = useChannelMembers(activeChannelId, channels);
   const { meetings, refresh: refreshMeetings } = useActiveMeetings();
   // activeChannelId 가 있을 때만 messages 를 구독. null 이면 idle.
-  const { messages } = useChannelMessages(activeChannelId);
+  // Composer 가 자체 hook instance 로 send 후 refetch 하지만, Thread 측 messages
+  // 는 다른 instance 라 그대로라서 Composer.onSendSuccess 콜백에서
+  // `refreshMessages` 를 호출해 양쪽 instance 를 동기화한다. R10 shared cache.
+  const { messages, refresh: refreshMessages } = useChannelMessages(activeChannelId);
 
   const [startMeetingOpen, setStartMeetingOpen] = useState(false);
 
@@ -86,6 +90,9 @@ export function Thread({
   const handleStartedMeeting = useCallback((): void => {
     void refreshMeetings();
   }, [refreshMeetings]);
+  const handleComposerSendSuccess = useCallback((): void => {
+    void refreshMessages();
+  }, [refreshMessages]);
 
   if (activeChannel === null) {
     return (
@@ -145,13 +152,11 @@ export function Thread({
         {t('messenger.thread.messageListPlaceholder')}
       </div>
 
-      <div
-        data-testid="thread-composer-slot"
-        className="border-t border-topbar-border bg-elev px-4 py-3 text-xs text-fg-subtle"
-      >
-        {/* Task 8: <Composer channelId={activeChannel.id} readOnly={activeChannel.readOnly} /> */}
-        {t('messenger.thread.composerPlaceholder')}
-      </div>
+      <Composer
+        channelId={activeChannel.id}
+        readOnly={activeChannel.readOnly}
+        onSendSuccess={handleComposerSendSuccess}
+      />
 
       <StartMeetingModal
         open={startMeetingOpen}

@@ -121,6 +121,14 @@
       },
       "userEmpty": "No channels yet"
     },
+    "composer": {
+      "errorSend": "Message failed to send: {{reason}}",
+      "hintCommand": "⌘ command",
+      "hintMention": "@ mention",
+      "inputAriaLabel": "Message input",
+      "placeholder": "Type a message…",
+      "readOnlyBadge": "Read-only — this channel does not accept new messages"
+    },
     "emptyState": {
       "noActiveChannel": "Select a channel on the left.",
       "noActiveProject": "Select a project on the left to open the messenger."
@@ -146,7 +154,6 @@
       "topicPlaceholder": "What will you discuss?"
     },
     "thread": {
-      "composerPlaceholder": "Task 8 pending — composer placeholder",
       "messageListPlaceholder": "Task 6 pending — message stream placeholder"
     }
   },
