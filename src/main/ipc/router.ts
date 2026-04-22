@@ -137,6 +137,7 @@ import {
   handleProjectArchive,
   handleProjectOpen,
   handleProjectSetAutonomy,
+  handleProjectRequestPermissionModeChange,
 } from './handlers/project-handler';
 import {
   handleChannelList,
@@ -491,6 +492,11 @@ export function registerIpcHandlers(): void {
   handle('project:archive', isDev, (data) => handleProjectArchive(data));
   handle('project:open', isDev, (data) => handleProjectOpen(data));
   handle('project:set-autonomy', isDev, (data) => handleProjectSetAutonomy(data));
+  handle(
+    'project:request-permission-mode-change',
+    isDev,
+    (data) => handleProjectRequestPermissionModeChange(data),
+  );
 
   // ── v3: Channel ─────────────────────────────────────────────────
   handle('channel:list', isDev, (data) => handleChannelList(data));

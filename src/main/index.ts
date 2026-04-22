@@ -151,22 +151,34 @@ app.whenReady().then(async () => {
     // rollback untouched (system channels are DB-only, no FS side).
     const channelRepo = new ChannelRepository(db);
     const channelService = new ChannelService(channelRepo, projectRepo);
-    const projectService = new ProjectService(projectRepo, arenaRoot, {
-      onProjectCreated: (project) => {
-        channelService.createSystemChannels(project.id);
-      },
-    });
-    setProjectServiceAccessor(() => projectService);
-    setChannelServiceAccessor(() => channelService);
-    setMeetingServiceAccessor(() => meetingService);
 
     // R7-Task2: ApprovalService must be instantiated BEFORE StreamBridge
     // so `streamBridge.connect({ approvals })` can subscribe to the
     // service's EventEmitter (spec §6 stream:approval-*). This also
     // unblocks `approval:list` / `approval:decide` IPC — without the
     // accessor the handlers throw at invoke time.
+    // R7-Task8: moved above ProjectService construction so the project
+    // service can receive the approvalService dep for the mode-transition
+    // flow (request + apply via ApprovalDecisionRouter).
     const approvalService = new ApprovalService(new ApprovalRepository(db));
     setApprovalServiceAccessor(() => approvalService);
+
+    const projectService = new ProjectService(projectRepo, arenaRoot, {
+      onProjectCreated: (project) => {
+        channelService.createSystemChannels(project.id);
+      },
+      approvalService,
+      // spec §7.3 CB-3: no mode transition while a meeting is live.
+      // `meetingRepo.listActive()` already joins `channels` so it returns
+      // the projectId we need to match against.
+      hasActiveMeeting: (projectId) =>
+        meetingRepo
+          .listActive()
+          .some((meeting) => meeting.projectId === projectId),
+    });
+    setProjectServiceAccessor(() => projectService);
+    setChannelServiceAccessor(() => channelService);
+    setMeetingServiceAccessor(() => meetingService);
 
     // R7-Task3: ApprovalCliAdapter — single shared instance. Stateless
     // per call, bridges CLI permission prompts onto the ApprovalService
@@ -186,6 +198,19 @@ app.whenReady().then(async () => {
       messageService,
     });
     approvalSystemMessageInjector.wire();
+
+    // R7-Task8: ApprovalDecisionRouter — dispatches 'decided' events by
+    // `item.kind` to the owning service. Currently routes `mode_transition`
+    // → ProjectService.applyPermissionModeChange. R7-Task9 wires
+    // `consensus_decision` on the same router.
+    const { ApprovalDecisionRouter } = await import(
+      './approvals/approval-decision-router'
+    );
+    const approvalDecisionRouter = new ApprovalDecisionRouter({
+      approvalService,
+      projectService,
+    });
+    approvalDecisionRouter.wire();
 
     // R6-Task1 + R7-Task2: StreamBridge — central Main → Renderer v3 push hub.
     // `onOutbound` is wired to every browser window's webContents; v3

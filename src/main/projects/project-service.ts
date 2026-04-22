@@ -30,6 +30,10 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
 import type {
+  ApprovalItem,
+  ModeTransitionApprovalPayload,
+} from '../../shared/approval-types';
+import type {
   Project,
   ProjectCreateInput,
   ProjectMember,
@@ -37,6 +41,7 @@ import type {
   PermissionMode,
 } from '../../shared/project-types';
 import type { ArenaRootService } from '../arena/arena-root-service';
+import type { CreateApprovalInput } from '../approvals/approval-service';
 import { resolveProjectPaths } from '../arena/resolve-project-paths';
 import { ProjectRepository } from './project-repository';
 import { buildProjectMeta, writeProjectMeta } from './project-meta';
@@ -102,6 +107,64 @@ export class ProjectInputError extends ProjectError {
   }
 }
 
+/**
+ * Raised when a permission-mode change is requested while the project has
+ * an in-flight meeting. Spec §7.3 CB-3: mode transitions cannot interleave
+ * with an active conversation because the CLI permission matrix changes
+ * mid-turn. Caller must pause/end the meeting first, then retry.
+ */
+export class ActiveMeetingForbiddenError extends ProjectError {
+  constructor(projectId: string) {
+    super(
+      `project ${projectId} has an active meeting — ` +
+        'pause or end it before changing permission mode (spec §7.3 CB-3).',
+    );
+    this.name = 'ActiveMeetingForbiddenError';
+  }
+}
+
+/**
+ * Raised when the requested target mode equals the project's current mode.
+ * No transition to request — surfaces as a friendly UX hint rather than a
+ * silent noop so the approval inbox does not accumulate vacuous rows.
+ */
+export class SamePermissionModeError extends ProjectError {
+  constructor(mode: PermissionMode) {
+    super(`permission mode is already "${mode}" — nothing to change.`);
+    this.name = 'SamePermissionModeError';
+  }
+}
+
+/**
+ * Raised when `requestPermissionModeChange` / `applyPermissionModeChange`
+ * is called but the ProjectService was instantiated without an
+ * `approvalService` dependency. Indicates a wiring bug in main/index.ts.
+ */
+export class ApprovalServiceUnavailableError extends ProjectError {
+  constructor() {
+    super(
+      'ProjectService.opts.approvalService is not configured — ' +
+        'wire it in main/index.ts before requesting a mode transition.',
+    );
+    this.name = 'ApprovalServiceUnavailableError';
+  }
+}
+
+/**
+ * Raised by `applyPermissionModeChange` when the approval row does not
+ * carry `kind='mode_transition'` or its payload is missing / malformed.
+ * The router filters kind upstream, so this surfaces only when something
+ * writes a bad row through back doors (tests, migrations, bugs).
+ */
+export class ApprovalKindMismatchError extends ProjectError {
+  constructor(approvalId: string, expected: string, actual: string) {
+    super(
+      `approval ${approvalId} has kind="${actual}" but "${expected}" was required`,
+    );
+    this.name = 'ApprovalKindMismatchError';
+  }
+}
+
 // ── Error-mapping helpers ──────────────────────────────────────────────
 
 /**
@@ -124,6 +187,17 @@ function isSlugUniqueViolation(err: unknown): boolean {
 
 // ── Options ────────────────────────────────────────────────────────────
 
+/**
+ * Narrow dep interface so tests can pass a fake ApprovalService without
+ * wiring a real EventEmitter + repository stack. Matches the surface of
+ * `ApprovalService` for the three methods the mode-transition flow needs.
+ */
+export interface ProjectApprovalServiceDep {
+  create(input: CreateApprovalInput): ApprovalItem;
+  get(id: string): ApprovalItem | null;
+  supersede(id: string): void;
+}
+
 export interface ProjectServiceOptions {
   /**
    * Optional post-create hook used by Task 10's ChannelService to
@@ -133,6 +207,19 @@ export interface ProjectServiceOptions {
    * additive state).
    */
   onProjectCreated?: (project: Project) => void;
+  /**
+   * R7-Task8: ApprovalService backing the mode-transition flow. Optional
+   * so existing callers (older tests) keep compiling — calls that require
+   * it throw {@link ApprovalServiceUnavailableError} when absent.
+   */
+  approvalService?: ProjectApprovalServiceDep;
+  /**
+   * R7-Task8: active-meeting gate (spec §7.3 CB-3). Returns `true` when
+   * the named project currently has any meeting with `ended_at IS NULL`.
+   * Inlined as a closure so ProjectService does not need a MeetingRepository
+   * import (keeps service boundaries thin).
+   */
+  hasActiveMeeting?: (projectId: string) => boolean;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -381,6 +468,175 @@ export class ProjectService {
       throw new ProjectError(`open: project is archived: ${id}`);
     }
     return project;
+  }
+
+  // ── R7-Task8: permission-mode transition (approval-gated) ───────────
+
+  /**
+   * Open an approval row asking the user to transition `projectId`'s
+   * permission mode to `targetMode`. The DB write happens only later in
+   * {@link applyPermissionModeChange}, after the user approves.
+   *
+   * Pre-flight rejections (fail-fast, no approval row created):
+   *   - project not found               → {@link ProjectError}
+   *   - already at `targetMode`          → {@link SamePermissionModeError}
+   *   - external + auto                  → {@link ExternalAutoForbiddenError}
+   *   - active meeting in project        → {@link ActiveMeetingForbiddenError}
+   *
+   * `channelId` and `meetingId` on the approval are left null — mode
+   * transitions are project-scoped (§7.3) and not bound to a particular
+   * channel or meeting. Dashboard widgets / inbox filter by `projectId`.
+   */
+  requestPermissionModeChange(
+    projectId: string,
+    targetMode: PermissionMode,
+    reason?: string,
+  ): ApprovalItem {
+    if (!this.opts.approvalService) {
+      throw new ApprovalServiceUnavailableError();
+    }
+    const project = this.repo.get(projectId);
+    if (project === null) {
+      throw new ProjectError(
+        `requestPermissionModeChange: project not found: ${projectId}`,
+      );
+    }
+    if (project.permissionMode === targetMode) {
+      throw new SamePermissionModeError(targetMode);
+    }
+    if (project.kind === 'external' && targetMode === 'auto') {
+      throw new ExternalAutoForbiddenError();
+    }
+    if (this.opts.hasActiveMeeting?.(projectId) ?? false) {
+      throw new ActiveMeetingForbiddenError(projectId);
+    }
+
+    const payload: ModeTransitionApprovalPayload = {
+      kind: 'mode_transition',
+      currentMode: project.permissionMode,
+      targetMode,
+    };
+    if (reason !== undefined) payload.reason = reason;
+
+    return this.opts.approvalService.create({
+      kind: 'mode_transition',
+      projectId,
+      channelId: null,
+      meetingId: null,
+      requesterId: null,
+      payload,
+    });
+  }
+
+  /**
+   * Apply the mode transition carried by an approved approval row. Called
+   * by {@link ApprovalDecisionRouter} on the 'decided' event when the user
+   * picks `approve` or `conditional` (both collapse to
+   * `approval_items.status='approved'`, spec §7.7).
+   *
+   * TOCTOU re-check: between `request` and `apply` the user may have
+   * changed project kind or started a meeting — we re-run the same gates
+   * here, and mark the approval `superseded` if any gate now fires. The
+   * caller sees a thrown error; the approval inbox sees the superseded
+   * status and stops showing the row.
+   *
+   * @throws {ApprovalServiceUnavailableError} approvalService not wired
+   * @throws {ProjectError}                     approval or project missing
+   * @throws {ApprovalKindMismatchError}        approval kind != mode_transition
+   * @throws {ExternalAutoForbiddenError}       TOCTOU: project became external
+   * @throws {ActiveMeetingForbiddenError}      TOCTOU: meeting now active
+   */
+  applyPermissionModeChange(approvalId: string): Project {
+    if (!this.opts.approvalService) {
+      throw new ApprovalServiceUnavailableError();
+    }
+    const item = this.opts.approvalService.get(approvalId);
+    if (item === null) {
+      throw new ProjectError(
+        `applyPermissionModeChange: approval not found: ${approvalId}`,
+      );
+    }
+    if (item.kind !== 'mode_transition') {
+      throw new ApprovalKindMismatchError(
+        approvalId,
+        'mode_transition',
+        item.kind,
+      );
+    }
+    if (item.status !== 'approved') {
+      throw new ProjectError(
+        `applyPermissionModeChange: approval ${approvalId} is not in ` +
+          `'approved' status (got '${item.status}')`,
+      );
+    }
+    const payload = item.payload as ModeTransitionApprovalPayload | null;
+    if (
+      payload === null ||
+      typeof payload !== 'object' ||
+      payload.kind !== 'mode_transition'
+    ) {
+      throw new ProjectError(
+        `applyPermissionModeChange: approval ${approvalId} payload missing ` +
+          'or malformed',
+      );
+    }
+    if (item.projectId === null) {
+      throw new ProjectError(
+        `applyPermissionModeChange: approval ${approvalId} has no projectId`,
+      );
+    }
+
+    const supersedeAndRethrow = (err: Error): never => {
+      try {
+        this.opts.approvalService!.supersede(approvalId);
+      } catch (supersedeErr) {
+        // TODO R2-log: the supersede failure itself is worth logging but
+        // must not mask the original TOCTOU reason the caller needs.
+        console.warn(
+          '[rolestra.projects.mode-transition] supersede on TOCTOU failed:',
+          {
+            approvalId,
+            name:
+              supersedeErr instanceof Error ? supersedeErr.name : undefined,
+            message:
+              supersedeErr instanceof Error
+                ? supersedeErr.message
+                : String(supersedeErr),
+          },
+        );
+      }
+      throw err;
+    };
+
+    // TOCTOU re-check against current DB state.
+    const project = this.repo.get(item.projectId);
+    if (project === null) {
+      return supersedeAndRethrow(
+        new ProjectError(
+          `applyPermissionModeChange: project gone: ${item.projectId}`,
+        ),
+      );
+    }
+    if (project.kind === 'external' && payload.targetMode === 'auto') {
+      return supersedeAndRethrow(new ExternalAutoForbiddenError());
+    }
+    if (this.opts.hasActiveMeeting?.(item.projectId) ?? false) {
+      return supersedeAndRethrow(
+        new ActiveMeetingForbiddenError(item.projectId),
+      );
+    }
+
+    this.repo.update(item.projectId, {
+      permissionMode: payload.targetMode,
+    });
+    const next = this.repo.get(item.projectId);
+    if (next === null) {
+      throw new ProjectError(
+        `applyPermissionModeChange: project disappeared after update: ` +
+          `${item.projectId}`,
+      );
+    }
+    return next;
   }
 
   // ── Member management (thin pass-throughs to the repository) ─────────

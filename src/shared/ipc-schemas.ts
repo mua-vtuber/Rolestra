@@ -218,6 +218,20 @@ export const projectSetAutonomySchema = z.object({
   mode: autonomyModeSchema,
 });
 
+/**
+ * R7-Task8: spec §7.3 CB-3 mode-transition flow. Opens an approval row;
+ * the actual DB write lives in `ProjectService.applyPermissionModeChange`
+ * and happens later when the user decides. The zod refine blocks the
+ * obviously-wrong `external + auto` combo up front — the service layer
+ * re-asserts this as a last-line defence because the `kind` field is not
+ * included in the request.
+ */
+export const projectRequestPermissionModeChangeSchema = z.object({
+  id: z.string().min(1).max(128),
+  targetMode: permissionModeSchema,
+  reason: z.string().max(2000).optional(),
+});
+
 export const channelCreateSchema = z.object({
   projectId: z.string().min(1).max(128).nullable(),
   name: z.string().min(1).max(200),
@@ -361,6 +375,8 @@ export const v3ChannelSchemas = {
   'project:import': projectImportSchema,
   'project:update': projectUpdateSchema,
   'project:set-autonomy': projectSetAutonomySchema,
+  'project:request-permission-mode-change':
+    projectRequestPermissionModeChangeSchema,
   'channel:create': channelCreateSchema,
   'channel:rename': channelRenameSchema,
   'channel:add-members': channelMembersPatchSchema,

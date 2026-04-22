@@ -40,6 +40,7 @@ import {
   generateSlug,
 } from '../project-service';
 import type { Project } from '../../../shared/project-types';
+import type { ApprovalKind } from '../../../shared/approval-types';
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -764,5 +765,238 @@ describe('ProjectService', () => {
         }
       },
     );
+  });
+
+  // ── R7-Task8: permission-mode transition (approval-gated) ─────────────
+
+  describe('requestPermissionModeChange / applyPermissionModeChange', () => {
+    interface FakeApproval {
+      id: string;
+      kind: ApprovalKind;
+      projectId: string | null;
+      channelId: string | null;
+      meetingId: string | null;
+      requesterId: string | null;
+      payload: unknown;
+      status: 'pending' | 'approved' | 'rejected' | 'expired' | 'superseded';
+      decisionComment: string | null;
+      createdAt: number;
+      decidedAt: number | null;
+    }
+
+    function makeFakeApprovalService() {
+      const rows = new Map<string, FakeApproval>();
+      let idCounter = 0;
+      const supersedeSpy = vi.fn((id: string) => {
+        const row = rows.get(id);
+        if (!row) throw new Error(`not found: ${id}`);
+        row.status = 'superseded';
+        row.decidedAt = Date.now();
+      });
+      return {
+        rows,
+        supersedeSpy,
+        create: vi.fn((input: {
+          kind: ApprovalKind;
+          projectId?: string | null;
+          channelId?: string | null;
+          meetingId?: string | null;
+          requesterId?: string | null;
+          payload?: unknown;
+        }) => {
+          idCounter += 1;
+          const id = `fake-appr-${idCounter}`;
+          const row: FakeApproval = {
+            id,
+            kind: input.kind,
+            projectId: input.projectId ?? null,
+            channelId: input.channelId ?? null,
+            meetingId: input.meetingId ?? null,
+            requesterId: input.requesterId ?? null,
+            payload: input.payload ?? null,
+            status: 'pending',
+            decisionComment: null,
+            createdAt: Date.now(),
+            decidedAt: null,
+          };
+          rows.set(id, row);
+          return row;
+        }),
+        get: vi.fn((id: string) => rows.get(id) ?? null),
+        supersede: supersedeSpy,
+      };
+    }
+
+    async function makeProjectFixture(
+      input: { kind: 'new' | 'external' | 'imported'; permissionMode: PermissionModeForTest; externalPath?: string; name?: string },
+      opts: { hasActiveMeeting?: boolean } = {},
+    ) {
+      const approvalSvc = makeFakeApprovalService();
+      const hasActive = { value: opts.hasActiveMeeting ?? false };
+      const wired = new ProjectService(repo, arenaRootService, {
+        approvalService: approvalSvc,
+        hasActiveMeeting: () => hasActive.value,
+      });
+      const project = await wired.create({
+        name: input.name ?? 'ModeFix',
+        kind: input.kind,
+        permissionMode: input.permissionMode,
+        externalPath: input.externalPath,
+      });
+      return { wired, approvalSvc, project, hasActive };
+    }
+
+    type PermissionModeForTest = 'auto' | 'hybrid' | 'approval';
+
+    it('requestPermissionModeChange creates a mode_transition approval row', async () => {
+      const f = await makeProjectFixture({
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const approval = f.wired.requestPermissionModeChange(
+        f.project.id,
+        'approval',
+        '보안 감사 기간',
+      );
+      expect(approval.kind).toBe('mode_transition');
+      expect(approval.projectId).toBe(f.project.id);
+      expect(approval.channelId).toBeNull();
+      expect(approval.meetingId).toBeNull();
+      expect(approval.status).toBe('pending');
+      const payload = approval.payload as {
+        kind: string;
+        currentMode: string;
+        targetMode: string;
+        reason?: string;
+      };
+      expect(payload.kind).toBe('mode_transition');
+      expect(payload.currentMode).toBe('hybrid');
+      expect(payload.targetMode).toBe('approval');
+      expect(payload.reason).toBe('보안 감사 기간');
+    });
+
+    it('rejects targetMode === currentMode with SamePermissionModeError (no row created)', async () => {
+      const f = await makeProjectFixture({
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const { SamePermissionModeError } = await import('../project-service');
+      expect(() =>
+        f.wired.requestPermissionModeChange(f.project.id, 'hybrid'),
+      ).toThrow(SamePermissionModeError);
+      expect(f.approvalSvc.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects external + auto with ExternalAutoForbiddenError (no row created)', async () => {
+      const targetDir = makeTmpDir('rolestra-ext-autogate-');
+      try {
+        const f = await makeProjectFixture({
+          kind: 'external',
+          permissionMode: 'hybrid',
+          externalPath: targetDir,
+          name: 'ExtAutoGate',
+        });
+        const { ExternalAutoForbiddenError } = await import('../project-service');
+        expect(() =>
+          f.wired.requestPermissionModeChange(f.project.id, 'auto'),
+        ).toThrow(ExternalAutoForbiddenError);
+        expect(f.approvalSvc.create).not.toHaveBeenCalled();
+      } finally {
+        cleanupDir(targetDir);
+      }
+    });
+
+    it('rejects when an active meeting exists (CB-3) — no row created', async () => {
+      const f = await makeProjectFixture(
+        { kind: 'new', permissionMode: 'hybrid' },
+        { hasActiveMeeting: true },
+      );
+      const { ActiveMeetingForbiddenError } = await import('../project-service');
+      expect(() =>
+        f.wired.requestPermissionModeChange(f.project.id, 'approval'),
+      ).toThrow(ActiveMeetingForbiddenError);
+      expect(f.approvalSvc.create).not.toHaveBeenCalled();
+    });
+
+    it('applyPermissionModeChange UPDATEs permission_mode when approved', async () => {
+      const f = await makeProjectFixture({
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const approval = f.wired.requestPermissionModeChange(
+        f.project.id,
+        'approval',
+      );
+      // Simulate a decision by mutating the fake row.
+      const row = f.approvalSvc.rows.get(approval.id);
+      if (!row) throw new Error('row missing');
+      row.status = 'approved';
+      row.decidedAt = Date.now();
+
+      const updated = f.wired.applyPermissionModeChange(approval.id);
+      expect(updated.permissionMode).toBe('approval');
+      expect(repo.get(f.project.id)?.permissionMode).toBe('approval');
+    });
+
+    it('applyPermissionModeChange re-asserts CB-3: active meeting → supersedes the approval', async () => {
+      const f = await makeProjectFixture({
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const approval = f.wired.requestPermissionModeChange(
+        f.project.id,
+        'approval',
+      );
+      const row = f.approvalSvc.rows.get(approval.id);
+      if (!row) throw new Error('row missing');
+      row.status = 'approved';
+
+      // Between request + apply a meeting started — TOCTOU.
+      f.hasActive.value = true;
+
+      const { ActiveMeetingForbiddenError } = await import('../project-service');
+      expect(() => f.wired.applyPermissionModeChange(approval.id)).toThrow(
+        ActiveMeetingForbiddenError,
+      );
+      expect(f.approvalSvc.supersede).toHaveBeenCalledWith(approval.id);
+      // Project row untouched.
+      expect(repo.get(f.project.id)?.permissionMode).toBe('hybrid');
+      // Approval row is now superseded (via fake).
+      expect(f.approvalSvc.rows.get(approval.id)?.status).toBe('superseded');
+    });
+
+    it('applyPermissionModeChange throws ApprovalKindMismatchError on wrong kind', async () => {
+      const approvalSvc = makeFakeApprovalService();
+      const wired = new ProjectService(repo, arenaRootService, {
+        approvalService: approvalSvc,
+      });
+      // Hand-craft a wrong-kind approval row.
+      const wrong = approvalSvc.create({
+        kind: 'cli_permission',
+        projectId: 'p-x',
+      });
+      const row = approvalSvc.rows.get(wrong.id);
+      if (row) row.status = 'approved';
+
+      const { ApprovalKindMismatchError } = await import('../project-service');
+      expect(() => wired.applyPermissionModeChange(wrong.id)).toThrow(
+        ApprovalKindMismatchError,
+      );
+    });
+
+    it('throws ApprovalServiceUnavailableError when not wired', () => {
+      const { ApprovalServiceUnavailableError } = (async () =>
+        await import('../project-service'))() as unknown as {
+        ApprovalServiceUnavailableError: new () => Error;
+      };
+      // Simpler path: instantiate without approvalService opt.
+      const bare = new ProjectService(repo, arenaRootService);
+      // Use the class at runtime via the import promise — since top-level
+      // here is sync, fall back to name-based assertion.
+      expect(() => bare.requestPermissionModeChange('p-1', 'approval')).toThrow(
+        /approvalService is not configured/,
+      );
+      void ApprovalServiceUnavailableError;
+    });
   });
 });

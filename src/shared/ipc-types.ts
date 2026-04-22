@@ -24,6 +24,7 @@ import type {
   Project,
   ProjectCreateInput,
   AutonomyMode,
+  PermissionMode,
 } from './project-types';
 import type { Channel, ChannelKind } from './channel-types';
 import type { Message, MessageSearchResult, RecentMessage } from './message-types';
@@ -549,6 +550,21 @@ export type IpcChannelMap = {
   'project:set-autonomy': {
     request: { id: string; mode: AutonomyMode };
     response: { project: Project };
+  };
+  /**
+   * R7-Task8: requests a spec §7.3 CB-3 mode transition. Opens an
+   * `approval_items` row of `kind='mode_transition'`; the actual DB write
+   * on the project row happens later when ApprovalDecisionRouter sees the
+   * user's decision. Pre-flight rejects `external + auto` and any project
+   * with an active meeting — see ProjectService errors.
+   */
+  'project:request-permission-mode-change': {
+    request: {
+      id: string;
+      targetMode: PermissionMode;
+      reason?: string;
+    };
+    response: { approval: ApprovalItem };
   };
 
   // ── v3: Channel ─────────────────────────────────────────────────

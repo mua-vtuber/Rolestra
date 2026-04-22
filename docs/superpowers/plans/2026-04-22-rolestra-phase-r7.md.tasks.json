@@ -67,10 +67,10 @@
     {
       "id": 8,
       "subject": "Task 8: ProjectService.updatePermissionMode — mode_transition approval flow",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** ProjectService 에 `requestPermissionModeChange` / `applyPermissionModeChange` 추가. 활성 회의 체크(CB-3) + external+auto 금지(§7.3) + TOCTOU 재검증. approved 'decided' 이벤트 라우터가 apply 호출. IPC `project:request-permission-mode-change` 추가.\n\n**Files:** src/main/projects/project-service.ts + __tests__, src/main/approvals/approval-decision-router.ts (또는 SystemMessageInjector 확장), src/main/ipc/handlers/project-handler.ts\n\n**Verify:** `npm run test -- project-service approval-decision-router`\n\n```json:metadata\n{\"files\":[\"src/main/projects/project-service.ts\"],\"verifyCommand\":\"npm run test -- project-service\",\"acceptanceCriteria\":[\"requestPermissionModeChange → approval_items row 생성\",\"approved → permission_mode DB UPDATE\",\"external+auto 거절\",\"활성 회의 거절\",\"TOCTOU 재거절 시 superseded\",\"4~6 테스트 green\"]}\n```",
-      "lastUpdated": "2026-04-22T16:00:00.000Z"
+      "lastUpdated": "2026-04-22T23:43:00.000Z"
     },
     {
       "id": 9,

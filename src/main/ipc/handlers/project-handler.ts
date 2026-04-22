@@ -135,3 +135,20 @@ export function handleProjectSetAutonomy(
   const project = getService().setAutonomy(data.id, data.mode);
   return { project };
 }
+
+/**
+ * project:request-permission-mode-change — R7-Task8 spec §7.3 CB-3.
+ * Opens an approval row of `kind='mode_transition'`. The actual DB write
+ * on the project row lives in `ProjectService.applyPermissionModeChange`,
+ * which the `ApprovalDecisionRouter` calls after the user decides.
+ */
+export function handleProjectRequestPermissionModeChange(
+  data: IpcRequest<'project:request-permission-mode-change'>,
+): IpcResponse<'project:request-permission-mode-change'> {
+  const approval = getService().requestPermissionModeChange(
+    data.id,
+    data.targetMode,
+    data.reason,
+  );
+  return { approval };
+}
