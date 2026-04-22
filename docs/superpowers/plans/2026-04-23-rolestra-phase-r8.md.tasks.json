@@ -51,7 +51,7 @@
     {
       "id": 6,
       "subject": "Task 6: MemberProfilePopover (4 액션: 편집 / 외근↔출근 / 연락해보기 / DM)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2, 4],
       "description": "**Goal:** `src/renderer/features/members/MemberProfilePopover.tsx` 신규 — Radix Popover, 헤더(Avatar+이름+role) + 본문(personality/expertise/WorkStatusDot+라벨) + 푸터 4 버튼. 외근 토글은 set-status, 연락해보기는 reconnect, DM 시작은 StartDmButton 위임.\n\n**Files:** src/renderer/features/members/MemberProfilePopover.tsx + __tests__\n\n**Verify:** `npm run test -- MemberProfilePopover`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/members/MemberProfilePopover.tsx\"],\"verifyCommand\":\"npm run test -- MemberProfilePopover\",\"acceptanceCriteria\":[\"편집 → onEdit 호출\",\"외근↔출근 토글 invoke 분기 정확\",\"연락해보기 → reconnect + indicator 갱신\",\"DM 시작 → 적절한 IPC\",\"a11y aria-pressed/aria-label\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"
