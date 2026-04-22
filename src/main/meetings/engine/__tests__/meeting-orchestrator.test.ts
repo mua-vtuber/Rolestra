@@ -6,6 +6,8 @@
  * in the SSM unit tests (src/main/engine/__tests__/session-state-machine.*).
  */
 
+import { EventEmitter } from 'node:events';
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MeetingSession } from '../meeting-session';
 import { MeetingOrchestrator } from '../meeting-orchestrator';
@@ -17,7 +19,11 @@ import type { MessageService } from '../../../channels/message-service';
 import type { MeetingService } from '../../meeting-service';
 import type { ChannelService } from '../../../channels/channel-service';
 import type { ProjectService } from '../../../projects/project-service';
-import type { ApprovalService } from '../../../approvals/approval-service';
+import {
+  APPROVAL_DECIDED_EVENT,
+  type ApprovalService,
+} from '../../../approvals/approval-service';
+import type { ApprovalItem } from '../../../../shared/approval-types';
 import type { NotificationService } from '../../../notifications/notification-service';
 import type { CircuitBreaker } from '../../../queue/circuit-breaker';
 import type { Participant } from '../../../../shared/engine-types';
@@ -132,9 +138,45 @@ function buildMocks(): Mocks {
     setAutonomy: vi.fn(),
   } as unknown as ProjectService;
 
-  const approvalService = {
-    create: vi.fn(),
-  } as unknown as ApprovalService;
+  // R7-Task9: the orchestrator now subscribes to ApprovalService
+  // 'decided' events for the consensus gate. Use a real EventEmitter so
+  // tests can emit synthetic decisions without reaching into private
+  // state. `create` returns a fake ApprovalItem with a predictable id so
+  // the test assertion can match against `stream:approval-decided` style
+  // payloads.
+  const approvalEmitter = new EventEmitter();
+  let approvalIdCounter = 0;
+  const approvalRows: ApprovalItem[] = [];
+  const approvalCreate = vi.fn((input: Record<string, unknown>) => {
+    approvalIdCounter += 1;
+    const row: ApprovalItem = {
+      id: `appr-${approvalIdCounter}`,
+      kind: (input.kind as ApprovalItem['kind']) ?? 'consensus_decision',
+      projectId: (input.projectId as string | null) ?? null,
+      channelId: (input.channelId as string | null) ?? null,
+      meetingId: (input.meetingId as string | null) ?? null,
+      requesterId: (input.requesterId as string | null) ?? null,
+      payload: input.payload ?? null,
+      status: 'pending',
+      decisionComment: null,
+      createdAt: Date.now(),
+      decidedAt: null,
+    };
+    approvalRows.push(row);
+    return row;
+  });
+  const approvalExpire = vi.fn((id: string) => {
+    const row = approvalRows.find((r) => r.id === id);
+    if (row) {
+      row.status = 'expired';
+      row.decidedAt = Date.now();
+    }
+  });
+  const approvalService = Object.assign(approvalEmitter, {
+    create: approvalCreate,
+    expire: approvalExpire,
+    approvalRows,
+  }) as unknown as ApprovalService;
 
   const notificationService = {
     show: vi.fn(() => null),
@@ -327,6 +369,199 @@ describe('MeetingOrchestrator — terminal handling', () => {
       'rejected',
       expect.any(String),
     );
+  });
+});
+
+describe('MeetingOrchestrator — R7-Task9 consensus_decision approval gate', () => {
+  function driveTerminalDone(
+    orc: MeetingOrchestrator,
+    snapshot: { state: 'DONE'; proposal?: string; votes?: unknown },
+  ): void {
+    // Directly invoke the private terminal handler — the full SSM walk
+    // from CONVERSATION to DONE is overkill for this unit-test slice.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (orc as any).handleTerminal({
+      state: 'DONE',
+      proposal: snapshot.proposal ?? 'Approved plan',
+      votes: snapshot.votes ?? [],
+    });
+  }
+
+  it('DONE → opens consensus_decision approval row (no #회의록 post yet)', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '배포는 자정' });
+
+    await Promise.resolve(); // flush microtasks
+    expect(mocks.approvalService.create).toHaveBeenCalledTimes(1);
+    const createCall = (mocks.approvalService.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(createCall.kind).toBe('consensus_decision');
+    expect(createCall.meetingId).toBe(MEETING_ID);
+    expect(createCall.channelId).toBe(CHANNEL_ID);
+    expect(createCall.projectId).toBe(PROJECT_ID);
+    const payload = createCall.payload as {
+      kind: string;
+      finalText: string;
+      snapshotHash: string;
+      votes: { yes: number; no: number; pending: number };
+    };
+    expect(payload.kind).toBe('consensus_decision');
+    expect(payload.finalText).toBe('배포는 자정');
+    expect(payload.snapshotHash.length).toBeGreaterThan(0);
+
+    // #회의록 post / finish must wait for the decision.
+    expect(mocks.messageService.append).not.toHaveBeenCalled();
+    expect(mocks.meetingService.finish).not.toHaveBeenCalled();
+  });
+
+  it('DONE → approve → posts composed minutes + finish(accepted)', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '배포 계획' });
+    await Promise.resolve();
+
+    const approvalId = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] })
+      .approvalRows[0].id;
+
+    // Emit decision.
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...((mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0]), status: 'approved' },
+      decision: 'approve',
+      comment: null,
+    });
+
+    // flush microtasks (postMinutes is async)
+    await new Promise((r) => setImmediate(r));
+
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const minutesCall = appendCalls.find((c) => {
+      const p = c[0] as { channelId: string; content: string };
+      return p.channelId === MINUTES_CHANNEL_ID && p.content.startsWith('## 회의 #');
+    });
+    expect(minutesCall).toBeDefined();
+    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'accepted',
+      expect.any(String),
+    );
+    void approvalId;
+  });
+
+  it('DONE → conditional → posts composed minutes + finish(accepted) (comment handled by injector)', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...row, status: 'approved' },
+      decision: 'conditional',
+      comment: '문서 검토 후 반영',
+    });
+    await new Promise((r) => setImmediate(r));
+
+    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'accepted',
+      expect.any(String),
+    );
+  });
+
+  it('DONE → reject → posts rejection message + finish(rejected)', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...row, status: 'rejected' },
+      decision: 'reject',
+      comment: '보안 감사 필요',
+    });
+    await new Promise((r) => setImmediate(r));
+
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const rejectionCall = appendCalls.find((c) => {
+      const p = c[0] as { channelId: string; content: string };
+      return (
+        p.channelId === MINUTES_CHANNEL_ID &&
+        p.content.includes('회의 합의 거절됨')
+      );
+    });
+    expect(rejectionCall).toBeDefined();
+    expect(((rejectionCall as unknown) as [{ content: string }])[0].content).toContain('보안 감사 필요');
+    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'rejected',
+      expect.any(String),
+    );
+  });
+
+  it('DONE → timeout → expires approval + posts timeout message + finish(aborted)', async () => {
+    const mocks = buildMocks();
+    const orc = new MeetingOrchestrator({
+      session: mocks.session,
+      turnExecutor: mocks.turnExecutor,
+      streamBridge: mocks.streamBridge,
+      messageService: mocks.messageService,
+      meetingService: mocks.meetingService,
+      channelService: mocks.channelService,
+      projectService: mocks.projectService,
+      approvalService: mocks.approvalService,
+      notificationService: mocks.notificationService,
+      circuitBreaker: mocks.circuitBreaker,
+      interTurnDelayMs: 0,
+      consensusDecisionTimeoutMs: 5, // 5ms — fires immediately in tests
+    });
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+
+    // Wait past the timeout.
+    await new Promise((r) => setTimeout(r, 25));
+
+    // Approval expired via expire() call.
+    const approvalId = (
+      (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] })
+        .approvalRows[0]?.id
+    );
+    expect(
+      (mocks.approvalService as unknown as { expire: ReturnType<typeof vi.fn> }).expire,
+    ).toHaveBeenCalledWith(approvalId);
+
+    // Post to #회의록 with timeout message.
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const timeoutCall = appendCalls.find((c) => {
+      const p = c[0] as { content: string };
+      return p.content.includes('대기 시간 초과');
+    });
+    expect(timeoutCall).toBeDefined();
+
+    // finish() with aborted outcome.
+    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'aborted',
+      expect.any(String),
+    );
+  });
+
+  it('stop() after DONE approval opened disposes listener + timer', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const listenerCountBefore = (
+      mocks.approvalService as unknown as EventEmitter
+    ).listenerCount(APPROVAL_DECIDED_EVENT);
+    expect(listenerCountBefore).toBe(1);
+
+    orc.stop();
+
+    const listenerCountAfter = (
+      mocks.approvalService as unknown as EventEmitter
+    ).listenerCount(APPROVAL_DECIDED_EVENT);
+    expect(listenerCountAfter).toBe(0);
   });
 });
 

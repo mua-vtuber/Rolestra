@@ -183,7 +183,7 @@ describe('v3-side-effects — state change', () => {
     expect(deps.bridge.emitMeetingStateChanged).toHaveBeenCalled();
   });
 
-  it('DONE transition: appends summary to #회의록 + fires work_done notification', () => {
+  it('DONE transition: R7-Task9 approval-gated — #회의록 append skipped, notification still fires', () => {
     const ssm = makeSsmStub(makeCtx());
     const deps = makeMockDeps('minutes-1');
     wireV3SideEffects(ssm as never, deps);
@@ -192,14 +192,16 @@ describe('v3-side-effects — state change', () => {
       makeSnapshot({ state: 'DONE', proposal: 'Deploy at midnight' }),
     );
 
-    expect(deps.messages.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        channelId: 'minutes-1',
-        authorKind: 'system',
-        role: 'system',
-        content: expect.stringContaining('Deploy at midnight'),
-      }),
-    );
+    // The final minutes post is now gated on the consensus-decision
+    // approval and therefore lives in MeetingOrchestrator, not here.
+    // v3-side-effects must NOT short-circuit the gate by posting a
+    // terse placeholder before the user decides.
+    expect(deps.messages.append).not.toHaveBeenCalled();
+
+    // Notification fires immediately on DONE so the user has an OS-level
+    // signal to open the approval inbox. Task 11 may supplement this
+    // with an `approval_pending` notification keyed on ApprovalService
+    // 'created'; for R7-Task9 both coexist harmlessly.
     expect(deps.notifications.show).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'work_done',

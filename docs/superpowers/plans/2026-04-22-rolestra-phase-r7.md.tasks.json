@@ -75,10 +75,10 @@
     {
       "id": 9,
       "subject": "Task 9: Consensus Decision Approval — SSM DONE 게이트",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2, 6],
       "description": "**Goal:** MeetingOrchestrator/v3-side-effects 가 SSM DONE 도달 시 즉시 MinutesComposer 포스팅하지 않고 `consensus_decision` approval 을 생성, decided 이벤트 대기. approve → R6 경로, reject → `#회의록` 거절 메시지 + outcome='rejected', conditional → approve + injector. timeout 24h → expired.\n\n**Files:** src/main/engine/v3-side-effects.ts, src/main/meetings/engine/meeting-orchestrator.ts + __tests__\n\n**Verify:** `npm run test -- meeting-orchestrator v3-side-effects`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- meeting-orchestrator v3-side-effects\",\"acceptanceCriteria\":[\"SSM DONE → consensus_decision approval row\",\"approve → MinutesComposer 포스팅 + accepted\",\"reject → 거절 메시지 + rejected\",\"conditional → approve + injector 연동\",\"timeout 24h → expired\",\"테스트 green\"]}\n```",
-      "lastUpdated": "2026-04-22T16:00:00.000Z"
+      "lastUpdated": "2026-04-23T00:15:00.000Z"
     },
     {
       "id": 10,

@@ -210,7 +210,14 @@ function postTerminalSideEffects(
     warn('findMinutesChannelId failed', err);
   }
 
-  if (minutesChannelId) {
+  // R7-Task9: the DONE branch is now approval-gated. MeetingOrchestrator
+  // opens a `consensus_decision` approval when SSM reaches DONE and posts
+  // the final #회의록 entry only after the user decides (approve →
+  // composed minutes, reject → rejection message, timeout → expired).
+  // Firing a post here would land the terse "합의 결과" message BEFORE
+  // the user has approved, breaking the gate. FAILED stays unchanged —
+  // failures are not approval-gated.
+  if (minutesChannelId && snapshot.state === 'FAILED') {
     try {
       deps.messages.append({
         channelId: minutesChannelId,

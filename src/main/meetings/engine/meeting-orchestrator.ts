@@ -37,14 +37,24 @@
  *     turn-manager to decide when the next AI gets the mic.
  */
 
+import { createHash } from 'node:crypto';
+
 import type { VoteRecord } from '../../../shared/consensus-types';
 import type { SessionSnapshot, SessionState } from '../../../shared/session-state-types';
+import type {
+  ApprovalDecision,
+  ConsensusDecisionApprovalPayload,
+} from '../../../shared/approval-types';
 import type { MeetingService } from '../meeting-service';
 import type { MessageService } from '../../channels/message-service';
 import type { ChannelService } from '../../channels/channel-service';
 import type { ProjectService } from '../../projects/project-service';
 import type { StreamBridge } from '../../streams/stream-bridge';
-import type { ApprovalService } from '../../approvals/approval-service';
+import {
+  APPROVAL_DECIDED_EVENT,
+  type ApprovalDecidedPayload,
+  type ApprovalService,
+} from '../../approvals/approval-service';
 import type { NotificationService } from '../../notifications/notification-service';
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
 import {
@@ -56,6 +66,14 @@ import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import { composeMinutes, type MinutesTranslator } from './meeting-minutes-composer';
 
 const INTER_TURN_DELAY_MS = 2000;
+
+/**
+ * Default wait for the user to decide on the consensus approval (spec §7.5).
+ * Spec R7 plan: 24h — long enough that an offline user still has a chance
+ * to review, short enough that the meeting row does not linger indefinitely
+ * if the user abandons the app.
+ */
+const CONSENSUS_DECISION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 /**
  * SSM states that need user input — the loop hands control back to the
@@ -88,6 +106,12 @@ export interface MeetingOrchestratorDeps {
   /** Opt-out hook for tests — disables the inter-turn delay so loop
    *  unit tests don't wait 2s between speakers. */
   interTurnDelayMs?: number;
+  /**
+   * R7-Task9: consensus_decision approval timeout. Default 24h. Tests
+   * pass a small value (e.g. 10ms) so the timeout branch fires without
+   * stalling the suite.
+   */
+  consensusDecisionTimeoutMs?: number;
 }
 
 export class MeetingOrchestrator {
@@ -103,6 +127,13 @@ export class MeetingOrchestrator {
   private readonly circuitBreaker: CircuitBreaker;
   private readonly t?: MinutesTranslator;
   private readonly interTurnDelayMs: number;
+  private readonly consensusDecisionTimeoutMs: number;
+  /**
+   * Per-run listener/timeout pair for the consensus approval gate. Kept so
+   * `stop()` can tear down the wait without leaving an open listener
+   * after an abort.
+   */
+  private consensusGateDisposer: (() => void) | null = null;
 
   private running = false;
   private abortController: AbortController | null = null;
@@ -127,6 +158,8 @@ export class MeetingOrchestrator {
     this.t = deps.t;
     this.interTurnDelayMs =
       deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
+    this.consensusDecisionTimeoutMs =
+      deps.consensusDecisionTimeoutMs ?? CONSENSUS_DECISION_TIMEOUT_MS;
   }
 
   get isRunning(): boolean {
@@ -189,6 +222,9 @@ export class MeetingOrchestrator {
     this.abortController?.abort();
     this.session.stop();
     this.running = false;
+    // R7-Task9: if the consensus approval gate was open, tear it down so
+    // the listener + 24h timer do not outlive the aborted meeting.
+    this.disposeConsensusGate();
   }
 
   /** Pause the loop; the current turn finishes then the loop idles. */
@@ -284,33 +320,205 @@ export class MeetingOrchestrator {
     if (this.terminalHandled) return;
     this.terminalHandled = true;
 
-    // (a) Compose minutes and post to #회의록. v3-side-effects already
-    //     appended a terse "합의 결과" placeholder — we REPLACE it
-    //     semantically by writing the richer composed minutes as a
-    //     second system message. The v2-style placeholder is cheap to
-    //     leave in place; readers see the full minutes immediately
-    //     after. R10 can collapse the two into a single richer post
-    //     once the LLM-summary path lands.
+    if (snapshot.state === 'FAILED') {
+      // FAILED path — no approval gate. v3-side-effects posted the terse
+      // fail line; we add the composed minutes + close the meeting row.
+      try {
+        await this.postMinutes(snapshot);
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] minutes post failed',
+          errorPayload(err),
+        );
+      }
+      this.finishMeeting(snapshot, 'rejected');
+      return;
+    }
+
+    // DONE — R7-Task9 consensus-decision approval gate (spec §7.5).
+    // The run() Promise resolves here; the user's decision (or the 24h
+    // timeout) fires asynchronously on the approval service and drives
+    // the final #회의록 post + meeting.finish() via the listener set up
+    // below. The orchestrator instance stays alive via the closure.
+    this.openConsensusDecisionGate(snapshot);
+  }
+
+  /**
+   * Build the `consensus_decision` payload, open the approval row, and
+   * subscribe to the `'decided'` event with a {@link consensusDecisionTimeoutMs}
+   * safety timer. Idempotent per-run via `terminalHandled`.
+   */
+  private openConsensusDecisionGate(snapshot: SessionSnapshot): void {
+    const payload = this.buildConsensusDecisionPayload(snapshot);
+
+    let approvalId: string;
+    try {
+      const created = this.approvalService.create({
+        kind: 'consensus_decision',
+        projectId: this.session.projectId,
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        requesterId: null,
+        payload,
+      });
+      approvalId = created.id;
+    } catch (err) {
+      // ApprovalService.create failure must not strand the meeting in
+      // limbo — fall back to the pre-R7 behaviour (immediate post +
+      // accepted). Log loudly so the wiring bug surfaces.
+      console.warn(
+        '[MeetingOrchestrator] consensus approval create failed — falling back to immediate post',
+        errorPayload(err),
+      );
+      void this.fallbackImmediateFinish(snapshot);
+      return;
+    }
+
+    let settled = false;
+    const onDecided = (event: ApprovalDecidedPayload): void => {
+      if (event.item.id !== approvalId) return;
+      if (settled) return;
+      settled = true;
+      this.disposeConsensusGate();
+      void this.handleConsensusDecision(snapshot, event.decision, event.comment);
+    };
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      this.disposeConsensusGate();
+      try {
+        this.approvalService.expire(approvalId);
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] consensus approval expire failed',
+          errorPayload(err),
+        );
+      }
+      void this.handleConsensusTimeout(snapshot);
+    }, this.consensusDecisionTimeoutMs);
+    // Let the app exit even if the 24h timer is still pending.
+    if (typeof timer.unref === 'function') timer.unref();
+
+    this.approvalService.on(APPROVAL_DECIDED_EVENT, onDecided);
+
+    this.consensusGateDisposer = (): void => {
+      clearTimeout(timer);
+      this.approvalService.off(APPROVAL_DECIDED_EVENT, onDecided);
+    };
+  }
+
+  private disposeConsensusGate(): void {
+    if (this.consensusGateDisposer) {
+      try {
+        this.consensusGateDisposer();
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] consensus gate disposer threw',
+          errorPayload(err),
+        );
+      }
+      this.consensusGateDisposer = null;
+    }
+  }
+
+  private async handleConsensusDecision(
+    snapshot: SessionSnapshot,
+    decision: ApprovalDecision,
+    comment: string | null,
+  ): Promise<void> {
+    if (decision === 'reject') {
+      // Reject — write the rejection message to #회의록 and close the
+      // meeting as rejected. The reject comment (if any) is also
+      // injected as a system message by ApprovalSystemMessageInjector
+      // (Task 6); we don't duplicate it here.
+      try {
+        const minutesChannelId = this.findMinutesChannelId();
+        if (minutesChannelId) {
+          const trimmed = comment?.trim() ?? '';
+          const body =
+            trimmed.length > 0
+              ? `회의 합의 거절됨 — ${trimmed}`
+              : '회의 합의 거절됨';
+          this.messageService.append({
+            channelId: minutesChannelId,
+            meetingId: this.session.meetingId,
+            authorId: 'system',
+            authorKind: 'system',
+            role: 'system',
+            content: body,
+            meta: null,
+          });
+        }
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] consensus rejection post failed',
+          errorPayload(err),
+        );
+      }
+      this.finishMeeting(snapshot, 'rejected');
+      return;
+    }
+
+    // approve / conditional → composed minutes + accepted. Conditional
+    // comment is already injected into the next turn's system prompt by
+    // ApprovalSystemMessageInjector(Task 6) — here we only need the
+    // minutes post + outcome stamp.
     try {
       await this.postMinutes(snapshot);
     } catch (err) {
       console.warn(
-        '[MeetingOrchestrator] minutes post failed',
+        '[MeetingOrchestrator] consensus minutes post failed',
         errorPayload(err),
       );
     }
+    this.finishMeeting(snapshot, 'accepted');
+  }
 
-    // (b) Close the meeting row. v3-side-effects updated the state
-    //     column on every transition; here we stamp ended_at + outcome
-    //     so the R4 dashboard TasksWidget surfaces the meeting as
-    //     finished.
+  private async handleConsensusTimeout(
+    snapshot: SessionSnapshot,
+  ): Promise<void> {
     try {
-      const outcome =
-        snapshot.state === 'DONE'
-          ? 'accepted'
-          : snapshot.state === 'FAILED'
-            ? 'rejected'
-            : 'aborted';
+      const minutesChannelId = this.findMinutesChannelId();
+      if (minutesChannelId) {
+        this.messageService.append({
+          channelId: minutesChannelId,
+          meetingId: this.session.meetingId,
+          authorId: 'system',
+          authorKind: 'system',
+          role: 'system',
+          content: '회의 합의 승인 대기 시간 초과 — 회의가 아카이브되었습니다.',
+          meta: null,
+        });
+      }
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] consensus timeout post failed',
+        errorPayload(err),
+      );
+    }
+    this.finishMeeting(snapshot, 'aborted');
+  }
+
+  private async fallbackImmediateFinish(
+    snapshot: SessionSnapshot,
+  ): Promise<void> {
+    try {
+      await this.postMinutes(snapshot);
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] fallback minutes post failed',
+        errorPayload(err),
+      );
+    }
+    this.finishMeeting(snapshot, 'accepted');
+  }
+
+  private finishMeeting(
+    snapshot: SessionSnapshot,
+    outcome: 'accepted' | 'rejected' | 'aborted',
+  ): void {
+    try {
       this.meetingService.finish(
         this.session.meetingId,
         outcome,
@@ -318,14 +526,38 @@ export class MeetingOrchestrator {
       );
     } catch (err) {
       // finish() throws MeetingNotFoundError when the row was already
-      // finished (e.g. user clicked "abort" moments before DONE). Log
-      // + swallow — the meeting reaching a terminal state is the
-      // authoritative signal.
+      // finished. Log + swallow — terminal state is authoritative.
       console.warn(
         '[MeetingOrchestrator] meeting finish failed',
         errorPayload(err),
       );
     }
+  }
+
+  private buildConsensusDecisionPayload(
+    snapshot: SessionSnapshot,
+  ): ConsensusDecisionApprovalPayload {
+    const finalText = (snapshot.proposal ?? '').trim();
+    const votes: VoteRecord[] = snapshot.votes ?? [];
+    let yes = 0;
+    let no = 0;
+    let pending = 0;
+    for (const v of votes) {
+      if (v.vote === 'agree') yes += 1;
+      else if (v.vote === 'disagree' || v.vote === 'block') no += 1;
+      else pending += 1; // 'abstain'
+    }
+    const hashInput = `${finalText}|${JSON.stringify(votes)}`;
+    const snapshotHash = createHash('sha256')
+      .update(hashInput)
+      .digest('hex')
+      .slice(0, 32);
+    return {
+      kind: 'consensus_decision',
+      snapshotHash,
+      finalText,
+      votes: { yes, no, pending },
+    };
   }
 
   private async postMinutes(snapshot: SessionSnapshot): Promise<void> {
