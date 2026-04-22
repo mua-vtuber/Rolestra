@@ -82,6 +82,10 @@ export default {
     /^translation:messenger\.channelDelete\.errors(\..+)?$/,
     // R5-Task11 StartDmButton `mapErrorToI18nKey` — same variable-key pattern.
     /^translation:messenger\.startDm\.errors(\..+)?$/,
+    // R7-Task5 ApprovalBlock / RejectDialog / ConditionalDialog
+    // `mapErrorToI18nKey(reason)` returns a variable key — parser cannot
+    // resolve statically. Keep the whole errors subtree in the catalogue.
+    /^translation:messenger\.approval\.errors(\..+)?$/,
     // R6-Task11 meeting.state.<SSM> — composed via
     // `t('meeting.state.${ssmState}')` in MeetingBanner / MinutesComposer.
     // The 12 SSM state names are variable-keyed so the parser cannot

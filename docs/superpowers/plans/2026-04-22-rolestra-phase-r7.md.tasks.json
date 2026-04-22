@@ -43,10 +43,10 @@
     {
       "id": 5,
       "subject": "Task 5: ApprovalBlock onDecision wire + RejectDialog + ConditionalDialog",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** ApprovalBlock 의 `onDecision` placeholder 제거 → 실 `approval:decide` IPC. deny/conditional 은 Radix Dialog 코멘트 입력. RejectDialog.tsx / ConditionalDialog.tsx 신규.\n\n**Files:** src/renderer/features/messenger/ApprovalBlock.tsx, src/renderer/features/approvals/{RejectDialog,ConditionalDialog}.tsx + __tests__\n\n**Verify:** `npm run test -- ApprovalBlock RejectDialog ConditionalDialog`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/ApprovalBlock.tsx\",\"src/renderer/features/approvals/RejectDialog.tsx\",\"src/renderer/features/approvals/ConditionalDialog.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalBlock RejectDialog ConditionalDialog\",\"acceptanceCriteria\":[\"approve → invoke('approval:decide', {id, decision:'approve'})\",\"reject+comment → invoke 인자 정확\",\"conditional+comment → invoke 인자 정확\",\"다이얼로그 cancel 시 invoke 0\",\"3-way 스타일(warm/tactical/retro) 회귀 0\"]}\n```",
-      "lastUpdated": "2026-04-22T16:00:00.000Z"
+      "lastUpdated": "2026-04-22T21:35:00.000Z"
     },
     {
       "id": 6,

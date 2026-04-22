@@ -113,9 +113,29 @@
     "approval": {
       "allow": "Allow",
       "conditional": "Conditional",
+      "conditionalDialog": {
+        "body": "Specify the conditions for this approval. They will be relayed to the meeting as the next system message.",
+        "cancel": "Cancel",
+        "commentRequired": "A condition is required.",
+        "placeholder": "e.g. only read-only paths",
+        "submit": "Approve with conditions",
+        "title": "Conditional approval"
+      },
       "deny": "Deny",
+      "errors": {
+        "alreadyDecided": "This approval has already been decided.",
+        "generic": "Failed to submit the approval decision.",
+        "notFound": "Approval request not found."
+      },
       "label": "⚠ Approval requested",
-      "labelRetro": "[APPROVAL REQUESTED]"
+      "labelRetro": "[APPROVAL REQUESTED]",
+      "rejectDialog": {
+        "body": "Leaving a reason will relay it to the meeting as the next system message. (optional)",
+        "cancel": "Cancel",
+        "placeholder": "e.g. out-of-scope file",
+        "submit": "Reject",
+        "title": "Reject approval request"
+      }
     },
     "banner": {
       "abortButton": "End meeting",

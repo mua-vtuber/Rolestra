@@ -113,9 +113,29 @@
     "approval": {
       "allow": "허가",
       "conditional": "조건부",
+      "conditionalDialog": {
+        "body": "승인 조건을 명시해 주세요. 입력한 조건은 다음 턴 시스템 메시지로 전달됩니다.",
+        "cancel": "취소",
+        "commentRequired": "조건은 필수 입력 항목입니다.",
+        "placeholder": "예: 읽기 전용 경로에 한해서만 허용",
+        "submit": "조건부 승인",
+        "title": "조건부 승인"
+      },
       "deny": "거절",
+      "errors": {
+        "alreadyDecided": "이미 결정된 승인 요청입니다.",
+        "generic": "승인 결정 처리 중 오류가 발생했습니다.",
+        "notFound": "승인 요청을 찾을 수 없습니다."
+      },
       "label": "⚠ 승인 요청",
-      "labelRetro": "[승인 요청]"
+      "labelRetro": "[승인 요청]",
+      "rejectDialog": {
+        "body": "거절 사유를 남기면 다음 턴 시스템 메시지로 전달됩니다. (선택)",
+        "cancel": "취소",
+        "placeholder": "예: 범위 밖의 파일입니다",
+        "submit": "거절",
+        "title": "승인 요청 거절"
+      }
     },
     "banner": {
       "abortButton": "회의 종료",
