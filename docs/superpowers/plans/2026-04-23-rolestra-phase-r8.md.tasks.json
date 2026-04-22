@@ -83,7 +83,7 @@
     {
       "id": 10,
       "subject": "Task 10: MeetingTurnExecutor v2→v3 PersonaBuilder swap (즉시 반영)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8],
       "description": "**Goal:** meeting-turn-executor 의 v2 `buildEffectivePersona(provider, opts)` 호출을 v3 `memberProfileService.buildPersona(participantId)` + `buildPermissionRules` shim 으로 교체. v2 builder 의 named export 승격. v2 engine 호출자 0 (R11 삭제 후보).\n\n**Files:** src/main/meetings/engine/meeting-turn-executor.ts + __tests__, src/main/engine/persona-builder.ts (export 승격), src/main/__tests__/r2-integration-smoke.test.ts (regression)\n\n**Verify:** `npm run test -- meeting-turn-executor && grep -r buildEffectivePersona src/main/meetings`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-turn-executor.ts\",\"src/main/engine/persona-builder.ts\"],\"verifyCommand\":\"npm run test -- meeting-turn-executor\",\"acceptanceCriteria\":[\"meeting-turn-executor v2 buildEffectivePersona import 0\",\"v3 buildPersona system prompt Identity 섹션 포함\",\"사용자 편집 → 다음 턴 즉시 반영\",\"v2 builder 호출자 0\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

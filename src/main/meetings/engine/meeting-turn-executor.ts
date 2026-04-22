@@ -56,7 +56,10 @@ import type {
 } from '../../../shared/provider-types';
 import type { SessionState } from '../../../shared/session-state-types';
 import type { ParsedAiOutput } from '../../../shared/message-protocol-types';
-import { buildEffectivePersona } from '../../engine/persona-builder';
+import {
+  buildEffectivePersona,
+  buildPermissionRules,
+} from '../../engine/persona-builder';
 import { MessageFormatter } from '../../engine/message-formatter';
 import { AppToolProvider, type AppTool } from '../../engine/app-tool-provider';
 import type { BaseProvider } from '../../providers/provider-interface';
@@ -246,15 +249,41 @@ export class MeetingTurnExecutor {
         messages.unshift({ role: 'system', content: formatInstruction });
       }
 
-      // R6 D9: permission omitted — PermissionService per-participant
-      // surface lands in R7. Persona retains conversation-mode guardrails.
-      let persona = this.shouldIncludePersona(provider, speaker.id)
-        ? buildEffectivePersona(provider, {
+      // R8-Task10: v3 PersonaBuilder swap. Previously called the v2
+      // `buildEffectivePersona(provider, opts)` which composed the persona
+      // from `provider.persona` (the legacy free-text field). The v3
+      // swap reads the structured `member_profiles` row via
+      // `MemberProfileService.buildPersona()` so user edits in
+      // {@link MemberProfileEditModal} land in the AI's system prompt
+      // STARTING NEXT TURN (no caching — buildPersona reads the row
+      // fresh every call).
+      //
+      // Permission rules are appended as a separate block via the
+      // `buildPermissionRules` shim (R8-Task10 promotion). Identical
+      // wording to v2 so AI behaviour does not drift across the swap.
+      //
+      // When `memberProfileService` is missing (R7 callers / smoke tests
+      // that never opted into the v3 wiring), fall back to the v2 path
+      // for compatibility.
+      let persona = '';
+      if (this.shouldIncludePersona(provider, speaker.id)) {
+        const permissionRules = buildPermissionRules({
+          permission: null,
+          projectFolder: this.session.sessionMachine.ctx.projectPath || null,
+          arenaFolder: this.arenaRootService.getPath(),
+        });
+        if (this.memberProfileService) {
+          const v3Identity = this.memberProfileService.buildPersona(speaker.id);
+          persona = `${v3Identity}${permissionRules}`;
+        } else {
+          persona = buildEffectivePersona(provider, {
             permission: null,
-            projectFolder: this.session.sessionMachine.ctx.projectPath || null,
+            projectFolder:
+              this.session.sessionMachine.ctx.projectPath || null,
             arenaFolder: this.arenaRootService.getPath(),
-          })
-        : '';
+          });
+        }
+      }
 
       if (provider.type === 'cli') {
         const permissionPrompt = this.buildCliPermissionPrompt(provider, speaker);

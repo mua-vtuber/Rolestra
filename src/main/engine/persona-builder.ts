@@ -43,8 +43,18 @@ export interface PersonaBuildOptions {
  *
  * Translates the PermissionService settings into natural-language
  * instructions that CLI providers can follow.
+ *
+ * R8-Task10: promoted from module-private to exported. The new v3 swap
+ * in `meeting-turn-executor` builds its persona from
+ * `MemberProfileService.buildPersona()` (Identity section) and appends
+ * THESE permission rules as a separate string. Previously the rules
+ * lived inside the v2 `buildEffectivePersona()`; the export keeps the
+ * v2 builder intact while letting the v3 path reuse the SAME wording so
+ * AI behaviour stays identical across the swap. v2 builder is still
+ * used by R6-deprecated `engine/turn-executor.ts` (R11 cleanup target);
+ * unifying the helper avoids divergent prompts during the overlap.
  */
-function buildPermissionRules(options: PersonaBuildOptions): string {
+export function buildPermissionRules(options: PersonaBuildOptions): string {
   const { permission, projectFolder, arenaFolder } = options;
 
   // No project folder configured → pure conversation mode
