@@ -309,16 +309,8 @@ export type IpcChannelMap = {
   };
 
   // ── CLI Native Permission Requests ──────────────────────────────────
-  'cli-permission:respond': {
-    request: {
-      /** Provider/participant ID that owns the CLI process. */
-      participantId: string;
-      /** CLI-internal request identifier (from the permission_request event). */
-      cliRequestId: string;
-      approved: boolean;
-    };
-    response: undefined;
-  };
+  // R7-Task4 removed `cli-permission:respond` — the v3 flow uses
+  // `approval:decide` (ApprovalService) for every CLI permission decision.
 
   // ── Runtime Permission Requests ───────────────────────────────────────
   'permission:list-pending': {

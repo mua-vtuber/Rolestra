@@ -13,7 +13,6 @@ import { ConversationSession } from '../../engine/conversation';
 import { ConversationOrchestrator } from '../../engine/orchestrator';
 import { submitPatchForReview, clearPendingPatches } from './execution-handler';
 import { workspaceService, permissionService } from './workspace-handler';
-import { clearPendingCliPermissions } from './cli-permission-handler';
 import { attachPermissionRevocationListener } from '../../files/permission-revocation-listener';
 import { attachCliPermissionBridge } from '../../files/cli-permission-bridge';
 import { providerRegistry } from '../../providers/registry';
@@ -79,7 +78,9 @@ export function setActiveSession(session: ConversationSession | null): void {
   if (session === null) {
     requestedRoundSetting = 'unlimited';
     clearPendingPatches();
-    clearPendingCliPermissions();
+    // R7-Task4: v2 cli-permission pending-resolver map is gone — any
+    // inflight approvals now live in ApprovalService and are cleaned up
+    // by TTL / ApprovalCliAdapter timeout. No explicit reset needed here.
   }
 }
 

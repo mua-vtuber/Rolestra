@@ -15,8 +15,9 @@ import type { ModeJudgment, SessionInfo } from './session-state-types';
 export type StreamEventMap = {
   /** A new token arrived from an AI participant. */
   'stream:token': StreamTokenEvent;
-  /** A CLI tool natively requested permission (e.g. Claude Code permission_request event). */
-  'stream:cli-permission-request': StreamCliPermissionRequestEvent;
+  // R7-Task4 removed `stream:cli-permission-request` — the v3 flow pushes
+  // CLI permission decisions through `stream:approval-created` on the
+  // v3 StreamBridge (`src/shared/stream-events.ts`).
   /** An error occurred during streaming. */
   'stream:error': StreamErrorEvent;
   /** The conversation state changed. */
@@ -169,21 +170,6 @@ export interface StreamReviewRequestEvent {
   session: SessionInfo;
 }
 
-/** Data describing a single CLI-native permission request. */
-export interface CliPermissionRequestData {
-  /** CLI-internal request identifier for routing responses back. */
-  cliRequestId: string;
-  /** Tool or action name requested (e.g. "Write", "Bash", "Edit"). */
-  toolName: string;
-  /** Target path or command string. */
-  target: string;
-  /** Optional human-readable description from the CLI. */
-  description?: string;
-}
-
-export interface StreamCliPermissionRequestEvent {
-  conversationId: string;
-  participantId: string;
-  participantName: string;
-  request: CliPermissionRequestData;
-}
+// R7-Task4 removed `CliPermissionRequestData` + `StreamCliPermissionRequestEvent`.
+// The v3 shape lives in `src/shared/approval-types.ts` (`CliPermissionApprovalPayload`)
+// and is delivered via `stream:approval-created` on the v3 StreamBridge.

@@ -32,8 +32,25 @@ import { AppToolProvider, type AppTool } from './app-tool-provider';
 import type { CliPermissionAdapter } from '../providers/cli/permission-adapter';
 import { CliProvider } from '../providers/cli/cli-provider';
 import type { ParsedCliPermissionRequest } from '../providers/cli/cli-permission-parser';
-import type { CliPermissionRequestData } from '../../shared/stream-types';
-import { registerPendingCliPermission } from '../ipc/handlers/cli-permission-handler';
+// R7-Task4: cli-permission-handler.ts was deleted. CliPermissionRequestData
+// and registerPendingCliPermission are locally stubbed below so this
+// @deprecated file still compiles (@ts-nocheck at top masks type errors,
+// but module resolution still runs).
+interface CliPermissionRequestData {
+  cliRequestId: string;
+  toolName: string;
+  target: string;
+  description?: string;
+}
+// Auto-reject stub — v2 turn-executor has 0 live callers since R6-Task4.
+// If something does reach this code path, treat the prompt as denied.
+function registerPendingCliPermission(
+  _participantId: string,
+  _cliRequestId: string,
+  resolver: (approved: boolean) => void,
+): void {
+  resolver(false);
+}
 
 /** Filename prefix for work summary documents. */
 const WORK_SUMMARY_PREFIX = 'work-summary-';

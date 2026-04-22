@@ -59,7 +59,6 @@ import {
   handlePermissionReject,
   handlePermissionListRules,
 } from './handlers/permission-handler';
-import { handleCliPermissionRespond } from './handlers/cli-permission-handler';
 import {
   handleWorkspacePickFolder,
   handleWorkspaceInit,
@@ -404,7 +403,8 @@ export function registerIpcHandlers(): void {
   handle('execution:reject', isDev, (data) => handleExecutionReject(data));
 
   // ── CLI Native Permission Requests ────────────────────────────────────
-  handle('cli-permission:respond', isDev, (data) => handleCliPermissionRespond(data));
+  // R7-Task4 removed — ApprovalService now owns the full CLI permission
+  // lifecycle (approval:list + approval:decide already registered below).
 
   // ── Runtime Permission Requests ───────────────────────────────────────
   handle('permission:list-pending', isDev, () => handlePermissionListPending());
