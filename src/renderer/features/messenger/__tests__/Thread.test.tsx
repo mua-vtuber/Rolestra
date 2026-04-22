@@ -258,11 +258,11 @@ describe('Thread — MeetingBanner wire-up (Task 7)', () => {
 });
 
 describe('Thread — ChannelHeader variants for system / dm kinds', () => {
-  it('system_approval active channel → rename/delete disabled + readonly badge + no start-meeting', async () => {
+  it('system_approval active channel → rename/delete disabled + readonly badge + no start-meeting + ApprovalInboxView branch (R7-Task7)', async () => {
     useActiveChannelStore.setState({
       channelIdByProject: { [PROJECT_ID]: 'c-sys-a' },
     });
-    stubBridge({
+    const inboxStub = stubBridge({
       channels: [
         makeChannel({
           id: 'c-sys-a',
@@ -273,6 +273,36 @@ describe('Thread — ChannelHeader variants for system / dm kinds', () => {
       ],
       members: [],
     });
+    // The inbox calls approval:list — extend the mock so the branch lands
+    // in the empty state instead of throwing. Thread.test's stubBridge
+    // default throws on unknown channels.
+    (inboxStub as unknown as { mockImplementation: (fn: (...args: unknown[]) => unknown) => void }).mockImplementation(
+      async (...args: unknown[]) => {
+        const channel = args[0] as string;
+        const data = args[1];
+        if (channel === 'channel:list') {
+          const payload = data as { projectId: string | null };
+          return payload.projectId === null
+            ? { channels: [] }
+            : {
+                channels: [
+                  makeChannel({
+                    id: 'c-sys-a',
+                    name: 'system-approval',
+                    kind: 'system_approval',
+                    readOnly: true,
+                  }),
+                ],
+              };
+        }
+        if (channel === 'member:list') return { members: [] };
+        if (channel === 'meeting:list-active') return { meetings: [] };
+        if (channel === 'approval:list') return { items: [] };
+        if (channel === 'message:list-by-channel') return { messages: [] };
+        throw new Error(`no mock for channel ${channel}`);
+      },
+    );
+
     renderThread(
       <Thread
         projectId={PROJECT_ID}
@@ -291,6 +321,16 @@ describe('Thread — ChannelHeader variants for system / dm kinds', () => {
     expect(
       (screen.getByTestId('channel-header-delete') as HTMLButtonElement).disabled,
     ).toBe(true);
+
+    // R7-Task7: #승인-대기 채널에서는 ApprovalInboxView 가 message-list 대신
+    // 단독 렌더된다.
+    await waitFor(() =>
+      expect(screen.getByTestId('approval-inbox-view')).toBeTruthy(),
+    );
+    expect(screen.queryByTestId('thread-message-list')).toBeNull();
+    expect(
+      screen.getByTestId('approval-inbox-view').getAttribute('data-project-id'),
+    ).toBe(PROJECT_ID);
   });
 
   it('dm active channel → no start-meeting, no rename, delete enabled', async () => {

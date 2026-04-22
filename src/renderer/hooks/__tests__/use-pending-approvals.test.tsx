@@ -174,6 +174,46 @@ describe('usePendingApprovals', () => {
     expect(result.current.items).toEqual([SAMPLE_2]);
   });
 
+  it('projectId filter: passes projectId through to approval:list', async () => {
+    const bridgeInvoke = vi.fn().mockResolvedValue({ items: [SAMPLE] });
+    vi.stubGlobal('arena', { platform: 'linux', invoke: bridgeInvoke });
+
+    const { result } = renderHook(() => usePendingApprovals('p-filter'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(bridgeInvoke).toHaveBeenCalledWith('approval:list', {
+      status: 'pending',
+      projectId: 'p-filter',
+    });
+  });
+
+  it('projectId filter: ignores stream:approval-created for other projects', async () => {
+    const bridgeInvoke = vi.fn().mockResolvedValue({ items: [] });
+    const { onStream, trigger } = makeStreamHarness();
+    vi.stubGlobal('arena', {
+      platform: 'linux',
+      invoke: bridgeInvoke,
+      onStream,
+    });
+
+    const { result } = renderHook(() => usePendingApprovals('p-1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => {
+      trigger('stream:approval-created', {
+        item: { ...SAMPLE, id: 'a-other', projectId: 'p-2' },
+      });
+    });
+    expect(result.current.items).toEqual([]);
+
+    act(() => {
+      trigger('stream:approval-created', {
+        item: { ...SAMPLE, id: 'a-mine', projectId: 'p-1' },
+      });
+    });
+    expect(result.current.items?.map((x) => x.id)).toEqual(['a-mine']);
+  });
+
   it('stream: unsubscribes on unmount (no listener leak)', async () => {
     const bridgeInvoke = vi.fn().mockResolvedValue({ items: [] });
     const { onStream, listeners } = makeStreamHarness();

@@ -127,6 +127,11 @@
         "generic": "Failed to submit the approval decision.",
         "notFound": "Approval request not found."
       },
+      "inbox": {
+        "empty": "No pending approvals.",
+        "error": "Could not load approvals.",
+        "loading": "Loading approvals…"
+      },
       "label": "⚠ Approval requested",
       "labelRetro": "[APPROVAL REQUESTED]",
       "rejectDialog": {

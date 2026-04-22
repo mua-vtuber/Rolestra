@@ -59,10 +59,10 @@
     {
       "id": 7,
       "subject": "Task 7: ApprovalInboxView + Thread #승인-대기 채널 분기 렌더",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** `src/renderer/features/approvals/ApprovalInboxView.tsx` 신규 — `#승인-대기` 시스템 채널 Thread 전용 컨테이너(pending approval 리스트 → ApprovalBlock 반복). Thread.tsx 는 채널 kind='system_approval' 일 때 ApprovalInboxView 단독 렌더로 분기. usePendingApprovals 에 projectId 옵션 추가.\n\n**Files:** src/renderer/features/approvals/ApprovalInboxView.tsx + __tests__, src/renderer/features/messenger/Thread.tsx, src/renderer/hooks/use-pending-approvals.ts\n\n**Verify:** `npm run test -- ApprovalInboxView Thread`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/approvals/ApprovalInboxView.tsx\",\"src/renderer/features/messenger/Thread.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalInboxView Thread\",\"acceptanceCriteria\":[\"#승인-대기 채널 → ApprovalInboxView\",\"pending 리스트 렌더 정확\",\"decide 후 stream 이벤트로 사라짐\",\"다른 채널 Thread 렌더 regression 0\",\"빈 상태 i18n 경유\"]}\n```",
-      "lastUpdated": "2026-04-22T16:00:00.000Z"
+      "lastUpdated": "2026-04-22T23:11:00.000Z"
     },
     {
       "id": 8,

@@ -41,6 +41,7 @@ import { MeetingBanner } from './MeetingBanner';
 import { Message, type MessageAuthorInfo } from './Message';
 import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
+import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
 import { StartMeetingModal } from '../meetings/StartMeetingModal';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
@@ -294,34 +295,41 @@ export function Thread({
         onDelete={handleDelete}
       />
 
-      {activeMeeting ? (
-        <MeetingBanner
-          meeting={activeMeeting}
-          memberCount={memberCount}
-        />
-      ) : null}
+      {activeChannel.kind === 'system_approval' ? (
+        // R7-Task7: #승인-대기 채널은 메시지 리스트 대신 pending approval
+        // inbox 를 단독 렌더한다. MeetingBanner / Composer / message-list
+        // 는 이 브랜치에서는 의미가 없다 (readOnly + meeting 불가).
+        <ApprovalInboxView projectId={projectId} />
+      ) : (
+        <>
+          {activeMeeting ? (
+            <MeetingBanner
+              meeting={activeMeeting}
+              memberCount={memberCount}
+            />
+          ) : null}
 
-      {meetingStream.error ? (
-        <div
-          data-testid="thread-meeting-error"
-          data-fatal={meetingStream.error.fatal ? 'true' : 'false'}
-          className="px-4 py-1 text-xs text-danger"
-        >
-          {/* R6-Task11: static key anchors the `meeting.*` namespace
-              so i18next-parser's keepRemoved regex preserves the
-              variable-keyed `meeting.state.*` / `meeting.error.*` /
-              `meeting.minutes.*` / `meeting.banner.state.*` subtrees. */}
-          {t('meeting.error.providerError')}: {meetingStream.error.message}
-        </div>
-      ) : null}
+          {meetingStream.error ? (
+            <div
+              data-testid="thread-meeting-error"
+              data-fatal={meetingStream.error.fatal ? 'true' : 'false'}
+              className="px-4 py-1 text-xs text-danger"
+            >
+              {/* R6-Task11: static key anchors the `meeting.*` namespace
+                  so i18next-parser's keepRemoved regex preserves the
+                  variable-keyed `meeting.state.*` / `meeting.error.*` /
+                  `meeting.minutes.*` / `meeting.banner.state.*` subtrees. */}
+              {t('meeting.error.providerError')}: {meetingStream.error.message}
+            </div>
+          ) : null}
 
-      <div
-        ref={scrollRef}
-        data-testid="thread-message-list"
-        data-message-count={messages === null ? 'null' : String(messages.length)}
-        data-live-turns={String(meetingStream.liveTurns.length)}
-        className="flex-1 min-h-0 overflow-y-auto px-0 py-2 text-sm text-fg"
-      >
+          <div
+            ref={scrollRef}
+            data-testid="thread-message-list"
+            data-message-count={messages === null ? 'null' : String(messages.length)}
+            data-live-turns={String(meetingStream.liveTurns.length)}
+            className="flex-1 min-h-0 overflow-y-auto px-0 py-2 text-sm text-fg"
+          >
         {messages === null ? (
           <p
             data-testid="thread-loading"
@@ -387,13 +395,15 @@ export function Thread({
             );
           })
         )}
-      </div>
+          </div>
 
-      <Composer
-        channelId={activeChannel.id}
-        readOnly={activeChannel.readOnly}
-        onSendSuccess={handleComposerSendSuccess}
-      />
+          <Composer
+            channelId={activeChannel.id}
+            readOnly={activeChannel.readOnly}
+            onSendSuccess={handleComposerSendSuccess}
+          />
+        </>
+      )}
 
       <StartMeetingModal
         open={startMeetingOpen}

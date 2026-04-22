@@ -8,6 +8,11 @@
  * without polling. `stream:approval-decided` removes the item from the
  * pending list (terminal status); `stream:approval-created` prepends it
  * (newest first, matching `approval:list` ordering).
+ * R7-Task7: optional `projectId` filter — when provided, passes it through
+ * to `approval:list` AND filters `stream:approval-created` events to items
+ * with matching `item.projectId`. Unset/`null` retains the project-wide
+ * behaviour the dashboard widget expects (no filter). `decided` events
+ * always apply — removing a non-member id is a safe no-op via filter.
  *
  * Strict-mode safe: the initial fetch runs exactly once (didMountFetchRef
  * guard) and stream subscriptions mount on every render pass — React 18
@@ -62,46 +67,59 @@ function applyDecided(
   return prev.filter((existing) => existing.id !== item.id);
 }
 
-export function usePendingApprovals(): UsePendingApprovalsResult {
+export function usePendingApprovals(
+  projectId?: string | null,
+): UsePendingApprovalsResult {
   const [items, setItems] = useState<ApprovalItem[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<Error | null>(null);
 
-  const didMountFetchRef = useRef(false);
+  /**
+   * Sentinel `Symbol('unset')` means "no fetch attempted yet". Any subsequent
+   * change to `filterProjectId` (including `null → 'p-1'`) re-fetches once;
+   * React 18 strict mode double-mount does not trigger a second fetch because
+   * the ref still matches after the unmount→remount.
+   */
+  const UNSET = useRef<symbol>(Symbol('pending-approvals-unset')).current;
+  const lastFetchedFilterRef = useRef<string | null | symbol>(UNSET);
   const mountedRef = useRef(true);
+  const filterProjectId =
+    typeof projectId === 'string' && projectId.length > 0 ? projectId : null;
 
-  const runFetch = useCallback(async (isInitial: boolean): Promise<void> => {
-    setLoading(true);
-    if (!isInitial) setError(null);
-    try {
-      const { items: list } = await invoke('approval:list', {
-        status: 'pending',
-      });
-      if (!mountedRef.current) return;
-      setItems(list);
-      setError(null);
-    } catch (reason) {
-      if (!mountedRef.current) return;
-      setError(toError(reason));
-      if (isInitial) setItems(null);
-    } finally {
-      if (mountedRef.current) setLoading(false);
-    }
-  }, []);
+  const runFetch = useCallback(
+    async (isInitial: boolean): Promise<void> => {
+      setLoading(true);
+      if (!isInitial) setError(null);
+      try {
+        const request: { status: 'pending'; projectId?: string } = {
+          status: 'pending',
+        };
+        if (filterProjectId !== null) request.projectId = filterProjectId;
+        const { items: list } = await invoke('approval:list', request);
+        if (!mountedRef.current) return;
+        setItems(list);
+        setError(null);
+      } catch (reason) {
+        if (!mountedRef.current) return;
+        setError(toError(reason));
+        if (isInitial) setItems(null);
+      } finally {
+        if (mountedRef.current) setLoading(false);
+      }
+    },
+    [filterProjectId],
+  );
 
   useEffect(() => {
     mountedRef.current = true;
-    if (didMountFetchRef.current) {
-      return () => {
-        mountedRef.current = false;
-      };
+    if (lastFetchedFilterRef.current !== filterProjectId) {
+      lastFetchedFilterRef.current = filterProjectId;
+      void runFetch(true);
     }
-    didMountFetchRef.current = true;
-    void runFetch(true);
     return () => {
       mountedRef.current = false;
     };
-  }, [runFetch]);
+  }, [runFetch, filterProjectId]);
 
   // R7-Task2: live stream merge. Subscribes unconditionally so the first
   // event after mount is captured even when the initial fetch is still
@@ -116,6 +134,15 @@ export function usePendingApprovals(): UsePendingApprovalsResult {
       'stream:approval-created',
       (payload: StreamApprovalCreatedPayload) => {
         if (!mountedRef.current) return;
+        // R7-Task7: filter by project so the #승인-대기 inbox only shows
+        // approvals for the host project. Global callers (widget) pass no
+        // filter and see every item.
+        if (
+          filterProjectId !== null &&
+          payload.item.projectId !== filterProjectId
+        ) {
+          return;
+        }
         setItems((prev) => applyCreated(prev, payload.item));
       },
     );
@@ -123,6 +150,9 @@ export function usePendingApprovals(): UsePendingApprovalsResult {
       'stream:approval-decided',
       (payload: StreamApprovalDecidedPayload) => {
         if (!mountedRef.current) return;
+        // `decided` always applies — if the id is not in the current list
+        // the filter in `applyDecided` is a no-op. No projectId gate here
+        // avoids leaking a stale id when the approval straddles projects.
         setItems((prev) => applyDecided(prev, payload.item));
       },
     );
@@ -130,7 +160,7 @@ export function usePendingApprovals(): UsePendingApprovalsResult {
       offCreated();
       offDecided();
     };
-  }, []);
+  }, [filterProjectId]);
 
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);
