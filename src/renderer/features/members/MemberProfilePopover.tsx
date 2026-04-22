@@ -114,7 +114,7 @@ export function MemberProfilePopover({
         status: target,
       });
       setLocalStatus(target);
-    } catch (e) {
+    } catch {
       setActionError(t('profile.popover.errors.toggleFailed'));
     } finally {
       setPending(null);
@@ -130,7 +130,7 @@ export function MemberProfilePopover({
         providerId: member.providerId,
       });
       setLocalStatus(status);
-    } catch (e) {
+    } catch {
       setLocalStatus('offline-connection');
       setActionError(t('profile.popover.errors.reconnectFailed'));
     } finally {

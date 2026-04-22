@@ -107,7 +107,7 @@
     {
       "id": 13,
       "subject": "Task 13: R8 Closeout — typecheck/lint/test/i18n/theme/build + done-checklist + tasks 14/14",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [12],
       "description": "**Goal:** 모든 정식 게이트 녹색. `docs/superpowers/specs/r8-done-checklist.md` 작성 (14 산출물 + Known Concerns + Decision Log). spec §10 R8 [ ] → [x]. tasks.json 14/14 completed.\n\n**Files:** docs/superpowers/specs/r8-done-checklist.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R8), tasks.json\n\n**Verify:** `npm run typecheck && npm run typecheck:web && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build`\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/r8-done-checklist.md\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build\",\"acceptanceCriteria\":[\"정식 게이트 전체 녹색\",\"r8-done-checklist.md 작성\",\"§10 R8 모든 ✓\",\"tasks.json 14/14 completed\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

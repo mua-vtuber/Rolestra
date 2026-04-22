@@ -31,7 +31,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { useEffect, useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
@@ -132,19 +132,28 @@ export function MemberProfileEditModal({
   // Seed draft when the profile fetch resolves (or when opening with a fresh
   // providerId). Skips if the user has already started editing — but R8
   // closes the modal on save so this race is rare in practice.
+  //
+  // We track the last-seeded provider key in a ref so the effect's
+  // setState calls fire AT MOST ONCE per open/providerId combo —
+  // satisfying the lint rule against cascading renders. On close we
+  // reset the ref so the next open re-seeds even for the same id.
+  const seededForKeyRef = useRef<string>('');
   useEffect(() => {
     if (!open) {
+      if (seededForKeyRef.current === '') return;
+      seededForKeyRef.current = '';
       setDraft(EMPTY_DRAFT);
       setOriginal(EMPTY_DRAFT);
       reset();
       return;
     }
-    if (profile) {
+    if (profile && seededForKeyRef.current !== providerId) {
+      seededForKeyRef.current = providerId;
       const seed = profileToDraft(profile);
       setDraft(seed);
       setOriginal(seed);
     }
-  }, [open, profile, reset]);
+  }, [open, profile, providerId, reset]);
 
   async function handleSave(): Promise<void> {
     const patch = buildPatch(original, draft);
