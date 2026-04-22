@@ -36,6 +36,7 @@ import {
 import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 import { ApprovalService } from './approvals/approval-service';
+import { setApprovalServiceAccessor } from './ipc/handlers/approval-handler';
 import { NotificationRepository } from './notifications/notification-repository';
 import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
@@ -158,15 +159,25 @@ app.whenReady().then(async () => {
     setChannelServiceAccessor(() => channelService);
     setMeetingServiceAccessor(() => meetingService);
 
-    // R6-Task1: StreamBridge — central Main → Renderer v3 push hub.
+    // R7-Task2: ApprovalService must be instantiated BEFORE StreamBridge
+    // so `streamBridge.connect({ approvals })` can subscribe to the
+    // service's EventEmitter (spec §6 stream:approval-*). This also
+    // unblocks `approval:list` / `approval:decide` IPC — without the
+    // accessor the handlers throw at invoke time.
+    const approvalService = new ApprovalService(new ApprovalRepository(db));
+    setApprovalServiceAccessor(() => approvalService);
+
+    // R6-Task1 + R7-Task2: StreamBridge — central Main → Renderer v3 push hub.
     // `onOutbound` is wired to every browser window's webContents; v3
     // events land on the renderer as `ipcRenderer.on(event.type, payload)`
-    // matching preload's `typedOnStream`. Service connect + per-meeting
-    // side effects land in R6-Task4 when MeetingOrchestrator boots.
+    // matching preload's `typedOnStream`. `connect({ approvals })` wires
+    // ApprovalService 'created'/'decided' EventEmitter events to the
+    // `stream:approval-*` push channels — renderer hooks drop polling.
     const streamBridge = new StreamBridge();
     streamBridge.connect({
       messages: messageService,
-      // approvals/queue connect in R7/R9 respectively.
+      approvals: approvalService,
+      // queue connect in R9.
     });
     streamBridge.onOutbound((event) => {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -180,11 +191,10 @@ app.whenReady().then(async () => {
     setStreamBridgeInstance(streamBridge);
 
     // R6-Task4: MeetingOrchestrator support services.
-    // ApprovalService + NotificationService land here (not their own
-    // handler block) because the R6 side-effect wiring needs them
-    // BEFORE channel:start-meeting fires. R7 splits them back out into
-    // dedicated IPC handlers with their own accessors.
-    const approvalService = new ApprovalService(new ApprovalRepository(db));
+    // NotificationService lands here (not its own handler block) because
+    // the R6 side-effect wiring needs it BEFORE channel:start-meeting
+    // fires. R7-Task11 wires ApprovalService 'created' → NotificationService
+    // approval_pending trigger; R9 splits this out further.
     const notificationService = new NotificationService(
       new NotificationRepository(db),
       new ElectronNotifierAdapter(),

@@ -1,20 +1,26 @@
 /**
- * `usePendingApprovals` — fetches pending-status approval items for the
- * R4 dashboard ApprovalsWidget (spec §7.5).
+ * `usePendingApprovals` — pending approval items for the dashboard widget
+ * and the `#승인-대기` ApprovalInboxView (spec §7.4, §7.5).
  *
- * Backed by the existing `approval:list` channel with
- * `status='pending'`. The server-side list has no limit argument at the
- * wire level (the channel type accepts `{ status?, projectId? }`); the
- * widget slices down to 5 visible rows client-side and shows the full
- * count in a badge.
+ * R4 baseline: mount-time fetch of `approval:list` with `status='pending'`.
+ * R7-Task2: live stream merge — subscribes to `stream:approval-created` and
+ * `stream:approval-decided` so the list reflects ApprovalService mutations
+ * without polling. `stream:approval-decided` removes the item from the
+ * pending list (terminal status); `stream:approval-created` prepends it
+ * (newest first, matching `approval:list` ordering).
  *
- * Contract mirrors {@link useActiveMeetings} — strict-mode safe initial
- * fetch, last-good retention on refresh error.
+ * Strict-mode safe: the initial fetch runs exactly once (didMountFetchRef
+ * guard) and stream subscriptions mount on every render pass — React 18
+ * double-mounts in dev so the cleanup must tear the subscription down.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { invoke } from '../ipc/invoke';
 import type { ApprovalItem } from '../../shared/approval-types';
+import type {
+  StreamApprovalCreatedPayload,
+  StreamApprovalDecidedPayload,
+} from '../../shared/stream-events';
 
 export interface UsePendingApprovalsResult {
   items: ApprovalItem[] | null;
@@ -25,6 +31,35 @@ export interface UsePendingApprovalsResult {
 
 function toError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error(String(reason));
+}
+
+/**
+ * Prepend the freshly-created approval while de-duplicating by id — the
+ * event and the next refetch can occasionally race (e.g. initial fetch
+ * lands after a create event) and we do not want the same id twice.
+ */
+function applyCreated(
+  prev: ApprovalItem[] | null,
+  item: ApprovalItem,
+): ApprovalItem[] {
+  if (item.status !== 'pending') {
+    // Defensive — ApprovalService.create always persists 'pending', but
+    // a buggy producer must not corrupt the pending list.
+    return prev ?? [];
+  }
+  const base = prev ?? [];
+  if (base.some((existing) => existing.id === item.id)) {
+    return base;
+  }
+  return [item, ...base];
+}
+
+function applyDecided(
+  prev: ApprovalItem[] | null,
+  item: ApprovalItem,
+): ApprovalItem[] | null {
+  if (prev === null) return prev;
+  return prev.filter((existing) => existing.id !== item.id);
 }
 
 export function usePendingApprovals(): UsePendingApprovalsResult {
@@ -67,6 +102,35 @@ export function usePendingApprovals(): UsePendingApprovalsResult {
       mountedRef.current = false;
     };
   }, [runFetch]);
+
+  // R7-Task2: live stream merge. Subscribes unconditionally so the first
+  // event after mount is captured even when the initial fetch is still
+  // in flight. `arena.onStream` is absent in unit tests that do not stub
+  // it — we no-op in that case so existing jsdom tests stay green.
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.arena : undefined;
+    const onStream = bridge?.onStream;
+    if (!onStream) return undefined;
+
+    const offCreated = onStream(
+      'stream:approval-created',
+      (payload: StreamApprovalCreatedPayload) => {
+        if (!mountedRef.current) return;
+        setItems((prev) => applyCreated(prev, payload.item));
+      },
+    );
+    const offDecided = onStream(
+      'stream:approval-decided',
+      (payload: StreamApprovalDecidedPayload) => {
+        if (!mountedRef.current) return;
+        setItems((prev) => applyDecided(prev, payload.item));
+      },
+    );
+    return () => {
+      offCreated();
+      offDecided();
+    };
+  }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);
