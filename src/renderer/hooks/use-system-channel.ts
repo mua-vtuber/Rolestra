@@ -15,7 +15,7 @@
  *   - Strict-mode double-mount safe — fetch once per `projectId+kind`
  *     combo.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 
 import { invoke } from '../ipc/invoke';
 import type { ChannelKind } from '../../shared/channel-types';
@@ -26,13 +26,41 @@ export interface UseSystemChannelResult {
   error: Error | null;
 }
 
+interface State {
+  channelId: string | null;
+  loading: boolean;
+  error: Error | null;
+}
+type Action =
+  | { type: 'reset' }
+  | { type: 'fetchStart' }
+  | { type: 'fetchSuccess'; channelId: string | null }
+  | { type: 'fetchError'; error: Error };
+
+const INITIAL_STATE: State = {
+  channelId: null,
+  loading: false,
+  error: null,
+};
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'reset':
+      return INITIAL_STATE;
+    case 'fetchStart':
+      return { ...state, loading: true, error: null };
+    case 'fetchSuccess':
+      return { channelId: action.channelId, loading: false, error: null };
+    case 'fetchError':
+      return { channelId: null, loading: false, error: action.error };
+  }
+}
+
 export function useSystemChannel(
   projectId: string | null,
   kind: ChannelKind,
 ): UseSystemChannelResult {
-  const [channelId, setChannelId] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<Error | null>(null);
+  const [state, dispatch] = useReducer(reducer, INITIAL_STATE);
   const mountedRef = useRef(true);
   const lastKeyRef = useRef<string | null>(null);
 
@@ -47,31 +75,25 @@ export function useSystemChannel(
     lastKeyRef.current = key;
 
     if (projectId === null) {
-      setChannelId(null);
-      setLoading(false);
-      setError(null);
+      dispatch({ type: 'reset' });
       return () => {
         mountedRef.current = false;
       };
     }
 
-    setLoading(true);
-    setError(null);
+    dispatch({ type: 'fetchStart' });
     (async () => {
       try {
         const { channels } = await invoke('channel:list', { projectId });
         if (!mountedRef.current) return;
         const found = channels.find((c) => c.kind === kind);
-        setChannelId(found?.id ?? null);
+        dispatch({ type: 'fetchSuccess', channelId: found?.id ?? null });
       } catch (reason) {
         if (!mountedRef.current) return;
         const err =
           reason instanceof Error ? reason : new Error(String(reason));
         console.warn('[rolestra] useSystemChannel channel:list failed', err);
-        setError(err);
-        setChannelId(null);
-      } finally {
-        if (mountedRef.current) setLoading(false);
+        dispatch({ type: 'fetchError', error: err });
       }
     })();
 
@@ -80,5 +102,5 @@ export function useSystemChannel(
     };
   }, [projectId, kind]);
 
-  return { channelId, loading, error };
+  return state;
 }

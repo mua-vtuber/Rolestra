@@ -586,9 +586,10 @@ export class ProjectService {
       );
     }
 
+    const approvalSvc = this.opts.approvalService;
     const supersedeAndRethrow = (err: Error): never => {
       try {
-        this.opts.approvalService!.supersede(approvalId);
+        approvalSvc.supersede(approvalId);
       } catch (supersedeErr) {
         // TODO R2-log: the supersede failure itself is worth logging but
         // must not mask the original TOCTOU reason the caller needs.

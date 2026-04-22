@@ -39,6 +39,14 @@ function toError(reason: unknown): Error {
 }
 
 /**
+ * Module-scoped sentinel used by the fetch-once ref below. Minting at the
+ * module level (not on every render) avoids the react-compiler "cannot
+ * access refs during render" diagnostic that fires when `Symbol()` is
+ * combined with `useRef()` in the component body.
+ */
+const UNSET = Symbol('use-pending-approvals:unset');
+
+/**
  * Prepend the freshly-created approval while de-duplicating by id — the
  * event and the next refetch can occasionally race (e.g. initial fetch
  * lands after a create event) and we do not want the same id twice.
@@ -75,13 +83,17 @@ export function usePendingApprovals(
   const [error, setError] = useState<Error | null>(null);
 
   /**
-   * Sentinel `Symbol('unset')` means "no fetch attempted yet". Any subsequent
-   * change to `filterProjectId` (including `null → 'p-1'`) re-fetches once;
-   * React 18 strict mode double-mount does not trigger a second fetch because
-   * the ref still matches after the unmount→remount.
+   * Sentinel means "no fetch attempted yet". Any subsequent change to
+   * `filterProjectId` (including `null → 'p-1'`) re-fetches once; React 18
+   * strict-mode double-mount does not trigger a second fetch because the
+   * ref still matches the same filter after unmount→remount.
+   *
+   * Using a module-scoped unique Symbol (set at module init) avoids the
+   * react-compiler rule "Cannot access refs during render" — the Symbol()
+   * call on every render reads a ref and re-mints a new symbol per render
+   * pass, which is banned under the strict rules of hooks.
    */
-  const UNSET = useRef<symbol>(Symbol('pending-approvals-unset')).current;
-  const lastFetchedFilterRef = useRef<string | null | symbol>(UNSET);
+  const lastFetchedFilterRef = useRef<string | null | typeof UNSET>(UNSET);
   const mountedRef = useRef(true);
   const filterProjectId =
     typeof projectId === 'string' && projectId.length > 0 ? projectId : null;
