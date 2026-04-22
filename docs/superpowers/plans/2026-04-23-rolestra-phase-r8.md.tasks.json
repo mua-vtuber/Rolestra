@@ -35,7 +35,7 @@
     {
       "id": 4,
       "subject": "Task 4: MemberProfileEditModal (Radix Dialog: 4 필드 + AvatarPicker)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** `src/renderer/features/members/MemberProfileEditModal.tsx` 신규 — Radix Dialog, role/personality/expertise/avatar 4 필드, save → `member:update-profile` invoke. `use-member-profile.ts` hook (mount-fetch + mutation).\n\n**Files:** src/renderer/features/members/MemberProfileEditModal.tsx + __tests__, src/renderer/hooks/use-member-profile.ts\n\n**Verify:** `npm run test -- MemberProfileEditModal use-member-profile`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/members/MemberProfileEditModal.tsx\",\"src/renderer/hooks/use-member-profile.ts\"],\"verifyCommand\":\"npm run test -- MemberProfileEditModal\",\"acceptanceCriteria\":[\"4 필드 → save → invoke 인자 정확\",\"AvatarPicker onChange 반영\",\"취소 시 invoke 0\",\"에러 시 모달 유지 + 메시지\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"
