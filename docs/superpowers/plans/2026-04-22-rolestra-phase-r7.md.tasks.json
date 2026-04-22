@@ -1,0 +1,116 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: R7 브랜치 + spec §10 R7 체크리스트 확장 + plan + tasks.json + Decision Log",
+      "status": "pending",
+      "description": "**Goal:** `rolestra-phase-r7` 브랜치 main tip(`1bfa3e1`)에서 분기. spec §10 Phase R7 블록을 R3/R4/R5/R6 와 동일한 체크박스+산출물 링크 템플릿으로 확장. Decision Log 8건(D1~D8) 기록. tasks.json 14-slot skeleton.\n\n**Files:** docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md, docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md.tasks.json, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 Phase R7만)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r7\n\n```json:metadata\n{\"files\":[\"docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md\",\"docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md.tasks.json\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r7 브랜치 생성\",\"Decision Log에 D1~D8 8건 기록\",\"§10 Phase R7 체크박스+산출물 템플릿 확장\",\"tasks.json 14-slot skeleton 존재\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Shared approval-stream-events.ts + ApprovalPayload discriminated union",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** `src/shared/approval-stream-events.ts` 신규 (stream:approval-created/decided discriminated union + zod). `src/shared/approval-types.ts` 에 ApprovalPayload 3 kind(cli_permission / mode_transition / consensus_decision) discriminated union 추가. 기존 stream-events.ts re-export.\n\n**Files:** src/shared/approval-stream-events.ts, src/shared/approval-types.ts, src/shared/stream-events.ts, src/shared/__tests__/approval-stream-events.test.ts\n\n**Verify:** `npm run test -- approval-stream-events`\n\n```json:metadata\n{\"files\":[\"src/shared/approval-stream-events.ts\",\"src/shared/approval-types.ts\"],\"verifyCommand\":\"npm run test -- approval-stream-events\",\"acceptanceCriteria\":[\"ApprovalPayload 3 kind discriminated union\",\"stream:approval-* 2 이벤트 + zod\",\"typecheck 회귀 0\",\"zod round-trip 6~8 케이스\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: ApprovalStreamAdapter + usePendingApprovals 실시간 전환",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** `src/main/approvals/approval-stream-adapter.ts` 신규 — ApprovalService EventEmitter('created'/'decided') → StreamBridge emit('stream:approval-*'). main/index.ts 에서 wire() 호출. `usePendingApprovals` 를 mount-fetch + stream 구독 병행으로 전환.\n\n**Files:** src/main/approvals/approval-stream-adapter.ts, src/main/streams/stream-bridge.ts, src/main/index.ts, src/preload/index.ts, src/renderer/hooks/use-pending-approvals.ts + __tests__\n\n**Verify:** `npm run test -- approval-stream-adapter use-pending-approvals`\n\n```json:metadata\n{\"files\":[\"src/main/approvals/approval-stream-adapter.ts\",\"src/renderer/hooks/use-pending-approvals.ts\"],\"verifyCommand\":\"npm run test -- approval-stream-adapter use-pending-approvals\",\"acceptanceCriteria\":[\"ApprovalService.create → stream:approval-created emit\",\"ApprovalService.decide → stream:approval-decided emit\",\"hook mount-fetch + stream 병합 정확\",\"disposer 호출 시 listener 0\",\"8~12 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: ApprovalCliAdapter + MeetingTurnExecutor CLI permission v3 교체",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** `src/main/approvals/approval-cli-adapter.ts` 신규 — `createCliPermissionApproval(ctx) → Promise<boolean>` (create + subscribe-once('decided') + timeout 5분 기본 + auto-expire). MeetingTurnExecutor.setPermissionRequestCallback 내부 `registerPendingCliPermission` + `legacyEmit('stream:cli-permission-request')` 전체를 adapter 한 줄로 교체. approvalService DI 추가.\n\n**Files:** src/main/approvals/approval-cli-adapter.ts + __tests__, src/main/meetings/engine/meeting-turn-executor.ts, src/main/index.ts, src/main/meetings/engine/__tests__/meeting-turn-executor.test.ts\n\n**Verify:** `npm run test -- approval-cli-adapter meeting-turn-executor`\n\n```json:metadata\n{\"files\":[\"src/main/approvals/approval-cli-adapter.ts\",\"src/main/meetings/engine/meeting-turn-executor.ts\"],\"verifyCommand\":\"npm run test -- approval-cli-adapter meeting-turn-executor\",\"acceptanceCriteria\":[\"registerPendingCliPermission 호출 0 (grep)\",\"approve/conditional → true, reject/timeout → false\",\"listener leak 0\",\"ApprovalService.create 인자 검증\",\"5~8 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: v2 cli-permission-handler + IPC + stream 이벤트 + preload 완전 제거",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** `src/main/ipc/handlers/cli-permission-handler.ts` 파일 삭제. `cli-permission:respond` IPC 채널 / `stream:cli-permission-request` 이벤트 / preload 화이트리스트 / renderer legacy subscriber 전부 제거. typecheck exit 0 보장.\n\n**Files:** src/main/ipc/handlers/cli-permission-handler.ts (삭제), src/shared/ipc-types.ts, src/shared/stream-types.ts, src/preload/index.ts, src/main/ipc/handler-registry.ts 또는 index.ts, 관련 renderer subscriber\n\n**Verify:** `grep -r cli-permission src/ | grep -v 주석` returns 0 + `npm run typecheck`\n\n```json:metadata\n{\"files\":[\"src/shared/ipc-types.ts\",\"src/shared/stream-types.ts\",\"src/preload/index.ts\"],\"verifyCommand\":\"npm run typecheck\",\"acceptanceCriteria\":[\"cli-permission-handler.ts 파일 삭제\",\"grep -r 'cli-permission' src/ 결과 0 (코드)\",\"grep -r 'registerPendingCliPermission' src/ 결과 0\",\"typecheck exit 0\",\"기존 테스트 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: ApprovalBlock onDecision wire + RejectDialog + ConditionalDialog",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** ApprovalBlock 의 `onDecision` placeholder 제거 → 실 `approval:decide` IPC. deny/conditional 은 Radix Dialog 코멘트 입력. RejectDialog.tsx / ConditionalDialog.tsx 신규.\n\n**Files:** src/renderer/features/messenger/ApprovalBlock.tsx, src/renderer/features/approvals/{RejectDialog,ConditionalDialog}.tsx + __tests__\n\n**Verify:** `npm run test -- ApprovalBlock RejectDialog ConditionalDialog`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/ApprovalBlock.tsx\",\"src/renderer/features/approvals/RejectDialog.tsx\",\"src/renderer/features/approvals/ConditionalDialog.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalBlock RejectDialog ConditionalDialog\",\"acceptanceCriteria\":[\"approve → invoke('approval:decide', {id, decision:'approve'})\",\"reject+comment → invoke 인자 정확\",\"conditional+comment → invoke 인자 정확\",\"다이얼로그 cancel 시 invoke 0\",\"3-way 스타일(warm/tactical/retro) 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: ApprovalSystemMessageInjector — reject/conditional comment 시스템 메시지 주입",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** `src/main/approvals/approval-system-message-injector.ts` 신규 — ApprovalService 'decided' 이벤트 구독 → decision ∈ {reject, conditional} + comment != null + meetingId + channelId 필터 → MessageService.append(kind='system'). spec §7.7 '다음 턴 시스템 메시지로 주입' 구현.\n\n**Files:** src/main/approvals/approval-system-message-injector.ts + __tests__, src/main/index.ts\n\n**Verify:** `npm run test -- approval-system-message-injector`\n\n```json:metadata\n{\"files\":[\"src/main/approvals/approval-system-message-injector.ts\"],\"verifyCommand\":\"npm run test -- approval-system-message-injector\",\"acceptanceCriteria\":[\"reject+comment → msgSvc.append 호출\",\"conditional+comment → 위와 동일\",\"approve → skip\",\"meetingId/channelId null → skip\",\"6~8 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: ApprovalInboxView + Thread #승인-대기 채널 분기 렌더",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** `src/renderer/features/approvals/ApprovalInboxView.tsx` 신규 — `#승인-대기` 시스템 채널 Thread 전용 컨테이너(pending approval 리스트 → ApprovalBlock 반복). Thread.tsx 는 채널 kind='system_approval' 일 때 ApprovalInboxView 단독 렌더로 분기. usePendingApprovals 에 projectId 옵션 추가.\n\n**Files:** src/renderer/features/approvals/ApprovalInboxView.tsx + __tests__, src/renderer/features/messenger/Thread.tsx, src/renderer/hooks/use-pending-approvals.ts\n\n**Verify:** `npm run test -- ApprovalInboxView Thread`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/approvals/ApprovalInboxView.tsx\",\"src/renderer/features/messenger/Thread.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalInboxView Thread\",\"acceptanceCriteria\":[\"#승인-대기 채널 → ApprovalInboxView\",\"pending 리스트 렌더 정확\",\"decide 후 stream 이벤트로 사라짐\",\"다른 채널 Thread 렌더 regression 0\",\"빈 상태 i18n 경유\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: ProjectService.updatePermissionMode — mode_transition approval flow",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** ProjectService 에 `requestPermissionModeChange` / `applyPermissionModeChange` 추가. 활성 회의 체크(CB-3) + external+auto 금지(§7.3) + TOCTOU 재검증. approved 'decided' 이벤트 라우터가 apply 호출. IPC `project:request-permission-mode-change` 추가.\n\n**Files:** src/main/projects/project-service.ts + __tests__, src/main/approvals/approval-decision-router.ts (또는 SystemMessageInjector 확장), src/main/ipc/handlers/project-handler.ts\n\n**Verify:** `npm run test -- project-service approval-decision-router`\n\n```json:metadata\n{\"files\":[\"src/main/projects/project-service.ts\"],\"verifyCommand\":\"npm run test -- project-service\",\"acceptanceCriteria\":[\"requestPermissionModeChange → approval_items row 생성\",\"approved → permission_mode DB UPDATE\",\"external+auto 거절\",\"활성 회의 거절\",\"TOCTOU 재거절 시 superseded\",\"4~6 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Consensus Decision Approval — SSM DONE 게이트",
+      "status": "pending",
+      "blockedBy": [2, 6],
+      "description": "**Goal:** MeetingOrchestrator/v3-side-effects 가 SSM DONE 도달 시 즉시 MinutesComposer 포스팅하지 않고 `consensus_decision` approval 을 생성, decided 이벤트 대기. approve → R6 경로, reject → `#회의록` 거절 메시지 + outcome='rejected', conditional → approve + injector. timeout 24h → expired.\n\n**Files:** src/main/engine/v3-side-effects.ts, src/main/meetings/engine/meeting-orchestrator.ts + __tests__\n\n**Verify:** `npm run test -- meeting-orchestrator v3-side-effects`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- meeting-orchestrator v3-side-effects\",\"acceptanceCriteria\":[\"SSM DONE → consensus_decision approval row\",\"approve → MinutesComposer 포스팅 + accepted\",\"reject → 거절 메시지 + rejected\",\"conditional → approve + injector 연동\",\"timeout 24h → expired\",\"테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Dashboard ApprovalsWidget → #승인-대기 채널 라우팅",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** ApprovalsWidget 의 `onRowActivate` 기본값이 activeChannelStore.setActiveChannel + appViewStore.setView('messenger') 로 #승인-대기 채널 라우팅. `useSystemChannel(projectId, 'system_approval')` 조회 훅 추가.\n\n**Files:** src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx + __tests__, src/renderer/hooks/use-system-channel.ts (필요 시)\n\n**Verify:** `npm run test -- ApprovalsWidget`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalsWidget\",\"acceptanceCriteria\":[\"row 클릭 → activeChannelStore 업데이트\",\"messenger 뷰 전환\",\"projectId=null 안전 fallback\",\"기존 3-way 스타일 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: NotificationService approval_pending 트리거",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** NotificationService 가 ApprovalService 'created' 이벤트 구독 → approval_pending OS notification 발사 (앱 비포커스 시). 클릭 시 #승인-대기 채널 라우팅 힌트.\n\n**Files:** src/main/notifications/notification-service.ts + __tests__, src/main/index.ts\n\n**Verify:** `npm run test -- notification-service`\n\n```json:metadata\n{\"files\":[\"src/main/notifications/notification-service.ts\"],\"verifyCommand\":\"npm run test -- notification-service\",\"acceptanceCriteria\":[\"ApprovalService.create → Notification enqueue (비포커스)\",\"포커스 시 skip\",\"클릭 → stream:notification-clicked 힌트\",\"중복 suppress\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: i18n populate approval.* + messenger.approval.* + dashboard.approvals.* + E2E approval-flow.spec.ts",
+      "status": "pending",
+      "blockedBy": [5, 6, 7, 9, 11],
+      "description": "**Goal:** ko/en locale 에 approval.kind.* / approval.systemMessage.* / messenger.approval.rejectDialog.* / conditionalDialog.* / messenger.approval.inboxEmpty / dashboard.approvals.* / notification.approvalPending.* 전체 populate. i18next-parser config 의 dynamic 키 keepRemoved regex 확장. Playwright approval-flow.spec.ts 1 시나리오.\n\n**Files:** src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js, e2e/approval-flow.spec.ts\n\n**Verify:** `npm run i18n:check` idempotent + `npm run typecheck:web`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"e2e/approval-flow.spec.ts\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"ko/en 신규 키 전체 populate\",\"i18next-parser idempotent clean\",\"e2e/approval-flow.spec.ts 존재 (WSL DONE_WITH_CONCERNS 허용)\",\"typecheck:web exit 0\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: R7 Closeout — typecheck/lint/test/i18n:check/theme:check/build + done-checklist + tasks 14/14",
+      "status": "pending",
+      "blockedBy": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12],
+      "description": "**Goal:** 전체 합격선 실행 + `docs/superpowers/specs/r7-done-checklist.md` 작성 (14 Task 산출물 링크 + Known Concerns R8 인수인계) + spec §10 R7 체크박스 전체 ✓ + tasks.json 14/14 completed.\n\n**Files:** docs/superpowers/specs/r7-done-checklist.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R7), docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md.tasks.json\n\n**Verify:** `npm run typecheck && npm run typecheck:web && npm run lint && npm run i18n:check && npm run theme:check && npm run build`\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/r7-done-checklist.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run i18n:check && npm run build\",\"acceptanceCriteria\":[\"모든 정식 게이트 exit 0 (typecheck/lint/test/i18n/theme/build)\",\"done-checklist 작성 완료\",\"spec §10 R7 체크박스 전체 ✓\",\"tasks.json 14/14 completed\"]}\n```",
+      "lastUpdated": "2026-04-22T16:00:00.000Z"
+    }
+  ]
+}

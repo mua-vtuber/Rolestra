@@ -1211,10 +1211,36 @@ interface SsmContext {
 - v2 engine 5 파일 물리적 삭제 (orchestrator/turn-executor/conversation/execution-coordinator/memory-coordinator) — R11
 - Retro 영어 복귀 결정 D8 — R11 릴리스 전
 
-**Phase R7 — 승인 시스템**
-- ApprovalInbox + 3종 승인 (CLI권한/모드전환/투표결정)
-- 허가/거절/조건부 허가 UX
-- 대시보드 🔔 위젯 연동
+**Phase R7 — 승인 시스템(ApprovalInbox + CLI permission adapter v3 전면 교체)** (plan: `docs/superpowers/plans/2026-04-22-rolestra-phase-r7.md`, done-checklist: `docs/superpowers/specs/r7-done-checklist.md`)
+
+구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
+
+- [ ] Shared approval stream events + ApprovalPayload discriminated union (cli_permission / mode_transition / consensus_decision) — 산출물: `src/shared/approval-stream-events.ts` + `src/shared/approval-types.ts` 확장 + zod round-trip 테스트
+- [ ] ApprovalStreamAdapter + usePendingApprovals 실시간 전환 — ApprovalService EventEmitter → StreamBridge emit + mount-fetch + stream 구독 병합 — 산출물: `src/main/approvals/approval-stream-adapter.ts` + `src/main/streams/stream-bridge.ts` 확장 + `src/main/index.ts` wire + `src/preload/index.ts` 화이트리스트 + `src/renderer/hooks/use-pending-approvals.ts` 재작성
+- [ ] §7.7 CLI Permission v3 ApprovalCliAdapter + MeetingTurnExecutor 교체 — `createCliPermissionApproval(ctx) → Promise<boolean>` (create + subscribe-once('decided') + timeout 5분 default + auto-expire) — 산출물: `src/main/approvals/approval-cli-adapter.ts` + `src/main/meetings/engine/meeting-turn-executor.ts` 내부 교체 + `src/main/index.ts` approvalService DI 추가
+- [ ] v2 cli-permission-handler + IPC + stream event + preload + renderer subscriber 완전 제거 — 산출물: `src/main/ipc/handlers/cli-permission-handler.ts` 파일 삭제 + `src/shared/{ipc-types,stream-types}.ts` 정리 + `src/preload/index.ts` 정리 + renderer legacy subscriber 0
+- [ ] §7.7 ApprovalBlock onDecision wire + RejectDialog + ConditionalDialog (코멘트 입력) — 산출물: `src/renderer/features/messenger/ApprovalBlock.tsx` + `src/renderer/features/approvals/{RejectDialog,ConditionalDialog}.tsx`
+- [ ] §7.7 ApprovalSystemMessageInjector — reject/conditional comment → 다음 턴 시스템 메시지 주입 — 산출물: `src/main/approvals/approval-system-message-injector.ts` + `src/main/index.ts` wire
+- [ ] §7.4 ApprovalInboxView + Thread `#승인-대기`(kind='system_approval') 분기 렌더 — 산출물: `src/renderer/features/approvals/ApprovalInboxView.tsx` + `src/renderer/features/messenger/Thread.tsx` 분기
+- [ ] §7.6/§7.3 ProjectService.updatePermissionMode — mode_transition approval flow (활성 회의 체크 + external+auto 금지 + TOCTOU 재검증) — 산출물: `src/main/projects/project-service.ts` 확장 + `src/main/ipc/handlers/project-handler.ts` + approved 'decided' 이벤트 라우터
+- [ ] §7.5 Consensus Decision Approval — SSM DONE → consensus_decision approval 게이트 (approve → MinutesComposer 포스팅, reject → 거절 메시지 + outcome='rejected', conditional → approve + injector, timeout 24h default → expired) — 산출물: `src/main/engine/v3-side-effects.ts` + `src/main/meetings/engine/meeting-orchestrator.ts`
+- [ ] §7.5 Dashboard ApprovalsWidget onRowActivate → `#승인-대기` 채널 라우팅 — 산출물: `src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx` + (필요 시) `src/renderer/hooks/use-system-channel.ts`
+- [ ] §7.8 NotificationService approval_pending 트리거 (비포커스 시 OS 알림 + 클릭 시 #승인-대기 라우팅 힌트) — 산출물: `src/main/notifications/notification-service.ts` 확장 + `src/main/index.ts` wire
+- [ ] i18n populate `approval.kind.*` / `approval.systemMessage.*` / `messenger.approval.{reject,conditional}Dialog.*` / `messenger.approval.inboxEmpty` / `dashboard.approvals.*` / `notification.approvalPending.*` + i18next-parser keepRemoved 확장 — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `i18next-parser.config.js`
+- [ ] Playwright Electron E2E "승인 flow (CLI permission 또는 consensus decision happy path)" — 산출물: `e2e/approval-flow.spec.ts` (**WSL 런타임 제약 시 R4/R5/R6 와 동일 DONE_WITH_CONCERNS**)
+- [ ] typecheck(전체) / typecheck:web / lint / test / i18n:check / theme:check / build exit 0 + R7 신규 테스트 green + done-checklist 작성 — 산출물: `docs/superpowers/specs/r7-done-checklist.md`
+
+**scope 경계 (R7에서 하지 않는 것, R8+ 이연):**
+- `review_outcome` / `failure_report` kind 의 발사 지점 (R7 은 enum 만) — R8 이후 autonomy/리뷰 도입 시
+- Consensus approval autonomy auto-approve (24h timeout 전 자동 승인) — R9 autonomy 시스템
+- `mode_transition` 조건부(conditional) UX — R10 (D3: 비활성 + 툴팁만, 재검토)
+- 설정 UI 전체(mode 변경 UI 포함 — R7 은 최소 IPC 만) — R10
+- Dashboard KPI 실시간 approval count stream — R10 (R7 은 KPI 는 mount-fetch + 정기 invalidate 수준)
+- Playwright CI integration + OS matrix — R10
+- v2 engine 5 파일 물리적 삭제 (orchestrator/turn-executor/conversation/execution-coordinator/memory-coordinator) — R11 (단 **cli-permission-handler 는 R7-Task4 에서 즉시 삭제** — D1)
+- Retro 영어 복귀 결정 D8 — R11 릴리스 전
+
+**Phase R8 — 멤버 프로필 + 출근 상태**
 
 **Phase R8 — 멤버 프로필 + 출근 상태**
 - MemberProfile 편집 모달 (role/personality/expertise/avatar)
