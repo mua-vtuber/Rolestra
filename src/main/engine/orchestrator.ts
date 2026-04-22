@@ -1,4 +1,9 @@
 /**
+ * @deprecated R6-Task7 — replaced by `src/main/meetings/engine/meeting-orchestrator.ts`.
+ *   New callers MUST use `MeetingOrchestrator`. This file remains only
+ *   until R11 deletes the v2 engine en bloc (chat-handler still holds
+ *   the last live import).
+ *
  * Conversation Orchestrator -- the main AI turn loop.
  *
  * Thin coordinator that delegates to focused sub-modules:

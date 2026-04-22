@@ -1,4 +1,8 @@
 /**
+ * @deprecated R6-Task7 — replaced by
+ *   `src/main/meetings/engine/meeting-session.ts` (MeetingSession).
+ *   Kept until R11 deletes the v2 engine; do not add new callers.
+ *
  * Conversation Session — manages a single conversation's lifecycle.
  *
  * Responsibilities:

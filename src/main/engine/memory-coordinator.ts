@@ -4,6 +4,11 @@
  * Extracted from ConversationOrchestrator to isolate all memory-related
  * operations (context building, extraction, post-conversation maintenance)
  * into a focused module.
+ *
+ * @deprecated R6-Task7 — the v3 MeetingOrchestrator does NOT wire memory
+ *   per turn yet; the memory integration lands via the new
+ *   `meeting-memory-coordinator.ts` helper when R7 ships ApprovalService.
+ *   This file stays to keep v2 orchestrator compiling until R11 deletion.
  */
 
 import type { ConversationSession } from './conversation';

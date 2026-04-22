@@ -5,6 +5,11 @@
  * Extracted from ConversationOrchestrator to isolate execution-specific
  * logic (patch extraction, user approval waiting, apply/review flow)
  * into a focused module.
+ *
+ * @deprecated R6-Task7 — v3 MeetingOrchestrator handles execution via
+ *   ApprovalService (R7). This file stays to keep v2 ConversationOrchestrator
+ *   compiling until R11 deletes the v2 engine files en bloc. Do NOT add
+ *   new callers.
  */
 
 import type { WebContents } from 'electron';

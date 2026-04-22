@@ -1,4 +1,8 @@
 /**
+ * @deprecated R6-Task7 — replaced by
+ *   `src/main/meetings/engine/meeting-turn-executor.ts`. Kept until R11
+ *   deletes the v2 engine; do not add new callers.
+ *
  * TurnExecutor — handles execution of a single AI participant's turn.
  *
  * Extracted from ConversationOrchestrator to isolate the per-turn
