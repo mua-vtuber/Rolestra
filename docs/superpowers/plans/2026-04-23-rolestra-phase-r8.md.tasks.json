@@ -19,7 +19,7 @@
     {
       "id": 2,
       "subject": "Task 2: Avatar 컴포넌트 + WorkStatusDot 4-state + ProfileAvatar 위임",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** `src/renderer/components/members/Avatar.tsx` 신규 (DEFAULT_AVATARS 8 emoji+color 렌더 + custom 분기 + initials fallback). `src/renderer/components/members/WorkStatusDot.tsx` 신규 (4 상태 + i18n 라벨 + connecting pulse). `ProfileAvatar` 가 MemberView prop 받으면 Avatar 위임.\n\n**Files:** src/renderer/components/members/{Avatar,WorkStatusDot}.tsx + __tests__, src/renderer/components/shell/ProfileAvatar.tsx + __tests__/ProfileAvatar.test.tsx (확장)\n\n**Verify:** `npm run test -- Avatar WorkStatusDot ProfileAvatar`\n\n```json:metadata\n{\"files\":[\"src/renderer/components/members/Avatar.tsx\",\"src/renderer/components/members/WorkStatusDot.tsx\",\"src/renderer/components/shell/ProfileAvatar.tsx\"],\"verifyCommand\":\"npm run test -- Avatar WorkStatusDot ProfileAvatar\",\"acceptanceCriteria\":[\"DEFAULT_AVATARS 8 key 모두 렌더 케이스 green\",\"4 work-status 도트 + i18n 라벨 정확\",\"ProfileAvatar R5 회귀 0\",\"a11y aria-label\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"
