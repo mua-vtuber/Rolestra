@@ -99,7 +99,7 @@
     {
       "id": 12,
       "subject": "Task 12: i18n populate approval.* + messenger.approval.* + dashboard.approvals.* + E2E approval-flow.spec.ts",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5, 6, 7, 9, 11],
       "description": "**Goal:** ko/en locale 에 approval.kind.* / approval.systemMessage.* / messenger.approval.rejectDialog.* / conditionalDialog.* / messenger.approval.inboxEmpty / dashboard.approvals.* / notification.approvalPending.* 전체 populate. i18next-parser config 의 dynamic 키 keepRemoved regex 확장. Playwright approval-flow.spec.ts 1 시나리오.\n\n**Files:** src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js, e2e/approval-flow.spec.ts\n\n**Verify:** `npm run i18n:check` idempotent + `npm run typecheck:web`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"e2e/approval-flow.spec.ts\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"ko/en 신규 키 전체 populate\",\"i18next-parser idempotent clean\",\"e2e/approval-flow.spec.ts 존재 (WSL DONE_WITH_CONCERNS 허용)\",\"typecheck:web exit 0\"]}\n```",
       "lastUpdated": "2026-04-22T16:00:00.000Z"

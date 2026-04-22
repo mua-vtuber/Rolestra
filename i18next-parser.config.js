@@ -86,6 +86,15 @@ export default {
     // `mapErrorToI18nKey(reason)` returns a variable key — parser cannot
     // resolve statically. Keep the whole errors subtree in the catalogue.
     /^translation:messenger\.approval\.errors(\..+)?$/,
+    // R7-Task12 — `approval.systemMessage.*` mirrors the Korean fixed
+    // labels emitted by the main-process ApprovalSystemMessageInjector.
+    // No renderer-side consumer today; reserved so renderer refactors can
+    // switch from hardcoded prefixes to i18n lookups without breaking the
+    // catalogue diff. Anchored to the `approval.*` namespace via
+    // `approval.kind.*` static `t()` calls in ApprovalInboxView (parser's
+    // orphan-namespace pruning only fires when NO static key survives in
+    // the whole top-level namespace).
+    /^translation:approval\.systemMessage(\..+)?$/,
     // R6-Task11 meeting.state.<SSM> — composed via
     // `t('meeting.state.${ssmState}')` in MeetingBanner / MinutesComposer.
     // The 12 SSM state names are variable-keyed so the parser cannot

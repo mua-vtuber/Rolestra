@@ -2,6 +2,19 @@
   "app": {
     "mainPlaceholder": "R4에서 대시보드가 여기에 들어옵니다."
   },
+  "approval": {
+    "kind": {
+      "cli_permission": "CLI 권한 요청",
+      "consensus_decision": "합의 결정",
+      "failure_report": "실패 리포트",
+      "mode_transition": "모드 전환",
+      "review_outcome": "리뷰 결과"
+    },
+    "systemMessage": {
+      "conditionalPrefix": "[조건부 승인]",
+      "rejectPrefix": "[승인 거절]"
+    }
+  },
   "dashboard": {
     "action": {
       "newProject": "+ 새 프로젝트",

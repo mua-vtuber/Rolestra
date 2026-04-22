@@ -2,6 +2,19 @@
   "app": {
     "mainPlaceholder": "The dashboard will move in here during R4."
   },
+  "approval": {
+    "kind": {
+      "cli_permission": "CLI permission",
+      "consensus_decision": "Consensus decision",
+      "failure_report": "Failure report",
+      "mode_transition": "Mode transition",
+      "review_outcome": "Review outcome"
+    },
+    "systemMessage": {
+      "conditionalPrefix": "[Conditional approval]",
+      "rejectPrefix": "[Approval rejected]"
+    }
+  },
   "dashboard": {
     "action": {
       "newProject": "+ New project",

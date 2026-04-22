@@ -94,6 +94,31 @@ function approvalToMessage(item: ApprovalItem): ChannelMessage {
   };
 }
 
+/**
+ * Resolve the human label for an `ApprovalKind` through the renderer i18n
+ * catalogue. Parser-friendly: each kind is a separate `t('...')` call with
+ * a literal key so i18next-parser picks them up on sight. This anchors the
+ * `approval.kind.*` namespace(Task 12) — once a consumer lands, the kind
+ * subtree can move into broader UI without losing the catalogue entries.
+ */
+function kindLabel(
+  t: (k: string) => string,
+  kind: ApprovalItem['kind'],
+): string {
+  switch (kind) {
+    case 'cli_permission':
+      return t('approval.kind.cli_permission');
+    case 'mode_transition':
+      return t('approval.kind.mode_transition');
+    case 'consensus_decision':
+      return t('approval.kind.consensus_decision');
+    case 'review_outcome':
+      return t('approval.kind.review_outcome');
+    case 'failure_report':
+      return t('approval.kind.failure_report');
+  }
+}
+
 export function ApprovalInboxView({
   projectId,
   className,
@@ -154,6 +179,12 @@ export function ApprovalInboxView({
             data-approval-id={item.id}
             data-kind={item.kind}
           >
+            <div
+              data-testid="approval-inbox-row-kind"
+              className="px-4 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+            >
+              {kindLabel(t, item.kind)}
+            </div>
             <ApprovalBlock message={message} />
           </li>
         ))}
