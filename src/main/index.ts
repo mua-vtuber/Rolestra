@@ -35,6 +35,12 @@ import {
 } from './ipc/handlers/channel-handler';
 import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
+import { ApprovalService } from './approvals/approval-service';
+import { NotificationRepository } from './notifications/notification-repository';
+import { NotificationService } from './notifications/notification-service';
+import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
+import { CircuitBreaker } from './queue/circuit-breaker';
+import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -172,6 +178,88 @@ app.whenReady().then(async () => {
     // Exported for MeetingOrchestrator DI (R6-Task4).
     // For now the bridge is reachable via `getStreamBridge()` accessor.
     setStreamBridgeInstance(streamBridge);
+
+    // R6-Task4: MeetingOrchestrator support services.
+    // ApprovalService + NotificationService land here (not their own
+    // handler block) because the R6 side-effect wiring needs them
+    // BEFORE channel:start-meeting fires. R7 splits them back out into
+    // dedicated IPC handlers with their own accessors.
+    const approvalService = new ApprovalService(new ApprovalRepository(db));
+    const notificationService = new NotificationService(
+      new NotificationRepository(db),
+      new ElectronNotifierAdapter(),
+    );
+    const circuitBreaker = new CircuitBreaker();
+
+    // Meeting orchestrator factory — channel-handler calls this on
+    // `channel:start-meeting` after MeetingService.start() has created
+    // the DB row. The factory owns the session + turn-executor + per-
+    // meeting side-effect wiring lifecycle (disposer on DONE/FAILED).
+    setMeetingOrchestratorFactory({
+      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx }) => {
+        const { MeetingSession } = await import(
+          './meetings/engine/meeting-session'
+        );
+        const { MeetingTurnExecutor } = await import(
+          './meetings/engine/meeting-turn-executor'
+        );
+        const { MeetingOrchestrator } = await import(
+          './meetings/engine/meeting-orchestrator'
+        );
+        const {
+          registerOrchestrator,
+          unregisterOrchestrator,
+        } = await import('./meetings/engine/meeting-orchestrator-registry');
+
+        const session = new MeetingSession({
+          meetingId: meeting.id,
+          channelId: meeting.channelId,
+          projectId,
+          topic,
+          participants,
+          ssmCtx,
+        });
+
+        const personaPrimedParticipants = new Set<string>();
+        const turnExecutor = new MeetingTurnExecutor({
+          session,
+          streamBridge,
+          messageService,
+          arenaRootService: arenaRoot,
+          providerRegistry,
+          personaPrimedParticipants,
+        });
+
+        const orchestrator = new MeetingOrchestrator({
+          session,
+          turnExecutor,
+          streamBridge,
+          messageService,
+          meetingService,
+          channelService,
+          projectService,
+          approvalService,
+          notificationService,
+          circuitBreaker,
+        });
+
+        registerOrchestrator(meeting.id, orchestrator);
+        // Fire-and-forget: the loop runs until SSM terminal or user
+        // abort. Errors are already surfaced as stream:meeting-error
+        // events by the turn-executor + orchestrator terminal path.
+        orchestrator
+          .run()
+          .catch((err) => {
+            console.warn(
+              `[meeting-orchestrator:${meeting.id}] run threw`,
+              err instanceof Error ? err.message : String(err),
+            );
+          })
+          .finally(() => {
+            unregisterOrchestrator(meeting.id);
+          });
+      },
+    });
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {

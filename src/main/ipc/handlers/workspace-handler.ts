@@ -173,4 +173,12 @@ export async function handleConsensusFolderInit(
 }
 
 /** Export service instances for use by other modules. */
+/**
+ * @deprecated R6-Task6 — v3 Meeting engine uses DI via MeetingOrchestrator.
+ * These v2 singletons remain for legacy code paths (execution-handler,
+ * recovery, memory). R11 retires them after the v2 orchestrator /
+ * turn-executor / conversation files are deleted. Do NOT import into
+ * `src/main/meetings/engine/` — that would reintroduce the singleton
+ * coupling R6-Task3/4/6 removed.
+ */
 export { workspaceService, permissionService, consensusFolderService };

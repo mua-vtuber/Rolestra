@@ -15,6 +15,7 @@
 
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { MeetingService } from '../../meetings/meeting-service';
+import { getOrchestrator } from '../../meetings/engine/meeting-orchestrator-registry';
 
 let meetingAccessor: (() => MeetingService) | null = null;
 
@@ -35,6 +36,14 @@ function getService(): MeetingService {
 export function handleMeetingAbort(
   data: IpcRequest<'meeting:abort'>,
 ): IpcResponse<'meeting:abort'> {
+  // R6-Task4: tear down the live orchestrator first so no in-flight
+  // turn lands on top of the "aborted" DB state. `stop()` aborts the
+  // provider request + freezes the session; the orchestrator's
+  // terminal listener runs only on SSM terminal states (which abort
+  // does NOT trigger), so the row update below is the authoritative
+  // close.
+  const orc = getOrchestrator(data.meetingId);
+  orc?.stop();
   getService().finish(data.meetingId, 'aborted', null);
   return { success: true };
 }

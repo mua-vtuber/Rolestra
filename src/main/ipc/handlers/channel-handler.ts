@@ -17,9 +17,29 @@
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { ChannelService } from '../../channels/channel-service';
 import type { MeetingService } from '../../meetings/meeting-service';
+import type { Meeting } from '../../../shared/meeting-types';
+import type { Participant } from '../../../shared/engine-types';
+import type { SsmContext } from '../../../shared/ssm-context-types';
+
+/**
+ * Factory surface used by `channel:start-meeting` to kick off a
+ * MeetingOrchestrator after MeetingService has created the DB row.
+ * Wired in `main/index.ts`; R7+ may replace the sync factory with an
+ * ApprovalService-gated variant.
+ */
+export interface MeetingOrchestratorFactory {
+  createAndRun(input: {
+    meeting: Meeting;
+    projectId: string;
+    participants: Participant[];
+    topic: string;
+    ssmCtx: SsmContext;
+  }): Promise<void> | void;
+}
 
 let channelAccessor: (() => ChannelService) | null = null;
 let meetingAccessor: (() => MeetingService) | null = null;
+let orchestratorFactory: MeetingOrchestratorFactory | null = null;
 
 export function setChannelServiceAccessor(fn: () => ChannelService): void {
   channelAccessor = fn;
@@ -27,6 +47,12 @@ export function setChannelServiceAccessor(fn: () => ChannelService): void {
 
 export function setMeetingServiceAccessor(fn: () => MeetingService): void {
   meetingAccessor = fn;
+}
+
+export function setMeetingOrchestratorFactory(
+  factory: MeetingOrchestratorFactory,
+): void {
+  orchestratorFactory = factory;
 }
 
 function getChannel(): ChannelService {
@@ -129,5 +155,41 @@ export function handleChannelStartMeeting(
     channelId: data.channelId,
     topic: data.topic,
   });
+
+  // R6-Task4: fire-and-forget orchestrator boot. We do NOT await —
+  // the IPC response goes back to the renderer immediately so the
+  // MeetingBanner can render; the orchestrator drives turn + stream
+  // events on its own schedule.
+  const factory = orchestratorFactory;
+  if (factory) {
+    const channel = getChannel().get(data.channelId);
+    if (channel && channel.projectId) {
+      const members = getChannel().listMembers(data.channelId);
+      const participants: Participant[] = members.map((m) => ({
+        id: m.providerId,
+        providerId: m.providerId,
+        displayName: m.providerId,
+        isActive: true,
+      }));
+      if (participants.length >= 2) {
+        const ssmCtx: SsmContext = {
+          meetingId: meeting.id,
+          channelId: meeting.channelId,
+          projectId: channel.projectId,
+          projectPath: '',
+          permissionMode: 'hybrid',
+          autonomyMode: 'manual',
+        };
+        void factory.createAndRun({
+          meeting,
+          projectId: channel.projectId,
+          participants,
+          topic: data.topic,
+          ssmCtx,
+        });
+      }
+    }
+  }
+
   return { meeting };
 }
