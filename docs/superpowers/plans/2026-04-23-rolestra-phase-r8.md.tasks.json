@@ -67,7 +67,7 @@
     {
       "id": 8,
       "subject": "Task 8: Production main/index.ts MemberProfileService boot + MemberWarmupService.warmAll",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** `src/main/members/member-warmup-service.ts` 신규 — Promise.allSettled + per-provider 5초 timeout. main/index.ts 에서 MemberProfileRepository + MemberProfileService boot + setMemberProfileServiceAccessor + setAvatarStoreAccessor + warmAll fire-and-forget.\n\n**Files:** src/main/members/member-warmup-service.ts + __tests__, src/main/index.ts, src/main/providers/registry.ts (어댑터 검토), src/main/__tests__/member-boot.test.ts (또는 r2 smoke 확장)\n\n**Verify:** `npm run test -- member-warmup-service member-boot`\n\n```json:metadata\n{\"files\":[\"src/main/members/member-warmup-service.ts\",\"src/main/index.ts\"],\"verifyCommand\":\"npm run test -- member-warmup-service\",\"acceptanceCriteria\":[\"member:list production 에서 throw 0\",\"member:list-avatars 8 default 반환\",\"warmAll await 없음 (timing 검증)\",\"5초 timeout 동작\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

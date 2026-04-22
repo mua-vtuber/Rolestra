@@ -43,6 +43,14 @@ import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
 import { CircuitBreaker } from './queue/circuit-breaker';
 import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
+import { MemberProfileRepository } from './members/member-profile-repository';
+import { MemberProfileService } from './members/member-profile-service';
+import { MemberWarmupService } from './members/member-warmup-service';
+import { AvatarStore } from './members/avatar-store';
+import {
+  setMemberProfileServiceAccessor,
+  setAvatarStoreAccessor,
+} from './ipc/handlers/member-handler';
 
 function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
@@ -142,6 +150,50 @@ app.whenReady().then(async () => {
     const messageService = new MessageService(new MessageRepository(db));
     setMeetingAbortServiceAccessor(() => meetingService);
     setMessageServiceAccessor(() => messageService);
+
+    // R8-Task8: MemberProfileService boot (production wire — R2~R7 only
+    // wired this in tests). Without this block the renderer's six member:*
+    // IPC calls all throw "service not initialized". The service depends
+    // on a narrow MemberProviderLookup adapter rather than the full
+    // ProviderRegistry to mirror the ProjectLookup pattern (matches the
+    // R2 service contract).
+    const memberProfileRepo = new MemberProfileRepository(db);
+    const memberProfileService = new MemberProfileService(memberProfileRepo, {
+      get: (providerId) => {
+        const p = providerRegistry.get(providerId);
+        return p
+          ? { id: p.id, displayName: p.displayName, persona: p.persona }
+          : null;
+      },
+      warmup: async (providerId) => {
+        // getOrThrow gives a clearer error than reading-then-checking;
+        // MemberProfileService catches any rejection generically and maps
+        // to 'offline-connection', so the message text isn't user-facing.
+        await providerRegistry.getOrThrow(providerId).warmup();
+      },
+    });
+    setMemberProfileServiceAccessor(() => memberProfileService);
+
+    // R8-Task5/8: AvatarStore boot — depends on arenaRoot for the
+    // <ArenaRoot>/avatars destination. Stateless, safe to share.
+    const avatarStore = new AvatarStore(arenaRoot);
+    setAvatarStoreAccessor(() => avatarStore);
+
+    // R8-Task8: fire-and-forget boot warmup. Probes every persisted
+    // provider in parallel with a 5 s deadline (R8-D3). The promise is
+    // intentionally NOT awaited — first paint must not wait on slow
+    // providers. Each probe's result mutates the runtime status map
+    // inside MemberProfileService so member:list / member:get-profile
+    // surfaces (Popover, MemberRow, PeopleWidget) reflect the live state
+    // without an explicit refresh.
+    const memberWarmup = new MemberWarmupService(memberProfileService);
+    const bootProviderIds = providerRegistry.listAll().map((p) => p.id);
+    void memberWarmup.warmAll(bootProviderIds).catch((err) => {
+      console.warn(
+        '[member-warmup] boot batch threw',
+        err instanceof Error ? err.message : String(err),
+      );
+    });
 
     // R5-Task11 wires the full channel + project service graph so the
     // renderer's channel:* / project:* IPC calls land on a live service.
