@@ -165,6 +165,8 @@ import {
   handleMemberSetStatus,
   handleMemberReconnect,
   handleMemberListAvatars,
+  handleMemberPickAvatarFile,
+  handleMemberUploadAvatar,
 } from './handlers/member-handler';
 import {
   handleApprovalList,
@@ -524,6 +526,8 @@ export function registerIpcHandlers(): void {
   handle('member:set-status', isDev, (data) => handleMemberSetStatus(data));
   handle('member:reconnect', isDev, (data) => handleMemberReconnect(data));
   handle('member:list-avatars', isDev, () => handleMemberListAvatars());
+  handle('member:pick-avatar-file', isDev, () => handleMemberPickAvatarFile());
+  handle('member:upload-avatar', isDev, (data) => handleMemberUploadAvatar(data));
 
   // ── v3: Approval Inbox ──────────────────────────────────────────
   handle('approval:list', isDev, (data) => handleApprovalList(data));

@@ -43,7 +43,7 @@
     {
       "id": 5,
       "subject": "Task 5: AvatarStore + member:upload-avatar handler + ArenaRoot getAvatarsDir",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** `src/main/members/avatar-store.ts` 신규 — copy/remove + ext 화이트리스트(png/jpg/jpeg/webp/gif) + 5MB 제한. `arena-root-service.getAvatarsDir()`. `handleMemberUploadAvatar` IPC handler. router 등록.\n\n**Files:** src/main/members/avatar-store.ts + __tests__, src/main/arena/arena-root-service.ts (확장), src/main/ipc/handlers/member-handler.ts, src/main/ipc/router.ts, src/main/ipc/__tests__/handlers-v3.test.ts (확장)\n\n**Verify:** `npm run test -- avatar-store member-handler`\n\n```json:metadata\n{\"files\":[\"src/main/members/avatar-store.ts\",\"src/main/arena/arena-root-service.ts\",\"src/main/ipc/handlers/member-handler.ts\"],\"verifyCommand\":\"npm run test -- avatar-store member-handler\",\"acceptanceCriteria\":[\"ext 화이트리스트만 허용\",\"5MB 초과 거절\",\"덮어쓰기 + ext 변경 정리\",\"응답에 상대+절대 경로\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

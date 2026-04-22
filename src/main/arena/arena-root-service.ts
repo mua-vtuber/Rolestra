@@ -39,6 +39,7 @@ export const ARENA_ROOT_SUBDIRS = [
   'projects',
   'db',
   'logs',
+  'avatars',
 ] as const;
 
 /** Top-level subdir names used by path accessors. */
@@ -46,6 +47,7 @@ const CONSENSUS_DIR = 'consensus';
 const PROJECTS_DIR = 'projects';
 const DB_DIR = 'db';
 const LOGS_DIR = 'logs';
+const AVATARS_DIR = 'avatars';
 const DB_FILENAME = 'arena.sqlite';
 const WRITABLE_PROBE_FILENAME = '.arena-writable-test';
 
@@ -150,6 +152,19 @@ export class ArenaRootService extends EventEmitter {
   /** `<ArenaRoot>/logs`. */
   logsPath(): string {
     return path.join(this.currentPath, LOGS_DIR);
+  }
+
+  /**
+   * `<ArenaRoot>/avatars` — destination for custom member avatars
+   * (R8-Task5, spec §7.1).
+   *
+   * Always returns a path; the directory itself is created by
+   * {@link ensure} (already includes `'avatars'` in {@link ARENA_ROOT_SUBDIRS}).
+   * The AvatarStore additionally `mkdir -p`'s on each `copy()` so a stale
+   * deletion between boot and a save action does not surface as ENOENT.
+   */
+  avatarsPath(): string {
+    return path.join(this.currentPath, AVATARS_DIR);
   }
 
   /**

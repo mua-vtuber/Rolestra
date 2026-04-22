@@ -12,13 +12,21 @@
  * render.
  */
 
+import { dialog } from 'electron';
+
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { MemberProfileService } from '../../members/member-profile-service';
+import type { AvatarStore } from '../../members/avatar-store';
+import { AvatarValidationError } from '../../members/avatar-store';
 import { providerRegistry } from '../../providers/registry';
 import { DEFAULT_AVATARS } from '../../members/default-avatars';
-import type { MemberView } from '../../../shared/member-profile-types';
+import {
+  ALLOWED_AVATAR_EXTENSIONS,
+  type MemberView,
+} from '../../../shared/member-profile-types';
 
 let memberAccessor: (() => MemberProfileService) | null = null;
+let avatarStoreAccessor: (() => AvatarStore) | null = null;
 
 export function setMemberProfileServiceAccessor(
   fn: () => MemberProfileService,
@@ -26,11 +34,27 @@ export function setMemberProfileServiceAccessor(
   memberAccessor = fn;
 }
 
+/**
+ * Inject the AvatarStore accessor (R8-Task5). Wired by `main/index.ts`
+ * boot (R8-Task8) — until then the upload handler throws the same
+ * "service not initialized" pattern used by {@link getService}.
+ */
+export function setAvatarStoreAccessor(fn: () => AvatarStore): void {
+  avatarStoreAccessor = fn;
+}
+
 function getService(): MemberProfileService {
   if (!memberAccessor) {
     throw new Error('member handler: service not initialized');
   }
   return memberAccessor();
+}
+
+function getAvatarStore(): AvatarStore {
+  if (!avatarStoreAccessor) {
+    throw new Error('member handler: avatar store not initialized');
+  }
+  return avatarStoreAccessor();
 }
 
 /** Labels for default-avatar palette entries. UI may re-translate via i18n. */
@@ -96,3 +120,52 @@ export function handleMemberListAvatars(): IpcResponse<'member:list-avatars'> {
     })),
   };
 }
+
+/**
+ * member:pick-avatar-file (R8-Task5) — opens the OS file picker filtered
+ * to allowed image extensions. Returns `{ sourcePath: null }` on cancel.
+ *
+ * The dialog filter is the FIRST line of defence — the user cannot even
+ * select a `.txt`. AvatarStore.copy() then validates again (defence in
+ * depth) so direct IPC callers (tests, malicious renderer) cannot bypass.
+ */
+export async function handleMemberPickAvatarFile(): Promise<
+  IpcResponse<'member:pick-avatar-file'>
+> {
+  const result = await dialog.showOpenDialog({
+    properties: ['openFile'],
+    filters: [
+      {
+        name: 'Image',
+        // Electron expects the extension list without the leading dot.
+        extensions: [...ALLOWED_AVATAR_EXTENSIONS],
+      },
+    ],
+  });
+  if (result.canceled || result.filePaths.length === 0) {
+    return { sourcePath: null };
+  }
+  return { sourcePath: result.filePaths[0] };
+}
+
+/**
+ * member:upload-avatar (R8-Task5) — copies the picked source file into
+ * `<ArenaRoot>/avatars/<providerId>.<ext>` via {@link AvatarStore}.
+ *
+ * Validation errors are wrapped in {@link AvatarValidationError} which
+ * keeps a stable `code` for renderer i18n mapping. Other I/O errors
+ * (EPERM, EACCES) bubble unchanged.
+ *
+ * NOTE: this handler does NOT update `member_profiles.avatar_data` —
+ * that is the renderer's job (it calls `member:update-profile` after
+ * receiving the relativePath response). Splitting the two keeps each
+ * IPC single-purpose.
+ */
+export function handleMemberUploadAvatar(
+  data: IpcRequest<'member:upload-avatar'>,
+): IpcResponse<'member:upload-avatar'> {
+  return getAvatarStore().copy(data.providerId, data.sourcePath);
+}
+
+// Re-export for test wiring + main/index.ts boot sequence.
+export { AvatarValidationError };
