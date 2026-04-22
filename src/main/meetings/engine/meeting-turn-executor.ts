@@ -17,11 +17,14 @@
  *      whether the turn can be retried.
  *
  * R6 Decision Log notes:
- *   - **D8 (CLI permission)**: CLI-native permission_request handling is
- *     left on the v2 `registerPendingCliPermission` path — the MeetingOrchestrator
- *     (R6-Task4) continues to import that helper and wires it through the
- *     optional `legacyWebContents` hook below. R7 replaces the flow with
- *     ApprovalService end-to-end and retires the legacy surface.
+ *   - **D8 (CLI permission)** [R7-Task3 resolved]: CLI-native permission_request
+ *     handling used to sit on the v2 `registerPendingCliPermission` Map.
+ *     R7 routes every prompt through {@link ApprovalCliAdapter}, which
+ *     creates an `approval_items` row, subscribes to `ApprovalService`
+ *     `'decided'`, and resolves the CLI Promise on approve/conditional/
+ *     reject/timeout. The legacy helper + `stream:cli-permission-request`
+ *     emit + `legacyWebContents` DI slot are gone — no Map, no dangling
+ *     resolvers across app restarts.
  *   - **D9 (persona permission)**: `buildEffectivePersona` accepts a
  *     `permission` field that the v2 path populated from the singleton
  *     `permissionService.getPermissionsForParticipant`. The v3
@@ -35,14 +38,13 @@
  *     the v2 `MessageFormatter` asset (re-used unchanged). If the SSM
  *     is in a state the formatter doesn't know about, we send raw prose —
  *     a regression would be caught by the orchestrator-flow tests.
- *   - **D11 (stream:log, stream:deep-debate)**: these v2 diagnostics
- *     are still emitted via the optional `legacyWebContents` hook so the
- *     existing orchestrator dev UX is preserved. R10 replaces them with
- *     the structured logger.
+ *   - **D11 (stream:log, stream:deep-debate)** [R10 still owns]: these
+ *     v2 diagnostic streams have no emit site here post-R7. The render-
+ *     side subscribers survive in the legacy channel isolation list until
+ *     R10 replaces them with the structured logger.
  */
 
 import { randomUUID } from 'node:crypto';
-import type { WebContents } from 'electron';
 import type {
   Participant,
   RoundSetting as _RoundSetting,
@@ -54,19 +56,17 @@ import type {
 } from '../../../shared/provider-types';
 import type { SessionState } from '../../../shared/session-state-types';
 import type { ParsedAiOutput } from '../../../shared/message-protocol-types';
-import type { CliPermissionRequestData } from '../../../shared/stream-types';
-import type { StreamEventMap, StreamEventName } from '../../../shared/stream-types';
 import { buildEffectivePersona } from '../../engine/persona-builder';
 import { MessageFormatter } from '../../engine/message-formatter';
 import { AppToolProvider, type AppTool } from '../../engine/app-tool-provider';
 import type { BaseProvider } from '../../providers/provider-interface';
 import { CliProvider } from '../../providers/cli/cli-provider';
 import type { ParsedCliPermissionRequest } from '../../providers/cli/cli-permission-parser';
-import { registerPendingCliPermission } from '../../ipc/handlers/cli-permission-handler';
 import type { StreamBridge } from '../../streams/stream-bridge';
 import type { MessageService } from '../../channels/message-service';
 import type { ArenaRootService } from '../../arena/arena-root-service';
 import type { providerRegistry } from '../../providers/registry';
+import type { ApprovalCliAdapter } from '../../approvals/approval-cli-adapter';
 
 /** Alias for the registry's instance type — the concrete class is not
  *  exported, so callers reach it via the singleton or through DI. */
@@ -83,8 +83,12 @@ function buildSummaryFileName(timestamp: number): string {
   return `${WORK_SUMMARY_PREFIX}${timestamp}.md`;
 }
 
-/** Deps injected into the constructor — every field is mandatory except
- *  `legacyWebContents` (deferred v2 event bridge, removed in R10). */
+/** Deps injected into the constructor — all mandatory.
+ *
+ *  R7-Task3 removed `legacyWebContents` together with the only remaining
+ *  legacyEmit call site (`stream:cli-permission-request`). The v2 stream:log
+ *  and stream:deep-debate events had no emit sites here even before R7.
+ *  `approvalCliAdapter` is the new channel for CLI permission prompts. */
 export interface MeetingTurnExecutorDeps {
   session: MeetingSession;
   streamBridge: StreamBridge;
@@ -95,10 +99,9 @@ export interface MeetingTurnExecutorDeps {
    *  providers already consumed their persona prompt this meeting.
    *  Owned by the MeetingOrchestrator so it survives turn boundaries. */
   personaPrimedParticipants: Set<string>;
-  /** Optional hook for v2 diagnostic streams still consumed by the
-   *  renderer (stream:log / stream:deep-debate / stream:cli-permission-request).
-   *  Removed in R10 when the structured logger replaces them. */
-  legacyWebContents?: WebContents | null;
+  /** R7-Task3: CLI permission prompts go through ApprovalService via this
+   *  adapter. One instance can be shared across every turn executor. */
+  approvalCliAdapter: ApprovalCliAdapter;
 }
 
 export class MeetingTurnExecutor {
@@ -108,7 +111,7 @@ export class MeetingTurnExecutor {
   private readonly arenaRootService: ArenaRootService;
   private readonly providerRegistry: ProviderRegistry;
   private readonly personaPrimedParticipants: Set<string>;
-  private readonly legacyWebContents: WebContents | null;
+  private readonly approvalCliAdapter: ApprovalCliAdapter;
 
   private readonly messageFormatter = new MessageFormatter();
   private readonly appToolProvider = new AppToolProvider();
@@ -130,7 +133,7 @@ export class MeetingTurnExecutor {
     this.arenaRootService = deps.arenaRootService;
     this.providerRegistry = deps.providerRegistry;
     this.personaPrimedParticipants = deps.personaPrimedParticipants;
-    this.legacyWebContents = deps.legacyWebContents ?? null;
+    this.approvalCliAdapter = deps.approvalCliAdapter;
   }
 
   /** Abort the currently in-flight provider request, if any. */
@@ -465,22 +468,20 @@ export class MeetingTurnExecutor {
         participantId: string,
         req: ParsedCliPermissionRequest,
       ): Promise<boolean> => {
-        const permData: CliPermissionRequestData = {
-          cliRequestId: req.cliRequestId,
-          toolName: req.toolName,
-          target: req.target,
-          description: req.description,
-        };
-        // R6 D11: CLI permission prompt UI still rides the v2 stream:*
-        // surface until R7 moves approvals to ApprovalService.
-        this.legacyEmit('stream:cli-permission-request', {
-          conversationId: this.session.meetingId,
+        // R7-Task3: every CLI permission prompt now lands in the
+        // ApprovalService table with kind='cli_permission'. The adapter
+        // owns the Promise bridge (create + subscribe-once('decided') +
+        // 5-minute timeout + listener cleanup). approve/conditional →
+        // true, reject/timeout → false. Conditional comments are
+        // delivered to the AI on the next turn by the SystemMessage-
+        // Injector (R7-Task6) — the CLI only sees the allow signal.
+        return this.approvalCliAdapter.createCliPermissionApproval({
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          projectId: this.session.projectId,
           participantId,
           participantName: speaker.displayName,
-          request: permData,
-        });
-        return new Promise<boolean>((resolve) => {
-          registerPendingCliPermission(participantId, req.cliRequestId, resolve);
+          request: req,
         });
       },
     );
@@ -546,14 +547,6 @@ export class MeetingTurnExecutor {
     }
   }
 
-  private legacyEmit<E extends StreamEventName>(
-    event: E,
-    data: StreamEventMap[E],
-  ): void {
-    const wc = this.legacyWebContents;
-    if (!wc || wc.isDestroyed()) return;
-    wc.send(event, data);
-  }
 }
 
 function isCliProviderConfig(config: unknown): config is CliProviderConfig {

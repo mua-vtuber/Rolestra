@@ -167,6 +167,14 @@ app.whenReady().then(async () => {
     const approvalService = new ApprovalService(new ApprovalRepository(db));
     setApprovalServiceAccessor(() => approvalService);
 
+    // R7-Task3: ApprovalCliAdapter — single shared instance. Stateless
+    // per call, bridges CLI permission prompts onto the ApprovalService
+    // lifecycle (replaces the v2 pending-map cli-permission-handler).
+    const { ApprovalCliAdapter } = await import(
+      './approvals/approval-cli-adapter'
+    );
+    const approvalCliAdapter = new ApprovalCliAdapter(approvalService);
+
     // R6-Task1 + R7-Task2: StreamBridge — central Main → Renderer v3 push hub.
     // `onOutbound` is wired to every browser window's webContents; v3
     // events land on the renderer as `ipcRenderer.on(event.type, payload)`
@@ -238,6 +246,7 @@ app.whenReady().then(async () => {
           arenaRootService: arenaRoot,
           providerRegistry,
           personaPrimedParticipants,
+          approvalCliAdapter,
         });
 
         const orchestrator = new MeetingOrchestrator({

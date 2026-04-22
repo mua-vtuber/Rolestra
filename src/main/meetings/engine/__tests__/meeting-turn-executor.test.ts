@@ -19,6 +19,7 @@ import type { StreamBridge } from '../../../streams/stream-bridge';
 import type { MessageService } from '../../../channels/message-service';
 import type { ArenaRootService } from '../../../arena/arena-root-service';
 import type { providerRegistry as ProviderRegistryInstance } from '../../../providers/registry';
+import type { ApprovalCliAdapter } from '../../../approvals/approval-cli-adapter';
 
 const MEETING_ID = 'mt-1';
 const CHANNEL_ID = 'ch-1';
@@ -83,6 +84,10 @@ function buildDeps(
     get: vi.fn(() => null),
   } as unknown as typeof ProviderRegistryInstance;
 
+  const approvalCliAdapter = {
+    createCliPermissionApproval: vi.fn(async () => true),
+  } as unknown as ApprovalCliAdapter;
+
   return {
     session: overrides.session ?? buildSession(),
     streamBridge: overrides.streamBridge ?? streamBridge,
@@ -91,7 +96,7 @@ function buildDeps(
     providerRegistry: overrides.providerRegistry ?? providerRegistry,
     personaPrimedParticipants:
       overrides.personaPrimedParticipants ?? new Set<string>(),
-    legacyWebContents: overrides.legacyWebContents,
+    approvalCliAdapter: overrides.approvalCliAdapter ?? approvalCliAdapter,
   };
 }
 
@@ -154,6 +159,68 @@ describe('MeetingTurnExecutor — format instructions delegate to MessageFormatt
     exec.getFormatInstruction('EXECUTING', 'AI 1', []);
     expect(exec.lastWorkerSummaryFileName).not.toBeNull();
     expect(exec.lastWorkerSummaryFileName).toMatch(/^work-summary-\d+\.md$/);
+  });
+});
+
+describe('MeetingTurnExecutor — CLI permission callback (R7-Task3)', () => {
+  it('routes CLI permission prompts through ApprovalCliAdapter with v3 context', async () => {
+    const createApproval = vi.fn(async () => true);
+    const approvalCliAdapter = {
+      createCliPermissionApproval: createApproval,
+    } as unknown as import('../../../approvals/approval-cli-adapter').ApprovalCliAdapter;
+
+    const exec = new MeetingTurnExecutor(
+      buildDeps({ approvalCliAdapter }),
+    );
+    const speaker: Participant = {
+      id: 'provider-claude',
+      providerId: 'provider-claude',
+      displayName: 'Claude',
+      isActive: true,
+    };
+
+    // Fake CliProvider that captures the callback the executor installs,
+    // then invokes it with a parsed request — no real spawn needed.
+    type Callback = (pid: string, req: unknown) => Promise<boolean>;
+    const capturedHolder: { current: Callback | null } = { current: null };
+    const fakeProvider = {
+      setPermissionRequestCallback: (cb: Callback | null): void => {
+        capturedHolder.current = cb;
+      },
+    } as unknown as import('../../../providers/cli/cli-provider').CliProvider;
+
+    // The method is private; reach through the instance typed as unknown.
+    type WireCallback = (
+      provider: typeof fakeProvider,
+      speaker: Participant,
+    ) => void;
+    const wire = (
+      exec as unknown as { wireCliPermissionCallback: WireCallback }
+    ).wireCliPermissionCallback.bind(exec);
+    wire(fakeProvider, speaker);
+
+    const cb = capturedHolder.current;
+    expect(cb).not.toBeNull();
+    if (!cb) throw new Error('callback not installed');
+
+    const parsedReq = {
+      cliRequestId: 'req-42',
+      toolName: 'Edit',
+      target: 'src/file.ts',
+      description: 'refactor',
+      rawLine: '{"type":"permission_request"}',
+    };
+    const result = await cb('provider-claude', parsedReq);
+
+    expect(result).toBe(true);
+    expect(createApproval).toHaveBeenCalledWith({
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      projectId: PROJECT_ID,
+      participantId: 'provider-claude',
+      participantName: 'Claude',
+      request: parsedReq,
+    });
   });
 });
 
