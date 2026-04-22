@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Card, CardHeader, CardBody } from '../../../components/primitives';
 import { ProfileAvatar } from '../../../components/shell/ProfileAvatar';
+import { MemberProfileTrigger } from '../../members/MemberProfileTrigger';
 import { useMembers } from '../../../hooks/use-members';
 import type {
   MemberView,
@@ -102,13 +103,23 @@ export function PeopleWidget({
             data-status={member.workStatus}
             className="flex items-center gap-2"
           >
-            <ProfileAvatar
-              member={{
-                id: member.providerId,
-                name: member.displayName,
-              }}
-              size={28}
-            />
+            <MemberProfileTrigger member={member}>
+              <button
+                type="button"
+                data-testid="people-widget-row-trigger"
+                aria-label={`프로필 보기: ${member.displayName}`}
+                className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <ProfileAvatar
+                  member={{
+                    id: member.providerId,
+                    name: member.displayName,
+                  }}
+                  profile={member}
+                  size={28}
+                />
+              </button>
+            </MemberProfileTrigger>
             <div className="flex-1 min-w-0 flex flex-col">
               <button
                 type="button"

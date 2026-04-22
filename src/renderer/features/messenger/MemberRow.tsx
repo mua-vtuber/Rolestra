@@ -15,6 +15,7 @@ import { clsx } from 'clsx';
 import type { ReactElement } from 'react';
 
 import { ProfileAvatar } from '../../components/shell/ProfileAvatar';
+import { MemberProfileTrigger } from '../members/MemberProfileTrigger';
 import { useTheme } from '../../theme/use-theme';
 import type { MemberView, WorkStatus } from '../../../shared/member-profile-types';
 
@@ -46,20 +47,39 @@ export function MemberRow({ member, className }: MemberRowProps): ReactElement {
       className={clsx('flex items-center gap-2', className)}
     >
       {themeKey === 'retro' ? (
-        <span
-          data-testid="member-row-status-dot"
-          aria-hidden="true"
-          className={clsx('h-2 w-2 shrink-0 rounded-full', statusClass)}
-        />
+        <MemberProfileTrigger member={member}>
+          <button
+            type="button"
+            data-testid="member-row-trigger"
+            aria-label={`프로필 보기: ${member.displayName}`}
+            className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <span
+              data-testid="member-row-status-dot"
+              aria-hidden="true"
+              className={clsx('h-2 w-2 block rounded-full', statusClass)}
+            />
+          </button>
+        </MemberProfileTrigger>
       ) : (
-        <ProfileAvatar
-          member={{
-            id: member.providerId,
-            name: member.displayName,
-          }}
-          size={28}
-          shape={avatarShape}
-        />
+        <MemberProfileTrigger member={member}>
+          <button
+            type="button"
+            data-testid="member-row-trigger"
+            aria-label={`프로필 보기: ${member.displayName}`}
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <ProfileAvatar
+              member={{
+                id: member.providerId,
+                name: member.displayName,
+              }}
+              profile={member}
+              size={28}
+              shape={avatarShape}
+            />
+          </button>
+        </MemberProfileTrigger>
       )}
       <div className={clsx('flex min-w-0 flex-1 flex-col', fontClass)}>
         <span

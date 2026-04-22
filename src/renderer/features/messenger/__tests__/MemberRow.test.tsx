@@ -60,7 +60,7 @@ afterEach(() => {
 });
 
 describe('MemberRow — themeKey 3-way avatar vs status-dot', () => {
-  it('warm: profile-avatar rendered with circle shape + sans font', () => {
+  it('warm: avatar rendered with circle shape + sans font', () => {
     renderWithTheme(
       'warm',
       <ul>
@@ -69,13 +69,15 @@ describe('MemberRow — themeKey 3-way avatar vs status-dot', () => {
     );
     const row = screen.getByTestId('member-row');
     expect(row.getAttribute('data-theme-variant')).toBe('warm');
-    const avatar = screen.getByTestId('profile-avatar');
+    // R8-Task7: ProfileAvatar with `profile` prop delegates to <Avatar>,
+    // which exposes its own `data-testid="avatar"` + `data-shape`.
+    const avatar = screen.getByTestId('avatar');
     expect(avatar.getAttribute('data-shape')).toBe('circle');
     const nameCol = screen.getByTestId('member-row-name').parentElement;
     expect(nameCol?.className).toContain('font-sans');
   });
 
-  it('tactical: profile-avatar rendered with diamond shape', () => {
+  it('tactical: avatar rendered with diamond shape', () => {
     renderWithTheme(
       'tactical',
       <ul>
@@ -84,11 +86,11 @@ describe('MemberRow — themeKey 3-way avatar vs status-dot', () => {
     );
     const row = screen.getByTestId('member-row');
     expect(row.getAttribute('data-theme-variant')).toBe('tactical');
-    const avatar = screen.getByTestId('profile-avatar');
+    const avatar = screen.getByTestId('avatar');
     expect(avatar.getAttribute('data-shape')).toBe('diamond');
   });
 
-  it('retro: NO profile-avatar, only status-dot + mono font', () => {
+  it('retro: NO avatar bubble, only status-dot button + mono font', () => {
     renderWithTheme(
       'retro',
       <ul>
@@ -97,8 +99,11 @@ describe('MemberRow — themeKey 3-way avatar vs status-dot', () => {
     );
     const row = screen.getByTestId('member-row');
     expect(row.getAttribute('data-theme-variant')).toBe('retro');
+    // No avatar bubble — only the trigger button wrapping a status-dot.
+    expect(screen.queryByTestId('avatar')).toBeNull();
     expect(screen.queryByTestId('profile-avatar')).toBeNull();
     expect(screen.getByTestId('member-row-status-dot')).toBeTruthy();
+    expect(screen.getByTestId('member-row-trigger')).toBeTruthy();
     const nameCol = screen.getByTestId('member-row-name').parentElement;
     expect(nameCol?.className).toContain('font-mono');
   });

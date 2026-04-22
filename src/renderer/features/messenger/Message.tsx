@@ -21,7 +21,9 @@ import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ProfileAvatar, type MemberLike } from '../../components/shell/ProfileAvatar';
+import { MemberProfileTrigger } from '../members/MemberProfileTrigger';
 import { useTheme } from '../../theme/use-theme';
+import type { MemberView } from '../../../shared/member-profile-types';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 
 /**
@@ -37,6 +39,14 @@ export interface MessageProps {
   message: ChannelMessage;
   /** Header 렌더 + ProfileAvatar 에 전달. null 이면 name fallback=authorId. */
   member: MessageAuthorInfo | null;
+  /**
+   * Optional full {@link MemberView} for the author (R8-Task7). When
+   * provided, the avatar becomes a click target that opens
+   * {@link MemberProfileTrigger}'s popover. When omitted (e.g. system
+   * messages, deleted authors), the avatar is non-interactive (R5
+   * behaviour preserved).
+   */
+  profile?: MemberView;
   /** 연속 메시지 — avatar 와 header 를 생략한다. */
   compact?: boolean;
   className?: string;
@@ -62,6 +72,7 @@ function formatTime(ts: number, lang: string): string {
 export function Message({
   message,
   member,
+  profile,
   compact = false,
   className,
 }: MessageProps): ReactElement {
@@ -120,7 +131,25 @@ export function Message({
     >
       {showHeader ? (
         member !== null ? (
-          <ProfileAvatar member={member} size={AVATAR_SIZE} shape={avatarShape} />
+          profile ? (
+            <MemberProfileTrigger member={profile}>
+              <button
+                type="button"
+                data-testid="message-avatar-trigger"
+                aria-label={`프로필 보기: ${member.name}`}
+                className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+              >
+                <ProfileAvatar
+                  member={member}
+                  profile={profile}
+                  size={AVATAR_SIZE}
+                  shape={avatarShape}
+                />
+              </button>
+            </MemberProfileTrigger>
+          ) : (
+            <ProfileAvatar member={member} size={AVATAR_SIZE} shape={avatarShape} />
+          )
         ) : (
           <div
             data-testid="message-avatar-placeholder"

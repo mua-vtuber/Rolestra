@@ -59,7 +59,7 @@
     {
       "id": 7,
       "subject": "Task 7: 아바타 클릭 wire (Message / MemberRow / PeopleWidget) + Edit 진입",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6],
       "description": "**Goal:** Message/MemberRow/PeopleWidget 각각 아바타 onClick → Popover open → 'Popover 편집' → EditModal open.\n\n**Files:** src/renderer/features/messenger/{Message,MemberRow}.tsx, src/renderer/features/dashboard/widgets/PeopleWidget.tsx, (선택) src/renderer/features/members/MemberProfileTrigger.tsx, __tests__\n\n**Verify:** `npm run test -- Message MemberRow PeopleWidget MemberProfileTrigger`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/Message.tsx\",\"src/renderer/features/messenger/MemberRow.tsx\",\"src/renderer/features/dashboard/widgets/PeopleWidget.tsx\"],\"verifyCommand\":\"npm run test -- Message MemberRow PeopleWidget\",\"acceptanceCriteria\":[\"3 surface 클릭 → Popover open\",\"Popover 편집 → EditModal open\",\"ESC/외부 클릭 close\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

@@ -36,7 +36,7 @@
 
 import * as Popover from '@radix-ui/react-popover';
 import { clsx } from 'clsx';
-import { useCallback, useState, type ReactElement } from 'react';
+import { useCallback, useState, type ReactElement, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Avatar } from '../../components/members/Avatar';
@@ -53,18 +53,15 @@ import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
 export interface MemberProfilePopoverProps {
   open: boolean;
   onOpenChange(open: boolean): void;
-  /**
-   * Anchor element passed by the trigger surface. We use Popover.Trigger's
-   * `asChild` pattern in the consumer instead — but exposing `triggerRef`
-   * here would require lifting the trigger into this component. Since the
-   * 3 trigger surfaces (Message / MemberRow / PeopleWidget — Task 7) all
-   * have their own clickable wrappers, the surrounding component renders
-   * Popover.Root with this component as its content. Hence: this component
-   * renders the CONTENT only and assumes the parent wraps it in a Root.
-   *
-   * No anchor prop here on purpose — the parent passes Trigger separately.
-   */
   member: MemberView;
+  /**
+   * Optional `Popover.Trigger` element (passed as React node — the
+   * component wraps it in `<Popover.Trigger asChild>`). When present, the
+   * popover anchors to this element. When omitted (test usage), the
+   * popover renders without a visible anchor — tests open it via
+   * `open=true` directly.
+   */
+  trigger?: ReactNode;
   /** Pre-resolved URL when member.avatarKind='custom'. */
   customAvatarSrc?: string;
   /** Called when the user clicks "편집". Parent opens the EditModal. */
@@ -90,6 +87,7 @@ export function MemberProfilePopover({
   open,
   onOpenChange,
   member,
+  trigger,
   customAvatarSrc,
   onEdit,
   onDmStarted,
@@ -181,6 +179,9 @@ export function MemberProfilePopover({
 
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
+      {trigger !== undefined && (
+        <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      )}
       <Popover.Portal>
         <Popover.Content
           data-testid="profile-popover"
