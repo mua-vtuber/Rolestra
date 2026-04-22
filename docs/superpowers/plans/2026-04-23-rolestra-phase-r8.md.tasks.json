@@ -91,7 +91,7 @@
     {
       "id": 11,
       "subject": "Task 11: i18n populate member.* / profile.* / meeting.turnSkipped",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2, 4, 6, 9],
       "description": "**Goal:** ko/en 신규 키 populate. member.status.* (4) / member.avatarPicker.* / member.warmup.* / profile.editor.* / profile.popover.* / meeting.turnSkipped. i18next-parser keepRemoved regex 확장. notification.* main-process 라벨은 R10 deferred.\n\n**Files:** src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js\n\n**Verify:** `npm run i18n:check`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"i18next-parser.config.js\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"ko/en 신규 키 populate (parser idempotent)\",\"i18n:check exit 0\",\"typecheck:web exit 0\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

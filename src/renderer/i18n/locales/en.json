@@ -120,6 +120,31 @@
       "USER_DECISION": "Awaiting user decision",
       "VOTING": "Voting",
       "WORK_DISCUSSING": "Work discussion"
+    },
+    "turnSkipped": "⚠ Skipped {{name}}'s turn — currently {{reason}}."
+  },
+  "member": {
+    "avatarPicker": {
+      "catalogueError": "Failed to load default avatar palette.",
+      "currentCustom": "Current uploaded photo",
+      "loadingCatalogue": "Loading default avatars…",
+      "remove": "Remove",
+      "revert": "Revert to default",
+      "title": "Pick avatar",
+      "upload": "Upload photo",
+      "uploadError": "Upload failed: {{message}}",
+      "uploading": "Uploading…"
+    },
+    "status": {
+      "connecting": "Reconnecting",
+      "offlineConnection": "Needs attention",
+      "offlineManual": "Out of office",
+      "online": "On duty"
+    },
+    "warmup": {
+      "failure": "Connection failed",
+      "starting": "Connecting",
+      "success": "Connected"
     }
   },
   "messenger": {
@@ -317,6 +342,42 @@
     },
     "typing": {
       "label": "{{names}} — typing"
+    }
+  },
+  "profile": {
+    "editor": {
+      "cancel": "Cancel",
+      "fetchError": "Failed to load profile.",
+      "fields": {
+        "avatar": "Avatar",
+        "expertise": "Expertise",
+        "personality": "Personality / tone",
+        "role": "Role / title"
+      },
+      "loading": "Loading profile…",
+      "save": "Save",
+      "saveError": "Save failed: {{message}}",
+      "saving": "Saving…",
+      "title": "Edit profile — {{name}}"
+    },
+    "popover": {
+      "actions": {
+        "edit": "Edit",
+        "reconnect": "Try connecting",
+        "startDm": "Start DM",
+        "toggleOffline": "Out of office",
+        "toggleOnline": "On duty"
+      },
+      "errors": {
+        "dmFailed": "Failed to create DM channel",
+        "reconnectFailed": "Reconnect failed",
+        "toggleFailed": "Failed to toggle work status"
+      },
+      "fields": {
+        "expertise": "Expertise",
+        "personality": "Personality"
+      },
+      "reconnecting": "Connecting…"
     }
   },
   "project": {

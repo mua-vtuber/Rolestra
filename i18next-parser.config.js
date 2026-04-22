@@ -109,6 +109,36 @@ export default {
     // parser does not prune unseen header labels.
     /^translation:meeting\.minutes(\..+)?$/,
     /^translation:meeting\.notification(\..+)?$/,
+    // R8-Task11 member.status.<WorkStatus> — referenced via
+    // `t(WORK_STATUS_I18N_KEY[status])` in WorkStatusDot, where the key
+    // table is composed at module load. The parser sees the constant
+    // accessor, not the string literal, so the 4 status keys would be
+    // pruned without this anchor.
+    /^translation:member\.status(\..+)?$/,
+    // R8-Task11 member.avatarPicker.* — the picker labels include
+    // upload/upload-error templates with interpolation that the parser
+    // does pick up, but we keep the full subtree to guard the catalogue
+    // against partial-extraction prunes (some keys are referenced from
+    // disabled-button text branches the parser may skip).
+    /^translation:member\.avatarPicker(\..+)?$/,
+    // R8-Task11 member.warmup.* — placeholder keys for future inline
+    // warmup status surfaces (notification text in R10). Anchor exists
+    // so populating these now does not get pruned by a parser pass
+    // before they have a static `t()` callsite.
+    /^translation:member\.warmup(\..+)?$/,
+    // R8-Task11 profile.editor.* — labels referenced via constant prop
+    // names (fields.role/personality/...) that the parser cannot resolve
+    // from a single t() inspection. Same shape as project.create.kind.*
+    // anchor above.
+    /^translation:profile\.editor(\..+)?$/,
+    // R8-Task11 profile.popover.* — actions/errors/fields are accessed
+    // via static keys but the parser sees aggregate `t('profile.popover.actions.X')`
+    // patterns that vary by branch. Anchored so the full subtree survives.
+    /^translation:profile\.popover(\..+)?$/,
+    // R8-Task9/Task11 meeting.turnSkipped — interpolation key consumed
+    // by SystemMessage when meta.turnSkipped is present. The parser sees
+    // it as a static key but the anchor preserves it across reorderings.
+    /^translation:meeting\.turnSkipped$/,
   ],
   failOnWarnings: false,
 };

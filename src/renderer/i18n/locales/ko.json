@@ -120,6 +120,31 @@
       "USER_DECISION": "사용자 결정 대기",
       "VOTING": "투표",
       "WORK_DISCUSSING": "업무 토론"
+    },
+    "turnSkipped": "⚠ {{name}}이(가) {{reason}} 상태라 이 턴을 건너뜁니다."
+  },
+  "member": {
+    "avatarPicker": {
+      "catalogueError": "기본 아바타 목록을 불러오지 못했습니다.",
+      "currentCustom": "현재 업로드된 사진",
+      "loadingCatalogue": "기본 아바타 불러오는 중…",
+      "remove": "제거",
+      "revert": "기본으로 되돌리기",
+      "title": "아바타 선택",
+      "upload": "사진 업로드",
+      "uploadError": "업로드 실패: {{message}}",
+      "uploading": "업로드 중…"
+    },
+    "status": {
+      "connecting": "재연결 중",
+      "offlineConnection": "점검 필요",
+      "offlineManual": "외근",
+      "online": "출근"
+    },
+    "warmup": {
+      "failure": "연결 실패",
+      "starting": "연결 시도 중",
+      "success": "연결 성공"
     }
   },
   "messenger": {
@@ -317,6 +342,42 @@
     },
     "typing": {
       "label": "{{names}} — 작성 중"
+    }
+  },
+  "profile": {
+    "editor": {
+      "cancel": "취소",
+      "fetchError": "프로필을 불러오지 못했습니다.",
+      "fields": {
+        "avatar": "아바타",
+        "expertise": "전문분야",
+        "personality": "성격 / 말투",
+        "role": "역할 / 직함"
+      },
+      "loading": "프로필 불러오는 중…",
+      "save": "저장",
+      "saveError": "저장 실패: {{message}}",
+      "saving": "저장 중…",
+      "title": "{{name}} 프로필 편집"
+    },
+    "popover": {
+      "actions": {
+        "edit": "편집",
+        "reconnect": "연락해보기",
+        "startDm": "DM 시작",
+        "toggleOffline": "외근",
+        "toggleOnline": "출근"
+      },
+      "errors": {
+        "dmFailed": "DM 채널 생성 실패",
+        "reconnectFailed": "재연결에 실패했습니다",
+        "toggleFailed": "출근 상태 변경 실패"
+      },
+      "fields": {
+        "expertise": "전문분야",
+        "personality": "성격"
+      },
+      "reconnecting": "연결 시도 중…"
     }
   },
   "project": {
