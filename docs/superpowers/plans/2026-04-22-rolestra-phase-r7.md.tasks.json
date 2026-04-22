@@ -83,7 +83,7 @@
     {
       "id": 10,
       "subject": "Task 10: Dashboard ApprovalsWidget → #승인-대기 채널 라우팅",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** ApprovalsWidget 의 `onRowActivate` 기본값이 activeChannelStore.setActiveChannel + appViewStore.setView('messenger') 로 #승인-대기 채널 라우팅. `useSystemChannel(projectId, 'system_approval')` 조회 훅 추가.\n\n**Files:** src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx + __tests__, src/renderer/hooks/use-system-channel.ts (필요 시)\n\n**Verify:** `npm run test -- ApprovalsWidget`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalsWidget\",\"acceptanceCriteria\":[\"row 클릭 → activeChannelStore 업데이트\",\"messenger 뷰 전환\",\"projectId=null 안전 fallback\",\"기존 3-way 스타일 회귀 0\"]}\n```",
       "lastUpdated": "2026-04-22T16:00:00.000Z"

@@ -10,14 +10,14 @@ import { MessengerPage } from './features/messenger/MessengerPage';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
+import { useAppViewStore, type AppView } from './stores/app-view-store';
 import type { Project } from '../shared/project-types';
 
 /**
  * 현재 마운트할 최상위 뷰. R5에서는 dashboard ↔ messenger 2개만 실제 페이지가
  * 달려 있고 approval/queue/settings는 R7+ 이전까지 dashboard로 fallback.
+ * `AppView` 유니온 정의는 `stores/app-view-store.ts` 로 이동했다(R7-Task10).
  */
-type AppView = 'dashboard' | 'messenger';
-
 const ROUTED_VIEWS: ReadonlyArray<AppView> = ['dashboard', 'messenger'];
 
 const NAV_ITEMS: ReadonlyArray<NavRailItem> = [
@@ -43,16 +43,20 @@ export function App() {
   const { projects } = useProjects();
   const { activeProjectId, setActive } = useActiveProject();
   const [modalOpen, setModalOpen] = useState<boolean>(false);
-  const [view, setView] = useState<AppView>('dashboard');
+  const view = useAppViewStore((s) => s.view);
+  const setView = useAppViewStore((s) => s.setView);
 
-  const handleNavSelect = useCallback((id: string): void => {
-    // NavRail 은 라우팅되지 않은 섹션(approval/queue/settings)도 클릭할 수
-    // 있지만 R5 는 dashboard/messenger 만 실제 뷰가 존재한다. 나머지는 무시해
-    // 현재 view 를 유지.
-    if ((ROUTED_VIEWS as readonly string[]).includes(id)) {
-      setView(id as AppView);
-    }
-  }, []);
+  const handleNavSelect = useCallback(
+    (id: string): void => {
+      // NavRail 은 라우팅되지 않은 섹션(approval/queue/settings)도 클릭할 수
+      // 있지만 R5 는 dashboard/messenger 만 실제 뷰가 존재한다. 나머지는 무시해
+      // 현재 view 를 유지.
+      if ((ROUTED_VIEWS as readonly string[]).includes(id)) {
+        setView(id as AppView);
+      }
+    },
+    [setView],
+  );
 
   const railProjects = useMemo(
     () => projects.map(toRailProject),

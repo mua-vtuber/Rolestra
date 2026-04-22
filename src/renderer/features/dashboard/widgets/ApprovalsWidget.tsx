@@ -11,27 +11,33 @@
  * navigation via the optional `onRowActivate` prop.
  */
 import { clsx } from 'clsx';
-import type { ReactElement } from 'react';
+import { useCallback, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Card, CardHeader, CardBody } from '../../../components/primitives';
 import { Badge } from '../../../components/primitives';
 import { usePendingApprovals } from '../../../hooks/use-pending-approvals';
+import { useSystemChannel } from '../../../hooks/use-system-channel';
+import { useActiveChannelStore } from '../../../stores/active-channel-store';
+import { useAppViewStore } from '../../../stores/app-view-store';
+import { useActiveProject } from '../../../hooks/use-active-project';
 import type { ApprovalItem } from '../../../../shared/approval-types';
 
 export interface ApprovalsWidgetProps {
   /** Max rows visible in the body. Extras contribute to the count badge only. */
   visibleLimit?: number;
-  /** Future (R7): invoked when an approval row is activated. Defaults to no-op. */
+  /**
+   * Override the default navigation behaviour. When omitted the widget
+   * routes to the approval's project `#승인-대기` (system_approval) channel
+   * and switches the top-level view to `messenger` (R7-Task10). Pass a
+   * custom handler when hosting the widget outside the standard shell
+   * (storybook / tests / settings preview).
+   */
   onRowActivate?: (item: ApprovalItem) => void;
   className?: string;
 }
 
 const DEFAULT_VISIBLE_LIMIT = 5;
-
-function noop(): void {
-  /* intentionally empty — R4 rows are not yet interactive */
-}
 
 /**
  * Truncate a kind-dependent preview string from the approval payload. The
@@ -53,11 +59,42 @@ function previewPayload(payload: unknown): string {
 
 export function ApprovalsWidget({
   visibleLimit = DEFAULT_VISIBLE_LIMIT,
-  onRowActivate = noop,
+  onRowActivate,
   className,
 }: ApprovalsWidgetProps): ReactElement {
   const { t } = useTranslation();
   const { items, loading, error } = usePendingApprovals();
+
+  // R7-Task10: default activation routes to the approval's project
+  // `#승인-대기` channel + switches to the messenger view. Look up the
+  // channel id via the active project(filter by active, not the
+  // approval item's project — the two may differ when the user browses
+  // approvals across projects in a future R10 multi-project dashboard).
+  const { activeProjectId } = useActiveProject();
+  const { channelId: inboxChannelId } = useSystemChannel(
+    activeProjectId ?? null,
+    'system_approval',
+  );
+  const setActiveChannelId = useActiveChannelStore(
+    (s) => s.setActiveChannelId,
+  );
+  const setAppView = useAppViewStore((s) => s.setView);
+
+  const defaultOnRowActivate = useCallback(
+    (item: ApprovalItem): void => {
+      // projectId null fallback — widget stays inert if no project is
+      // active (we have nowhere safe to route the user to).
+      if (activeProjectId === null) return;
+      if (inboxChannelId !== null) {
+        setActiveChannelId(activeProjectId, inboxChannelId);
+      }
+      setAppView('messenger');
+      void item; // reserved for R10 per-row highlighting.
+    },
+    [activeProjectId, inboxChannelId, setActiveChannelId, setAppView],
+  );
+
+  const handleRowActivate = onRowActivate ?? defaultOnRowActivate;
 
   const total = items?.length ?? 0;
   const visible = items?.slice(0, visibleLimit) ?? [];
@@ -114,7 +151,7 @@ export function ApprovalsWidget({
             <button
               type="button"
               data-testid="approvals-widget-row-activate"
-              onClick={() => onRowActivate(item)}
+              onClick={() => handleRowActivate(item)}
               className="text-left flex flex-col"
             >
               <span className="text-sm font-medium text-fg truncate">
