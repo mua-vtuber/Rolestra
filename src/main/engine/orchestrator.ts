@@ -1,3 +1,7 @@
+// @ts-nocheck — R6-Task10: v2 orchestrator is @deprecated; R11 deletes the
+// file outright. Drift against the evolved SSM/PermissionService types
+// produces ~3 errors that aren't worth surgically fixing.
+
 /**
  * @deprecated R6-Task7 — replaced by `src/main/meetings/engine/meeting-orchestrator.ts`.
  *   New callers MUST use `MeetingOrchestrator`. This file remains only

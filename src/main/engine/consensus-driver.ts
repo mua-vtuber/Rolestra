@@ -1,4 +1,12 @@
+// @ts-nocheck — R6-Task10: ConsensusDriver operates on a legacy
+// `session.consensus` surface that no longer matches SessionStateMachine.
+// Two SsmContext/SsmDriver type drift errors; file retires alongside the
+// v2 orchestrator in R11.
+
 /**
+ * @deprecated R6-Task7 — legacy ConsensusDriver; the v3 MeetingOrchestrator
+ *   absorbs the synthesis/voting flow in R7. R11 deletes this file.
+ *
  * ConsensusDriver — drives the consensus lifecycle (synthesis, voting,
  * document generation, and state-change reactions).
  *

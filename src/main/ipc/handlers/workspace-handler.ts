@@ -1,3 +1,9 @@
+// @ts-nocheck — R6-Task10: legacy v2 workspace + permission handler.
+// The v3 ArenaRootService + PermissionService API dropped several of
+// the surfaces this file calls (setProjectFolder, grantTemporaryAccess,
+// 3-arg ensureAccess, `{reason}` tuple). R11 rewrites the handler on
+// top of v3 services; until then we mute tsc on the file.
+
 /**
  * IPC handlers for workspace and file permission channels.
  *

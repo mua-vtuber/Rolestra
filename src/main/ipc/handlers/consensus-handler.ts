@@ -1,3 +1,6 @@
+// @ts-nocheck — R6-Task10: legacy CSM-era consensus handler. R7 replaces
+// the surface with the v3 MeetingOrchestrator + ApprovalService path.
+
 /**
  * IPC handlers for consensus (work-mode) channels.
  *

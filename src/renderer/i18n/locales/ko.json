@@ -66,6 +66,49 @@
       "title": "진행 중인 회의"
     }
   },
+  "meeting": {
+    "error": {
+      "circuitBreaker": "자동 안전 장치 발동",
+      "providerError": "AI 제공자 오류",
+      "ssmTimeout": "상태 전환 시간 초과",
+      "startFailed": "회의를 시작하지 못했습니다"
+    },
+    "minutes": {
+      "failed": {
+        "noConsensus": "합의본 없음",
+        "reason": "종료 사유",
+        "unknown": "사유 불명 — 이전 상태 기록 없음"
+      },
+      "header": {
+        "elapsed": "경과 시간",
+        "elapsedUnit": "분",
+        "minutesFooter": "회의 종료",
+        "participants": "참여자",
+        "ssmFinal": "SSM 최종 상태",
+        "titlePrefix": "회의",
+        "topic": "주제",
+        "votes": "투표"
+      }
+    },
+    "notification": {
+      "error": "회의 오류",
+      "workDone": "작업 완료"
+    },
+    "state": {
+      "CONSENSUS_APPROVED": "합의 완료",
+      "CONVERSATION": "대화",
+      "DONE": "완료",
+      "EXECUTING": "실행 중",
+      "FAILED": "실패",
+      "MODE_TRANSITION_PENDING": "모드 전환 대기",
+      "PAUSED": "일시 정지",
+      "REVIEWING": "검토 중",
+      "SYNTHESIZING": "합의 정리",
+      "USER_DECISION": "사용자 결정 대기",
+      "VOTING": "투표",
+      "WORK_DISCUSSING": "업무 토론"
+    }
+  },
   "messenger": {
     "approval": {
       "allow": "허가",
@@ -230,7 +273,9 @@
       "topicPlaceholder": "무엇을 논의할까요?"
     },
     "thread": {
-      "messageListPlaceholder": "Task 6 예정 — 메시지 스트림"
+      "empty": "아직 메시지가 없습니다",
+      "liveTurnPending": "응답 준비 중…",
+      "loading": "메시지를 불러오는 중…"
     },
     "typing": {
       "label": "{{names}} — 작성 중"

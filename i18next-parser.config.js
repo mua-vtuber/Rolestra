@@ -82,6 +82,20 @@ export default {
     /^translation:messenger\.channelDelete\.errors(\..+)?$/,
     // R5-Task11 StartDmButton `mapErrorToI18nKey` — same variable-key pattern.
     /^translation:messenger\.startDm\.errors(\..+)?$/,
+    // R6-Task11 meeting.state.<SSM> — composed via
+    // `t('meeting.state.${ssmState}')` in MeetingBanner / MinutesComposer.
+    // The 12 SSM state names are variable-keyed so the parser cannot
+    // resolve them statically.
+    /^translation:meeting\.state(\..+)?$/,
+    /^translation:meeting\.banner\.state(\..+)?$/,
+    // R6-Task11 meeting.error.<kind> — same variable-keyed pattern when
+    // rendering a failed-meeting banner via `t('meeting.error.${kind}')`.
+    /^translation:meeting\.error(\..+)?$/,
+    // R6-Task11 meeting.minutes.* — MinutesComposer reads these through
+    // an injected translator; keep the full subtree intact so the
+    // parser does not prune unseen header labels.
+    /^translation:meeting\.minutes(\..+)?$/,
+    /^translation:meeting\.notification(\..+)?$/,
   ],
   failOnWarnings: false,
 };

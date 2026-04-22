@@ -35,7 +35,11 @@ export function setExecutionWorkspaceRoot(
   ) => Promise<boolean>,
 ): void {
   executionService = new ExecutionService({ workspaceRoot, ensureAccess });
-  setAuditLogAccessor(() => executionService.getAuditLog());
+  // Non-null assertion: we assigned `executionService` on the previous
+  // line; the accessor closes over it lazily. The `?.` below would
+  // confuse downstream callers who expect a non-null AuditLog, so we
+  // narrow via the now-non-null reference.
+  setAuditLogAccessor(() => executionService!.getAuditLog());
 }
 
 function getExecutionService(): ExecutionService {

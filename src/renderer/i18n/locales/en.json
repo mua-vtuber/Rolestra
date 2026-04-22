@@ -66,6 +66,49 @@
       "title": "Active meetings"
     }
   },
+  "meeting": {
+    "error": {
+      "circuitBreaker": "Safety circuit tripped",
+      "providerError": "AI provider error",
+      "ssmTimeout": "State transition timeout",
+      "startFailed": "Failed to start meeting"
+    },
+    "minutes": {
+      "failed": {
+        "noConsensus": "No consensus",
+        "reason": "Termination reason",
+        "unknown": "Unknown reason — no prior state"
+      },
+      "header": {
+        "elapsed": "Elapsed",
+        "elapsedUnit": "m",
+        "minutesFooter": "Meeting ended",
+        "participants": "Participants",
+        "ssmFinal": "Final SSM state",
+        "titlePrefix": "Meeting",
+        "topic": "Topic",
+        "votes": "Votes"
+      }
+    },
+    "notification": {
+      "error": "Meeting error",
+      "workDone": "Work done"
+    },
+    "state": {
+      "CONSENSUS_APPROVED": "Consensus approved",
+      "CONVERSATION": "Conversation",
+      "DONE": "Done",
+      "EXECUTING": "Executing",
+      "FAILED": "Failed",
+      "MODE_TRANSITION_PENDING": "Awaiting mode transition",
+      "PAUSED": "Paused",
+      "REVIEWING": "Reviewing",
+      "SYNTHESIZING": "Synthesising",
+      "USER_DECISION": "Awaiting user decision",
+      "VOTING": "Voting",
+      "WORK_DISCUSSING": "Work discussion"
+    }
+  },
   "messenger": {
     "approval": {
       "allow": "Allow",
@@ -230,7 +273,9 @@
       "topicPlaceholder": "What will you discuss?"
     },
     "thread": {
-      "messageListPlaceholder": "Task 6 pending — message stream placeholder"
+      "empty": "No messages yet",
+      "liveTurnPending": "Preparing response…",
+      "loading": "Loading messages…"
     },
     "typing": {
       "label": "{{names}} — typing"

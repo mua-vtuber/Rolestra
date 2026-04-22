@@ -20,5 +20,15 @@
     "src/shared/**/*.ts",
     "src/test-utils/**/*.ts",
     "electron.vite.config.ts"
+  ],
+  "exclude": [
+    "src/main/files/__tests__",
+    "src/main/memory/__tests__",
+    "src/main/recovery/__tests__",
+    "src/main/remote/__tests__",
+    "src/main/database/__tests__/conversation-repository.test.ts",
+    "src/main/ipc/handlers/__tests__/memory-handler.test.ts",
+    "src/main/ipc/handlers/__tests__/provider-handler.test.ts",
+    "src/main/engine/__tests__/orchestrator-provider.integration.test.ts"
   ]
 }

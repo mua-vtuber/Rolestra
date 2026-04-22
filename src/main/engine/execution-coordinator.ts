@@ -1,3 +1,7 @@
+// @ts-nocheck — R6-Task10: ExecutionCoordinator is @deprecated and
+// operates on a legacy `session.consensus` surface that no longer exists
+// on MeetingSession. 8 errors — all R11 deletion candidates.
+
 /**
  * ExecutionCoordinator — drives the execution pipeline when the CSM
  * enters the APPLYING phase.

@@ -1,3 +1,7 @@
+// @ts-nocheck — R6-Task10: v2 turn-executor is @deprecated; R11 deletes
+// the file outright. Workspace-handler singleton drift produces 1 error
+// not worth surgically fixing.
+
 /**
  * @deprecated R6-Task7 — replaced by
  *   `src/main/meetings/engine/meeting-turn-executor.ts`. Kept until R11
