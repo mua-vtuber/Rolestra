@@ -75,7 +75,7 @@
     {
       "id": 9,
       "subject": "Task 9: MeetingTurnExecutor work-status 게이트 + meeting:turn-skipped 이벤트",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8],
       "description": "**Goal:** `meeting-turn-executor.executeTurn` 시작점에 `getWorkStatus(participantId) !== 'online'` 게이트 — skip + emitMeetingTurnSkipped + system message append. shared meeting-stream-types 에 이벤트 타입 추가. preload + use-meeting-stream reducer + Thread 시스템 메시지 분기.\n\n**Files:** src/shared/meeting-stream-types.ts, src/main/streams/stream-bridge.ts, src/main/meetings/engine/meeting-turn-executor.ts + __tests__, src/main/index.ts, src/preload/index.ts, src/renderer/hooks/use-meeting-stream.ts, src/renderer/features/messenger/Thread.tsx\n\n**Verify:** `npm run test -- meeting-turn-executor.work-status-gate use-meeting-stream`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-turn-executor.ts\",\"src/shared/meeting-stream-types.ts\"],\"verifyCommand\":\"npm run test -- meeting-turn-executor\",\"acceptanceCriteria\":[\"online → 정상 turn (회귀 0)\",\"비-online → skip + 이벤트 + system message\",\"SSM TURN_DONE/FAIL 발사 0\",\"4 케이스 green\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

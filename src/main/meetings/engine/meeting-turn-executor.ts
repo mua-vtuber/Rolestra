@@ -102,6 +102,18 @@ export interface MeetingTurnExecutorDeps {
   /** R7-Task3: CLI permission prompts go through ApprovalService via this
    *  adapter. One instance can be shared across every turn executor. */
   approvalCliAdapter: ApprovalCliAdapter;
+  /**
+   * R8-Task9: optional MemberProfileService for the work-status gate
+   * (spec §7.2 "턴매니저는 online 상태 멤버만 선발"). When present, every
+   * `executeTurn` first checks `getWorkStatus(speakerId)` and emits
+   * `meeting:turn-skipped` + system message + early-returns if the
+   * speaker is anything other than `online`.
+   *
+   * Optional to keep R7 callers (existing tests, smoke harnesses) working
+   * without forcing them to inject the dependency. Production wiring
+   * (R8-Task8 main/index.ts) always provides it.
+   */
+  memberProfileService?: import('../../members/member-profile-service').MemberProfileService;
 }
 
 export class MeetingTurnExecutor {
@@ -112,6 +124,9 @@ export class MeetingTurnExecutor {
   private readonly providerRegistry: ProviderRegistry;
   private readonly personaPrimedParticipants: Set<string>;
   private readonly approvalCliAdapter: ApprovalCliAdapter;
+  private readonly memberProfileService?: NonNullable<
+    MeetingTurnExecutorDeps['memberProfileService']
+  >;
 
   private readonly messageFormatter = new MessageFormatter();
   private readonly appToolProvider = new AppToolProvider();
@@ -134,6 +149,7 @@ export class MeetingTurnExecutor {
     this.providerRegistry = deps.providerRegistry;
     this.personaPrimedParticipants = deps.personaPrimedParticipants;
     this.approvalCliAdapter = deps.approvalCliAdapter;
+    this.memberProfileService = deps.memberProfileService;
   }
 
   /** Abort the currently in-flight provider request, if any. */
@@ -143,6 +159,53 @@ export class MeetingTurnExecutor {
 
   /** Execute a single AI turn for the given speaker. */
   async executeTurn(speaker: Participant): Promise<void> {
+    // R8-Task9: work-status gate (spec §7.2). Skip the turn entirely
+    // when the speaker is not `online`. The skip is NOT a turn failure
+    // — we do not emit TURN_DONE/TURN_FAIL. The orchestrator's turn
+    // rotation decides what to do next (move to the next speaker).
+    if (this.memberProfileService) {
+      const status = this.memberProfileService.getWorkStatus(speaker.id);
+      if (status !== 'online') {
+        this.streamBridge.emitMeetingTurnSkipped({
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          participantId: speaker.id,
+          participantName: speaker.displayName,
+          reason: status,
+        });
+        // Persist a system message so the channel transcript shows the
+        // skip even after the meeting ends. The renderer Thread (Task 9
+        // continued) maps the well-known meta marker to a translated
+        // banner.
+        try {
+          this.messageService.append({
+            channelId: this.session.channelId,
+            meetingId: this.session.meetingId,
+            authorId: speaker.id,
+            authorKind: 'system',
+            role: 'system',
+            content: `meeting.turnSkipped|${speaker.displayName}|${status}`,
+            meta: {
+              turnSkipped: {
+                participantId: speaker.id,
+                participantName: speaker.displayName,
+                reason: status,
+              },
+            },
+          });
+        } catch (e) {
+          // Persisting the marker is best-effort — even if the DB write
+          // fails, the live `stream:meeting-turn-skipped` already
+          // surfaced the skip to the renderer.
+          console.warn(
+            '[meeting-turn-executor] failed to persist turn-skipped marker',
+            e instanceof Error ? e.message : String(e),
+          );
+        }
+        return;
+      }
+    }
+
     const provider = this.providerRegistry.get(speaker.id);
     if (!provider) {
       this.streamBridge.emitMeetingError({

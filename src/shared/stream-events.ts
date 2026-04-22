@@ -132,6 +132,24 @@ export interface StreamMeetingErrorPayload {
   fatal: boolean;
 }
 
+/**
+ * R8-Task9: a turn was skipped because the participant was not `online`
+ * (spec §7.2). The renderer reflects this as a system message ("⚠ {name}
+ * 가 외근 중이라 이 턴을 건너뜁니다") and the SSM does NOT receive a
+ * TURN_DONE/TURN_FAIL — skip is "this slot is empty", not failure.
+ *
+ * `reason` is the {@link WorkStatus} that triggered the skip (anything
+ * !== 'online'). The renderer maps it to an i18n label rather than relying
+ * on a hard-coded string here.
+ */
+export interface StreamMeetingTurnSkippedPayload {
+  meetingId: string;
+  channelId: string;
+  participantId: string;
+  participantName: string;
+  reason: 'connecting' | 'offline-connection' | 'offline-manual';
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -156,6 +174,10 @@ export type StreamEvent =
       payload: StreamMeetingTurnDonePayload;
     }
   | { type: 'stream:meeting-error'; payload: StreamMeetingErrorPayload }
+  | {
+      type: 'stream:meeting-turn-skipped';
+      payload: StreamMeetingTurnSkippedPayload;
+    }
   | { type: 'stream:queue-progress'; payload: StreamQueueProgressPayload }
   | { type: 'stream:notification'; payload: StreamNotificationPayload }
   | {

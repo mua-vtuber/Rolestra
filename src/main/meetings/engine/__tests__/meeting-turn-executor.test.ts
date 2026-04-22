@@ -64,6 +64,7 @@ function buildDeps(
     emitMeetingTurnToken: vi.fn(),
     emitMeetingTurnDone: vi.fn(),
     emitMeetingError: vi.fn(),
+    emitMeetingTurnSkipped: vi.fn(),
   } as unknown as StreamBridge;
 
   const messageService = {
@@ -97,6 +98,10 @@ function buildDeps(
     personaPrimedParticipants:
       overrides.personaPrimedParticipants ?? new Set<string>(),
     approvalCliAdapter: overrides.approvalCliAdapter ?? approvalCliAdapter,
+    // R8-Task9: optional — only forwarded when an explicit override is
+    // passed (most R7 callers don't supply it and rely on the gate being
+    // dormant).
+    memberProfileService: overrides.memberProfileService,
   };
 }
 
@@ -133,6 +138,67 @@ describe('MeetingTurnExecutor — DI contract', () => {
 
   it('abort() cancels the in-flight turn without throwing', () => {
     expect(() => executor.abort()).not.toThrow();
+  });
+});
+
+describe('MeetingTurnExecutor — work-status gate (R8-Task9, spec §7.2)', () => {
+  function buildWithStatus(
+    status: 'online' | 'connecting' | 'offline-connection' | 'offline-manual',
+  ): { deps: MeetingTurnExecutorDeps; executor: MeetingTurnExecutor } {
+    const memberProfileService = {
+      getWorkStatus: vi.fn(() => status),
+    } as unknown as NonNullable<MeetingTurnExecutorDeps['memberProfileService']>;
+    const deps = buildDeps({ memberProfileService });
+    return { deps, executor: new MeetingTurnExecutor(deps) };
+  }
+
+  it('online: gate passes — flow proceeds (and falls into "Provider not found" because the test rig has no provider)', async () => {
+    const { deps, executor } = buildWithStatus('online');
+    await executor.executeTurn(participants(1)[0]);
+    // The skip path was NOT taken (no skip event, no skip-marker append).
+    expect(deps.streamBridge.emitMeetingTurnSkipped).not.toHaveBeenCalled();
+    // The provider lookup falls through to the existing "Provider not found"
+    // error path — proves we reached the post-gate code.
+    expect(deps.streamBridge.emitMeetingError).toHaveBeenCalled();
+  });
+
+  it.each(['connecting', 'offline-connection', 'offline-manual'] as const)(
+    '%s: gate skips the turn, emits stream:meeting-turn-skipped, and persists a marker — never emits TURN_DONE/TURN_FAIL',
+    async (status) => {
+      const { deps, executor } = buildWithStatus(status);
+      await executor.executeTurn(participants(1)[0]);
+
+      expect(deps.streamBridge.emitMeetingTurnSkipped).toHaveBeenCalledWith(
+        expect.objectContaining({
+          meetingId: MEETING_ID,
+          channelId: CHANNEL_ID,
+          participantId: 'ai-1',
+          participantName: 'AI 1',
+          reason: status,
+        }),
+      );
+      expect(deps.messageService.append).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channelId: CHANNEL_ID,
+          authorKind: 'system',
+          meta: expect.objectContaining({
+            turnSkipped: expect.objectContaining({ reason: status }),
+          }),
+        }),
+      );
+      // SSM TURN_DONE / TURN_FAIL ARE NOT fired — skip is "this slot is empty"
+      expect(deps.streamBridge.emitMeetingTurnStart).not.toHaveBeenCalled();
+      expect(deps.streamBridge.emitMeetingTurnDone).not.toHaveBeenCalled();
+      expect(deps.streamBridge.emitMeetingError).not.toHaveBeenCalled();
+    },
+  );
+
+  it('absent memberProfileService: gate is dormant, behaves like R7 (provider lookup fires)', async () => {
+    const deps = buildDeps(); // memberProfileService omitted
+    const exec = new MeetingTurnExecutor(deps);
+    await exec.executeTurn(participants(1)[0]);
+    expect(deps.streamBridge.emitMeetingTurnSkipped).not.toHaveBeenCalled();
+    expect(deps.streamBridge.emitMeetingError).toHaveBeenCalled();
   });
 });
 

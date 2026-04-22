@@ -347,6 +347,10 @@ app.whenReady().then(async () => {
           providerRegistry,
           personaPrimedParticipants,
           approvalCliAdapter,
+          // R8-Task9: enable the work-status gate (spec §7.2). Speakers
+          // not in `online` state get their turn skipped + a system
+          // message + `stream:meeting-turn-skipped` event.
+          memberProfileService,
         });
 
         const orchestrator = new MeetingOrchestrator({

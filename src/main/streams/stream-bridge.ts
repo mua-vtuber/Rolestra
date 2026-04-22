@@ -52,6 +52,7 @@ import type {
   StreamMeetingTurnTokenPayload,
   StreamMeetingTurnDonePayload,
   StreamMeetingErrorPayload,
+  StreamMeetingTurnSkippedPayload,
   StreamQueueProgressPayload,
   StreamMemberStatusPayload,
   StreamNotificationPayload,
@@ -279,6 +280,10 @@ export class StreamBridge {
 
   emitMeetingError(payload: StreamMeetingErrorPayload): void {
     this.emit({ type: 'stream:meeting-error', payload });
+  }
+
+  emitMeetingTurnSkipped(payload: StreamMeetingTurnSkippedPayload): void {
+    this.emit({ type: 'stream:meeting-turn-skipped', payload });
   }
 
   emitQueueProgress(payload: StreamQueueProgressPayload): void {
