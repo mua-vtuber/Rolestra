@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: ExecutionCoordinator is @deprecated and
 // operates on a legacy `session.consensus` surface that no longer exists
 // on MeetingSession. 8 errors — all R11 deletion candidates.

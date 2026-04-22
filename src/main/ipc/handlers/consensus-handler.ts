@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: legacy CSM-era consensus handler. R7 replaces
 // the surface with the v3 MeetingOrchestrator + ApprovalService path.
 

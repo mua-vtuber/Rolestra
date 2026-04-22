@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: ConsensusDriver operates on a legacy
 // `session.consensus` surface that no longer matches SessionStateMachine.
 // Two SsmContext/SsmDriver type drift errors; file retires alongside the

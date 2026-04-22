@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: legacy v2 workspace + permission handler.
 // The v3 ArenaRootService + PermissionService API dropped several of
 // the surfaces this file calls (setProjectFolder, grantTemporaryAccess,

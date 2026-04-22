@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: legacy v2 permission handler; uses dropped
 // PermissionService.getPermissions surface. R7 replaces with the v3
 // ApprovalService-backed path.

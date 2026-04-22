@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: v2 turn-executor is @deprecated; R11 deletes
 // the file outright. Workspace-handler singleton drift produces 1 error
 // not worth surgically fixing.

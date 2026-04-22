@@ -34,12 +34,13 @@ export function setExecutionWorkspaceRoot(
     conversationId?: string,
   ) => Promise<boolean>,
 ): void {
-  executionService = new ExecutionService({ workspaceRoot, ensureAccess });
-  // Non-null assertion: we assigned `executionService` on the previous
-  // line; the accessor closes over it lazily. The `?.` below would
-  // confuse downstream callers who expect a non-null AuditLog, so we
-  // narrow via the now-non-null reference.
-  setAuditLogAccessor(() => executionService!.getAuditLog());
+  const svc = new ExecutionService({ workspaceRoot, ensureAccess });
+  executionService = svc;
+  // Capture the fresh local reference so the accessor closure holds a
+  // non-null ExecutionService. Using `executionService` directly would
+  // force a `!` assertion (ESLint no-non-null-assertion) because the
+  // module-level binding is typed `| null`.
+  setAuditLogAccessor(() => svc.getAuditLog());
 }
 
 function getExecutionService(): ExecutionService {

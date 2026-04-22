@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-non-null-assertion */
 // @ts-nocheck — R6-Task10: v2 orchestrator is @deprecated; R11 deletes the
 // file outright. Drift against the evolved SSM/PermissionService types
 // produces ~3 errors that aren't worth surgically fixing.
