@@ -51,10 +51,10 @@
     {
       "id": 6,
       "subject": "Task 6: ApprovalSystemMessageInjector — reject/conditional comment 시스템 메시지 주입",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** `src/main/approvals/approval-system-message-injector.ts` 신규 — ApprovalService 'decided' 이벤트 구독 → decision ∈ {reject, conditional} + comment != null + meetingId + channelId 필터 → MessageService.append(kind='system'). spec §7.7 '다음 턴 시스템 메시지로 주입' 구현.\n\n**Files:** src/main/approvals/approval-system-message-injector.ts + __tests__, src/main/index.ts\n\n**Verify:** `npm run test -- approval-system-message-injector`\n\n```json:metadata\n{\"files\":[\"src/main/approvals/approval-system-message-injector.ts\"],\"verifyCommand\":\"npm run test -- approval-system-message-injector\",\"acceptanceCriteria\":[\"reject+comment → msgSvc.append 호출\",\"conditional+comment → 위와 동일\",\"approve → skip\",\"meetingId/channelId null → skip\",\"6~8 테스트 green\"]}\n```",
-      "lastUpdated": "2026-04-22T16:00:00.000Z"
+      "lastUpdated": "2026-04-22T22:49:00.000Z"
     },
     {
       "id": 7,

@@ -36,6 +36,7 @@ import {
 import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 import { ApprovalService } from './approvals/approval-service';
+import { ApprovalSystemMessageInjector } from './approvals/approval-system-message-injector';
 import { setApprovalServiceAccessor } from './ipc/handlers/approval-handler';
 import { NotificationRepository } from './notifications/notification-repository';
 import { NotificationService } from './notifications/notification-service';
@@ -174,6 +175,17 @@ app.whenReady().then(async () => {
       './approvals/approval-cli-adapter'
     );
     const approvalCliAdapter = new ApprovalCliAdapter(approvalService);
+
+    // R7-Task6: ApprovalSystemMessageInjector — wire ApprovalService
+    // 'decided' → MessageService.append(kind='system') for reject/
+    // conditional comments so spec §7.7 "다음 턴 시스템 메시지로 주입" lands.
+    // Disposer is retained; on app teardown the listener detaches. The
+    // injector does not re-wire on renderer reload (main-process lifetime).
+    const approvalSystemMessageInjector = new ApprovalSystemMessageInjector({
+      approvalService,
+      messageService,
+    });
+    approvalSystemMessageInjector.wire();
 
     // R6-Task1 + R7-Task2: StreamBridge — central Main → Renderer v3 push hub.
     // `onOutbound` is wired to every browser window's webContents; v3
