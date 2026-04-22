@@ -91,7 +91,7 @@
     {
       "id": 11,
       "subject": "Task 11: NotificationService approval_pending 트리거",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** NotificationService 가 ApprovalService 'created' 이벤트 구독 → approval_pending OS notification 발사 (앱 비포커스 시). 클릭 시 #승인-대기 채널 라우팅 힌트.\n\n**Files:** src/main/notifications/notification-service.ts + __tests__, src/main/index.ts\n\n**Verify:** `npm run test -- notification-service`\n\n```json:metadata\n{\"files\":[\"src/main/notifications/notification-service.ts\"],\"verifyCommand\":\"npm run test -- notification-service\",\"acceptanceCriteria\":[\"ApprovalService.create → Notification enqueue (비포커스)\",\"포커스 시 skip\",\"클릭 → stream:notification-clicked 힌트\",\"중복 suppress\"]}\n```",
       "lastUpdated": "2026-04-22T16:00:00.000Z"

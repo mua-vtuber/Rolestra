@@ -55,6 +55,7 @@ import type {
   StreamQueueProgressPayload,
   StreamMemberStatusPayload,
   StreamNotificationPayload,
+  StreamNotificationClickedPayload,
 } from '../../shared/stream-events';
 
 /** Renderer-delivery hook. */
@@ -86,6 +87,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:meeting-error',
   'stream:queue-progress',
   'stream:notification',
+  'stream:notification-clicked',
 ]);
 
 interface FailureState {
@@ -103,6 +105,13 @@ export interface StreamBridgeServices {
   messages?: EventEmitter;
   approvals?: EventEmitter;
   queue?: EventEmitter;
+  /**
+   * R7-Task11: NotificationService whose `'clicked'` event feeds
+   * `stream:notification-clicked`. Bridged here (rather than via
+   * `emitXxx` helpers) because the event is a pure in-process signal —
+   * no side-effect logic needs to run before it reaches the renderer.
+   */
+  notifications?: EventEmitter;
   /**
    * Optional lookup so the bridge can expand `QueueChangedEvent`
    * (project-scope hint) into full `QueueItem` payloads. If omitted,
@@ -218,6 +227,15 @@ export class StreamBridge {
         this.emit({
           type: 'stream:queue-progress',
           payload: { item } as StreamQueueProgressPayload,
+        });
+      });
+    }
+
+    if (services.notifications) {
+      services.notifications.on('clicked', (payload: unknown) => {
+        this.emit({
+          type: 'stream:notification-clicked',
+          payload: payload as StreamNotificationClickedPayload,
         });
       });
     }

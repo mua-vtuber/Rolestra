@@ -212,16 +212,38 @@ app.whenReady().then(async () => {
     });
     approvalDecisionRouter.wire();
 
-    // R6-Task1 + R7-Task2: StreamBridge — central Main → Renderer v3 push hub.
-    // `onOutbound` is wired to every browser window's webContents; v3
-    // events land on the renderer as `ipcRenderer.on(event.type, payload)`
-    // matching preload's `typedOnStream`. `connect({ approvals })` wires
-    // ApprovalService 'created'/'decided' EventEmitter events to the
-    // `stream:approval-*` push channels — renderer hooks drop polling.
+    // R6-Task4: MeetingOrchestrator support services.
+    // NotificationService lands here (not its own handler block) because
+    // the R6 side-effect wiring needs it BEFORE channel:start-meeting
+    // fires. R7-Task11 wires ApprovalService 'created' → NotificationService
+    // approval_pending trigger (see ApprovalNotificationBridge below).
+    const notificationService = new NotificationService(
+      new NotificationRepository(db),
+      new ElectronNotifierAdapter(),
+    );
+    const circuitBreaker = new CircuitBreaker();
+
+    // R7-Task11: ApprovalNotificationBridge — ApprovalService 'created' →
+    // NotificationService.show(approval_pending). NotificationService's
+    // own prefs + focus gates decide whether the OS toast actually fires.
+    const { ApprovalNotificationBridge } = await import(
+      './approvals/approval-notification-bridge'
+    );
+    const approvalNotificationBridge = new ApprovalNotificationBridge({
+      approvalService,
+      notificationService,
+    });
+    approvalNotificationBridge.wire();
+
+    // R6-Task1 + R7-Task2 + R7-Task11: StreamBridge — central Main →
+    // Renderer v3 push hub. `connect({ notifications })` wires
+    // NotificationService 'clicked' → `stream:notification-clicked` so
+    // the renderer can navigate on OS notification click.
     const streamBridge = new StreamBridge();
     streamBridge.connect({
       messages: messageService,
       approvals: approvalService,
+      notifications: notificationService,
       // queue connect in R9.
     });
     streamBridge.onOutbound((event) => {
@@ -234,17 +256,6 @@ app.whenReady().then(async () => {
     // Exported for MeetingOrchestrator DI (R6-Task4).
     // For now the bridge is reachable via `getStreamBridge()` accessor.
     setStreamBridgeInstance(streamBridge);
-
-    // R6-Task4: MeetingOrchestrator support services.
-    // NotificationService lands here (not its own handler block) because
-    // the R6 side-effect wiring needs it BEFORE channel:start-meeting
-    // fires. R7-Task11 wires ApprovalService 'created' → NotificationService
-    // approval_pending trigger; R9 splits this out further.
-    const notificationService = new NotificationService(
-      new NotificationRepository(db),
-      new ElectronNotifierAdapter(),
-    );
-    const circuitBreaker = new CircuitBreaker();
 
     // Meeting orchestrator factory — channel-handler calls this on
     // `channel:start-meeting` after MeetingService.start() has created

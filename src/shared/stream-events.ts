@@ -71,6 +71,18 @@ export interface StreamNotificationPayload {
 }
 
 /**
+ * R7-Task11: user clicked an OS notification. The renderer uses this as a
+ * navigation hint — e.g. `approval_pending` click → switch to messenger +
+ * activate the `#승인-대기` channel. Emitted from NotificationService's
+ * `'clicked'` event via StreamBridge.connect({ notifications }).
+ */
+export interface StreamNotificationClickedPayload {
+  id: string;
+  kind: NotificationKind;
+  channelId: string | null;
+}
+
+/**
  * R6: AI turn starts in a meeting. `messageId` is the id the Message row
  * will carry once persisted — renderers use it to correlate live tokens
  * with the eventual DB row.
@@ -145,7 +157,11 @@ export type StreamEvent =
     }
   | { type: 'stream:meeting-error'; payload: StreamMeetingErrorPayload }
   | { type: 'stream:queue-progress'; payload: StreamQueueProgressPayload }
-  | { type: 'stream:notification'; payload: StreamNotificationPayload };
+  | { type: 'stream:notification'; payload: StreamNotificationPayload }
+  | {
+      type: 'stream:notification-clicked';
+      payload: StreamNotificationClickedPayload;
+    };
 
 export type StreamEventType = StreamEvent['type'];
 
