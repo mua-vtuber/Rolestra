@@ -4,14 +4,14 @@
     {
       "id": 0,
       "subject": "Task 0: R8 브랜치 + spec §10 R8 체크리스트 확장 + plan + tasks.json + Decision Log",
-      "status": "in_progress",
+      "status": "completed",
       "description": "**Goal:** `rolestra-phase-r8` 브랜치 main tip(`114576d`)에서 분기. spec §10 Phase R8 블록을 R3/R4/R5/R6/R7 와 동일한 체크박스+산출물 링크 템플릿으로 확장. Decision Log 8건(D1~D8) 기록. tasks.json 14-slot skeleton.\n\n**Files:** docs/superpowers/plans/2026-04-23-rolestra-phase-r8.md, docs/superpowers/plans/2026-04-23-rolestra-phase-r8.md.tasks.json, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 Phase R8만)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r8\n\n```json:metadata\n{\"files\":[\"docs/superpowers/plans/2026-04-23-rolestra-phase-r8.md\",\"docs/superpowers/plans/2026-04-23-rolestra-phase-r8.md.tasks.json\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r8 브랜치 생성\",\"Decision Log에 D1~D8 8건 기록\",\"§10 Phase R8 체크박스+산출물 템플릿 확장\",\"tasks.json 14-slot skeleton 존재\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"
     },
     {
       "id": 1,
       "subject": "Task 1: Shared AvatarUploadRequest/Response + member:upload-avatar IPC 채널 + zod",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** `src/shared/member-profile-types.ts` 에 AvatarUploadRequest/Response 타입 추가. `src/shared/ipc-types.ts` 에 `member:upload-avatar` 채널. `src/shared/ipc-schemas.ts` 에 zod. preload 화이트리스트.\n\n**Files:** src/shared/member-profile-types.ts, src/shared/ipc-types.ts, src/shared/ipc-schemas.ts, src/preload/index.ts, src/shared/__tests__/ipc-schemas.test.ts (또는 member-profile-types.test.ts)\n\n**Verify:** `npm run test -- ipc-schemas member-profile-types`\n\n```json:metadata\n{\"files\":[\"src/shared/member-profile-types.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\"],\"verifyCommand\":\"npm run test -- ipc-schemas\",\"acceptanceCriteria\":[\"member:upload-avatar 채널 일관 선언\",\"zod round-trip 4 케이스 green\",\"기존 6 채널 회귀 0\",\"typecheck exit 0\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"

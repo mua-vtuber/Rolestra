@@ -14,6 +14,7 @@ import {
   meetingListActiveSchema,
   messageListRecentSchema,
   memberSetStatusSchema,
+  memberUploadAvatarSchema,
   v3ChannelSchemas,
 } from '../ipc-schemas';
 
@@ -280,6 +281,50 @@ describe('v3 IPC schemas — meetingAbortSchema / memberSetStatusSchema', () => 
   });
 });
 
+describe('v3 IPC schemas — memberUploadAvatarSchema (R8-Task1)', () => {
+  it('accepts a well-formed payload with absolute source path', () => {
+    const result = memberUploadAvatarSchema.safeParse({
+      providerId: 'claude-code',
+      sourcePath: '/home/user/Pictures/avatar.png',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects empty providerId', () => {
+    const result = memberUploadAvatarSchema.safeParse({
+      providerId: '',
+      sourcePath: '/tmp/x.png',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects empty sourcePath', () => {
+    const result = memberUploadAvatarSchema.safeParse({
+      providerId: 'p1',
+      sourcePath: '',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects sourcePath beyond 4096 characters (POSIX PATH_MAX baseline)', () => {
+    const result = memberUploadAvatarSchema.safeParse({
+      providerId: 'p1',
+      sourcePath: '/' + 'x'.repeat(4096),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('does NOT validate file existence or extension (delegated to AvatarStore — R8-Task5)', () => {
+    // schema treats /nonexistent.weird as syntactically valid; AvatarStore
+    // produces the actionable error during the actual copy.
+    const result = memberUploadAvatarSchema.safeParse({
+      providerId: 'p1',
+      sourcePath: '/nonexistent/path.weird',
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('v3 IPC schemas — v3ChannelSchemas map', () => {
   it('exposes expected core channels', () => {
     expect(v3ChannelSchemas['project:create']).toBeDefined();
@@ -298,6 +343,10 @@ describe('v3 IPC schemas — v3ChannelSchemas map', () => {
   it('exposes meeting:list-active and message:list-recent (R4 widgets)', () => {
     expect(v3ChannelSchemas['meeting:list-active']).toBeDefined();
     expect(v3ChannelSchemas['message:list-recent']).toBeDefined();
+  });
+
+  it('exposes member:upload-avatar (R8-Task1)', () => {
+    expect(v3ChannelSchemas['member:upload-avatar']).toBeDefined();
   });
 });
 

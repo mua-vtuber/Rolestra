@@ -303,6 +303,26 @@ export const memberSetStatusSchema = z.object({
   status: z.enum(['online', 'offline-manual']),
 });
 
+/**
+ * `member:upload-avatar` input schema (R8-Task1, spec §7.1).
+ *
+ * `sourcePath` is the absolute path of a file the user picked through
+ * `dialog.showOpenDialog`. We bound it at 4096 chars (POSIX `PATH_MAX`
+ * baseline; Windows long-paths up to 32 K live behind opt-in flags we
+ * don't enable). The schema deliberately does NOT validate the file's
+ * existence, extension, or size — those checks live in the AvatarStore
+ * (R8-Task5) where they can produce typed `AvatarValidationError`s with
+ * actionable messages. Doing them here would (i) split error reporting
+ * across two layers and (ii) force the schema to do filesystem I/O.
+ *
+ * `providerId` reuses the same 1..128 char convention as every other
+ * member:* channel for consistency with `member:set-status`.
+ */
+export const memberUploadAvatarSchema = z.object({
+  providerId: z.string().min(1).max(128),
+  sourcePath: z.string().min(1).max(4096),
+});
+
 export const approvalDecideSchema = z
   .object({
     id: z.string().min(1).max(128),
@@ -388,6 +408,7 @@ export const v3ChannelSchemas = {
   'meeting:abort': meetingAbortSchema,
   'meeting:list-active': meetingListActiveSchema,
   'member:set-status': memberSetStatusSchema,
+  'member:upload-avatar': memberUploadAvatarSchema,
   'approval:decide': approvalDecideSchema,
   'queue:add': queueAddSchema,
   'queue:reorder': queueReorderSchema,

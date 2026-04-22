@@ -36,6 +36,8 @@ import type {
 } from './approval-types';
 import type { QueueItem } from './queue-types';
 import type {
+  AvatarUploadRequest,
+  AvatarUploadResponse,
   MemberProfile,
   MemberView,
   WorkStatus,
@@ -649,6 +651,10 @@ export type IpcChannelMap = {
   'member:list-avatars': {
     request: undefined;
     response: { avatars: Array<{ key: string; label: string }> };
+  };
+  'member:upload-avatar': {
+    request: AvatarUploadRequest;
+    response: AvatarUploadResponse;
   };
 
   // ── v3: Approval Inbox ──────────────────────────────────────────
