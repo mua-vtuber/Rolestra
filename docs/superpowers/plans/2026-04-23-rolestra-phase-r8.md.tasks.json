@@ -99,7 +99,7 @@
     {
       "id": 12,
       "subject": "Task 12: Playwright E2E member-profile-flow.spec.ts (수동 퇴근 → 턴 스킵 → 출근 복귀)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7, 9, 10, 11],
       "description": "**Goal:** spec §11 시나리오 — 메시지 버블 아바타 → popover → edit modal 저장 → 외근 토글 → 회의 턴 skip → 연락해보기 → 출근 복귀. WSL 제약 시 R4~R7 와 동일 DONE_WITH_CONCERNS.\n\n**Files:** e2e/member-profile-flow.spec.ts, e2e/helpers/mock-provider.ts (재사용)\n\n**Verify:** `npx playwright test member-profile-flow` 또는 DONE_WITH_CONCERNS\n\n```json:metadata\n{\"files\":[\"e2e/member-profile-flow.spec.ts\"],\"verifyCommand\":\"npx playwright test member-profile-flow\",\"acceptanceCriteria\":[\"e2e/member-profile-flow.spec.ts 존재\",\"7 step 시나리오 명시\",\"typecheck/lint exit 0\",\"WSL 제약 시 DONE_WITH_CONCERNS 정책\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"
