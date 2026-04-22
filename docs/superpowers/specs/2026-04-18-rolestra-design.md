@@ -1240,13 +1240,35 @@ interface SsmContext {
 - v2 engine 5 파일 물리적 삭제 (orchestrator/turn-executor/conversation/execution-coordinator/memory-coordinator) — R11 (단 **cli-permission-handler 는 R7-Task4 에서 즉시 삭제** — D1)
 - Retro 영어 복귀 결정 D8 — R11 릴리스 전
 
-**Phase R8 — 멤버 프로필 + 출근 상태**
+**Phase R8 — 멤버 프로필 + 출근 상태** (plan: `docs/superpowers/plans/2026-04-23-rolestra-phase-r8.md`, done-checklist: `docs/superpowers/specs/r8-done-checklist.md`)
 
-**Phase R8 — 멤버 프로필 + 출근 상태**
-- MemberProfile 편집 모달 (role/personality/expertise/avatar)
-- 기본 아바타 8종
-- 출근 상태 머신 + 프로필 카드 "연락해보기" 버튼
-- PersonaBuilder 확장
+구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
+
+- [ ] §6 IPC 신규 `member:upload-avatar` (custom 아바타 파일 복사) + Shared `AvatarUploadRequest`/`Response` + zod — 산출물: `src/shared/{member-profile-types,ipc-types,ipc-schemas}.ts` + `src/preload/index.ts`
+- [ ] §7.1 `Avatar` 컴포넌트 (DEFAULT_AVATARS 8 emoji+color 렌더 + custom 분기 + initials fallback) + `WorkStatusDot` (4-state + i18n 라벨 + connecting pulse) + `ProfileAvatar` MemberView prop 위임 — 산출물: `src/renderer/components/members/{Avatar,WorkStatusDot}.tsx` + `src/renderer/components/shell/ProfileAvatar.tsx`
+- [ ] §7.1 `AvatarPicker` (8 default 갤러리 + custom upload 트리거 + 되돌리기) + `use-avatar-picker` hook — 산출물: `src/renderer/components/members/AvatarPicker.tsx` + `src/renderer/hooks/use-avatar-picker.ts`
+- [ ] §7.1 `MemberProfileEditModal` (Radix Dialog, role/personality/expertise/avatar 4 필드 + AvatarPicker + `member:update-profile` invoke) + `use-member-profile` hook — 산출물: `src/renderer/features/members/MemberProfileEditModal.tsx` + `src/renderer/hooks/use-member-profile.ts`
+- [ ] §7.1 `AvatarStore` Main (custom 파일 복사 to `<ArenaRoot>/avatars/<providerId>.<ext>` + ext 화이트리스트 png/jpg/jpeg/webp/gif + 5MB 제한) + `member:upload-avatar` handler + `ArenaRootService.getAvatarsDir()` — 산출물: `src/main/members/avatar-store.ts` + `src/main/arena/arena-root-service.ts` + `src/main/ipc/handlers/member-handler.ts` + `src/main/ipc/router.ts`
+- [ ] §7.1 `MemberProfilePopover` (Radix Popover, 헤더 Avatar+이름+role + 본문 personality/expertise/WorkStatusDot+라벨 + 푸터 4 액션: 편집/외근↔출근 토글/연락해보기/DM 시작) — 산출물: `src/renderer/features/members/MemberProfilePopover.tsx`
+- [ ] §7.1 아바타 클릭 wire 3 surface (메시지 버블 / MemberRow / PeopleWidget → 동일 Popover open → 'Popover 편집' → EditModal) — 산출물: `src/renderer/features/messenger/{Message,MemberRow}.tsx` + `src/renderer/features/dashboard/widgets/PeopleWidget.tsx`
+- [ ] §7.2 Production main/index.ts MemberProfileService boot (R2~R7 까지 테스트에서만 wire 되어 있던 6 IPC 의 production 활성화) + `MemberWarmupService.warmAll(providerIds)` (`Promise.allSettled` + per-provider 5초 timeout, fire-and-forget) — 산출물: `src/main/members/member-warmup-service.ts` + `src/main/index.ts` + `src/main/providers/registry.ts` 어댑터 검토
+- [ ] §7.2 `MeetingTurnExecutor` work-status 게이트 (`getWorkStatus !== 'online'` → skip + `meeting:turn-skipped` 이벤트 + system message append, SSM TURN_DONE/FAIL 발사 0) + Shared `meeting:turn-skipped` 이벤트 타입 + Renderer `use-meeting-stream` reducer + Thread 시스템 메시지 분기 — 산출물: `src/main/meetings/engine/meeting-turn-executor.ts` + `src/shared/meeting-stream-types.ts` + `src/main/streams/stream-bridge.ts` + `src/preload/index.ts` + `src/renderer/hooks/use-meeting-stream.ts` + `src/renderer/features/messenger/Thread.tsx`
+- [ ] §7.1 `MeetingTurnExecutor` v2 → v3 PersonaBuilder swap (v2 `engine/persona-builder.buildEffectivePersona(provider, opts)` 호출을 v3 `MemberProfileService.buildPersona(participantId)` + `buildPermissionRules` shim 으로 교체, v2 `engine/persona-builder.ts` 호출자 0 → R11 legacy 삭제 후보 등록) — 산출물: `src/main/meetings/engine/meeting-turn-executor.ts` + `src/main/engine/persona-builder.ts` (export 승격)
+- [ ] i18n populate `member.status.*` (4 라벨) / `member.avatarPicker.*` / `member.warmup.*` / `profile.editor.*` / `profile.popover.*` / `meeting.turnSkipped` + i18next-parser keepRemoved regex 확장. `notification.*` main-process 라벨은 R7 D 흐름과 동일하게 R10 deferred — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `i18next-parser.config.js`
+- [ ] §11 Playwright Electron E2E "메시지 버블 아바타 → popover → edit modal 저장 → 외근 토글 → 회의 턴 skip → 연락해보기 → 출근 복귀" — 산출물: `e2e/member-profile-flow.spec.ts` (mock provider + mock CLI 재사용. **WSL 제약 시 R4/R5/R6/R7 와 동일 DONE_WITH_CONCERNS 정책**)
+- [ ] typecheck(전체) / typecheck:web / lint / test / i18n:check / theme:check / build exit 0 + R8 신규 테스트 green + done-checklist 작성 — 산출물: `docs/superpowers/specs/r8-done-checklist.md`
+
+**scope 경계 (R8에서 하지 않는 것, R9+ 이연):**
+- `stream:member-status-changed` 등 실시간 broadcast (R8 은 mutation 후 단순 invalidation) — R10 (autonomy / 다중 클라이언트 도입과 함께)
+- 외근 자동 timeout (예: 1시간 뒤 자동 출근 복귀) — R9 autonomy 정책과 함께
+- Warmup 자동 재시도 정책 (5초 timeout 후 backoff retry) — R9
+- DM read-receipt / typing indicator 실 이벤트 — R10
+- 설정 화면 "멤버 관리" 풀버전 (전체 멤버 일괄 편집 / 추가 / 삭제) — R10 설정 UI
+- Provider 추가/삭제 UX (현재는 DB seed 또는 기존 IPC) — R10
+- 6 테마 멤버 프로필 시각 sign-off — Windows/native 또는 R11 릴리스 전
+- v2 `engine/persona-builder.ts` + `engine/turn-executor.ts` 등 v2 engine 5파일 물리 삭제 — R11 legacy cleanup 일괄
+- Playwright CI integration + OS matrix — R10
+- Retro 영어 복귀 결정 D8 — R11 릴리스 전
 
 **Phase R9 — 자율 모드 + 시스템 알림**
 - autonomyMode `auto_toggle`, `queue` 구현
