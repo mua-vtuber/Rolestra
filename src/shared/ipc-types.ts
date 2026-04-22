@@ -656,6 +656,10 @@ export type IpcChannelMap = {
     request: AvatarUploadRequest;
     response: AvatarUploadResponse;
   };
+  'member:pick-avatar-file': {
+    request: undefined;
+    response: { sourcePath: string | null };
+  };
 
   // ── v3: Approval Inbox ──────────────────────────────────────────
   'approval:list': {

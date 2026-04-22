@@ -27,7 +27,7 @@
     {
       "id": 3,
       "subject": "Task 3: AvatarPicker 컴포넌트 (8 default 갤러리 + custom upload 트리거)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1, 2],
       "description": "**Goal:** `src/renderer/components/members/AvatarPicker.tsx` 신규 — 8 default 그리드 + 사진 업로드 + 되돌리기. `src/renderer/hooks/use-avatar-picker.ts` 신규 — `member:list-avatars` 캐시 + uploadCustom mutation.\n\n**Files:** src/renderer/components/members/AvatarPicker.tsx + __tests__, src/renderer/hooks/use-avatar-picker.ts\n\n**Verify:** `npm run test -- AvatarPicker use-avatar-picker`\n\n```json:metadata\n{\"files\":[\"src/renderer/components/members/AvatarPicker.tsx\",\"src/renderer/hooks/use-avatar-picker.ts\"],\"verifyCommand\":\"npm run test -- AvatarPicker\",\"acceptanceCriteria\":[\"8 default 클릭 → onChange 정확\",\"upload mock → custom kind onChange\",\"되돌리기 → default 첫 항목\",\"avatars fetch 실패 fallback\"]}\n```",
       "lastUpdated": "2026-04-23T10:00:00.000Z"
