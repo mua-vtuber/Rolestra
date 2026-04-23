@@ -27,7 +27,7 @@
     {
       "id": 3,
       "subject": "Task 3: QueuePanel + use-queue hook + stream reducer",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** `src/renderer/features/projects/QueuePanel.tsx` — 프로젝트 상단 접기 가능 패널. 여러 줄 입력 → 줄 단위 항목 추가 / 목록 표시 / drag 순서 변경 / 항목 제거 / pause / resume / 진행 포인터 표시. `use-queue.ts` — `queue:list/add/reorder/remove/pause/resume` invoke + `stream:queue-updated` reducer.\n\n**Files:** src/renderer/features/projects/QueuePanel.tsx + __tests__, src/renderer/hooks/use-queue.ts + __tests__\n\n**Verify:** `npm run test -- QueuePanel use-queue`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/projects/QueuePanel.tsx\",\"src/renderer/hooks/use-queue.ts\"],\"verifyCommand\":\"npm run test -- QueuePanel use-queue\",\"acceptanceCriteria\":[\"여러 줄 입력 → add 여러 번 invoke\",\"drag 순서 변경 → reorder invoke 인자 정확\",\"pause/resume 토글\",\"진행 포인터 반영\",\"stream event 수신 시 로컬 state 갱신\"]}\n```",
       "lastUpdated": "2026-04-23T12:00:00.000Z"
