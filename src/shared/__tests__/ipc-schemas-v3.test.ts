@@ -9,12 +9,18 @@ import {
   approvalDecideSchema,
   queueAddSchema,
   queueReorderSchema,
+  queueListSchema,
+  queueItemIdSchema,
+  queuePauseResumeSchema,
+  notificationGetPrefsSchema,
   notificationUpdatePrefsSchema,
+  notificationTestSchema,
   meetingAbortSchema,
   meetingListActiveSchema,
   messageListRecentSchema,
   memberSetStatusSchema,
   memberUploadAvatarSchema,
+  projectSetAutonomySchema,
   v3ChannelSchemas,
 } from '../ipc-schemas';
 
@@ -380,5 +386,76 @@ describe('v3 IPC schemas — meetingListActiveSchema / messageListRecentSchema',
     expect(
       messageListRecentSchema.safeParse({ limit: 1.5 }).success,
     ).toBe(false);
+  });
+});
+
+describe('v3 IPC schemas — R9 queue / notification / autonomy', () => {
+  it('queueListSchema requires projectId', () => {
+    expect(queueListSchema.safeParse({ projectId: 'p1' }).success).toBe(true);
+    expect(queueListSchema.safeParse({}).success).toBe(false);
+    expect(queueListSchema.safeParse({ projectId: '' }).success).toBe(false);
+  });
+
+  it('queueItemIdSchema requires id (non-empty)', () => {
+    expect(queueItemIdSchema.safeParse({ id: 'q1' }).success).toBe(true);
+    expect(queueItemIdSchema.safeParse({}).success).toBe(false);
+    expect(queueItemIdSchema.safeParse({ id: '' }).success).toBe(false);
+  });
+
+  it('queuePauseResumeSchema requires projectId', () => {
+    expect(queuePauseResumeSchema.safeParse({ projectId: 'p1' }).success).toBe(true);
+    expect(queuePauseResumeSchema.safeParse({}).success).toBe(false);
+  });
+
+  it('notificationGetPrefsSchema accepts undefined only', () => {
+    expect(notificationGetPrefsSchema.safeParse(undefined).success).toBe(true);
+    expect(notificationGetPrefsSchema.safeParse({}).success).toBe(false);
+    expect(notificationGetPrefsSchema.safeParse({ any: 1 }).success).toBe(false);
+  });
+
+  it('notificationTestSchema accepts each kind', () => {
+    for (const kind of [
+      'new_message',
+      'approval_pending',
+      'work_done',
+      'error',
+      'queue_progress',
+      'meeting_state',
+    ] as const) {
+      expect(notificationTestSchema.safeParse({ kind }).success).toBe(true);
+    }
+    expect(notificationTestSchema.safeParse({ kind: 'bogus' }).success).toBe(false);
+  });
+
+  it('notificationUpdatePrefsSchema rejects empty patch', () => {
+    expect(notificationUpdatePrefsSchema.safeParse({ patch: {} }).success).toBe(false);
+    expect(
+      notificationUpdatePrefsSchema.safeParse({ patch: { work_done: {} } }).success,
+    ).toBe(false); // inner pref patch must not be empty either
+    expect(
+      notificationUpdatePrefsSchema.safeParse({
+        patch: { work_done: { enabled: false } },
+      }).success,
+    ).toBe(true);
+  });
+
+  it('projectSetAutonomySchema accepts 3 modes', () => {
+    for (const mode of ['manual', 'auto_toggle', 'queue'] as const) {
+      expect(
+        projectSetAutonomySchema.safeParse({ id: 'p1', mode }).success,
+      ).toBe(true);
+    }
+    expect(
+      projectSetAutonomySchema.safeParse({ id: 'p1', mode: 'bogus' }).success,
+    ).toBe(false);
+  });
+
+  it('v3ChannelSchemas maps R9 channels (queue:list/remove/cancel/pause/resume + notification:get-prefs)', () => {
+    expect(v3ChannelSchemas['queue:list']).toBe(queueListSchema);
+    expect(v3ChannelSchemas['queue:remove']).toBe(queueItemIdSchema);
+    expect(v3ChannelSchemas['queue:cancel']).toBe(queueItemIdSchema);
+    expect(v3ChannelSchemas['queue:pause']).toBe(queuePauseResumeSchema);
+    expect(v3ChannelSchemas['queue:resume']).toBe(queuePauseResumeSchema);
+    expect(v3ChannelSchemas['notification:get-prefs']).toBe(notificationGetPrefsSchema);
   });
 });

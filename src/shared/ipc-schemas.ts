@@ -345,6 +345,18 @@ export const queueReorderSchema = z.object({
   orderedIds: z.array(z.string().min(1).max(128)).min(1).max(500),
 });
 
+export const queueListSchema = z.object({
+  projectId: z.string().min(1).max(128),
+});
+
+export const queueItemIdSchema = z.object({
+  id: z.string().min(1).max(128),
+});
+
+export const queuePauseResumeSchema = z.object({
+  projectId: z.string().min(1).max(128),
+});
+
 const notificationPrefValueSchema = z
   .object({
     enabled: z.boolean().optional(),
@@ -370,6 +382,8 @@ export const notificationUpdatePrefsSchema = z.object({
 export const notificationTestSchema = z.object({
   kind: notificationKindSchema,
 });
+
+export const notificationGetPrefsSchema = z.undefined();
 
 export const arenaRootSetSchema = z.object({
   path: z.string().min(1).max(4096),
@@ -412,6 +426,12 @@ export const v3ChannelSchemas = {
   'approval:decide': approvalDecideSchema,
   'queue:add': queueAddSchema,
   'queue:reorder': queueReorderSchema,
+  'queue:list': queueListSchema,
+  'queue:remove': queueItemIdSchema,
+  'queue:cancel': queueItemIdSchema,
+  'queue:pause': queuePauseResumeSchema,
+  'queue:resume': queuePauseResumeSchema,
+  'notification:get-prefs': notificationGetPrefsSchema,
   'notification:update-prefs': notificationUpdatePrefsSchema,
   'notification:test': notificationTestSchema,
 } as const;

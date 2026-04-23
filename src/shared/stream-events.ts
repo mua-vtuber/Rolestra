@@ -23,9 +23,9 @@
 import type { Message } from './message-types';
 import type { ApprovalItem, ApprovalDecision } from './approval-types';
 import type { QueueItem } from './queue-types';
-import type { Project } from './project-types';
+import type { Project, AutonomyMode } from './project-types';
 import type { WorkStatus } from './member-profile-types';
-import type { NotificationKind } from './notification-types';
+import type { NotificationKind, NotificationPrefs } from './notification-types';
 import type { MeetingOutcome } from './meeting-types';
 
 export interface StreamChannelMessagePayload {
@@ -150,6 +150,45 @@ export interface StreamMeetingTurnSkippedPayload {
   reason: 'connecting' | 'offline-connection' | 'offline-manual';
 }
 
+/**
+ * R9-Task1: full queue snapshot broadcast. Emitted after any mutation
+ * (add/remove/reorder/pause/resume/startNext) so renderers reconcile
+ * their view without needing `queue:list` round-trips. Complements the
+ * per-item `stream:queue-progress` event above — progress is a fine-grained
+ * status tick, `updated` is a coarse-grained authoritative snapshot.
+ *
+ * `paused` reflects the project-level run state toggled by `queue:pause` /
+ * `queue:resume`; when true, `QueueService.startNext` is a no-op even if
+ * pending items exist.
+ */
+export interface StreamQueueUpdatedPayload {
+  projectId: string;
+  items: QueueItem[];
+  paused: boolean;
+}
+
+/**
+ * R9-Task1: notification preferences changed (any kind × display/sound
+ * toggle). Payload carries the FULL `NotificationPrefs` so any surface
+ * (settings view / toast suppression logic) can reconcile state without
+ * extra fetches. Emitted from `NotificationService.updatePrefs`.
+ */
+export interface StreamNotificationPrefsChangedPayload {
+  prefs: NotificationPrefs;
+}
+
+/**
+ * R9-Task1: project autonomy mode changed (manual ↔ auto_toggle ↔ queue),
+ * whether by user toggle (`project:set-autonomy`) or system downgrade
+ * (Circuit Breaker fire / AutonomyGate fail path). The project-scoped
+ * payload lets listeners skip projects they don't care about cheaply.
+ */
+export interface StreamAutonomyModeChangedPayload {
+  projectId: string;
+  mode: AutonomyMode;
+  reason?: 'user' | 'circuit_breaker' | 'autonomy_gate_fail';
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -179,10 +218,19 @@ export type StreamEvent =
       payload: StreamMeetingTurnSkippedPayload;
     }
   | { type: 'stream:queue-progress'; payload: StreamQueueProgressPayload }
+  | { type: 'stream:queue-updated'; payload: StreamQueueUpdatedPayload }
   | { type: 'stream:notification'; payload: StreamNotificationPayload }
   | {
       type: 'stream:notification-clicked';
       payload: StreamNotificationClickedPayload;
+    }
+  | {
+      type: 'stream:notification-prefs-changed';
+      payload: StreamNotificationPrefsChangedPayload;
+    }
+  | {
+      type: 'stream:autonomy-mode-changed';
+      payload: StreamAutonomyModeChangedPayload;
     };
 
 export type StreamEventType = StreamEvent['type'];

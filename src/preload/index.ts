@@ -73,11 +73,17 @@ function typedOnStream<T extends StreamEventType>(
   type: T,
   callback: (payload: StreamV3PayloadOf<T>) => void,
 ): () => void {
+  // Electron ipcRenderer.on's listener is typed as `(event, ...args: any[])`.
+  // Our callback narrows `args[0]` to `StreamV3PayloadOf<T>` for the caller,
+  // but the registered listener itself must match Electron's open-ended
+  // signature — hence the `unknown[]` spread + single-cast at the invocation
+  // boundary. R9-Task1 expanded the StreamEventType union (3 new events) and
+  // made the prior generic listener signature uninferable under strict mode.
   const listener = (
     _event: IpcRendererEvent,
-    payload: StreamV3PayloadOf<T>,
+    ...args: unknown[]
   ): void => {
-    callback(payload);
+    callback(args[0] as StreamV3PayloadOf<T>);
   };
   ipcRenderer.on(type, listener);
   return () => {

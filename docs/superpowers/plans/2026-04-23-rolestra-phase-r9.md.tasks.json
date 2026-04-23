@@ -4,14 +4,14 @@
     {
       "id": 0,
       "subject": "Task 0: R9 브랜치 + spec §10 R9 체크리스트 확장 + plan + tasks.json + Decision Log",
-      "status": "in_progress",
+      "status": "completed",
       "description": "**Goal:** `rolestra-phase-r9` 브랜치 main tip(`3cf32ad`)에서 분기. spec §10 Phase R9 블록을 R3~R8 템플릿(체크박스 + 산출물 링크)으로 확장 — 13 구현 체크박스 + scope 경계. Decision Log 8건(D1~D8) 기록. tasks.json 14-slot skeleton.\n\n**Files:** docs/superpowers/plans/2026-04-23-rolestra-phase-r9.md, docs/superpowers/plans/2026-04-23-rolestra-phase-r9.md.tasks.json, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 Phase R9만)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r9\n\n```json:metadata\n{\"files\":[\"docs/superpowers/plans/2026-04-23-rolestra-phase-r9.md\",\"docs/superpowers/plans/2026-04-23-rolestra-phase-r9.md.tasks.json\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r9 브랜치 생성\",\"Decision Log에 D1~D8 8건 기록\",\"§10 Phase R9 체크박스+산출물 템플릿 확장\",\"tasks.json 14-slot skeleton 존재\"]}\n```",
       "lastUpdated": "2026-04-23T12:00:00.000Z"
     },
     {
       "id": 1,
       "subject": "Task 1: Shared autonomy + queue + notification prefs types + IPC 채널 + zod + preload",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** `src/shared/queue-types.ts` + `src/shared/notification-types.ts` 확정 (이미 일부 존재 — 확장). IPC 채널 `project:set-autonomy`, `queue:list/add/reorder/remove/pause/resume`, `notification:get-prefs/update-prefs/test` 를 `ipc-types.ts` + `ipc-schemas.ts` + preload 화이트리스트에 일관 선언. Stream 이벤트 `stream:queue-updated` / `stream:notification-prefs-changed` / `stream:autonomy-mode-changed` 를 `stream-events.ts` 에 추가.\n\n**Files:** src/shared/{queue-types,notification-types,ipc-types,ipc-schemas,stream-events}.ts, src/preload/index.ts, src/shared/__tests__/ipc-schemas.test.ts (확장)\n\n**Verify:** `npm run test -- ipc-schemas queue-types notification-types`\n\n```json:metadata\n{\"files\":[\"src/shared/queue-types.ts\",\"src/shared/notification-types.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\",\"src/shared/stream-events.ts\",\"src/preload/index.ts\"],\"verifyCommand\":\"npm run test -- ipc-schemas queue notification stream-events\",\"acceptanceCriteria\":[\"10+ 신규 채널 (+3 stream) 일관 선언\",\"zod round-trip 게이트 green\",\"기존 R8 채널 회귀 0\",\"typecheck exit 0\"]}\n```",
       "lastUpdated": "2026-04-23T12:00:00.000Z"
