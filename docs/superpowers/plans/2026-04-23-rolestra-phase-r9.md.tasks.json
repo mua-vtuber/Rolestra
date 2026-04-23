@@ -19,7 +19,7 @@
     {
       "id": 2,
       "subject": "Task 2: AutonomyModeToggle + 2단계 확인 다이얼로그 + use-autonomy-mode hook + stream reducer",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** `src/renderer/features/projects/AutonomyModeToggle.tsx` — 프로젝트 헤더 3분기 토글 (manual/auto_toggle/queue). `AutonomyConfirmDialog.tsx` — manual → auto_toggle/queue 승격 시 Circuit Breaker 기본값 4종 안내 + 명시적 재확인 checkbox. `use-autonomy-mode.ts` hook — fetch + invoke + `stream:autonomy-mode-changed` reducer.\n\n**Files:** src/renderer/features/projects/{AutonomyModeToggle,AutonomyConfirmDialog}.tsx + __tests__, src/renderer/hooks/use-autonomy-mode.ts + __tests__\n\n**Verify:** `npm run test -- AutonomyModeToggle AutonomyConfirmDialog use-autonomy-mode`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/projects/AutonomyModeToggle.tsx\",\"src/renderer/features/projects/AutonomyConfirmDialog.tsx\",\"src/renderer/hooks/use-autonomy-mode.ts\"],\"verifyCommand\":\"npm run test -- AutonomyModeToggle AutonomyConfirmDialog\",\"acceptanceCriteria\":[\"3 모드 토글 onClick → invoke 인자 정확\",\"manual → auto_toggle/queue 승격 시 confirm dialog open\",\"checkbox 없이 confirm 비활성\",\"stream event 수신 시 로컬 state 갱신\"]}\n```",
       "lastUpdated": "2026-04-23T12:00:00.000Z"
