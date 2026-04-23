@@ -387,18 +387,20 @@ src/
 
 **목표**: 4 kind × 표시/소리 on/off UI + 테스트 알림.
 
-- [ ] `src/renderer/hooks/use-notification-prefs.ts` 신규:
-  - `useNotificationPrefs()` → `{ prefs, isLoading, error, setKind(kind, patch), test(kind) }`
+- [x] `src/renderer/hooks/use-notification-prefs.ts` 신규:
+  - `useNotificationPrefs()` → `{ prefs, isLoading, error, refresh, setKind(kind, patch), test(kind) }`
   - mount fetch `notification:get-prefs` + `stream:notification-prefs-changed` reducer
-  - `setKind(kind, { display?, sound? })` → `invoke('notification:update-prefs', { [kind]: patch })`
-- [ ] `src/renderer/features/settings/NotificationPrefsView.tsx` 신규:
+  - `setKind(kind, { enabled?, soundEnabled? })` → `invoke('notification:update-prefs', { patch: { [kind]: patch } })` (scheme type 이 `enabled` / `soundEnabled` 이므로 spec 의 `display` / `sound` 와 1:1 매핑)
+- [x] `src/renderer/features/settings/NotificationPrefsView.tsx` 신규:
   - 4 kind (`new_message` / `approval_pending` / `work_done` / `error`) 각각 row
   - row: kind 라벨 + 표시 스위치 + 소리 스위치 + "테스트" 버튼
   - 테스트 버튼 → `notification:test` invoke
-- [ ] `src/renderer/features/settings/SettingsView.tsx` (기존) 수정: `<NotificationPrefsView>` 섹션 mount (R10 설정 10 탭 재구성 전 임시 배치 — 기존 SettingsView 가 tab 구조이면 새 탭 추가, 아니면 단일 View 하단 섹션)
-- [ ] `__tests__/NotificationPrefsView.test.tsx`: 4 row 렌더 / 스위치 토글 → setKind 호출 / 테스트 버튼 → notification:test 호출
-- [ ] `__tests__/use-notification-prefs.test.tsx`: stream reducer / invoke 인자
-- [ ] 커밋: `feat(rolestra): NotificationPrefsView + use-notification-prefs (R9-Task4)`
+- [x] `src/renderer/features/settings/SettingsView.tsx` 신규 (R9-Task4 시점 기존 파일 없음 — 임시 단일 View 로 생성): `<NotificationPrefsView>` 섹션 mount (R10 설정 10 탭 재구성 전 placeholder)
+- [x] `src/renderer/App.tsx` + `src/renderer/stores/app-view-store.ts` 수정: `AppView` 유니온에 `'settings'` 추가, `ROUTED_VIEWS` 확장, `view === 'settings'` 시 `<SettingsView />` 마운트 (NavRail Settings 클릭이 더 이상 dead link 아님)
+- [x] `__tests__/NotificationPrefsView.test.tsx`: 8 tests — 4 row 렌더 / 스위치 초기 상태 / display 토글 → `notification:update-prefs` 인자 / sound 토글 / 테스트 버튼 → `notification:test` / stream 수신 반영 / loading placeholder
+- [x] `__tests__/use-notification-prefs.test.tsx`: 7 tests — mount fetch / error surface / stream reducer / setKind 인자 (enabled / soundEnabled) / test 인자 / error rethrow
+- [x] `src/renderer/__tests__/App.test.tsx` 회귀 수정: Settings 가 routed view 로 올라와 unrouted fallback 시나리오는 Approval 로 교체 + Settings → SettingsView 라우팅 테스트 추가
+- [x] 커밋: `feat(rolestra): NotificationPrefsView + use-notification-prefs (R9-Task4)`
 
 **AC**:
 - 4 kind × 2 스위치 UI 렌더

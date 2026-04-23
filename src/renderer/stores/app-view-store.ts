@@ -15,7 +15,7 @@
  */
 import { create } from 'zustand';
 
-export type AppView = 'dashboard' | 'messenger';
+export type AppView = 'dashboard' | 'messenger' | 'settings';
 
 export const DEFAULT_APP_VIEW: AppView = 'dashboard';
 

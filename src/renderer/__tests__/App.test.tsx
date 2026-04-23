@@ -412,7 +412,24 @@ describe('App — view router (R5-Task3)', () => {
     expect(screen.queryByTestId('messenger-page')).toBeNull();
   });
 
-  it('clicking an unrouted NavRail item (e.g. Settings) keeps the current view', async () => {
+  it('clicking an unrouted NavRail item (e.g. Approval) keeps the current view', async () => {
+    stubBridge({ projects: [] });
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Approval' }));
+    });
+
+    // No router entry for approval → dashboard stays mounted.
+    expect(screen.getByTestId('dashboard-page')).toBeTruthy();
+    expect(screen.queryByTestId('messenger-page')).toBeNull();
+  });
+
+  it('clicking Settings routes to SettingsView (R9-Task4)', async () => {
     stubBridge({ projects: [] });
     render(<App />);
 
@@ -424,9 +441,8 @@ describe('App — view router (R5-Task3)', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
     });
 
-    // No router entry for settings → dashboard stays mounted.
-    expect(screen.getByTestId('dashboard-page')).toBeTruthy();
-    expect(screen.queryByTestId('messenger-page')).toBeNull();
+    expect(screen.getByTestId('settings-view')).toBeTruthy();
+    expect(screen.queryByTestId('dashboard-page')).toBeNull();
   });
 
   it('MessengerPage falls back to empty-state when there is no active project', async () => {

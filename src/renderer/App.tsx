@@ -8,6 +8,7 @@ import { DevThemeSwitcher } from './components/shell/theme-switcher';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { MessengerPage } from './features/messenger/MessengerPage';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
+import { SettingsView } from './features/settings/SettingsView';
 import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
 import { useAppViewStore, type AppView } from './stores/app-view-store';
@@ -15,10 +16,11 @@ import type { Project } from '../shared/project-types';
 
 /**
  * 현재 마운트할 최상위 뷰. R5에서는 dashboard ↔ messenger 2개만 실제 페이지가
- * 달려 있고 approval/queue/settings는 R7+ 이전까지 dashboard로 fallback.
+ * 달려 있었고 approval/queue는 아직 dashboard fallback. R9-Task4 에서
+ * settings 가 NotificationPrefsView 를 갖춘 실제 뷰로 올라왔다.
  * `AppView` 유니온 정의는 `stores/app-view-store.ts` 로 이동했다(R7-Task10).
  */
-const ROUTED_VIEWS: ReadonlyArray<AppView> = ['dashboard', 'messenger'];
+const ROUTED_VIEWS: ReadonlyArray<AppView> = ['dashboard', 'messenger', 'settings'];
 
 const NAV_ITEMS: ReadonlyArray<NavRailItem> = [
   { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
@@ -129,6 +131,8 @@ export function App() {
     >
       {view === 'messenger' ? (
         <MessengerPage />
+      ) : view === 'settings' ? (
+        <SettingsView />
       ) : (
         <DashboardPage onRequestNewProject={handleCreateProject} />
       )}

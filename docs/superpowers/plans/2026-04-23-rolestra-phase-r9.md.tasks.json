@@ -35,10 +35,10 @@
     {
       "id": 4,
       "subject": "Task 4: NotificationPrefsView + use-notification-prefs + 설정 surface 진입",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** `src/renderer/features/settings/NotificationPrefsView.tsx` — 4 kind × 표시 on/off + 소리 on/off + 테스트 알림 버튼. `use-notification-prefs.ts` — fetch + update + `stream:notification-prefs-changed` reducer. 설정 surface 진입점 wire (R4 SettingsSection 또는 임시 SettingsView).\n\n**Files:** src/renderer/features/settings/NotificationPrefsView.tsx + __tests__, src/renderer/hooks/use-notification-prefs.ts + __tests__\n\n**Verify:** `npm run test -- NotificationPrefsView use-notification-prefs`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/settings/NotificationPrefsView.tsx\",\"src/renderer/hooks/use-notification-prefs.ts\"],\"verifyCommand\":\"npm run test -- NotificationPrefsView\",\"acceptanceCriteria\":[\"4 kind × 2 토글 UI 렌더\",\"update-prefs invoke 인자 정확\",\"테스트 알림 버튼 → notification:test invoke\",\"stream event 수신 반영\"]}\n```",
-      "lastUpdated": "2026-04-23T12:00:00.000Z"
+      "lastUpdated": "2026-04-24T01:00:00.000Z"
     },
     {
       "id": 5,
