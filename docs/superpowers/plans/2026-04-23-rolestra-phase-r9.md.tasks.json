@@ -67,10 +67,10 @@
     {
       "id": 8,
       "subject": "Task 8: MeetingOrchestrator.onFinal → #회의록 요약 포스트 + NotificationService.show(work_done)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
-      "description": "**Goal:** v3-side-effects.ts 의 work-done handler 완성. MeetingOrchestrator onFinal 이벤트에서 (a) `#회의록` 채널에 메타 헤더 + 요약 원문 자동 포스트 (R6 와 동일 포맷), (b) NotificationService.show('work_done', { projectId, meetingTitle }) (모든 autonomyMode 공통), (c) auto_toggle/queue 일 때만 `#일반` 채널에 완료 알림 system message 추가 (spec §8).\n\n**Files:** src/main/engine/v3-side-effects.ts + __tests__, src/main/meetings/engine/meeting-orchestrator.ts (wire 확인)\n\n**Verify:** `npm run test -- v3-side-effects meeting-orchestrator`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- v3-side-effects\",\"acceptanceCriteria\":[\"onFinal → #회의록 메시지 append 확인\",\"notification.show('work_done') 호출\",\"auto_toggle/queue 에서만 #일반 system message\"]}\n```",
-      "lastUpdated": "2026-04-23T12:00:00.000Z"
+      "description": "**Goal:** v3-side-effects.ts 의 work-done handler 완성. MeetingOrchestrator onFinal 이벤트에서 (a) `#회의록` 채널에 메타 헤더 + 요약 원문 자동 포스트 (R6 와 동일 포맷 — postMinutes 경유 기존 완료), (b) NotificationService.show('work_done', { projectId, meetingTitle }) (모든 autonomyMode 공통 — v3-side-effects terminal DONE 경로 기존 완료), (c) **신규** auto_toggle/queue 일 때만 `#일반` 채널에 완료 알림 system message 추가 (spec §8).\n\n**구현:** `postGeneralMeetingDoneMessage(deps, info)` helper를 v3-side-effects.ts 에 export, `MeetingOrchestrator.finishMeeting(outcome='accepted')` 직후 호출. ProjectService.get 으로 autonomyMode 조회 → auto_toggle/queue 일 때만 ChannelService.listByProject 에서 `system_general` 찾아 MessageService.append. 프로젝트/채널 누락/throw 모두 error-tolerant (warn + no-op).\n\n**Files:** src/main/engine/v3-side-effects.ts (+ __tests__ +9 cases), src/main/meetings/engine/meeting-orchestrator.ts (+ __tests__ +4 cases)\n\n**Verify:** `npx vitest run src/main/engine/__tests__/v3-side-effects.test.ts src/main/meetings/engine/__tests__/meeting-orchestrator.test.ts`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- v3-side-effects\",\"acceptanceCriteria\":[\"onFinal → #회의록 메시지 append 확인 (기존 postMinutes)\",\"notification.show('work_done') 호출 (기존 v3-side-effects)\",\"auto_toggle/queue 에서만 #일반 system message (신규)\",\"manual autonomy 에서 #일반 포스트 0 (회귀 0)\",\"rejected/aborted outcome 에서 #일반 포스트 0\"]}\n```",
+      "lastUpdated": "2026-04-24T19:50:00.000Z"
     },
     {
       "id": 9,

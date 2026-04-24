@@ -33,6 +33,7 @@ const MEETING_ID = 'mt-orc-1';
 const CHANNEL_ID = 'ch-orc-1';
 const PROJECT_ID = 'pr-orc-1';
 const MINUTES_CHANNEL_ID = 'ch-minutes';
+const GENERAL_CHANNEL_ID = 'ch-general';
 
 function ctx(): SsmContext {
   return {
@@ -130,12 +131,30 @@ function buildMocks(): Mocks {
   const channelService = {
     listByProject: vi.fn(() => [
       { id: MINUTES_CHANNEL_ID, kind: 'system_minutes', name: '#회의록' },
-      { id: CHANNEL_ID, kind: 'user', name: '#일반' },
+      { id: GENERAL_CHANNEL_ID, kind: 'system_general', name: '#일반' },
+      { id: CHANNEL_ID, kind: 'user', name: '#작업' },
     ]),
   } as unknown as ChannelService;
 
+  // R9-Task8: finishMeeting(accepted) calls `projects.get` to look up
+  // autonomyMode before posting to `#일반`. Default to a `manual` project
+  // so the existing R6/R7 assertions stay green; tests that exercise
+  // auto_toggle/queue override this mock explicitly.
   const projectService = {
     setAutonomy: vi.fn(),
+    get: vi.fn(() => ({
+      id: PROJECT_ID,
+      slug: 'proj',
+      name: 'Test Project',
+      description: '',
+      kind: 'new' as const,
+      externalLink: null,
+      permissionMode: 'hybrid' as const,
+      autonomyMode: 'manual' as const,
+      status: 'active' as const,
+      createdAt: Date.now(),
+      archivedAt: null,
+    })),
   } as unknown as ProjectService;
 
   // R7-Task9: the orchestrator now subscribes to ApprovalService
@@ -616,6 +635,154 @@ describe('MeetingOrchestrator — R7-Task9 consensus_decision approval gate', ()
     expect(mocks.meetingService.finish).toHaveBeenCalledWith(
       MEETING_ID,
       'aborted',
+      expect.any(String),
+    );
+  });
+
+  it('R9-Task8: DONE → approve → manual project — no #일반 post (regression guard)', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...row, status: 'approved' },
+      decision: 'approve',
+      comment: null,
+    });
+    await new Promise((r) => setImmediate(r));
+
+    // Manual autonomy must NOT post to #일반 (system_general).
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const generalPost = appendCalls.find((c) => {
+      const p = c[0] as { channelId: string };
+      return p.channelId === GENERAL_CHANNEL_ID;
+    });
+    expect(generalPost).toBeUndefined();
+  });
+
+  it('R9-Task8: DONE → approve → auto_toggle project — posts #일반 completion message', async () => {
+    const mocks = buildMocks();
+    (mocks.projectService.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: PROJECT_ID,
+      slug: 'proj',
+      name: 'Test Project',
+      description: '',
+      kind: 'new',
+      externalLink: null,
+      permissionMode: 'hybrid',
+      autonomyMode: 'auto_toggle',
+      status: 'active',
+      createdAt: Date.now(),
+      archivedAt: null,
+    });
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...row, status: 'approved' },
+      decision: 'approve',
+      comment: null,
+    });
+    await new Promise((r) => setImmediate(r));
+
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const generalPost = appendCalls.find((c) => {
+      const p = c[0] as { channelId: string; content: string };
+      return (
+        p.channelId === GENERAL_CHANNEL_ID &&
+        p.content.includes('Ship v1.0 this week')
+      );
+    });
+    expect(generalPost).toBeDefined();
+    const generalPayload = (generalPost as unknown as [
+      { authorKind: string; role: string; meetingId: string },
+    ])[0];
+    expect(generalPayload.authorKind).toBe('system');
+    expect(generalPayload.role).toBe('system');
+    expect(generalPayload.meetingId).toBe(MEETING_ID);
+
+    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'accepted',
+      expect.any(String),
+    );
+  });
+
+  it('R9-Task8: DONE → approve → queue project — posts #일반 completion message', async () => {
+    const mocks = buildMocks();
+    (mocks.projectService.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: PROJECT_ID,
+      slug: 'proj',
+      name: 'Test Project',
+      description: '',
+      kind: 'new',
+      externalLink: null,
+      permissionMode: 'hybrid',
+      autonomyMode: 'queue',
+      status: 'active',
+      createdAt: Date.now(),
+      archivedAt: null,
+    });
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...row, status: 'approved' },
+      decision: 'approve',
+      comment: null,
+    });
+    await new Promise((r) => setImmediate(r));
+
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const generalPost = appendCalls.find((c) => {
+      const p = c[0] as { channelId: string };
+      return p.channelId === GENERAL_CHANNEL_ID;
+    });
+    expect(generalPost).toBeDefined();
+  });
+
+  it('R9-Task8: DONE → reject → auto_toggle project — skips #일반 post (outcome=rejected)', async () => {
+    const mocks = buildMocks();
+    (mocks.projectService.get as ReturnType<typeof vi.fn>).mockReturnValue({
+      id: PROJECT_ID,
+      slug: 'proj',
+      name: 'Test Project',
+      description: '',
+      kind: 'new',
+      externalLink: null,
+      permissionMode: 'hybrid',
+      autonomyMode: 'auto_toggle',
+      status: 'active',
+      createdAt: Date.now(),
+      archivedAt: null,
+    });
+    const orc = buildOrchestrator(mocks);
+    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
+    await Promise.resolve();
+
+    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
+    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
+      item: { ...row, status: 'rejected' },
+      decision: 'reject',
+      comment: '반려',
+    });
+    await new Promise((r) => setImmediate(r));
+
+    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
+    const generalPost = appendCalls.find((c) => {
+      const p = c[0] as { channelId: string };
+      return p.channelId === GENERAL_CHANNEL_ID;
+    });
+    expect(generalPost).toBeUndefined();
+    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'rejected',
       expect.any(String),
     );
   });

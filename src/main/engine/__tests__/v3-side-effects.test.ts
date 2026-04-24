@@ -24,7 +24,9 @@ import { EventEmitter } from 'node:events';
 
 import {
   wireV3SideEffects,
+  postGeneralMeetingDoneMessage,
   type V3SideEffectDeps,
+  type WorkDoneHandlerDeps,
 } from '../v3-side-effects';
 import type { SessionSnapshot } from '../../../shared/session-state-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
@@ -360,6 +362,182 @@ describe('v3-side-effects — circuit breaker', () => {
 
     expect(deps.projects.setAutonomy).toHaveBeenCalled();
     expect(deps.notifications.show).toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+});
+
+describe('v3-side-effects — postGeneralMeetingDoneMessage (R9-Task8)', () => {
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  function makeWorkDoneDeps(
+    autonomyMode: 'manual' | 'auto_toggle' | 'queue',
+    options: {
+      includeGeneral?: boolean;
+      projectMissing?: boolean;
+    } = {},
+  ): WorkDoneHandlerDeps & {
+    messagesAppend: ReturnType<typeof vi.fn>;
+    projectsGet: ReturnType<typeof vi.fn>;
+    channelsList: ReturnType<typeof vi.fn>;
+  } {
+    const { includeGeneral = true, projectMissing = false } = options;
+    const channelRows = includeGeneral
+      ? [
+          { id: 'general-1', kind: 'system_general' },
+          { id: 'minutes-1', kind: 'system_minutes' },
+          { id: 'approval-1', kind: 'system_approval' },
+        ]
+      : [
+          { id: 'minutes-1', kind: 'system_minutes' },
+          { id: 'approval-1', kind: 'system_approval' },
+        ];
+
+    const messagesAppend = vi.fn();
+    const projectsGet = vi.fn(() =>
+      projectMissing ? null : { autonomyMode },
+    );
+    const channelsList = vi.fn().mockReturnValue(channelRows);
+
+    return {
+      messages: { append: messagesAppend } as never,
+      channels: { listByProject: channelsList } as never,
+      projects: { get: projectsGet } as never,
+      messagesAppend,
+      projectsGet,
+      channelsList,
+    };
+  }
+
+  it('manual autonomy: skips the #일반 post', () => {
+    const deps = makeWorkDoneDeps('manual');
+    postGeneralMeetingDoneMessage(deps, {
+      projectId: 'proj-1',
+      meetingId: 'meet-1',
+      meetingTitle: 'Ship v1.0',
+    });
+    expect(deps.projectsGet).toHaveBeenCalledWith('proj-1');
+    expect(deps.channelsList).not.toHaveBeenCalled();
+    expect(deps.messagesAppend).not.toHaveBeenCalled();
+  });
+
+  it('auto_toggle autonomy: appends a system message to #일반', () => {
+    const deps = makeWorkDoneDeps('auto_toggle');
+    postGeneralMeetingDoneMessage(deps, {
+      projectId: 'proj-1',
+      meetingId: 'meet-1',
+      meetingTitle: 'Ship v1.0',
+    });
+    expect(deps.messagesAppend).toHaveBeenCalledTimes(1);
+    expect(deps.messagesAppend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channelId: 'general-1',
+        authorKind: 'system',
+        role: 'system',
+        meetingId: 'meet-1',
+        content: expect.stringContaining('Ship v1.0'),
+      }),
+    );
+  });
+
+  it('queue autonomy: appends a system message to #일반', () => {
+    const deps = makeWorkDoneDeps('queue');
+    postGeneralMeetingDoneMessage(deps, {
+      projectId: 'proj-1',
+      meetingId: 'meet-1',
+      meetingTitle: 'Nightly ship',
+    });
+    expect(deps.messagesAppend).toHaveBeenCalledTimes(1);
+    expect(deps.messagesAppend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channelId: 'general-1',
+        content: expect.stringContaining('Nightly ship'),
+      }),
+    );
+  });
+
+  it('empty projectId: no-op (defensive guard for DM meetings)', () => {
+    const deps = makeWorkDoneDeps('queue');
+    postGeneralMeetingDoneMessage(deps, {
+      projectId: '',
+      meetingId: 'meet-1',
+      meetingTitle: 't',
+    });
+    expect(deps.projectsGet).not.toHaveBeenCalled();
+    expect(deps.messagesAppend).not.toHaveBeenCalled();
+  });
+
+  it('missing project row: no-op (error-tolerant, no throw)', () => {
+    const deps = makeWorkDoneDeps('auto_toggle', { projectMissing: true });
+    postGeneralMeetingDoneMessage(deps, {
+      projectId: 'proj-gone',
+      meetingId: 'meet-1',
+      meetingTitle: 't',
+    });
+    expect(deps.messagesAppend).not.toHaveBeenCalled();
+  });
+
+  it('missing #일반 channel: no-op (error-tolerant)', () => {
+    const deps = makeWorkDoneDeps('auto_toggle', { includeGeneral: false });
+    postGeneralMeetingDoneMessage(deps, {
+      projectId: 'proj-1',
+      meetingId: 'meet-1',
+      meetingTitle: 't',
+    });
+    expect(deps.channelsList).toHaveBeenCalledWith('proj-1');
+    expect(deps.messagesAppend).not.toHaveBeenCalled();
+  });
+
+  it('projects.get throws: logs warn and does not rethrow', () => {
+    const deps = makeWorkDoneDeps('auto_toggle');
+    deps.projectsGet.mockImplementation(() => {
+      throw new Error('DB gone');
+    });
+    expect(() =>
+      postGeneralMeetingDoneMessage(deps, {
+        projectId: 'proj-1',
+        meetingId: 'meet-1',
+        meetingTitle: 't',
+      }),
+    ).not.toThrow();
+    expect(deps.messagesAppend).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('messages.append throws: logs warn and does not rethrow', () => {
+    const deps = makeWorkDoneDeps('queue');
+    deps.messagesAppend.mockImplementation(() => {
+      throw new Error('append failed');
+    });
+    expect(() =>
+      postGeneralMeetingDoneMessage(deps, {
+        projectId: 'proj-1',
+        meetingId: 'meet-1',
+        meetingTitle: 't',
+      }),
+    ).not.toThrow();
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('channels.listByProject throws: logs warn and does not rethrow', () => {
+    const deps = makeWorkDoneDeps('queue');
+    deps.channelsList.mockImplementation(() => {
+      throw new Error('channels gone');
+    });
+    expect(() =>
+      postGeneralMeetingDoneMessage(deps, {
+        projectId: 'proj-1',
+        meetingId: 'meet-1',
+        meetingTitle: 't',
+      }),
+    ).not.toThrow();
+    expect(deps.messagesAppend).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
   });
 });

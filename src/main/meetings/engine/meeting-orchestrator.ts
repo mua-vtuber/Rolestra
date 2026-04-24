@@ -59,6 +59,7 @@ import type { NotificationService } from '../../notifications/notification-servi
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
 import {
   wireV3SideEffects,
+  postGeneralMeetingDoneMessage,
   type V3SideEffectDisposer,
 } from '../../engine/v3-side-effects';
 import type { MeetingSession } from './meeting-session';
@@ -552,6 +553,34 @@ export class MeetingOrchestrator {
         '[MeetingOrchestrator] meeting finish failed',
         errorPayload(err),
       );
+    }
+
+    // R9-Task8: post the autonomy-mode `#일반` completion message when
+    // the meeting settled as accepted. The helper is a no-op for manual
+    // projects and for missing `#일반` channels, so the call is safe to
+    // issue unconditionally on the accepted branch. Rejected / aborted
+    // outcomes skip this post — `#일반` is reserved for positive
+    // completions (rejection / timeout already wrote to `#회의록`).
+    if (outcome === 'accepted' && this.session.projectId) {
+      try {
+        postGeneralMeetingDoneMessage(
+          {
+            channels: this.channelService,
+            messages: this.messageService,
+            projects: this.projectService,
+          },
+          {
+            projectId: this.session.projectId,
+            meetingId: this.session.meetingId,
+            meetingTitle: this.session.topic,
+          },
+        );
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] #일반 work-done post threw',
+          errorPayload(err),
+        );
+      }
     }
 
     // R9-Task7: fire the post-finalise hook (if any). Fire-and-forget —

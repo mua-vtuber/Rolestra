@@ -410,6 +410,109 @@ function readStringField(detail: unknown, key: string): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
+// ── R9-Task8: post-finalise work-done side-effect ────────────────────
+
+/**
+ * Minimum project shape needed by {@link postGeneralMeetingDoneMessage}.
+ * The helper only reads `autonomyMode` — widening the contract would pull
+ * every Project consumer into the v3-side-effects bundle.
+ */
+interface MeetingDoneProject {
+  autonomyMode: 'manual' | 'auto_toggle' | 'queue';
+}
+
+/**
+ * Service surface the R9-Task8 `#일반` work-done helper consumes. Split
+ * out from {@link V3SideEffectDeps} so MeetingOrchestrator can pass an
+ * ad-hoc object without constructing an SSM context.
+ */
+export interface WorkDoneHandlerDeps {
+  channels: Pick<ChannelService, 'listByProject'>;
+  messages: Pick<MessageService, 'append'>;
+  projects: { get(id: string): MeetingDoneProject | null };
+}
+
+/** Identifying info forwarded to the work-done helper. */
+export interface WorkDoneEventInfo {
+  projectId: string;
+  meetingId: string;
+  /** Human-readable meeting subject used in the `#일반` message body. */
+  meetingTitle: string;
+}
+
+/**
+ * Append a system-authored "meeting done" message to the project's
+ * `#일반` (`system_general`) channel — but only when the project is in
+ * `auto_toggle` / `queue` autonomy mode (spec §8).
+ *
+ * R9-Task8 design:
+ *   - The `#회의록` post + the OS-level `work_done` notification are
+ *     already owned elsewhere (MeetingOrchestrator.postMinutes and
+ *     postTerminalSideEffects, respectively). This helper is strictly
+ *     additive so manual-mode flows regress at zero.
+ *   - Called from {@link MeetingOrchestrator.finishMeeting} when the
+ *     meeting settles with `outcome='accepted'`. Rejected / aborted
+ *     meetings do NOT trigger a `#일반` post — the channel is reserved
+ *     for positive completions.
+ *   - Error-tolerant: project lookup, channel lookup, and message
+ *     append each run inside try/catch so a downstream failure (missing
+ *     `#일반`, closed DB) does not resurface at the finalise path.
+ *   - Today the message text is a Korean literal. R9-Task11 swaps it
+ *     for a main-process i18n dictionary lookup (Decision Log D8).
+ */
+export function postGeneralMeetingDoneMessage(
+  deps: WorkDoneHandlerDeps,
+  info: WorkDoneEventInfo,
+): void {
+  if (!info.projectId) return;
+
+  let project: MeetingDoneProject | null = null;
+  try {
+    project = deps.projects.get(info.projectId);
+  } catch (err) {
+    warn('projects.get (work-done) failed', err);
+    return;
+  }
+  if (!project) return;
+  if (
+    project.autonomyMode !== 'auto_toggle' &&
+    project.autonomyMode !== 'queue'
+  ) {
+    return;
+  }
+
+  let generalChannelId: string | null = null;
+  try {
+    const rows = deps.channels.listByProject(info.projectId);
+    generalChannelId =
+      rows.find((c) => c.kind === 'system_general')?.id ?? null;
+  } catch (err) {
+    warn('channels.listByProject (work-done) failed', err);
+    return;
+  }
+  if (!generalChannelId) return;
+
+  const title = info.meetingTitle.trim();
+  const content =
+    title.length > 0
+      ? `회의 "${title}" 이(가) 완료되었습니다.`
+      : '회의가 완료되었습니다.';
+
+  try {
+    deps.messages.append({
+      channelId: generalChannelId,
+      meetingId: info.meetingId || null,
+      authorId: 'system',
+      authorKind: 'system',
+      role: 'system',
+      content,
+      meta: null,
+    });
+  } catch (err) {
+    warn('messages.append (#일반 work-done) failed', err);
+  }
+}
+
 /**
  * Local logger — swap for the structured logger when it lands.
  * Marker: "rolestra.v3-side-effects" keeps grep-ability across a
