@@ -26,6 +26,7 @@
  * breaking-change constructor later.
  */
 
+import { EventEmitter } from 'node:events';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
@@ -250,14 +251,47 @@ export function generateSlug(name: string): string {
   return capped;
 }
 
+// ── Event typing ──────────────────────────────────────────────────────
+
+/**
+ * R9-Task5: autonomy-mode change event. Emitted by {@link
+ * ProjectService.setAutonomy} when the persisted mode actually flips.
+ * StreamBridge re-emits this to the renderer as
+ * `stream:autonomy-mode-changed` (spec §6 + shared/stream-events.ts).
+ *
+ * `reason` distinguishes user-initiated toggles (`'user'`) from
+ * system-initiated downgrades (`'autonomy_gate_fail'` from AutonomyGate
+ * when a rework/fail lands, `'circuit_breaker'` from v3-side-effects
+ * when a tripwire fires). Default is `'user'` when omitted so legacy
+ * call sites keep working.
+ */
+export type AutonomyChangeReason =
+  | 'user'
+  | 'circuit_breaker'
+  | 'autonomy_gate_fail';
+
+export const PROJECT_AUTONOMY_CHANGED_EVENT = 'autonomy-changed' as const;
+
+export interface AutonomyChangedPayload {
+  projectId: string;
+  mode: AutonomyMode;
+  reason: AutonomyChangeReason;
+}
+
+export interface ProjectServiceEvents {
+  'autonomy-changed': (payload: AutonomyChangedPayload) => void;
+}
+
 // ── Service ────────────────────────────────────────────────────────────
 
-export class ProjectService {
+export class ProjectService extends EventEmitter {
   constructor(
     private readonly repo: ProjectRepository,
     private readonly arenaRoot: ArenaRootService,
     private readonly opts: ProjectServiceOptions = {},
-  ) {}
+  ) {
+    super();
+  }
 
   /**
    * Create a project of the requested kind. DB + FS are applied atomically
@@ -445,10 +479,77 @@ export class ProjectService {
    * autonomy toggle UI and the audit trail keeps this action separated
    * from full `project:update` calls.
    *
+   * R9-Task5: emits `'autonomy-changed'` on every successful transition
+   * (including no-op writes where the mode already matches — the event
+   * still fires so UI listeners can reassure the user after a redundant
+   * click). `reason` defaults to `'user'`; callers such as AutonomyGate
+   * and the circuit-breaker handler pass `'autonomy_gate_fail'` /
+   * `'circuit_breaker'` so the stream payload tells the renderer whether
+   * the downgrade was their own click or a system-driven guard.
+   *
    * @throws {ProjectError} unknown id.
    */
-  setAutonomy(id: string, mode: AutonomyMode): Project {
-    return this.update(id, { autonomyMode: mode });
+  setAutonomy(
+    id: string,
+    mode: AutonomyMode,
+    opts: { reason?: AutonomyChangeReason } = {},
+  ): Project {
+    const next = this.update(id, { autonomyMode: mode });
+    const reason = opts.reason ?? 'user';
+    try {
+      this.emit(PROJECT_AUTONOMY_CHANGED_EVENT, {
+        projectId: id,
+        mode: next.autonomyMode,
+        reason,
+      });
+    } catch (err) {
+      // Listener failures must not rewrite the contract of setAutonomy
+      // (row saved, Project returned). Same pattern as MessageService /
+      // ApprovalService — a single warn for observability.
+      // TODO R2-log: swap console.warn for structured logger.
+      const message = err instanceof Error ? err.message : String(err);
+      console.warn('[rolestra.projects] autonomy-changed listener threw:', {
+        projectId: id,
+        name: err instanceof Error ? err.name : undefined,
+        message,
+      });
+    }
+    return next;
+  }
+
+  // ── typed EventEmitter overloads ───────────────────────────────────
+
+  on<E extends keyof ProjectServiceEvents>(
+    event: E,
+    listener: ProjectServiceEvents[E],
+  ): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  on(
+    event: string | symbol,
+    listener: (...args: unknown[]) => void,
+  ): this {
+    return super.on(event, listener);
+  }
+
+  off<E extends keyof ProjectServiceEvents>(
+    event: E,
+    listener: ProjectServiceEvents[E],
+  ): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  off(
+    event: string | symbol,
+    listener: (...args: unknown[]) => void,
+  ): this {
+    return super.off(event, listener);
+  }
+
+  emit<E extends keyof ProjectServiceEvents>(
+    event: E,
+    ...args: Parameters<ProjectServiceEvents[E]>
+  ): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean {
+    return super.emit(event, ...args);
   }
 
   /**

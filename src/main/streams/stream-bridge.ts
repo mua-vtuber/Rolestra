@@ -54,9 +54,12 @@ import type {
   StreamMeetingErrorPayload,
   StreamMeetingTurnSkippedPayload,
   StreamQueueProgressPayload,
+  StreamQueueUpdatedPayload,
   StreamMemberStatusPayload,
   StreamNotificationPayload,
   StreamNotificationClickedPayload,
+  StreamNotificationPrefsChangedPayload,
+  StreamAutonomyModeChangedPayload,
 } from '../../shared/stream-events';
 
 /** Renderer-delivery hook. */
@@ -86,9 +89,13 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:meeting-turn-token',
   'stream:meeting-turn-done',
   'stream:meeting-error',
+  'stream:meeting-turn-skipped',
   'stream:queue-progress',
+  'stream:queue-updated',
   'stream:notification',
   'stream:notification-clicked',
+  'stream:notification-prefs-changed',
+  'stream:autonomy-mode-changed',
 ]);
 
 interface FailureState {
@@ -113,6 +120,14 @@ export interface StreamBridgeServices {
    * no side-effect logic needs to run before it reaches the renderer.
    */
   notifications?: EventEmitter;
+  /**
+   * R9-Task5: ProjectService whose `'autonomy-changed'` event feeds
+   * `stream:autonomy-mode-changed`. Fires on both user-initiated
+   * toggles (`project:set-autonomy` IPC) and system-initiated
+   * downgrades (AutonomyGate fail path / CircuitBreaker fire), with the
+   * `reason` carried through so the renderer can distinguish the two.
+   */
+  projects?: EventEmitter;
   /**
    * Optional lookup so the bridge can expand `QueueChangedEvent`
    * (project-scope hint) into full `QueueItem` payloads. If omitted,
@@ -240,6 +255,27 @@ export class StreamBridge {
         });
       });
     }
+
+    if (services.projects) {
+      services.projects.on('autonomy-changed', (payload: unknown) => {
+        // ProjectService emits `{projectId, mode, reason}` — shape already
+        // matches StreamAutonomyModeChangedPayload, but we coerce defensively
+        // so a stray emitter that forgets `reason` still produces a valid
+        // stream event (default 'user' mirrors the ProjectService default).
+        const record = (payload ?? {}) as Record<string, unknown>;
+        this.emit({
+          type: 'stream:autonomy-mode-changed',
+          payload: {
+            projectId: String(record.projectId ?? ''),
+            mode: record.mode as StreamAutonomyModeChangedPayload['mode'],
+            reason:
+              typeof record.reason === 'string'
+                ? (record.reason as StreamAutonomyModeChangedPayload['reason'])
+                : 'user',
+          },
+        });
+      });
+    }
   }
 
   // ── Direct emit helpers (Task 20 side-effects) ────────────────────
@@ -290,12 +326,28 @@ export class StreamBridge {
     this.emit({ type: 'stream:queue-progress', payload });
   }
 
+  emitQueueUpdated(payload: StreamQueueUpdatedPayload): void {
+    this.emit({ type: 'stream:queue-updated', payload });
+  }
+
   emitMemberStatus(payload: StreamMemberStatusPayload): void {
     this.emit({ type: 'stream:member-status', payload });
   }
 
   emitNotification(payload: StreamNotificationPayload): void {
     this.emit({ type: 'stream:notification', payload });
+  }
+
+  emitNotificationPrefsChanged(
+    payload: StreamNotificationPrefsChangedPayload,
+  ): void {
+    this.emit({ type: 'stream:notification-prefs-changed', payload });
+  }
+
+  emitAutonomyModeChanged(
+    payload: StreamAutonomyModeChangedPayload,
+  ): void {
+    this.emit({ type: 'stream:autonomy-mode-changed', payload });
   }
 
   // ── Introspection (tests / diagnostics) ───────────────────────────
@@ -412,11 +464,36 @@ export class StreamBridge {
         );
       case 'stream:queue-progress':
         return this.isObject(payload.item);
+      case 'stream:queue-updated':
+        return (
+          typeof payload.projectId === 'string' &&
+          Array.isArray(payload.items) &&
+          typeof payload.paused === 'boolean'
+        );
+      case 'stream:meeting-turn-skipped':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          typeof payload.participantId === 'string' &&
+          typeof payload.reason === 'string'
+        );
       case 'stream:notification':
         return (
           typeof payload.id === 'string' &&
           typeof payload.kind === 'string' &&
           typeof payload.title === 'string'
+        );
+      case 'stream:notification-clicked':
+        return (
+          typeof payload.id === 'string' &&
+          typeof payload.kind === 'string'
+        );
+      case 'stream:notification-prefs-changed':
+        return this.isObject(payload.prefs);
+      case 'stream:autonomy-mode-changed':
+        return (
+          typeof payload.projectId === 'string' &&
+          typeof payload.mode === 'string'
         );
       default:
         return false;

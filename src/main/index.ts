@@ -42,6 +42,7 @@ import { NotificationRepository } from './notifications/notification-repository'
 import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
 import { CircuitBreaker } from './queue/circuit-breaker';
+import { AutonomyGate } from './autonomy/autonomy-gate';
 import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
 import { MemberProfileRepository } from './members/member-profile-repository';
 import { MemberProfileService } from './members/member-profile-service';
@@ -287,6 +288,20 @@ app.whenReady().then(async () => {
     });
     approvalNotificationBridge.wire();
 
+    // R9-Task5: AutonomyGate — inspects every approval created and, for
+    // projects in `auto_toggle`/`queue`, either auto-accepts it (mode
+    // transition to auto|hybrid / consensus decision / review accepted)
+    // or forces the project back to `manual` (cli_permission / rework /
+    // fail / failure_report). See `src/main/autonomy/autonomy-gate.ts`.
+    const autonomyGate = new AutonomyGate({
+      approvalService,
+      projectService,
+      notificationService,
+      messageService,
+      channelService,
+    });
+    autonomyGate.wire();
+
     // R6-Task1 + R7-Task2 + R7-Task11: StreamBridge — central Main →
     // Renderer v3 push hub. `connect({ notifications })` wires
     // NotificationService 'clicked' → `stream:notification-clicked` so
@@ -296,6 +311,10 @@ app.whenReady().then(async () => {
       messages: messageService,
       approvals: approvalService,
       notifications: notificationService,
+      // R9-Task5: project autonomy toggles + system downgrades become
+      // `stream:autonomy-mode-changed` pushes without a dedicated emit
+      // helper at each call site.
+      projects: projectService,
       // queue connect in R9.
     });
     streamBridge.onOutbound((event) => {
