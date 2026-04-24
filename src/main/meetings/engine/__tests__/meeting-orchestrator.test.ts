@@ -370,6 +370,81 @@ describe('MeetingOrchestrator — terminal handling', () => {
       expect.any(String),
     );
   });
+
+  // ── R9-Task7: onFinalized callback ────────────────────────────────
+
+  it('invokes onFinalized with meeting + project + outcome after FAILED finish', async () => {
+    const mocks = buildMocks();
+    const onFinalized = vi.fn(async () => {});
+    const orc = new MeetingOrchestrator({
+      session: mocks.session,
+      turnExecutor: mocks.turnExecutor,
+      streamBridge: mocks.streamBridge,
+      messageService: mocks.messageService,
+      meetingService: mocks.meetingService,
+      channelService: mocks.channelService,
+      projectService: mocks.projectService,
+      approvalService: mocks.approvalService,
+      notificationService: mocks.notificationService,
+      circuitBreaker: mocks.circuitBreaker,
+      interTurnDelayMs: 0,
+      onFinalized,
+    });
+
+    const runPromise = orc.run();
+    mocks.session.sessionMachine.transition('ERROR');
+    await runPromise;
+    // onFinalized runs fire-and-forget inside the finalise path; drain
+    // the microtask queue so the assertion stabilises.
+    await Promise.resolve();
+
+    expect(onFinalized).toHaveBeenCalledTimes(1);
+    expect(onFinalized).toHaveBeenCalledWith({
+      meetingId: MEETING_ID,
+      projectId: PROJECT_ID,
+      channelId: CHANNEL_ID,
+      outcome: 'rejected',
+    });
+  });
+
+  it('swallows onFinalized callback errors — meeting finish stays authoritative', async () => {
+    const mocks = buildMocks();
+    const onFinalized = vi
+      .fn(async () => {
+        throw new Error('queue hand-off broke');
+      });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const orc = new MeetingOrchestrator({
+      session: mocks.session,
+      turnExecutor: mocks.turnExecutor,
+      streamBridge: mocks.streamBridge,
+      messageService: mocks.messageService,
+      meetingService: mocks.meetingService,
+      channelService: mocks.channelService,
+      projectService: mocks.projectService,
+      approvalService: mocks.approvalService,
+      notificationService: mocks.notificationService,
+      circuitBreaker: mocks.circuitBreaker,
+      interTurnDelayMs: 0,
+      onFinalized,
+    });
+
+    const runPromise = orc.run();
+    mocks.session.sessionMachine.transition('ERROR');
+    await runPromise;
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onFinalized).toHaveBeenCalled();
+    expect(mocks.meetingService.finish).toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('onFinalized callback threw'),
+      expect.any(Object),
+    );
+
+    warn.mockRestore();
+  });
 });
 
 describe('MeetingOrchestrator — R7-Task9 consensus_decision approval gate', () => {

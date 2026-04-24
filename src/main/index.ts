@@ -44,6 +44,8 @@ import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapt
 import { CircuitBreaker } from './queue/circuit-breaker';
 import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
 import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
+import { QueueRepository } from './queue/queue-repository';
+import { QueueService } from './queue/queue-service';
 import { AutonomyGate } from './autonomy/autonomy-gate';
 import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
 import { MemberProfileRepository } from './members/member-profile-repository';
@@ -287,6 +289,22 @@ app.whenReady().then(async () => {
     setCircuitBreakerAccessor(() => circuitBreaker);
     setExecutionCircuitBreaker(circuitBreaker);
 
+    // R9-Task7: QueueService — autonomy-queue run loop owner. Construct
+    // before StreamBridge.connect so the bridge can subscribe to the
+    // service's `'changed'` event and fan out `stream:queue-updated`
+    // snapshots. The optional `meetingStarter` injection that spawns a
+    // meeting for each claimed item lands with Task 9 production wiring
+    // (needs the fully-built MeetingOrchestratorFactory reference); for
+    // now `startNext` still performs the atomic claim + snapshot emit so
+    // the onFinalized hook can observe the flip.
+    const queueService = new QueueService(new QueueRepository(db), {
+      circuitBreaker,
+    });
+    // Spec §5.2 recovery rule — revert any `in_progress` rows left by a
+    // crash mid-run back to `pending` so the next claim picks them up.
+    // No-op count on a clean DB.
+    queueService.recoverInProgress();
+
     // R7-Task11: ApprovalNotificationBridge — ApprovalService 'created' →
     // NotificationService.show(approval_pending). NotificationService's
     // own prefs + focus gates decide whether the OS toast actually fires.
@@ -326,7 +344,20 @@ app.whenReady().then(async () => {
       // `stream:autonomy-mode-changed` pushes without a dedicated emit
       // helper at each call site.
       projects: projectService,
-      // queue connect in R9.
+      // R9-Task7: queue mutation fan-out. `queueSnapshot` resolves a
+      // `changed` hint to the project-level full list + paused flag so
+      // the renderer's `useQueue` hook reconciles in a single push.
+      // `queueItemLookup` is retained for the `{id}`-only hint → projectId
+      // indirection that `complete`/`cancel` emit.
+      queue: queueService,
+      queueItemLookup: (id) => {
+        const item = queueService.get(id);
+        return item ? { id: item.id, projectId: item.projectId } : null;
+      },
+      queueSnapshot: (projectId) => ({
+        items: queueService.listByProject(projectId),
+        paused: queueService.isPaused(projectId),
+      }),
     });
     streamBridge.onOutbound((event) => {
       for (const win of BrowserWindow.getAllWindows()) {
@@ -399,6 +430,41 @@ app.whenReady().then(async () => {
           approvalService,
           notificationService,
           circuitBreaker,
+          // R9-Task7: autonomy-queue run loop. When the finalised meeting
+          // belongs to a project in `queue` mode, complete the owning
+          // queue item and advance to the next pending item. Lookups miss
+          // cleanly when the meeting was not started from the queue — in
+          // that case `findByMeetingId` returns null and we skip complete.
+          onFinalized: async ({ meetingId, projectId, outcome }) => {
+            const project = projectService.get(projectId);
+            if (!project || project.autonomyMode !== 'queue') return;
+            const item = queueService.findByMeetingId(meetingId);
+            if (item) {
+              try {
+                queueService.complete(
+                  item.id,
+                  meetingId,
+                  outcome === 'accepted',
+                );
+              } catch (err) {
+                console.warn(
+                  '[queue-runner] complete failed',
+                  err instanceof Error ? err.message : String(err),
+                );
+              }
+            }
+            try {
+              await queueService.startNext(projectId);
+            } catch (err) {
+              // `startNext` throws when the (future) meetingStarter
+              // callback fails. Log + move on — the failed queue row is
+              // already recorded so the UI sees the failure state.
+              console.warn(
+                '[queue-runner] startNext failed',
+                err instanceof Error ? err.message : String(err),
+              );
+            }
+          },
         });
 
         registerOrchestrator(meeting.id, orchestrator);

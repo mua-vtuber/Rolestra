@@ -20,7 +20,7 @@ import Database from 'better-sqlite3';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   ArenaRootService,
   type ArenaRootConfigAccessor,
@@ -42,7 +42,9 @@ import {
   QueueService,
   type QueueAbortRequestedEvent,
   type QueueChangedEvent,
+  type QueueMeetingStarter,
 } from '../queue-service';
+import { CircuitBreaker } from '../circuit-breaker';
 import type { QueueItem } from '../../../shared/queue-types';
 
 function makeTmpDir(prefix: string): string {
@@ -423,6 +425,169 @@ describe('QueueService', () => {
       const count = queueService.pause(projectId);
       expect(count).toBe(1); // only the remaining pending one
       expect(queueRepo.get(claimed.id)!.status).toBe('in_progress');
+    });
+  });
+
+  // ── recoverInProgress ──────────────────────────────────────────────
+
+  // ── isPaused ───────────────────────────────────────────────────────
+
+  describe('isPaused (R9-Task7)', () => {
+    it('returns false on a fresh project with no items', async () => {
+      const projectId = await seedProject();
+      expect(queueService.isPaused(projectId)).toBe(false);
+    });
+
+    it('returns false when items are pending', async () => {
+      const projectId = await seedProject();
+      queueService.add({ projectId, prompt: 'a' });
+      queueService.add({ projectId, prompt: 'b' });
+      expect(queueService.isPaused(projectId)).toBe(false);
+    });
+
+    it('returns true after pause() moves pending → paused', async () => {
+      const projectId = await seedProject();
+      queueService.add({ projectId, prompt: 'a' });
+      queueService.pause(projectId);
+      expect(queueService.isPaused(projectId)).toBe(true);
+    });
+
+    it('returns false after resume() moves paused → pending', async () => {
+      const projectId = await seedProject();
+      queueService.add({ projectId, prompt: 'a' });
+      queueService.pause(projectId);
+      queueService.resume(projectId);
+      expect(queueService.isPaused(projectId)).toBe(false);
+    });
+  });
+
+  // ── findByMeetingId ────────────────────────────────────────────────
+
+  describe('findByMeetingId (R9-Task7)', () => {
+    it('returns the queue row whose started_meeting_id matches', async () => {
+      const projectId = await seedProject();
+      const meetingId = await seedMeeting(projectId);
+      const item = queueService.add({ projectId, prompt: 'run' });
+      queueService.claimNext(projectId);
+      // Back-stamp the meeting id the way startNext would.
+      db.prepare(
+        `UPDATE queue_items SET started_meeting_id = ? WHERE id = ?`,
+      ).run(meetingId, item.id);
+
+      const found = queueService.findByMeetingId(meetingId);
+      expect(found).not.toBeNull();
+      expect(found!.id).toBe(item.id);
+    });
+
+    it('returns null when no queue row references the meeting', () => {
+      expect(queueService.findByMeetingId('ghost-meeting')).toBeNull();
+    });
+  });
+
+  // ── startNext ──────────────────────────────────────────────────────
+
+  describe('startNext (R9-Task7)', () => {
+    it('returns null and emits nothing when the project is paused', async () => {
+      const projectId = await seedProject();
+      queueService.add({ projectId, prompt: 'a' });
+      queueService.pause(projectId);
+
+      const events: QueueChangedEvent[] = [];
+      queueService.on(QUEUE_CHANGED_EVENT, (e) => events.push(e));
+
+      const result = await queueService.startNext(projectId);
+
+      expect(result).toBeNull();
+      expect(events).toHaveLength(0);
+    });
+
+    it('returns null and emits nothing when no pending items exist', async () => {
+      const projectId = await seedProject();
+
+      const events: QueueChangedEvent[] = [];
+      queueService.on(QUEUE_CHANGED_EVENT, (e) => events.push(e));
+
+      const result = await queueService.startNext(projectId);
+
+      expect(result).toBeNull();
+      expect(events).toHaveLength(0);
+    });
+
+    it('claims the next pending item and emits changed with {projectId}', async () => {
+      const projectId = await seedProject();
+      const a = queueService.add({ projectId, prompt: 'first' });
+      queueService.add({ projectId, prompt: 'second' });
+
+      const events: QueueChangedEvent[] = [];
+      queueService.on(QUEUE_CHANGED_EVENT, (e) => events.push(e));
+
+      const result = await queueService.startNext(projectId);
+
+      expect(result).not.toBeNull();
+      expect(result!.id).toBe(a.id);
+      expect(result!.status).toBe('in_progress');
+      expect(queueRepo.get(a.id)!.status).toBe('in_progress');
+      expect(events).toEqual([{ projectId }]);
+    });
+
+    it('ticks the circuit breaker `queue_streak` tripwire via claimNext', async () => {
+      const breaker = new CircuitBreaker();
+      const service = new QueueService(queueRepo, { circuitBreaker: breaker });
+
+      const projectId = await seedProject();
+      service.add({ projectId, prompt: 'a' });
+
+      const fired: string[] = [];
+      breaker.on('fired', (e) => fired.push(e.reason));
+
+      await service.startNext(projectId);
+
+      expect(breaker.getState().consecutiveQueueRuns).toBe(1);
+      expect(fired).toEqual([]);
+    });
+
+    it('spawns a meeting via meetingStarter and stamps started_meeting_id', async () => {
+      const projectId = await seedProject();
+      const meetingId = await seedMeeting(projectId);
+
+      const starter: QueueMeetingStarter = vi.fn().mockResolvedValue({
+        meetingId,
+      });
+      const service = new QueueService(queueRepo, { meetingStarter: starter });
+      const item = service.add({ projectId, prompt: 'do X' });
+
+      const result = await service.startNext(projectId);
+
+      expect(starter).toHaveBeenCalledWith({
+        projectId,
+        prompt: 'do X',
+        queueItemId: item.id,
+      });
+      expect(result!.startedMeetingId).toBe(meetingId);
+      expect(queueRepo.get(item.id)!.startedMeetingId).toBe(meetingId);
+    });
+
+    it('flips the item to failed and re-throws when meetingStarter rejects', async () => {
+      const starter: QueueMeetingStarter = vi
+        .fn()
+        .mockRejectedValue(new Error('no #일반 channel'));
+      const service = new QueueService(queueRepo, { meetingStarter: starter });
+
+      const projectId = await seedProject();
+      const item = service.add({ projectId, prompt: 'X' });
+
+      const events: QueueChangedEvent[] = [];
+      service.on(QUEUE_CHANGED_EVENT, (e) => events.push(e));
+
+      await expect(service.startNext(projectId)).rejects.toThrow(
+        /no #일반 channel/,
+      );
+
+      const row = queueRepo.get(item.id)!;
+      expect(row.status).toBe('failed');
+      expect(row.lastError).toMatch(/meeting start failed: no #일반 channel/);
+      expect(row.finishedAt).not.toBeNull();
+      expect(events).toEqual([{ projectId }]);
     });
   });
 

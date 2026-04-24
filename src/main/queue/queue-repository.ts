@@ -208,6 +208,44 @@ export class QueueRepository {
   }
 
   /**
+   * R9-Task7: stamp the `started_meeting_id` column after `startNext`
+   * has successfully spawned a meeting for the claimed queue item. This
+   * is the back-pointer that lets the onFinal hook map a meeting end
+   * event to the queue row that started it. Returns `true` when the row
+   * was updated.
+   */
+  setStartedMeetingId(id: string, meetingId: string): boolean {
+    const result = this.database
+      .prepare(`UPDATE queue_items SET started_meeting_id = ? WHERE id = ?`)
+      .run(meetingId, id);
+    return result.changes > 0;
+  }
+
+  /**
+   * R9-Task7: reverse lookup by meeting id. Used by the onFinal hook to
+   * find the queue row that owns a finished meeting so it can transition
+   * the item to `done` / `failed` and trigger the next `startNext`.
+   *
+   * `meetingId` is keyed on `started_meeting_id`. Migration 007 does NOT
+   * place a UNIQUE constraint on the column (a meeting may be cancelled
+   * and re-started against the same queue item in edge cases), so we
+   * LIMIT 1 and pick the most recently-claimed row by `started_at DESC`.
+   */
+  findByMeetingId(meetingId: string): QueueItem | null {
+    const row = this.database
+      .prepare(
+        `SELECT id, project_id, target_channel_id, order_index, prompt, status,
+                started_meeting_id, started_at, finished_at, last_error, created_at
+         FROM queue_items
+         WHERE started_meeting_id = ?
+         ORDER BY started_at DESC
+         LIMIT 1`,
+      )
+      .get(meetingId) as QueueItemRow | undefined;
+    return row ? rowToItem(row) : null;
+  }
+
+  /**
    * Sets `status` and optionally `started_at`. Used for pending→paused,
    * paused→pending, pending→in_progress (the atomic claim), and
    * recovery in_progress→pending.

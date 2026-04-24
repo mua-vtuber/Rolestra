@@ -59,10 +59,10 @@
     {
       "id": 7,
       "subject": "Task 7: Queue run loop — auto-start next + 재시작 복구 + pause/resume + stream emit",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** QueueService 가 meeting onFinal 직후 `startNext()` 호출 (autonomyMode=queue 인 경우). 앱 재시작 시 `status='in_progress'` 항목을 `pending` 으로 롤백 + `attempts` 유지 (복구). pause/resume 정합성. `stream:queue-updated` emit 완성. 이미 있는 구조 확장.\n\n**Files:** src/main/queue/queue-service.ts + __tests__, src/main/index.ts (recovery hook), src/main/queue/queue-repository.ts (소폭 확장)\n\n**Verify:** `npm run test -- queue-service queue-repository`\n\n```json:metadata\n{\"files\":[\"src/main/queue/queue-service.ts\",\"src/main/queue/queue-repository.ts\",\"src/main/index.ts\"],\"verifyCommand\":\"npm run test -- queue-service\",\"acceptanceCriteria\":[\"queue 모드 onFinal → startNext 호출\",\"재시작 recovery rollback 검증\",\"pause 중 startNext 호출 없음\",\"stream:queue-updated 발사\"]}\n```",
-      "lastUpdated": "2026-04-23T12:00:00.000Z"
+      "lastUpdated": "2026-04-24T19:10:00.000Z"
     },
     {
       "id": 8,

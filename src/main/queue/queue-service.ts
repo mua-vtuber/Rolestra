@@ -114,6 +114,24 @@ export interface AddQueueItemInput {
   targetChannelId?: string | null;
 }
 
+/**
+ * R9-Task7: injected by production wiring so `startNext` can spawn a
+ * meeting for the claimed queue item. The returned `meetingId` is
+ * stored in `queue_items.started_meeting_id` so the onFinal hook can
+ * correlate a meeting end back to the queue row.
+ *
+ * Omitted in R2 tests + standalone CRUD callers — when absent,
+ * `startNext` performs the atomic pending→in_progress flip and emits
+ * the `'changed'` event but does not kick off an orchestrator. This is
+ * the contract tests depend on to cover the queue-state path without
+ * standing up the full meeting service graph.
+ */
+export type QueueMeetingStarter = (input: {
+  projectId: string;
+  prompt: string;
+  queueItemId: string;
+}) => Promise<{ meetingId: string }>;
+
 /** Event payload for `'changed'`: either a project-wide or single-id hint. */
 export type QueueChangedEvent =
   | { projectId: string; id?: undefined }
@@ -149,13 +167,22 @@ export class QueueService extends EventEmitter {
    * standalone operation when no breaker is registered.
    */
   private readonly circuitBreaker: CircuitBreaker | null;
+  /**
+   * R9-Task7: optional meeting spawner called from `startNext`. See
+   * {@link QueueMeetingStarter} for the contract + test fallback.
+   */
+  private readonly meetingStarter: QueueMeetingStarter | null;
 
   constructor(
     private readonly repo: QueueRepository,
-    options: { circuitBreaker?: CircuitBreaker } = {},
+    options: {
+      circuitBreaker?: CircuitBreaker;
+      meetingStarter?: QueueMeetingStarter;
+    } = {},
   ) {
     super();
     this.circuitBreaker = options.circuitBreaker ?? null;
+    this.meetingStarter = options.meetingStarter ?? null;
   }
 
   /**
@@ -342,6 +369,101 @@ export class QueueService extends EventEmitter {
     );
     this.safeEmit(QUEUE_CHANGED_EVENT, { projectId });
     return changes;
+  }
+
+  /**
+   * R9-Task7: queue-level run-state predicate. A project is considered
+   * paused when one or more items still sit at `status='paused'` after
+   * the user toggled the pause control. `startNext` consults this gate
+   * before flipping the next pending item — it is the "don't auto-start
+   * while the user has paused the queue" contract from spec §5.2.
+   *
+   * Derivation-based (no separate flag table) so the semantics match
+   * R2 `pause()` / `resume()` exactly: pause moves pending→paused, so
+   * the predicate returns true afterwards; resume moves them back to
+   * pending and the predicate returns false.
+   *
+   * Edge case: pause() on an empty queue is a no-op (0 rows touched),
+   * which means a subsequent `add` lands as pending and `isPaused`
+   * reports false. That mirrors R2 behaviour — if nothing is paused,
+   * nothing is being held back.
+   */
+  isPaused(projectId: string): boolean {
+    return this.listByProject(projectId).some((i) => i.status === 'paused');
+  }
+
+  /**
+   * R9-Task7: reverse lookup used by the meeting onFinal hook to find
+   * the queue row that owns a just-finished meeting. Returns `null`
+   * when no queue item has its `started_meeting_id` pointing at
+   * `meetingId` — that is the common case when a meeting was started
+   * directly via `channel:start-meeting` rather than the autonomy-queue
+   * loop.
+   */
+  findByMeetingId(meetingId: string): QueueItem | null {
+    return this.repo.findByMeetingId(meetingId);
+  }
+
+  /**
+   * R9-Task7: autonomy-queue run loop advance. Claims the next pending
+   * item (atomic pending→in_progress flip via {@link claimNext}) and,
+   * when a {@link QueueMeetingStarter} is wired, spawns a meeting for
+   * the claimed item + stamps the returned `meetingId` back on the
+   * queue row so the onFinal hook can correlate them.
+   *
+   * Returns:
+   *   - `null` when the project is paused (spec §5.2: paused → no-op).
+   *   - `null` when no pending item exists (empty queue, idle).
+   *   - the claimed + meeting-stamped `QueueItem` otherwise.
+   *
+   * Error surface:
+   *   - A throwing `meetingStarter` flips the claimed row to `failed`
+   *     (with `last_error` carrying the starter's message) before
+   *     re-throwing so the caller can log + move on to the next tick.
+   *     This keeps the queue from wedging on a single broken item.
+   *
+   * Event model:
+   *   - Emits `'changed' {projectId}` exactly once at the end of a
+   *     successful claim so the StreamBridge fans out a full
+   *     `stream:queue-updated` snapshot. The error branch emits the
+   *     same event before re-throwing so the renderer sees the failed
+   *     row.
+   *   - No emit on the paused/empty paths — state did not change.
+   */
+  async startNext(projectId: string): Promise<QueueItem | null> {
+    if (this.isPaused(projectId)) return null;
+
+    const claimed = this.claimNext(projectId);
+    if (!claimed) return null;
+
+    let final: QueueItem = claimed;
+
+    if (this.meetingStarter) {
+      try {
+        const { meetingId } = await this.meetingStarter({
+          projectId,
+          prompt: claimed.prompt,
+          queueItemId: claimed.id,
+        });
+        this.repo.setStartedMeetingId(claimed.id, meetingId);
+        final = { ...claimed, startedMeetingId: meetingId };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        const finishedAt = Date.now();
+        this.repo.finish(
+          claimed.id,
+          'failed',
+          null,
+          `meeting start failed: ${message}`,
+          finishedAt,
+        );
+        this.safeEmit(QUEUE_CHANGED_EVENT, { projectId });
+        throw err;
+      }
+    }
+
+    this.safeEmit(QUEUE_CHANGED_EVENT, { projectId });
+    return final;
   }
 
   /**

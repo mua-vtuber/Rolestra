@@ -317,6 +317,73 @@ describe('StreamBridge — connect()', () => {
     expect(queueItemLookup).not.toHaveBeenCalled();
     expect(received).toHaveLength(0);
   });
+
+  // ── R9-Task7: queueSnapshot path ───────────────────────────────────
+
+  it('emits stream:queue-updated when queueSnapshot is provided (projectId hint)', () => {
+    const queue = new EventEmitter();
+    const queueSnapshot = vi.fn().mockReturnValue({
+      items: [
+        {
+          id: 'q1',
+          projectId: 'p1',
+          targetChannelId: null,
+          orderIndex: 1000,
+          prompt: 'run',
+          status: 'pending',
+          startedMeetingId: null,
+          startedAt: null,
+          finishedAt: null,
+          lastError: null,
+          createdAt: 1,
+        },
+      ],
+      paused: false,
+    });
+
+    bridge.connect({ queue, queueSnapshot });
+    queue.emit('changed', { projectId: 'p1' });
+
+    expect(queueSnapshot).toHaveBeenCalledWith('p1');
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('stream:queue-updated');
+    expect(received[0].payload).toMatchObject({
+      projectId: 'p1',
+      paused: false,
+    });
+  });
+
+  it('resolves {id} hint via queueItemLookup → projectId before snapshot', () => {
+    const queue = new EventEmitter();
+    const queueItemLookup = vi.fn().mockReturnValue({
+      id: 'q1',
+      projectId: 'p1',
+    });
+    const queueSnapshot = vi.fn().mockReturnValue({
+      items: [],
+      paused: true,
+    });
+
+    bridge.connect({ queue, queueItemLookup, queueSnapshot });
+    queue.emit('changed', { id: 'q1' });
+
+    expect(queueItemLookup).toHaveBeenCalledWith('q1');
+    expect(queueSnapshot).toHaveBeenCalledWith('p1');
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('stream:queue-updated');
+    expect((received[0].payload as { paused: boolean }).paused).toBe(true);
+  });
+
+  it('ignores hint when snapshot is set but neither projectId nor lookup resolves', () => {
+    const queue = new EventEmitter();
+    const queueSnapshot = vi.fn();
+    bridge.connect({ queue, queueSnapshot });
+
+    queue.emit('changed', { id: 'unknown' });
+
+    expect(queueSnapshot).not.toHaveBeenCalled();
+    expect(received).toHaveLength(0);
+  });
 });
 
 describe('StreamBridge — direct emit helpers', () => {

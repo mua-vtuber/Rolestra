@@ -112,6 +112,25 @@ export interface MeetingOrchestratorDeps {
    * stalling the suite.
    */
   consensusDecisionTimeoutMs?: number;
+  /**
+   * R9-Task7: optional post-finalise callback. Invoked exactly once per
+   * run, immediately after {@link MeetingService.finish} settles the
+   * meeting row (accepted / rejected / aborted). The autonomy-queue
+   * loop uses this to drive `QueueService.complete(item, ...)` +
+   * `startNext(projectId)` when the owning project is in `queue` mode.
+   *
+   * Errors are logged and swallowed — the meeting is already final
+   * before the callback runs, so a broken queue hand-off must not
+   * resurface as a meeting error. The callback runs asynchronously
+   * (fire-and-forget) so the finalise path does not block on a slow
+   * queue-side side-effect.
+   */
+  onFinalized?: (info: {
+    meetingId: string;
+    projectId: string;
+    channelId: string;
+    outcome: 'accepted' | 'rejected' | 'aborted';
+  }) => void | Promise<void>;
 }
 
 export class MeetingOrchestrator {
@@ -128,6 +147,7 @@ export class MeetingOrchestrator {
   private readonly t?: MinutesTranslator;
   private readonly interTurnDelayMs: number;
   private readonly consensusDecisionTimeoutMs: number;
+  private readonly onFinalized?: MeetingOrchestratorDeps['onFinalized'];
   /**
    * Per-run listener/timeout pair for the consensus approval gate. Kept so
    * `stop()` can tear down the wait without leaving an open listener
@@ -160,6 +180,7 @@ export class MeetingOrchestrator {
       deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
     this.consensusDecisionTimeoutMs =
       deps.consensusDecisionTimeoutMs ?? CONSENSUS_DECISION_TIMEOUT_MS;
+    this.onFinalized = deps.onFinalized;
   }
 
   get isRunning(): boolean {
@@ -531,6 +552,31 @@ export class MeetingOrchestrator {
         '[MeetingOrchestrator] meeting finish failed',
         errorPayload(err),
       );
+    }
+
+    // R9-Task7: fire the post-finalise hook (if any). Fire-and-forget —
+    // the queue hand-off must not resurface as a meeting error.
+    const hook = this.onFinalized;
+    if (hook) {
+      const info = {
+        meetingId: this.session.meetingId,
+        projectId: this.session.projectId,
+        channelId: this.session.channelId,
+        outcome,
+      };
+      try {
+        void Promise.resolve(hook(info)).catch((err) => {
+          console.warn(
+            '[MeetingOrchestrator] onFinalized callback threw',
+            errorPayload(err),
+          );
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] onFinalized sync threw',
+          errorPayload(err),
+        );
+      }
     }
   }
 

@@ -40,6 +40,7 @@
  */
 
 import type { EventEmitter } from 'node:events';
+import type { QueueItem } from '../../shared/queue-types';
 import type {
   StreamEvent,
   StreamEventType,
@@ -135,6 +136,22 @@ export interface StreamBridgeServices {
    * the `id` hint; project-wide hints are skipped.
    */
   queueItemLookup?: (id: string) => { projectId: string; id: string } | null;
+  /**
+   * R9-Task7: full-snapshot lookup. When provided, `changed` events are
+   * fanned out as `stream:queue-updated` (project-level list + paused
+   * flag) instead of the per-item `stream:queue-progress` fall-back.
+   * The renderer's `useQueue` hook subscribes to `stream:queue-updated`
+   * only, so the snapshot path is the R9 authoritative surface.
+   *
+   * When both `queueItemLookup` and `queueSnapshot` are provided, the
+   * snapshot path wins. The `queueItemLookup` is still used to resolve
+   * the `{id}`-form hint to its owning `projectId` so single-row events
+   * (complete / in_progress cancel) reach the right snapshot.
+   */
+  queueSnapshot?: (projectId: string) => {
+    items: QueueItem[];
+    paused: boolean;
+  };
 }
 
 export class StreamBridge {
@@ -231,12 +248,38 @@ export class StreamBridge {
 
     if (services.queue) {
       services.queue.on('changed', (hint: unknown) => {
+        const h = (hint ?? {}) as { id?: string; projectId?: string };
+
+        // R9-Task7 authoritative path: emit a full `stream:queue-updated`
+        // snapshot so the renderer reconciles items + paused state in
+        // one hop. Resolve projectId from either hint form — for the
+        // `{id}`-only form we still need `queueItemLookup` as the id →
+        // projectId indirection, because the snapshot query is
+        // project-scoped.
+        if (services.queueSnapshot) {
+          let projectId: string | null = h.projectId ?? null;
+          if (!projectId && h.id) {
+            const resolved = services.queueItemLookup?.(h.id);
+            projectId = resolved?.projectId ?? null;
+          }
+          if (!projectId) return;
+          const snapshot = services.queueSnapshot(projectId);
+          this.emit({
+            type: 'stream:queue-updated',
+            payload: {
+              projectId,
+              items: snapshot.items,
+              paused: snapshot.paused,
+            } as StreamQueueUpdatedPayload,
+          });
+          return;
+        }
+
+        // Legacy R2 path — per-item `stream:queue-progress`. Retained
+        // so existing smoke-wire fixtures (r2-integration-smoke) keep
+        // working while callers migrate to the snapshot path.
         const lookup = services.queueItemLookup;
         if (!lookup) return;
-        const h = hint as { id?: string; projectId?: string };
-        // Project-wide hints carry no single item — let the renderer
-        // ask for the full list on its next tick. Only the
-        // single-item case becomes a push.
         if (!h?.id) return;
         const item = lookup(h.id);
         if (!item) return;
