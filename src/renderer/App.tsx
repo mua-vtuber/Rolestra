@@ -7,7 +7,9 @@ import type { NavRailItem, ProjectRailProject } from './components/shell';
 import { DevThemeSwitcher } from './components/shell/theme-switcher';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { MessengerPage } from './features/messenger/MessengerPage';
+import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
+import { QueuePanel } from './features/projects/QueuePanel';
 import { SettingsView } from './features/settings/SettingsView';
 import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
@@ -65,14 +67,14 @@ export function App() {
     [projects],
   );
 
-  // Resolve the active project's display name from the already-loaded
+  // Resolve the active project (name + autonomyMode) from the already-loaded
   // `projects` array. We never trigger a second IPC to fetch the full
   // object — `useActiveProject` stores only the id on purpose.
-  const activeProjectName: string | null = useMemo(() => {
+  const activeProject: Project | null = useMemo(() => {
     if (!activeProjectId) return null;
-    const found = projects.find((p) => p.id === activeProjectId);
-    return found ? found.name : null;
+    return projects.find((p) => p.id === activeProjectId) ?? null;
   }, [activeProjectId, projects]);
+  const activeProjectName: string | null = activeProject?.name ?? null;
 
   const handleSelectProject = useCallback(
     (id: string): void => {
@@ -125,10 +127,29 @@ export function App() {
         <ShellTopBar
           title={t('shell.topbar.title', 'Office')}
           activeProjectName={activeProjectName}
-          rightSlot={import.meta.env.DEV ? <DevThemeSwitcher /> : undefined}
+          rightSlot={
+            <div
+              data-testid="shell-topbar-right-slot"
+              className="flex items-center gap-3"
+            >
+              {activeProject !== null && (
+                <AutonomyModeToggle
+                  projectId={activeProject.id}
+                  currentMode={activeProject.autonomyMode}
+                />
+              )}
+              {import.meta.env.DEV && <DevThemeSwitcher />}
+            </div>
+          }
         />
       }
     >
+      {activeProject !== null && (
+        <QueuePanel
+          projectId={activeProject.id}
+          className="mx-4 mt-3"
+        />
+      )}
       {view === 'messenger' ? (
         <MessengerPage />
       ) : view === 'settings' ? (
