@@ -41,6 +41,8 @@ import { setApprovalServiceAccessor } from './ipc/handlers/approval-handler';
 import { NotificationRepository } from './notifications/notification-repository';
 import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
+import { setNotificationServiceAccessor } from './ipc/handlers/notification-handler';
+import { setQueueServiceAccessor } from './ipc/handlers/queue-handler';
 import { CircuitBreaker } from './queue/circuit-breaker';
 import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
 import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
@@ -278,6 +280,22 @@ app.whenReady().then(async () => {
       new NotificationRepository(db),
       new ElectronNotifierAdapter(),
     );
+
+    // R9-Task9: production wire for `notification:*` IPC. Without this
+    // accessor the 3 notification handlers throw
+    // `'notification handler: service not initialized'` on every invoke.
+    // Also seed the 6 default pref rows so first-boot callers of
+    // `notification:get-prefs` see a complete map (the repo's read-repair
+    // would insert them anyway — we seed eagerly so the first render is
+    // not observing a half-populated table through a race).
+    setNotificationServiceAccessor(() => notificationService);
+    const seeded = notificationService.seedDefaultPrefsIfEmpty();
+    if (seeded > 0) {
+      console.info(
+        `[notification] seeded ${seeded} default pref row(s) on first boot`,
+      );
+    }
+
     const circuitBreaker = new CircuitBreaker();
 
     // R9-Task6: register the breaker so CLI spawn sites (CliProcessManager
@@ -300,6 +318,9 @@ app.whenReady().then(async () => {
     const queueService = new QueueService(new QueueRepository(db), {
       circuitBreaker,
     });
+    // R9-Task9: production wire for `queue:*` IPC. 7 queue handlers all
+    // throw `'queue handler: service not initialized'` until this runs.
+    setQueueServiceAccessor(() => queueService);
     // Spec §5.2 recovery rule — revert any `in_progress` rows left by a
     // crash mid-run back to `pending` so the next claim picks them up.
     // No-op count on a clean DB.

@@ -189,6 +189,17 @@ export class NotificationService extends EventEmitter {
   }
 
   /**
+   * Boot-time helper wired from `main/index.ts` (R9-Task9). Inserts a
+   * default `{ enabled: true, soundEnabled: true }` row for every
+   * {@link NotificationKind} that is missing from `notification_prefs`.
+   * Returns the number of rows actually inserted — 0 on subsequent
+   * boots, 6 on first boot. Idempotent; safe to call on every start.
+   */
+  seedDefaultPrefsIfEmpty(): number {
+    return this.repo.seedDefaultPrefsIfEmpty();
+  }
+
+  /**
    * Convenience: fire a diagnostic notification for the given kind with a
    * stable title/body so a user in the settings UI can confirm OS-level
    * delivery without waiting for a real event. Always passes `force=true`

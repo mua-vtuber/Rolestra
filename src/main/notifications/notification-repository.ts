@@ -92,6 +92,33 @@ export class NotificationRepository {
   constructor(private readonly db: Database.Database) {}
 
   /**
+   * Boot-time seed: inserts a default pref row for every kind that is
+   * missing from `notification_prefs`, and returns the number of rows
+   * inserted. Used by {@link NotificationService.seedDefaultPrefsIfEmpty}
+   * so the R9 production wire logs a "seeded N kinds" count; callers that
+   * just need a complete map should use {@link getPrefs} (which also
+   * read-repairs but fetches afterwards).
+   *
+   * Uses `INSERT OR IGNORE` so repeat calls are idempotent and rows with
+   * user-modified `enabled`/`sound_enabled` values are preserved.
+   */
+  seedDefaultPrefsIfEmpty(): number {
+    const insert = this.db.prepare(
+      `INSERT OR IGNORE INTO notification_prefs (key, enabled, sound_enabled)
+       VALUES (?, 1, 1)`,
+    );
+    let inserted = 0;
+    const apply = this.db.transaction(() => {
+      for (const kind of NOTIFICATION_KINDS) {
+        const result = insert.run(kind);
+        inserted += Number(result.changes);
+      }
+    });
+    apply();
+    return inserted;
+  }
+
+  /**
    * Returns a complete {@link NotificationPrefs} map. Any kind that is
    * missing from `notification_prefs` (first-boot / partial state) is
    * inserted with the default pref `{ enabled: true, soundEnabled: true }`
