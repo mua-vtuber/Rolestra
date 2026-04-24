@@ -206,6 +206,25 @@
       "success": "Connected"
     }
   },
+  "message": {
+    "search": {
+      "button": "🔍 Search",
+      "close": "Close",
+      "dmLabel": "DM",
+      "empty": "No results",
+      "error": "Search failed: {{msg}}",
+      "filter": {
+        "currentChannel": "Current channel: #{{name}}",
+        "currentProject": "Current project: {{name}}",
+        "noScope": "No active project"
+      },
+      "loading": "Searching…",
+      "open": "Open message search (Cmd/Ctrl+K)",
+      "placeholder": "Enter a query (FTS5 syntax supported)",
+      "shortcutHint": "Press Cmd/Ctrl+K to open",
+      "title": "Message search"
+    }
+  },
   "messenger": {
     "approval": {
       "allow": "Allow",

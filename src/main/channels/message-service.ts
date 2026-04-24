@@ -57,6 +57,7 @@ import type {
   MessageSearchResult,
   RecentMessage,
 } from '../../shared/message-types';
+import type { MessageSearchHit } from '../../shared/message-search-types';
 import { MessageRepository } from './message-repository';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -360,6 +361,28 @@ export class MessageService extends EventEmitter {
       if (isFtsQueryError(err)) {
         const msg =
           err instanceof Error ? err.message : String(err);
+        throw new InvalidQueryError(query, msg);
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * R10-Task2: `search()` 와 동일한 scope/limit 규칙을 공유하되, UI 가
+   * 한 번에 렌더할 수 있도록 FTS5 snippet + channel/project 이름을 포함한
+   * `MessageSearchHit[]` 를 반환한다. `MessageSearchView` 가 이 메서드를
+   * 호출하고, `search()` 는 내부 로직(예: SSM 가 "이전 메시지 찾기" 등) 이
+   * 유지하는 경량 경로로 남긴다.
+   */
+  searchWithContext(query: string, opts: SearchInput = {}): MessageSearchHit[] {
+    if (opts.channelId !== undefined && opts.projectId !== undefined) {
+      throw new SearchScopeError();
+    }
+    try {
+      return this.repo.searchWithContext(query, opts);
+    } catch (err) {
+      if (isFtsQueryError(err)) {
+        const msg = err instanceof Error ? err.message : String(err);
         throw new InvalidQueryError(query, msg);
       }
       throw err;

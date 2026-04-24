@@ -43,6 +43,10 @@ import type {
   MessageSearchResult,
   RecentMessage,
 } from '../../shared/message-types';
+import type { MessageSearchHit } from '../../shared/message-search-types';
+import {
+  MESSAGE_SEARCH_SNIPPET_CONTEXT,
+} from '../../shared/message-search-types';
 import { RECENT_MESSAGE_EXCERPT_LEN } from '../../shared/constants';
 
 /** Snake-case row shape as returned by better-sqlite3. */
@@ -87,6 +91,22 @@ function rowToMessage(row: MessageRow): Message {
 
 function rowToSearchResult(row: MessageSearchRow): MessageSearchResult {
   return { ...rowToMessage(row), rank: row.rank };
+}
+
+/** Row shape for `searchWithContext` — adds snippet + channel/project names. */
+interface MessageSearchHitRow extends MessageSearchRow {
+  snippet: string;
+  channel_name: string;
+  project_name: string | null;
+}
+
+function rowToSearchHit(row: MessageSearchHitRow): MessageSearchHit {
+  return {
+    ...rowToSearchResult(row),
+    snippet: row.snippet,
+    channelName: row.channel_name,
+    projectName: row.project_name,
+  };
 }
 
 /** Maximum rows either list/search will ever return. Matches the spec's UX cap. */
@@ -274,6 +294,83 @@ export class MessageRepository {
       )
       .all(query, limit) as MessageSearchRow[];
     return rows.map(rowToSearchResult);
+  }
+
+  /**
+   * R10-Task2: `search()` 확장판 — JOIN 으로 channel 이름 / project 이름을
+   * 가져오고, FTS5 `snippet()` 로 `<mark>` 가 삽입된 짧은 문맥을 함께 반환한다.
+   *
+   * `snippet()` 인수 요약:
+   *   - column_idx=0 → `messages_fts.content` 단일 컬럼 인덱스.
+   *   - start_tag=`<mark>` / end_tag=`</mark>` → UI 가 CSS 로 하이라이트.
+   *   - ellipsis=`…` → 잘린 경우 양 끝 표시.
+   *   - tokens=MESSAGE_SEARCH_SNIPPET_CONTEXT → 매치 양쪽 토큰 수.
+   *
+   * LEFT JOIN projects 를 쓰는 이유: DM 채널(project_id IS NULL)도 검색 결과에
+   * 섞일 수 있다. DM 의 경우 project_name=null 이 내려가고 UI 가 "DM" 라벨을
+   * 대신 보인다.
+   */
+  searchWithContext(
+    query: string,
+    opts: SearchOptions = {},
+  ): MessageSearchHit[] {
+    const limit = clampLimit(
+      opts.limit,
+      MESSAGE_SEARCH_DEFAULT_LIMIT,
+      MESSAGE_SEARCH_MAX_LIMIT,
+    );
+    const snippetCtx = MESSAGE_SEARCH_SNIPPET_CONTEXT;
+
+    const projection = `
+      SELECT m.id, m.channel_id, m.meeting_id, m.author_id, m.author_kind,
+             m.role, m.content, m.meta_json, m.created_at,
+             bm25(messages_fts) AS rank,
+             snippet(messages_fts, 0, '<mark>', '</mark>', '…', ${snippetCtx}) AS snippet,
+             c.name AS channel_name,
+             p.name AS project_name
+    `;
+    const joins = `
+      FROM messages m
+      JOIN messages_fts ON m.rowid = messages_fts.rowid
+      JOIN channels c ON m.channel_id = c.id
+      LEFT JOIN projects p ON c.project_id = p.id
+    `;
+
+    if (opts.channelId !== undefined) {
+      const rows = this.db
+        .prepare(
+          `${projection} ${joins}
+           WHERE messages_fts MATCH ?
+             AND m.channel_id = ?
+           ORDER BY rank ASC
+           LIMIT ?`,
+        )
+        .all(query, opts.channelId, limit) as MessageSearchHitRow[];
+      return rows.map(rowToSearchHit);
+    }
+
+    if (opts.projectId !== undefined) {
+      const rows = this.db
+        .prepare(
+          `${projection} ${joins}
+           WHERE messages_fts MATCH ?
+             AND c.project_id = ?
+           ORDER BY rank ASC
+           LIMIT ?`,
+        )
+        .all(query, opts.projectId, limit) as MessageSearchHitRow[];
+      return rows.map(rowToSearchHit);
+    }
+
+    const rows = this.db
+      .prepare(
+        `${projection} ${joins}
+         WHERE messages_fts MATCH ?
+         ORDER BY rank ASC
+         LIMIT ?`,
+      )
+      .all(query, limit) as MessageSearchHitRow[];
+    return rows.map(rowToSearchHit);
   }
 
   /**

@@ -625,6 +625,117 @@ describe('MessageService', () => {
     });
   });
 
+  // ── searchWithContext (R10-Task2) ─────────────────────────────────
+
+  describe('searchWithContext', () => {
+    it('returns snippet + channelName + projectName for a project-scope hit', async () => {
+      const project = await projectService.create({
+        name: 'Alpha',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const channel = channelService.create({
+        projectId: project.id,
+        name: 'general',
+      });
+      messageService.append({
+        channelId: channel.id,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: 'find me pineapple easily',
+      });
+
+      const hits = messageService.searchWithContext('pineapple', {
+        projectId: project.id,
+      });
+      expect(hits).toHaveLength(1);
+      expect(hits[0]!.channelName).toBe('general');
+      expect(hits[0]!.projectName).toBe('Alpha');
+      expect(hits[0]!.snippet).toContain('<mark>pineapple</mark>');
+      expect(hits[0]!.rank).toBeLessThan(0);
+    });
+
+    it('returns projectName=null for DM (channel with project_id IS NULL)', async () => {
+      seedProvider(db, 'prov-dm');
+      const dm = channelService.createDm('prov-dm');
+      messageService.append({
+        channelId: dm.id,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: 'dm only raspberry content',
+      });
+
+      const hits = messageService.searchWithContext('raspberry', {
+        channelId: dm.id,
+      });
+      expect(hits).toHaveLength(1);
+      expect(hits[0]!.projectName).toBeNull();
+      expect(hits[0]!.channelName).toBe(dm.name);
+    });
+
+    it('propagates SearchScopeError when both scope options given', async () => {
+      const { channelId, projectId } = await makeChannel();
+      expect(() =>
+        messageService.searchWithContext('x', { channelId, projectId }),
+      ).toThrow(SearchScopeError);
+    });
+
+    it('wraps malformed FTS5 query as InvalidQueryError (same as search)', async () => {
+      const { channelId } = await makeChannel();
+      messageService.append({
+        channelId,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: 'indexable content',
+      });
+      expect(() =>
+        messageService.searchWithContext('"no close quote', { channelId }),
+      ).toThrow(InvalidQueryError);
+    });
+
+    it('respects the limit clamp', async () => {
+      const { channelId } = await makeChannel();
+      for (let i = 0; i < 4; i += 1) {
+        messageService.append({
+          channelId,
+          authorId: 'user',
+          authorKind: 'user',
+          role: 'user',
+          content: `match${i} match${i}`,
+        });
+      }
+      const hits = messageService.searchWithContext(
+        'match0 OR match1 OR match2 OR match3',
+        { channelId, limit: 2 },
+      );
+      expect(hits).toHaveLength(2);
+    });
+
+    it('orders results by bm25 ascending like search()', async () => {
+      const { channelId } = await makeChannel();
+      const denser = messageService.append({
+        channelId,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: 'avocado avocado avocado',
+      });
+      messageService.append({
+        channelId,
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: 'just one avocado here',
+      });
+      const hits = messageService.searchWithContext('avocado', { channelId });
+      expect(hits[0]!.id).toBe(denser.id);
+      expect(hits[0]!.rank).toBeLessThanOrEqual(hits[1]!.rank);
+    });
+  });
+
   // ── listRecent (R4-Task7 RecentWidget) ────────────────────────────
 
   describe('listRecent', () => {

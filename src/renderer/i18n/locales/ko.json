@@ -206,6 +206,25 @@
       "success": "연결 성공"
     }
   },
+  "message": {
+    "search": {
+      "button": "🔍 검색",
+      "close": "닫기",
+      "dmLabel": "DM",
+      "empty": "검색 결과 없음",
+      "error": "검색 실패: {{msg}}",
+      "filter": {
+        "currentChannel": "현재 채널: #{{name}}",
+        "currentProject": "현재 프로젝트: {{name}}",
+        "noScope": "활성 프로젝트 없음"
+      },
+      "loading": "검색 중…",
+      "open": "메시지 검색 열기 (Cmd/Ctrl+K)",
+      "placeholder": "검색어를 입력하세요 (FTS5 syntax 지원)",
+      "shortcutHint": "Cmd/Ctrl+K 로 열기",
+      "title": "메시지 검색"
+    }
+  },
   "messenger": {
     "approval": {
       "allow": "허가",

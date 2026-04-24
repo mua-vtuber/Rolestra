@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import './i18n';
@@ -10,10 +10,12 @@ import { MessengerPage } from './features/messenger/MessengerPage';
 import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { QueuePanel } from './features/projects/QueuePanel';
+import { MessageSearchView } from './features/search/MessageSearchView';
 import { SettingsView } from './features/settings/SettingsView';
 import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
 import { useAppViewStore, type AppView } from './stores/app-view-store';
+import { useActiveChannelStore } from './stores/active-channel-store';
 import type { Project } from '../shared/project-types';
 
 /**
@@ -47,8 +49,15 @@ export function App() {
   const { projects } = useProjects();
   const { activeProjectId, setActive } = useActiveProject();
   const [modalOpen, setModalOpen] = useState<boolean>(false);
+  const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const view = useAppViewStore((s) => s.view);
   const setView = useAppViewStore((s) => s.setView);
+  const activeChannelMap = useActiveChannelStore((s) => s.channelIdByProject);
+  const setActiveChannelIdStore = useActiveChannelStore(
+    (s) => s.setActiveChannelId,
+  );
+  const activeChannelId: string | null =
+    activeProjectId === null ? null : activeChannelMap[activeProjectId] ?? null;
 
   const handleNavSelect = useCallback(
     (id: string): void => {
@@ -94,6 +103,36 @@ export function App() {
     setModalOpen(true);
   }, []);
 
+  // R10-Task2: Cmd/Ctrl+K 로 검색 모달 열기. activeProjectId 가 없으면
+  // (대시보드 비어있는 상태) 단축키는 여전히 모달을 열되, 입력이 disabled
+  // 상태로 렌더된다 — 사용자가 "왜 작동 안 하지?"로 혼동하지 않도록
+  // scope label 이 "활성 프로젝트 없음" 을 표시.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const handleSearchNavigate = useCallback(
+    (channelId: string, _messageId: string): void => {
+      // 채널 전환 후 messenger 뷰로. messageId deep-link 는 R11+ (scrollToMessage).
+      if (activeProjectId !== null) {
+        setActiveChannelIdStore(activeProjectId, channelId);
+      }
+      setView('messenger');
+    },
+    [activeProjectId, setActiveChannelIdStore, setView],
+  );
+
+  // activeChannel 이름은 messenger 내부에서 가져오므로 여기서는 id 만 넘김.
+  const activeChannelName: string | null = null;
+
   const handleProjectCreated = useCallback(
     (project: Project): void => {
       // Drop the user straight into the freshly-created project so the
@@ -132,6 +171,17 @@ export function App() {
               data-testid="shell-topbar-right-slot"
               className="flex items-center gap-3"
             >
+              <button
+                type="button"
+                data-testid="shell-topbar-search"
+                onClick={() => setSearchOpen(true)}
+                aria-label={t('message.search.open', {
+                  defaultValue: '메시지 검색 열기 (Cmd/Ctrl+K)',
+                })}
+                className="text-xs text-fg-muted hover:text-fg focus:outline-none focus:ring-1 focus:ring-brand px-2 py-1 rounded-panel border border-panel-border"
+              >
+                {t('message.search.button', { defaultValue: '🔍 검색' })}
+              </button>
               {activeProject !== null && (
                 <AutonomyModeToggle
                   projectId={activeProject.id}
@@ -161,6 +211,15 @@ export function App() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         onCreated={handleProjectCreated}
+      />
+      <MessageSearchView
+        open={searchOpen}
+        onOpenChange={setSearchOpen}
+        activeProjectId={activeProjectId}
+        activeChannelId={activeChannelId}
+        activeProjectName={activeProjectName}
+        activeChannelName={activeChannelName}
+        onNavigate={handleSearchNavigate}
       />
     </Shell>
   );

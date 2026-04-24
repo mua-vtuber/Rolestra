@@ -27,7 +27,7 @@ import type {
   PermissionMode,
 } from './project-types';
 import type { Channel, ChannelKind } from './channel-types';
-import type { Message, MessageSearchResult, RecentMessage } from './message-types';
+import type { Message, RecentMessage } from './message-types';
 import type { Meeting, ActiveMeetingSummary } from './meeting-types';
 import type {
   ApprovalItem,
@@ -53,6 +53,7 @@ import type {
   PermissionFlagInput,
   PermissionFlagOutput,
 } from './permission-flag-types';
+import type { MessageSearchResponse } from './message-search-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -615,7 +616,7 @@ export type IpcChannelMap = {
   };
   'message:search': {
     request: MessageSearchInput;
-    response: { results: MessageSearchResult[] };
+    response: MessageSearchResponse;
   };
   'message:list-recent': {
     request: { limit?: number } | undefined;
