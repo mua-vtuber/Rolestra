@@ -75,10 +75,10 @@
     {
       "id": 9,
       "subject": "Task 9: Production wiring — setNotificationServiceAccessor + setQueueServiceAccessor + streamBridge.connect({queue}) + prefs seed",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6, 7, 8],
       "description": "**Goal:** R8 Task 8 패턴. main/index.ts 에서 `setNotificationServiceAccessor(() => notificationService)` + `setQueueServiceAccessor(() => queueService)` 호출. `streamBridge.connect({ ..., queue: queueService })` (현재 주석 `queue connect in R9`). NotificationPrefsRepository 기본값 4 kind × display/sound=true 로 seed (최초 부팅). notification-handler / queue-handler production 에서 throw 0.\n\n**Files:** src/main/index.ts, src/main/streams/stream-bridge.ts, src/main/notifications/notification-repository.ts (seed), src/main/__tests__/r9-boot.test.ts 또는 r2-integration-smoke 확장\n\n**Verify:** `npm run test -- r9-boot handlers-v3 r2-integration-smoke`\n\n```json:metadata\n{\"files\":[\"src/main/index.ts\",\"src/main/streams/stream-bridge.ts\",\"src/main/notifications/notification-repository.ts\"],\"verifyCommand\":\"npm run test -- r9-boot\",\"acceptanceCriteria\":[\"notification:get-prefs production throw 0\",\"queue:list production throw 0\",\"streamBridge queue 연결 확인\",\"prefs 초기 4 kind seed\"]}\n```",
-      "lastUpdated": "2026-04-23T12:00:00.000Z"
+      "lastUpdated": "2026-04-24T11:15:00.000Z"
     },
     {
       "id": 10,
