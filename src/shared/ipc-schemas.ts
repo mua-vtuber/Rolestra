@@ -400,6 +400,56 @@ export const dashboardGetKpisSchema = z.object({
   projectId: z.string().min(1).max(128).nullable().optional(),
 });
 
+// ── R10 신규 zod schemas ──────────────────────────────────────────
+
+/**
+ * R10-Task3: `dm:create` — providerId 를 받아 1:1 DM 채널을 연다.
+ * UNIQUE 위반(이미 DM 이 있는 provider) 은 service 계층에서 throw.
+ */
+export const dmCreateSchema = z.object({
+  providerId: z.string().min(1).max(128),
+});
+
+/** R10-Task3: `dm:list` 는 입력이 없다. */
+export const dmListSchema = z.undefined();
+
+/** R10-Task5: `permission:dry-run-flags` 빌더 dry-run 호출 스키마. */
+export const providerTypeSchema = z.enum([
+  'claude_api',
+  'claude_cli',
+  'codex_api',
+  'codex_cli',
+  'gemini_api',
+  'gemini_cli',
+  'openai_api',
+  'mock',
+]);
+
+export const permissionDryRunFlagsSchema = z
+  .object({
+    providerType: providerTypeSchema,
+    permissionMode: permissionModeSchema,
+    projectKind: projectKindSchema,
+    dangerousAutonomyOptIn: z.boolean(),
+  })
+  .refine(
+    (v) => !(v.projectKind === 'external' && v.permissionMode === 'auto'),
+    {
+      message: 'external + auto is forbidden per spec §7.3',
+      path: ['permissionMode'],
+    },
+  );
+
+/**
+ * R10-Task11: `meeting:llm-summarize` — providerId 를 생략하면
+ * service 가 summarize capability true 인 첫 provider 로 fallback chain
+ * (Decision D7).
+ */
+export const meetingLlmSummarizeSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  providerId: z.string().min(1).max(128).optional(),
+});
+
 /** Channel-keyed map of v3 schemas for router/handler wiring. */
 export const v3ChannelSchemas = {
   'arena-root:set': arenaRootSetSchema,
@@ -434,6 +484,11 @@ export const v3ChannelSchemas = {
   'notification:get-prefs': notificationGetPrefsSchema,
   'notification:update-prefs': notificationUpdatePrefsSchema,
   'notification:test': notificationTestSchema,
+  // ── R10 신규 채널 ──────────────────────────────────────────────
+  'dm:list': dmListSchema,
+  'dm:create': dmCreateSchema,
+  'permission:dry-run-flags': permissionDryRunFlagsSchema,
+  'meeting:llm-summarize': meetingLlmSummarizeSchema,
 } as const;
 
 export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;

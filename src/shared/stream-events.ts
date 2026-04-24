@@ -24,7 +24,7 @@ import type { Message } from './message-types';
 import type { ApprovalItem, ApprovalDecision } from './approval-types';
 import type { QueueItem } from './queue-types';
 import type { Project, AutonomyMode } from './project-types';
-import type { WorkStatus } from './member-profile-types';
+import type { MemberView, WorkStatus } from './member-profile-types';
 import type { NotificationKind, NotificationPrefs } from './notification-types';
 import type { MeetingOutcome } from './meeting-types';
 
@@ -32,9 +32,31 @@ export interface StreamChannelMessagePayload {
   message: Message;
 }
 
-export interface StreamMemberStatusPayload {
+/**
+ * R10-Task1: member 의 출근 상태 또는 프로필 메타가 바뀔 때 renderer 가
+ * 전체 목록을 다시 가져오지 않고도 reducer 로 반영할 수 있도록 `member`
+ * 필드에 최신 `MemberView` 를 통째로 싣는다.
+ *
+ * R8/R9 에서 `{providerId, status}` 만 담던 `stream:member-status` 를
+ * R10 에서 `stream:member-status-changed` 로 이름을 맞추고 payload 를
+ * `MemberView` 수준으로 확장(Decision D9 — R8 mutation-후-invalidation
+ * 패턴과 공존, stream 은 추가 layer 로만 작동).
+ *
+ * `status` 는 {@link MemberView.workStatus} 와 동일한 값이지만 "이 이벤트의
+ * 트리거가 status 변화냐 프로필 편집이냐"를 renderer 가 구분할 수 있게
+ * `cause` 필드를 같이 싣는다.
+ */
+export interface StreamMemberStatusChangedPayload {
   providerId: string;
+  member: MemberView;
+  /** 편의성 shortcut — `member.workStatus` 와 동일. */
   status: WorkStatus;
+  /**
+   * - `'status'`  : 출근 상태(online/connecting/offline-*) 가 바뀜.
+   * - `'profile'` : 이름/아바타/역할/성격 등 구조화 필드가 바뀜.
+   * - `'warmup'`  : MemberWarmupService 의 backoff retry 결과 반영.
+   */
+  cause: 'status' | 'profile' | 'warmup';
 }
 
 export interface StreamApprovalCreatedPayload {
@@ -192,7 +214,10 @@ export interface StreamAutonomyModeChangedPayload {
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
-  | { type: 'stream:member-status'; payload: StreamMemberStatusPayload }
+  | {
+      type: 'stream:member-status-changed';
+      payload: StreamMemberStatusChangedPayload;
+    }
   | { type: 'stream:approval-created'; payload: StreamApprovalCreatedPayload }
   | { type: 'stream:approval-decided'; payload: StreamApprovalDecidedPayload }
   | { type: 'stream:project-updated'; payload: StreamProjectUpdatedPayload }

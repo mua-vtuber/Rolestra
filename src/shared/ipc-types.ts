@@ -48,6 +48,11 @@ import type {
 } from './notification-types';
 import type { ArenaRootStatus } from './arena-root-types';
 import type { KpiSnapshot, DashboardGetKpisInput } from './dashboard-types';
+import type { DmCreateRequest, DmListResponse } from './dm-types';
+import type {
+  PermissionFlagInput,
+  PermissionFlagOutput,
+} from './permission-flag-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -625,6 +630,51 @@ export type IpcChannelMap = {
   'meeting:list-active': {
     request: { limit?: number } | undefined;
     response: { meetings: ActiveMeetingSummary[] };
+  };
+  /**
+   * R10-Task11: LLM 1단락 회의록 요약. `providerId` 를 명시하면 해당 provider
+   * 의 summarize capability 로 실행, 생략 시 `summarize: true` 인 첫 provider
+   * fallback chain(Decision D7). provider 가 없거나 호출이 throw 하면
+   * `{ summary: null, providerUsed: null, reason }` 로 응답.
+   */
+  'meeting:llm-summarize': {
+    request: { meetingId: string; providerId?: string };
+    response: {
+      summary: string | null;
+      providerUsed: string | null;
+      reason: 'ok' | 'no_provider' | 'provider_error' | 'disabled';
+    };
+  };
+
+  // ── v3: DM (R10-Task1) ──────────────────────────────────────────
+  /**
+   * R10-Task3: 사용자↔AI 1:1 DM 채널 목록. 아직 DM 이 없는 provider 도
+   * `channel=null, exists=false` 로 포함해 renderer 에서 "새 DM 생성" 모달이
+   * 비활성 여부를 한 번의 응답으로 결정할 수 있게 한다.
+   */
+  'dm:list': {
+    request: undefined;
+    response: DmListResponse;
+  };
+  /**
+   * R10-Task3: 지정 provider 와 1:1 DM 채널 생성. `idx_dm_unique_per_provider`
+   * 가 중복 방지를 보장하므로 이미 있는 provider 를 넘기면 UNIQUE 위반
+   * throw — 호출자는 먼저 `dm:list` 로 존재 여부를 확인한다.
+   */
+  'dm:create': {
+    request: DmCreateRequest;
+    response: { channel: Channel };
+  };
+
+  // ── v3: Permission Flag Builder (R10-Task5) ────────────────────
+  /**
+   * R10-Task5: 설정 UI 의 CLI 탭이 "현재 조합에 어떤 플래그가 붙는가"를
+   * 미리 보여주도록 PermissionFlagBuilder 를 dry-run 으로 호출한다.
+   * Service 를 실제로 spawn 하지는 않고 argv 배열만 반환.
+   */
+  'permission:dry-run-flags': {
+    request: PermissionFlagInput;
+    response: PermissionFlagOutput;
   };
 
   // ── v3: Member Profile ──────────────────────────────────────────

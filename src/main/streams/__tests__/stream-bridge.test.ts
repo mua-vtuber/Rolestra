@@ -99,8 +99,8 @@ describe('StreamBridge — emit + validation', () => {
 
   it('drops events with missing required payload fields', () => {
     bridge.emit({
-      type: 'stream:member-status',
-      payload: { providerId: 'ai-1' }, // status missing
+      type: 'stream:member-status-changed',
+      payload: { providerId: 'ai-1' }, // status/member/cause missing
     } as never);
     expect(received).toHaveLength(0);
 

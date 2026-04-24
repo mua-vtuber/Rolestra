@@ -56,7 +56,7 @@ import type {
   StreamMeetingTurnSkippedPayload,
   StreamQueueProgressPayload,
   StreamQueueUpdatedPayload,
-  StreamMemberStatusPayload,
+  StreamMemberStatusChangedPayload,
   StreamNotificationPayload,
   StreamNotificationClickedPayload,
   StreamNotificationPrefsChangedPayload,
@@ -81,7 +81,7 @@ const UNKNOWN_TYPE_BUCKET = '__unknown__';
  */
 const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>([
   'stream:channel-message',
-  'stream:member-status',
+  'stream:member-status-changed',
   'stream:approval-created',
   'stream:approval-decided',
   'stream:project-updated',
@@ -373,8 +373,8 @@ export class StreamBridge {
     this.emit({ type: 'stream:queue-updated', payload });
   }
 
-  emitMemberStatus(payload: StreamMemberStatusPayload): void {
-    this.emit({ type: 'stream:member-status', payload });
+  emitMemberStatusChanged(payload: StreamMemberStatusChangedPayload): void {
+    this.emit({ type: 'stream:member-status-changed', payload });
   }
 
   emitNotification(payload: StreamNotificationPayload): void {
@@ -455,10 +455,12 @@ export class StreamBridge {
     switch (type) {
       case 'stream:channel-message':
         return this.isObject(payload.message);
-      case 'stream:member-status':
+      case 'stream:member-status-changed':
         return (
           typeof payload.providerId === 'string' &&
-          typeof payload.status === 'string'
+          typeof payload.status === 'string' &&
+          typeof payload.cause === 'string' &&
+          this.isObject(payload.member)
         );
       case 'stream:approval-created':
         return this.isObject(payload.item);
