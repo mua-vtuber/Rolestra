@@ -56,6 +56,7 @@ import type {
   NotificationPrefs,
 } from '../../shared/notification-types';
 import { NotificationRepository } from './notification-repository';
+import { resolveNotificationLabel } from './notification-labels';
 
 // ── Adapter contract ───────────────────────────────────────────────────
 
@@ -209,8 +210,8 @@ export class NotificationService extends EventEmitter {
   test(kind: NotificationKind): NotificationLogEntry | null {
     return this.show({
       kind,
-      title: 'Rolestra 테스트',
-      body: 'OS 알림 확인용',
+      title: resolveNotificationLabel('test.title'),
+      body: resolveNotificationLabel('test.body'),
       force: true,
     });
   }

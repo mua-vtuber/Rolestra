@@ -139,6 +139,41 @@ export default {
     // by SystemMessage when meta.turnSkipped is present. The parser sees
     // it as a static key but the anchor preserves it across reorderings.
     /^translation:meeting\.turnSkipped$/,
+    // R9-Task11 notification.* — main-process emits OS toast copy via the
+    // `notification-labels.ts` dictionary; i18next is deliberately NOT
+    // imported in the main bundle (Decision Log D8). The keys here
+    // mirror the dictionary so the renderer can look up the same copy
+    // via t() without drifting from what the OS actually shows. No
+    // renderer callsite statically references these, so the full subtree
+    // is anchored to survive parser prune.
+    /^translation:notification(\..+)?$/,
+    // R9-Task11 circuitBreaker.tripwire.<reason>.* — AutonomyConfirmDialog
+    // renders the 4 tripwire limits via `t(\`circuitBreaker.tripwire.${key}.limit\`)`,
+    // a template-string key the parser cannot statically resolve. The
+    // `.title` / `.body` / `.reason` leaves are consumed by future
+    // surfaces (R10 ApprovalInbox breaker row, autonomy.downgrade.reason
+    // interpolation) — keep the full subtree.
+    /^translation:circuitBreaker(\..+)?$/,
+    // R9-Task11 autonomy.mode.* / autonomy.trace.* / autonomy.downgrade.*
+    // — mode / tooltip variants are statically detected (6 leaves), but
+    // trace/downgrade/generalMeetingDone are composed server-side in
+    // main-process side-effects and main-process notification dictionaries.
+    // Anchor the whole subtree so the parser does not prune them between
+    // R9 and R10.
+    /^translation:autonomy(\..+)?$/,
+    // R9-Task11 queue.toast.* / queue.recovery.* — consumed by future
+    // toast surfaces (R10) and the queue recovery banner. The panel
+    // leaves (queue.panel.* + queue.status.*) are statically detected
+    // but pluralization introduces `title_one`/`title_other` only; the
+    // singular `title` base is kept for catalogue completeness. Anchor
+    // the top namespace so new sub-surfaces do not require parser edits.
+    /^translation:queue(\..+)?$/,
+    // R9-Task11 settings.notifications.kind.<NotificationKind> — the
+    // rendered kind → i18n-key map in NotificationPrefsView is branchy
+    // (if/if chain) so the parser catches the leaves, but we anchor the
+    // full settings subtree because R10 will populate provider / theme /
+    // memory sections that land in the same catalogue pass.
+    /^translation:settings(\..+)?$/,
   ],
   failOnWarnings: false,
 };

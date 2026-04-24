@@ -45,6 +45,11 @@ import {
   type CircuitBreaker,
   type CircuitBreakerFiredEvent,
 } from '../queue/circuit-breaker';
+import {
+  resolveBreakerCopy,
+  resolveGeneralMeetingDoneBody,
+  resolveNotificationLabel,
+} from '../notifications/notification-labels';
 
 /**
  * Service references passed to {@link wireV3SideEffects}. Every field
@@ -235,12 +240,12 @@ function postTerminalSideEffects(
 
   try {
     if (snapshot.state === 'DONE') {
+      const fallbackBody = resolveNotificationLabel('workDone.body');
       const body =
-        snapshot.proposal?.slice(0, NOTIFICATION_BODY_LIMIT) ??
-        '회의가 완료되었습니다';
+        snapshot.proposal?.slice(0, NOTIFICATION_BODY_LIMIT) ?? fallbackBody;
       deps.notifications.show({
         kind: 'work_done',
-        title: '작업 완료',
+        title: resolveNotificationLabel('workDone.title'),
         body,
         channelId: minutesChannelId,
       });
@@ -248,8 +253,8 @@ function postTerminalSideEffects(
       const previous = snapshot.previousState ?? 'UNKNOWN';
       deps.notifications.show({
         kind: 'error',
-        title: '작업 실패',
-        body: `${previous} 상태에서 종료되었습니다`,
+        title: resolveNotificationLabel('error.title'),
+        body: resolveNotificationLabel('error.body', { previous }),
         channelId: minutesChannelId,
       });
     }
@@ -342,72 +347,11 @@ function handleBreakerFired(
 function breakerNotificationCopy(
   event: CircuitBreakerFiredEvent,
 ): { title: string; body: string } {
-  switch (event.reason) {
-    case 'files_per_turn': {
-      const count = readNumberField(event.detail, 'count');
-      return {
-        title: 'Circuit breaker 발동 — 파일 변경 한계',
-        body:
-          count !== null
-            ? `한 턴에 파일 ${count}개를 변경했습니다. 자율 모드가 manual로 변경되었습니다.`
-            : '파일 변경이 한계를 초과했습니다. 자율 모드가 manual로 변경되었습니다.',
-      };
-    }
-    case 'cumulative_cli_ms': {
-      const ms = readNumberField(event.detail, 'ms');
-      const minutes = ms !== null ? Math.round(ms / 60000) : null;
-      return {
-        title: 'Circuit breaker 발동 — CLI 누적 시간 한계',
-        body:
-          minutes !== null
-            ? `CLI 누적 실행 시간이 ${minutes}분을 넘었습니다. 자율 모드가 manual로 변경되었습니다.`
-            : 'CLI 누적 실행 시간이 한계를 초과했습니다. 자율 모드가 manual로 변경되었습니다.',
-      };
-    }
-    case 'queue_streak': {
-      const count = readNumberField(event.detail, 'count');
-      return {
-        title: 'Circuit breaker 발동 — 연속 큐 실행',
-        body:
-          count !== null
-            ? `연속으로 ${count}개의 큐 항목을 실행했습니다. 자율 모드가 manual로 변경되었습니다.`
-            : '연속 큐 실행이 한계에 도달했습니다. 자율 모드가 manual로 변경되었습니다.',
-      };
-    }
-    case 'same_error': {
-      const category = readStringField(event.detail, 'category');
-      return {
-        title: 'Circuit breaker 발동 — 같은 오류 반복',
-        body:
-          category !== null
-            ? `같은 오류(${category})가 반복해서 발생했습니다. 자율 모드가 manual로 변경되었습니다.`
-            : '같은 오류가 반복해서 발생했습니다. 자율 모드가 manual로 변경되었습니다.',
-      };
-    }
-    default: {
-      // Exhaustive fallback — a future CircuitBreakerReason would land
-      // here until the switch is extended. Keep the word "breaker" in
-      // the title so legacy string-match assertions stay green.
-      return {
-        title: 'Circuit breaker 발동',
-        body: '자율 모드가 manual로 변경되었습니다.',
-      };
-    }
-  }
-}
-
-/** Read `key` from `detail` when it is a plain object + number value. */
-function readNumberField(detail: unknown, key: string): number | null {
-  if (!detail || typeof detail !== 'object') return null;
-  const value = (detail as Record<string, unknown>)[key];
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
-}
-
-/** Read `key` from `detail` when it is a plain object + string value. */
-function readStringField(detail: unknown, key: string): string | null {
-  if (!detail || typeof detail !== 'object') return null;
-  const value = (detail as Record<string, unknown>)[key];
-  return typeof value === 'string' && value.length > 0 ? value : null;
+  const detail =
+    event.detail && typeof event.detail === 'object'
+      ? (event.detail as Record<string, unknown>)
+      : null;
+  return resolveBreakerCopy(event.reason, detail);
 }
 
 // ── R9-Task8: post-finalise work-done side-effect ────────────────────
@@ -492,11 +436,7 @@ export function postGeneralMeetingDoneMessage(
   }
   if (!generalChannelId) return;
 
-  const title = info.meetingTitle.trim();
-  const content =
-    title.length > 0
-      ? `회의 "${title}" 이(가) 완료되었습니다.`
-      : '회의가 완료되었습니다.';
+  const content = resolveGeneralMeetingDoneBody(info.meetingTitle);
 
   try {
     deps.messages.append({

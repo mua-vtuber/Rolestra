@@ -4,6 +4,7 @@
   },
   "approval": {
     "kind": {
+      "circuit_breaker": "Circuit breaker",
       "cli_permission": "CLI permission",
       "consensus_decision": "Consensus decision",
       "failure_report": "Failure report",
@@ -13,6 +14,63 @@
     "systemMessage": {
       "conditionalPrefix": "[Conditional approval]",
       "rejectPrefix": "[Approval rejected]"
+    }
+  },
+  "autonomy": {
+    "confirm": {
+      "ack": "I have reviewed the Circuit Breaker defaults above and confirm the switch to autonomous mode.",
+      "cancel": "Cancel",
+      "description": "Switching from {{from}} to {{to}}. Autonomous mode automatically returns to manual when a Circuit Breaker below trips.",
+      "submit": "Confirm and switch",
+      "title": "Confirm autonomous mode",
+      "tripwireHeader": "Circuit Breaker defaults"
+    },
+    "downgrade": {
+      "reason": "Circuit Breaker tripped — reverted to manual: {{reason}}",
+      "title": "Autonomy disabled"
+    },
+    "generalMeetingDone": "Meeting \"{{title}}\" has completed.",
+    "mode": {
+      "autoToggle": "Auto",
+      "autoToggleTooltip": "Each meeting's final outcome is auto-accepted; failures revert to manual automatically.",
+      "manual": "Manual",
+      "manualTooltip": "Every decision waits in the approval inbox for the user.",
+      "queue": "Queue",
+      "queueTooltip": "Runs items from the queue in order, one after another."
+    },
+    "toggleLabel": "Autonomy:",
+    "trace": {
+      "autoAccepted": "Auto-accepted by autonomy: {{kind}}",
+      "downgraded": "Autonomy → manual (reason: {{reason}})",
+      "queueNextStarted": "Starting next queue item: {{prompt}}"
+    }
+  },
+  "circuitBreaker": {
+    "tripwire": {
+      "cumulativeCliMs": {
+        "body": "Cumulative CLI runtime exceeded {{minutes}} minutes.",
+        "limit": "Cumulative CLI runtime 30 minutes",
+        "reason": "CLI runtime limit",
+        "title": "Circuit breaker fired — CLI time limit"
+      },
+      "filesPerTurn": {
+        "body": "Changed {{count}} files in a single turn.",
+        "limit": "20 file changes per turn",
+        "reason": "File change limit",
+        "title": "Circuit breaker fired — file change limit"
+      },
+      "queueStreak": {
+        "body": "Ran {{count}} consecutive queue items.",
+        "limit": "10 consecutive queue runs",
+        "reason": "Consecutive queue runs",
+        "title": "Circuit breaker fired — consecutive queue runs"
+      },
+      "sameError": {
+        "body": "Same error ({{category}}) repeated.",
+        "limit": "3 repeats of the same error",
+        "reason": "Repeated error",
+        "title": "Circuit breaker fired — repeated error"
+      }
     }
   },
   "dashboard": {
@@ -28,6 +86,7 @@
       "empty": "No pending approvals.",
       "error": "Could not load approvals.",
       "kind": {
+        "circuit_breaker": "Circuit breaker",
         "cli_permission": "CLI permission",
         "consensus_decision": "Consensus decision",
         "failure_report": "Failure report",
@@ -344,6 +403,36 @@
       "label": "{{names}} — typing"
     }
   },
+  "notification": {
+    "approvalPending": {
+      "body": "A {{kind}} approval is waiting.",
+      "title": "Approval pending"
+    },
+    "circuitBreaker": {
+      "body": "Autonomy reverted to manual.",
+      "title": "Circuit breaker fired"
+    },
+    "error": {
+      "body": "Ended in {{previous}} state",
+      "title": "Work failed"
+    },
+    "newMessage": {
+      "body": "{{author}}: {{preview}}",
+      "title": "New message"
+    },
+    "test": {
+      "body": "OS notification check",
+      "title": "Rolestra test"
+    },
+    "warmupFailed": {
+      "body": "Please check {{name}} connectivity",
+      "title": "Connection failed"
+    },
+    "workDone": {
+      "body": "The meeting has completed",
+      "title": "Work done"
+    }
+  },
   "profile": {
     "editor": {
       "cancel": "Cancel",
@@ -432,6 +521,56 @@
       "nameTooLong": "Name must be ≤ 200 characters",
       "sourcePathRequired": "Select a folder to import"
     }
+  },
+  "queue": {
+    "panel": {
+      "add": "Add",
+      "addPlaceholder": "Enter tasks (one per line)",
+      "dragHint": "Drag to reorder",
+      "empty": "The queue is empty.",
+      "pause": "Pause",
+      "remove": "Remove item",
+      "resume": "Resume",
+      "title": "Task queue ({{count}})",
+      "title_one": "Task queue ({{count}})",
+      "title_other": "Task queue ({{count}})"
+    },
+    "recovery": {
+      "banner": "Recovered {{count}} in-progress items from the previous session. Verify before restarting."
+    },
+    "status": {
+      "cancelled": "Cancelled",
+      "done": "Done",
+      "failed": "Failed",
+      "inProgress": "In progress",
+      "paused": "Paused",
+      "pending": "Pending"
+    },
+    "toast": {
+      "added": "Added {{count}} item(s) to the queue.",
+      "done": "Item completed.",
+      "failed": "Item failed.",
+      "started": "Item started."
+    }
+  },
+  "settings": {
+    "description": "Adjust notifications, themes, and other preferences.",
+    "notifications": {
+      "description": "Toggle OS notifications and sound per kind.",
+      "display": "Display",
+      "kind": {
+        "approvalPending": "Approval pending",
+        "error": "Error",
+        "newMessage": "New message",
+        "unknown": "Other",
+        "workDone": "Work done"
+      },
+      "loading": "Loading notification settings…",
+      "sound": "Sound",
+      "test": "Test",
+      "title": "Notifications"
+    },
+    "title": "Settings"
   },
   "shell": {
     "rail": {
