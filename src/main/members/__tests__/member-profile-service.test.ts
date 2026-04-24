@@ -511,6 +511,158 @@ describe('MemberProfileService', () => {
 
   // ── buildPersona ────────────────────────────────────────────────────
 
+  // ── offline-manual auto-timeout (R9-Task10) ──────────────────────────
+
+  describe('offline-manual auto-timeout', () => {
+    // Spec §7.2 + R9 Task 10: status_override='offline-manual' expires
+    // after a configurable window (default 60 min) so a user who toggled
+    // "외근" and forgot does not stay offline forever. Timestamp source is
+    // the persisted `updated_at` column; a clock injected via options
+    // lets the assertion ignore real time.
+    function makeClock(start: number) {
+      let now = start;
+      return {
+        now: () => now,
+        advance: (deltaMs: number) => {
+          now += deltaMs;
+        },
+      };
+    }
+
+    it('clears the override AND surfaces the runtime status once the window elapses', async () => {
+      seedProvider(db, 'p1', 'Ada');
+      const clock = makeClock(1_700_000_000_000);
+      const providers = makeProviderLookup(
+        { p1: { displayName: 'Ada', persona: '' } },
+        async () => undefined,
+      );
+      const service = new MemberProfileService(repo, providers, {
+        offlineManualTimeoutMs: 60 * 60 * 1000, // 60 min
+        now: clock.now,
+      });
+
+      // Warm up first so the runtime slot holds 'online' — the auto-clear
+      // must fall through to the runtime status, not the default.
+      await service.reconnect('p1');
+      expect(service.getWorkStatus('p1')).toBe('online');
+
+      // User toggles "외근" → setStatus writes updated_at = clock.now.
+      service.setStatus('p1', 'offline-manual');
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+
+      // 59 min later: inside the window, override still in force.
+      clock.advance(59 * 60 * 1000);
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+      expect(service.getProfile('p1').statusOverride).toBe('offline-manual');
+
+      // 1 more second → past the window. getWorkStatus auto-clears.
+      clock.advance(61 * 1000);
+      expect(service.getWorkStatus('p1')).toBe('online');
+      expect(service.getProfile('p1').statusOverride).toBeNull();
+    });
+
+    it('falls back to offline-connection when the runtime slot was never probed', () => {
+      seedProvider(db, 'p1', 'Ada');
+      const clock = makeClock(2_000_000_000_000);
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers, {
+        offlineManualTimeoutMs: 10_000,
+        now: clock.now,
+      });
+
+      service.setStatus('p1', 'offline-manual');
+      clock.advance(11_000);
+
+      expect(service.getWorkStatus('p1')).toBe('offline-connection');
+      expect(service.getProfile('p1').statusOverride).toBeNull();
+    });
+
+    it('does NOT clear a fresh override within the window', () => {
+      seedProvider(db, 'p1', 'Ada');
+      const clock = makeClock(3_000_000_000_000);
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers, {
+        offlineManualTimeoutMs: 60_000,
+        now: clock.now,
+      });
+
+      service.setStatus('p1', 'offline-manual');
+
+      // 59.9 s < window → still offline-manual, row untouched.
+      clock.advance(59_900);
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+      expect(service.getProfile('p1').statusOverride).toBe('offline-manual');
+    });
+
+    it('a profile edit resets the countdown (updated_at bumps forward)', () => {
+      // Edge case: updateProfile preserves statusOverride but bumps
+      // updated_at via the injected clock. The timeout is anchored on
+      // updated_at, so an edit during the offline window restarts the
+      // timer. Acceptable under the "no new migrations" constraint;
+      // documented as a minor imperfection in the service header.
+      seedProvider(db, 'p1', 'Ada');
+      const clock = makeClock(4_000_000_000_000);
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers, {
+        offlineManualTimeoutMs: 60_000,
+        now: clock.now,
+      });
+
+      service.setStatus('p1', 'offline-manual');
+      clock.advance(50_000);
+
+      // Edit profile → updated_at jumps to clock.now (via this.now()).
+      service.updateProfile('p1', { role: 'Engineer' });
+
+      // 20 s after the edit: only 20 s elapsed since new updated_at,
+      // still inside the 60 s window.
+      clock.advance(20_000);
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+
+      // Another 50 s → total 70 s since the edit → now expired.
+      clock.advance(50_000);
+      expect(service.getWorkStatus('p1')).toBe('offline-connection');
+    });
+
+    it('defaults the timeout to 60 min when no option is passed', async () => {
+      // Guard the production default: callers that omit
+      // offlineManualTimeoutMs (main/index.ts) must get the
+      // spec-mandated 60-minute window. We rely on the injected clock
+      // to jump forward rather than waiting an hour.
+      seedProvider(db, 'p1', 'Ada');
+      const clock = makeClock(5_000_000_000_000);
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers, {
+        now: clock.now,
+      });
+
+      service.setStatus('p1', 'offline-manual');
+      // Exactly 60 min later: still inside (">" not ">=", by design so
+      // the very first boundary click is stable).
+      clock.advance(60 * 60 * 1000);
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+
+      // One more ms → expired.
+      clock.advance(1);
+      expect(service.getWorkStatus('p1')).toBe('offline-connection');
+    });
+
+    it('timeoutMs=0 disables the auto-clear entirely (legacy mode)', () => {
+      seedProvider(db, 'p1', 'Ada');
+      const clock = makeClock(6_000_000_000_000);
+      const providers = makeProviderLookup({ p1: { displayName: 'Ada', persona: '' } });
+      const service = new MemberProfileService(repo, providers, {
+        offlineManualTimeoutMs: 0,
+        now: clock.now,
+      });
+
+      service.setStatus('p1', 'offline-manual');
+      clock.advance(24 * 60 * 60 * 1000); // 24 h
+      expect(service.getWorkStatus('p1')).toBe('offline-manual');
+      expect(service.getProfile('p1').statusOverride).toBe('offline-manual');
+    });
+  });
+
   describe('buildPersona', () => {
     it('threads the legacy persona from providers.persona into the builder', () => {
       seedProvider(db, 'p1', 'Ada', 'Likes terse answers.');

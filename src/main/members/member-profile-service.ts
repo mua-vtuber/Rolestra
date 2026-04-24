@@ -45,11 +45,12 @@
  * override first.
  */
 
-import type {
-  AvatarKind,
-  MemberProfile,
-  MemberView,
-  WorkStatus,
+import {
+  AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS,
+  type AvatarKind,
+  type MemberProfile,
+  type MemberView,
+  type WorkStatus,
 } from '../../shared/member-profile-types';
 import { MemberProfileRepository } from './member-profile-repository';
 import { buildEffectivePersona } from './persona-builder';
@@ -140,6 +141,38 @@ export type SetStatusTarget = 'online' | 'offline-manual';
  */
 const DEFAULT_RUNTIME_STATUS: WorkStatus = 'offline-connection';
 
+/**
+ * Tunable options passed into {@link MemberProfileService} for the R9
+ * offline-manual timeout behaviour (spec §7.2, R9-Task10).
+ *
+ * Both fields are optional — the production wiring never sets them.
+ * Tests override them to (a) shrink the 60-minute default for speed,
+ * (b) inject a deterministic `now()` clock so the assertion does not
+ * depend on real time.
+ */
+export interface MemberProfileServiceOptions {
+  /**
+   * How long a persisted `status_override='offline-manual'` survives
+   * before {@link MemberProfileService.getWorkStatus} auto-clears it
+   * and falls back to the runtime status.
+   *
+   * Defaults to {@link AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS} (60 min).
+   * The reference point is `member_profiles.updated_at` — the column
+   * is bumped by `setStatusOverride()` (setStatus path) and also by
+   * `upsert()` (routine profile edits). A profile edit therefore
+   * resets the countdown; this is an acceptable minor imperfection
+   * relative to adding a dedicated `status_override_at` column (spec
+   * "신규 마이그레이션 0건" constraint, R9 plan).
+   */
+  offlineManualTimeoutMs?: number;
+  /**
+   * Inject a deterministic clock. Defaults to {@link Date.now}. Tests
+   * pass `() => fixedTimestamp` so the expiry check is predictable
+   * without fake timers (which tangle with better-sqlite3).
+   */
+  now?: () => number;
+}
+
 export class MemberProfileService {
   /**
    * In-memory runtime status per provider. Keyed by `providerId`. Absent
@@ -163,10 +196,26 @@ export class MemberProfileService {
    */
   private readonly reconnectInFlight = new Map<string, Promise<WorkStatus>>();
 
+  /**
+   * Resolved offline-manual timeout window in ms. `0` disables the
+   * auto-clear path entirely (tests use this when the timeout must not
+   * fire). Frozen at construction so a mid-run override cannot bend
+   * behaviour.
+   */
+  private readonly offlineManualTimeoutMs: number;
+
+  /** Injected clock — see {@link MemberProfileServiceOptions.now}. */
+  private readonly now: () => number;
+
   constructor(
     private readonly repo: MemberProfileRepository,
     private readonly providers: MemberProviderLookup,
-  ) {}
+    options: MemberProfileServiceOptions = {},
+  ) {
+    this.offlineManualTimeoutMs =
+      options.offlineManualTimeoutMs ?? AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS;
+    this.now = options.now ?? Date.now;
+  }
 
   /**
    * Returns the persisted profile for `providerId`. If no row exists, a
@@ -225,7 +274,7 @@ export class MemberProfileService {
       // Status override is deliberately NOT patchable through this method
       // (see module header). Carry the existing value forward untouched.
       statusOverride: current.statusOverride,
-      updatedAt: Date.now(),
+      updatedAt: this.now(),
     };
     this.repo.upsert(next);
     return next;
@@ -252,7 +301,7 @@ export class MemberProfileService {
    */
   setStatus(providerId: string, target: SetStatusTarget): MemberProfile {
     const nextOverride = target === 'offline-manual' ? 'offline-manual' : null;
-    const now = Date.now();
+    const now = this.now();
     this.repo.setStatusOverride(providerId, nextOverride, now);
     if (target === 'online') {
       // Drop any stale runtime value so getWorkStatus falls through to the
@@ -339,19 +388,55 @@ export class MemberProfileService {
   /**
    * Compute the effective {@link WorkStatus} for a member.
    *
-   * Decision tree (spec §7.2):
-   *   1. If `statusOverride === 'offline-manual'` ⇒ `'offline-manual'`.
-   *      The user's manual toggle wins over every runtime signal.
-   *   2. Otherwise, return the runtime map value for `providerId`, falling
-   *      back to {@link DEFAULT_RUNTIME_STATUS} when the map has no entry
+   * Decision tree (spec §7.2 + R9-Task10):
+   *   1. If `statusOverride === 'offline-manual'`:
+   *      1a. If the override's age (now - row.updatedAt) exceeds
+   *          {@link offlineManualTimeoutMs}, the override has expired.
+   *          Clear the persisted override (side-effect write) and fall
+   *          through to step 2. Surfaces this as the user "coming back"
+   *          automatically after an hour of inactivity.
+   *      1b. Otherwise ⇒ `'offline-manual'`. The user's manual toggle
+   *          wins over every runtime signal during the window.
+   *   2. Return the runtime map value for `providerId`, falling back to
+   *      {@link DEFAULT_RUNTIME_STATUS} when the map has no entry
    *      (never probed).
+   *
+   * The auto-clear path writes through {@link MemberProfileRepository.setStatusOverride}
+   * (not a full `upsert`) so routine profile fields are untouched. A
+   * `timeoutMs=0` option disables the auto-clear entirely so tests can
+   * assert the pre-R9 behaviour without poking at real timestamps.
    */
   getWorkStatus(providerId: string): WorkStatus {
     const profile = this.repo.get(providerId);
     if (profile && profile.statusOverride === 'offline-manual') {
-      return 'offline-manual';
+      if (this.isOfflineManualExpired(profile)) {
+        // Side-effect: clear the persisted override so the next call
+        // (and every renderer surface reading via IPC) sees the natural
+        // runtime status instead of the stale manual flag. We reuse
+        // setStatusOverride rather than setStatus('online') to avoid the
+        // runtime-map clear — the runtime status already reflects the
+        // latest warmup outcome and we want to surface that truth, not
+        // the 'offline-connection' default.
+        this.repo.setStatusOverride(providerId, null, this.now());
+      } else {
+        return 'offline-manual';
+      }
     }
     return this.runtimeStatus.get(providerId) ?? DEFAULT_RUNTIME_STATUS;
+  }
+
+  /**
+   * Whether the persisted `offline-manual` override should be treated as
+   * expired. Isolated for readability and so a future R10 feature (UI
+   * surface showing "will expire at ...") can reuse the predicate.
+   *
+   * Returns `false` when {@link offlineManualTimeoutMs} is `0` — callers
+   * (tests) use that to opt out of the auto-clear path entirely. Any
+   * positive value means "check the age".
+   */
+  private isOfflineManualExpired(profile: MemberProfile): boolean {
+    if (this.offlineManualTimeoutMs <= 0) return false;
+    return this.now() - profile.updatedAt > this.offlineManualTimeoutMs;
   }
 
   /**

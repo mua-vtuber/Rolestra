@@ -49,6 +49,50 @@ export const ALLOWED_AVATAR_EXTENSIONS = [
 export type AllowedAvatarExtension = (typeof ALLOWED_AVATAR_EXTENSIONS)[number];
 
 /**
+ * Default timeout for an auto-return from the manual "leave work"
+ * (`status_override='offline-manual'`) toggle (spec §7.2, R9-Task10).
+ *
+ * Once the override has been set for longer than this window,
+ * {@link MemberProfileService.getWorkStatus} auto-clears the persisted
+ * override and reverts to the runtime-controlled status. Keeps the
+ * "offline-manual" flag from living forever on a user who toggled it
+ * for a short errand and forgot.
+ *
+ * Exposed in minutes (not ms) so R10 can expose a settings slider with
+ * human-scale units. {@link AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS} is the
+ * derived ms form callers use at runtime.
+ */
+export const AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MIN = 60;
+
+/** Derived ms form of {@link AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MIN}. */
+export const AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS =
+  AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MIN * 60 * 1_000;
+
+/**
+ * Exponential backoff schedule for `MemberWarmupService` retries after a
+ * failed or timed-out initial warmup probe (spec §7.2, R9-Task10).
+ *
+ * Reads left-to-right: the first retry fires 10 s after the initial
+ * failure, the second 30 s later, the third 60 s later. Total wall-clock
+ * horizon ≈ 100 s on top of the ~5 s initial deadline — slow enough to
+ * ride out transient API hiccups, fast enough that a user who just
+ * turned Wi-Fi back on sees the member come back online within a minute
+ * or two without a manual reconnect click.
+ *
+ * The array is `readonly` so a caller cannot accidentally mutate the
+ * shared schedule. Pass a custom array to `WarmupOptions.retryDelaysMs`
+ * for tests that need shorter timings.
+ */
+export const WARMUP_RETRY_DELAYS_MS = [10_000, 30_000, 60_000] as const;
+
+/**
+ * Length of {@link WARMUP_RETRY_DELAYS_MS} — kept as a named constant so
+ * assertions and comments ("max 3 retries") stay in sync if the schedule
+ * ever grows or shrinks.
+ */
+export const WARMUP_MAX_RETRIES = WARMUP_RETRY_DELAYS_MS.length;
+
+/**
  * Hard cap on uploaded avatar file size (spec §7.1, R8 D7).
  *
  * 5 MB is generous for a profile picture (a 4 K JPEG is ~2 MB) while
