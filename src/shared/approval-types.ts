@@ -21,7 +21,8 @@ export type ApprovalKind =
   | 'mode_transition'
   | 'consensus_decision'
   | 'review_outcome'
-  | 'failure_report';
+  | 'failure_report'
+  | 'circuit_breaker';
 export type ApprovalStatus = 'pending' | 'approved' | 'rejected' | 'expired' | 'superseded';
 export type ApprovalDecision = 'approve' | 'reject' | 'conditional';
 

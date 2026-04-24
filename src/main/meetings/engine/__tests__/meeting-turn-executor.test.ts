@@ -20,6 +20,11 @@ import type { MessageService } from '../../../channels/message-service';
 import type { ArenaRootService } from '../../../arena/arena-root-service';
 import type { providerRegistry as ProviderRegistryInstance } from '../../../providers/registry';
 import type { ApprovalCliAdapter } from '../../../approvals/approval-cli-adapter';
+import {
+  CircuitBreaker,
+  CIRCUIT_BREAKER_FIRED_EVENT,
+  type CircuitBreakerFiredEvent,
+} from '../../../queue/circuit-breaker';
 
 const MEETING_ID = 'mt-1';
 const CHANNEL_ID = 'ch-1';
@@ -102,6 +107,10 @@ function buildDeps(
     // passed (most R7 callers don't supply it and rely on the gate being
     // dormant).
     memberProfileService: overrides.memberProfileService,
+    // R9-Task6: optional CircuitBreaker. Dormant by default so existing
+    // tests that never installed the breaker continue to run with the
+    // recordError hook muted.
+    circuitBreaker: overrides.circuitBreaker,
   };
 }
 
@@ -199,6 +208,114 @@ describe('MeetingTurnExecutor — work-status gate (R8-Task9, spec §7.2)', () =
     await exec.executeTurn(participants(1)[0]);
     expect(deps.streamBridge.emitMeetingTurnSkipped).not.toHaveBeenCalled();
     expect(deps.streamBridge.emitMeetingError).toHaveBeenCalled();
+  });
+});
+
+describe('MeetingTurnExecutor — circuit breaker feed (R9-Task6)', () => {
+  /**
+   * The executor records a categorised error tick whenever
+   * `provider.streamCompletion` rejects *and* the turn was not aborted
+   * by the user. We drive this path without a real provider by
+   * injecting a stub that rejects with a spawn-shaped error, which the
+   * classifier maps onto `cli_spawn_failed`.
+   */
+  it('records a same_error tick on turn failure (non-aborted)', async () => {
+    // Reuse an existing speaker id from buildSession() so
+    // getMessagesForProvider() finds the participant before the
+    // provider stream is invoked.
+    const speaker = participants(1)[0];
+    const stubProvider = {
+      id: speaker.id,
+      type: 'api',
+      displayName: speaker.displayName,
+      persona: '',
+      model: 'stub-model',
+      // eslint-disable-next-line require-yield
+      streamCompletion: vi.fn(async function* () {
+        throw new Error('spawn ENOENT claude');
+      }),
+      consumeLastTokenUsage: vi.fn(() => null),
+      // Non-Gemini api config — persona-builder reads .endpoint to
+      // decide the Gemini guardrail branch; anything non-Google works.
+      config: { type: 'api', endpoint: 'https://api.example.test/v1' },
+    };
+    const providerRegistry = {
+      get: vi.fn(() => stubProvider),
+    } as unknown as typeof ProviderRegistryInstance;
+
+    const breaker = new CircuitBreaker();
+    const fires: CircuitBreakerFiredEvent[] = [];
+    breaker.on(CIRCUIT_BREAKER_FIRED_EVENT, (e) => fires.push(e));
+
+    const deps = buildDeps({ providerRegistry, circuitBreaker: breaker });
+    const exec = new MeetingTurnExecutor(deps);
+
+    await exec.executeTurn(speaker);
+
+    // emitMeetingError fires on the same path as recordError — confirm
+    // the shared catch block ran.
+    expect(deps.streamBridge.emitMeetingError).toHaveBeenCalled();
+    // Single spawn failure does not yet cross the same_error threshold
+    // (default 3) but the counter must advance to 1 in the cli_spawn_failed
+    // bucket.
+    expect(breaker.getState().recentErrorCategory).toBe('cli_spawn_failed');
+    expect(breaker.getState().recentErrorCount).toBe(1);
+    expect(fires).toHaveLength(0);
+
+    // Two more same-category failures cross the threshold.
+    await exec.executeTurn(speaker);
+    await exec.executeTurn(speaker);
+
+    expect(fires).toHaveLength(1);
+    expect(fires[0]!.reason).toBe('same_error');
+    expect((fires[0]!.detail as { category: string }).category).toBe(
+      'cli_spawn_failed',
+    );
+  });
+
+  it('does NOT record when the turn is aborted (user gesture)', async () => {
+    const speakerParticipant = participants(1)[0];
+    // Provider that yields forever until aborted. The test aborts the
+    // controller before the first yield so the catch branch sees
+    // signal.aborted === true and skips the recordError call.
+    const stubProvider = {
+      id: speakerParticipant.id,
+      type: 'api',
+      displayName: speakerParticipant.displayName,
+      persona: '',
+      model: 'stub-model',
+      // eslint-disable-next-line require-yield
+      streamCompletion: vi.fn(async function* (
+        _messages: unknown,
+        _persona: string,
+        _opts: unknown,
+        signal?: AbortSignal,
+      ) {
+        await new Promise<void>((_resolve, reject) => {
+          if (signal?.aborted) {
+            reject(new Error('aborted'));
+            return;
+          }
+          signal?.addEventListener('abort', () => reject(new Error('aborted')));
+        });
+      }),
+      consumeLastTokenUsage: vi.fn(() => null),
+      config: { type: 'api', endpoint: 'https://api.example.test/v1' },
+    };
+    const providerRegistry = {
+      get: vi.fn(() => stubProvider),
+    } as unknown as typeof ProviderRegistryInstance;
+
+    const breaker = new CircuitBreaker();
+    const deps = buildDeps({ providerRegistry, circuitBreaker: breaker });
+    const exec = new MeetingTurnExecutor(deps);
+
+    const pending = exec.executeTurn(speakerParticipant);
+    exec.abort(); // user gesture flips signal.aborted before rejection.
+    await pending;
+
+    expect(breaker.getState().recentErrorCount).toBe(0);
+    expect(breaker.getState().recentErrorCategory).toBeNull();
   });
 });
 

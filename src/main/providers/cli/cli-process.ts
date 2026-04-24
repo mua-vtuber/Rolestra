@@ -8,8 +8,32 @@
 import { execFile, type ChildProcess } from 'node:child_process';
 import type { CliRuntimeConfig } from './cli-provider';
 import type { CliSessionState } from './cli-session-state';
+import { getCircuitBreaker } from '../../queue/circuit-breaker-accessor';
 
 const MAX_BUFFER_BYTES = 50 * 1024 * 1024; // 50 MB
+
+/**
+ * R9-Task6 (spec §8 CB-5 `cumulative_cli_ms`): hook the process exit
+ * event so the CircuitBreaker accumulates wall-clock CLI time. Called
+ * from both `spawnPersistent` and `spawnPerTurn` right after
+ * `execFile` returns, so the handler runs even when the child exits
+ * before the caller awaits anything.
+ *
+ * The breaker is read through {@link getCircuitBreaker} each exit —
+ * tests that never install an accessor get a silent no-op, and the
+ * production boot wire-up can rotate the breaker instance without
+ * touching every spawning CliProvider.
+ */
+function wireCliElapsedRecorder(child: ChildProcess): void {
+  const startedAt = Date.now();
+  child.on('exit', () => {
+    const elapsed = Date.now() - startedAt;
+    const breaker = getCircuitBreaker();
+    if (breaker && elapsed > 0) {
+      breaker.recordCliElapsed(elapsed);
+    }
+  });
+}
 
 /**
  * Escape a single argument for safe use with cmd.exe /C on Windows.
@@ -139,6 +163,7 @@ export class CliProcessManager {
           },
           // The callback fires when process exits (for persistent, that is at cooldown)
         );
+        wireCliElapsedRecorder(this.process);
 
         // Drain stderr to prevent pipe buffer deadlock (v1 pattern)
         if (this.process.stderr) {
@@ -180,7 +205,7 @@ export class CliProcessManager {
   /** Spawn a per-turn child process. */
   spawnPerTurn(config: CliRuntimeConfig, args: string[]): ChildProcess {
     const { resolvedCommand, resolvedArgs } = resolveWindowsCommand(config.command, args, config.wslDistro);
-    return execFile(
+    const child = execFile(
       resolvedCommand,
       resolvedArgs,
       {
@@ -188,6 +213,8 @@ export class CliProcessManager {
         maxBuffer: MAX_BUFFER_BYTES,
       },
     );
+    wireCliElapsedRecorder(child);
+    return child;
   }
 
   /** Kill the current subprocess if running. */

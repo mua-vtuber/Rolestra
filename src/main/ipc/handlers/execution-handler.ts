@@ -9,6 +9,7 @@ import type { WebContents } from 'electron';
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { DiffEntry, PatchSet } from '../../../shared/execution-types';
 import { ExecutionService } from '../../execution/execution-service';
+import type { CircuitBreaker } from '../../queue/circuit-breaker';
 import { getActiveOrchestrator } from './chat-handler';
 import { setAuditLogAccessor } from './audit-handler';
 
@@ -19,9 +20,32 @@ import { setAuditLogAccessor } from './audit-handler';
 let executionService: ExecutionService | null = null;
 let rendererWebContents: WebContents | null = null;
 
+/**
+ * R9-Task6: CircuitBreaker remembered across `setExecutionWorkspaceRoot`
+ * invocations. `main/index.ts` registers the boot-time breaker once via
+ * {@link setExecutionCircuitBreaker}; workspace init (which rebuilds the
+ * ExecutionService with a fresh workspace root) threads the same instance
+ * into the new service so `files_per_turn` keeps accumulating across
+ * workspace switches.
+ */
+let cachedCircuitBreaker: CircuitBreaker | null = null;
+
 /** Set the renderer WebContents reference for push events. */
 export function setExecutionWebContents(wc: WebContents): void {
   rendererWebContents = wc;
+}
+
+/**
+ * Register the CircuitBreaker that every ExecutionService built via
+ * {@link setExecutionWorkspaceRoot} will receive. Called once at boot
+ * by `main/index.ts`. Subsequent workspace init IPC calls pick it up
+ * automatically without re-threading the reference through the
+ * workspace-handler call chain.
+ */
+export function setExecutionCircuitBreaker(
+  breaker: CircuitBreaker | null,
+): void {
+  cachedCircuitBreaker = breaker;
 }
 
 /** Set (or reset) the workspace root for execution service path validation. */
@@ -33,8 +57,13 @@ export function setExecutionWorkspaceRoot(
     targetPath: string,
     conversationId?: string,
   ) => Promise<boolean>,
+  circuitBreaker?: CircuitBreaker,
 ): void {
-  const svc = new ExecutionService({ workspaceRoot, ensureAccess });
+  const svc = new ExecutionService({
+    workspaceRoot,
+    ensureAccess,
+    circuitBreaker: circuitBreaker ?? cachedCircuitBreaker ?? undefined,
+  });
   executionService = svc;
   // Capture the fresh local reference so the accessor closure holds a
   // non-null ExecutionService. Using `executionService` directly would

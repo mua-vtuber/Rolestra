@@ -41,6 +41,12 @@ export const approvalKindSchema = z.enum([
   'consensus_decision',
   'review_outcome',
   'failure_report',
+  // R9-Task6: CircuitBreaker downgrade receipts. Payload shape is not
+  // asserted in `approvalPayloadSchema` yet (same pattern as
+  // review_outcome / failure_report — emitted at runtime but kept off
+  // the discriminated union until the R10 approval panel formalises
+  // rendering).
+  'circuit_breaker',
 ]);
 
 export const cliPermissionPayloadSchema = z.object({

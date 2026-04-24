@@ -284,13 +284,17 @@ describe('v3-side-effects — circuit breaker', () => {
     deps.breaker.emit(CIRCUIT_BREAKER_FIRED_EVENT, event);
 
     expect(deps.projects.setAutonomy).toHaveBeenCalledWith('proj-1', 'manual');
+    // R9-Task6: kind flipped from 'failure_report' to 'circuit_breaker'
+    // and payload meta carries `tripwire` (not `reason`) so renderer
+    // filtering can narrow by kind alone.
     expect(deps.approvals.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        kind: 'failure_report',
+        kind: 'circuit_breaker',
         projectId: 'proj-1',
         payload: expect.objectContaining({
           source: 'circuit_breaker',
-          reason: 'files_per_turn',
+          tripwire: 'files_per_turn',
+          detail: { count: 42 },
         }),
       }),
     );
@@ -298,6 +302,43 @@ describe('v3-side-effects — circuit breaker', () => {
       expect.objectContaining({
         kind: 'error',
         title: expect.stringContaining('breaker'),
+        body: expect.stringContaining('파일'),
+      }),
+    );
+  });
+
+  it("'fired' with cumulative_cli_ms mentions the elapsed minutes", () => {
+    const ssm = makeSsmStub(makeCtx());
+    const deps = makeMockDeps();
+    wireV3SideEffects(ssm as never, deps);
+
+    deps.breaker.emit(CIRCUIT_BREAKER_FIRED_EVENT, {
+      reason: 'cumulative_cli_ms',
+      detail: { ms: 31 * 60 * 1000 },
+    });
+
+    expect(deps.notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'error',
+        body: expect.stringContaining('31'),
+      }),
+    );
+  });
+
+  it("'fired' with same_error mentions the error category", () => {
+    const ssm = makeSsmStub(makeCtx());
+    const deps = makeMockDeps();
+    wireV3SideEffects(ssm as never, deps);
+
+    deps.breaker.emit(CIRCUIT_BREAKER_FIRED_EVENT, {
+      reason: 'same_error',
+      detail: { category: 'cli_spawn_failed', count: 3 },
+    });
+
+    expect(deps.notifications.show).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'error',
+        body: expect.stringContaining('cli_spawn_failed'),
       }),
     );
   });

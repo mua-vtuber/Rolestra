@@ -260,11 +260,24 @@ function postTerminalSideEffects(
 
 /**
  * Runs when the circuit breaker trips. Downgrades autonomy, files a
- * failure_report approval for audit, and fires an OS notification.
+ * `circuit_breaker` approval row for audit, and fires an OS notification.
  *
  * We downgrade autonomy BEFORE filing the approval so that if the
  * approval write fails the project still exits auto mode — the manual
  * downgrade is the primary safety valve; the approval is the receipt.
+ *
+ * R9-Task6: approval kind is now `circuit_breaker` (was `failure_report`).
+ * Kind values are `TEXT` in `approval_items` so no migration is needed.
+ * The payload carries `{source: 'circuit_breaker', tripwire, detail}`
+ * — `tripwire` mirrors the `event.reason` literal; `detail` is the
+ * tripwire-specific diagnostic (file count / elapsed ms / streak /
+ * error category) minted inside `CircuitBreaker.fire`.
+ *
+ * Notification title/body are keyed per tripwire so the future i18n
+ * populate (R9-Task11) can swap them to localized copy. Today the
+ * helper returns the literal fallback strings — identical shape to
+ * the terminal-state notification so NotificationService treats them
+ * uniformly.
  */
 function handleBreakerFired(
   event: CircuitBreakerFiredEvent,
@@ -280,35 +293,121 @@ function handleBreakerFired(
     }
   }
 
-  // (b) Approval row (audit receipt).
+  // (b) Approval row (audit receipt). `kind='circuit_breaker'` lets
+  //     AutonomyGate + renderer ApprovalInbox filter the row without
+  //     mining the payload. Meta shape `{tripwire, detail}` matches
+  //     the plan wording for R9-Task6.
   try {
     deps.approvals.create({
-      kind: 'failure_report',
+      kind: 'circuit_breaker',
       projectId: ctx.projectId || null,
       channelId: ctx.channelId || null,
       meetingId: ctx.meetingId || null,
       requesterId: null,
       payload: {
         source: 'circuit_breaker',
-        reason: event.reason,
+        tripwire: event.reason,
         detail: event.detail,
       },
     });
   } catch (err) {
-    warn('approvals.create(failure_report) failed', err);
+    warn('approvals.create(circuit_breaker) failed', err);
   }
 
-  // (c) User-facing alert.
+  // (c) User-facing alert. Title/body pivot on the tripwire so the OS
+  //     toast describes the specific safety trip (file cap vs. CLI time
+  //     vs. queue streak vs. error repeat) rather than a generic
+  //     "breaker fired" line.
   try {
+    const { title, body } = breakerNotificationCopy(event);
     deps.notifications.show({
       kind: 'error',
-      title: 'Circuit breaker 발동',
-      body: `${event.reason}: 자율 모드가 manual로 변경되었습니다`,
+      title,
+      body,
       channelId: ctx.channelId || null,
     });
   } catch (err) {
     warn('notifications.show (breaker) failed', err);
   }
+}
+
+/**
+ * Pivot title + body on `event.reason`. Strings are Korean fallbacks;
+ * R9-Task11 swaps them for `t(...)` lookups through the main-process
+ * notification-labels dictionary (i18next is not imported in the Main
+ * bundle — see Decision Log D8). The word "breaker" is kept in the
+ * title so the existing v3-side-effects test (match-on-title) keeps
+ * working without being pinned to a specific Korean phrase.
+ */
+function breakerNotificationCopy(
+  event: CircuitBreakerFiredEvent,
+): { title: string; body: string } {
+  switch (event.reason) {
+    case 'files_per_turn': {
+      const count = readNumberField(event.detail, 'count');
+      return {
+        title: 'Circuit breaker 발동 — 파일 변경 한계',
+        body:
+          count !== null
+            ? `한 턴에 파일 ${count}개를 변경했습니다. 자율 모드가 manual로 변경되었습니다.`
+            : '파일 변경이 한계를 초과했습니다. 자율 모드가 manual로 변경되었습니다.',
+      };
+    }
+    case 'cumulative_cli_ms': {
+      const ms = readNumberField(event.detail, 'ms');
+      const minutes = ms !== null ? Math.round(ms / 60000) : null;
+      return {
+        title: 'Circuit breaker 발동 — CLI 누적 시간 한계',
+        body:
+          minutes !== null
+            ? `CLI 누적 실행 시간이 ${minutes}분을 넘었습니다. 자율 모드가 manual로 변경되었습니다.`
+            : 'CLI 누적 실행 시간이 한계를 초과했습니다. 자율 모드가 manual로 변경되었습니다.',
+      };
+    }
+    case 'queue_streak': {
+      const count = readNumberField(event.detail, 'count');
+      return {
+        title: 'Circuit breaker 발동 — 연속 큐 실행',
+        body:
+          count !== null
+            ? `연속으로 ${count}개의 큐 항목을 실행했습니다. 자율 모드가 manual로 변경되었습니다.`
+            : '연속 큐 실행이 한계에 도달했습니다. 자율 모드가 manual로 변경되었습니다.',
+      };
+    }
+    case 'same_error': {
+      const category = readStringField(event.detail, 'category');
+      return {
+        title: 'Circuit breaker 발동 — 같은 오류 반복',
+        body:
+          category !== null
+            ? `같은 오류(${category})가 반복해서 발생했습니다. 자율 모드가 manual로 변경되었습니다.`
+            : '같은 오류가 반복해서 발생했습니다. 자율 모드가 manual로 변경되었습니다.',
+      };
+    }
+    default: {
+      // Exhaustive fallback — a future CircuitBreakerReason would land
+      // here until the switch is extended. Keep the word "breaker" in
+      // the title so legacy string-match assertions stay green.
+      return {
+        title: 'Circuit breaker 발동',
+        body: '자율 모드가 manual로 변경되었습니다.',
+      };
+    }
+  }
+}
+
+/** Read `key` from `detail` when it is a plain object + number value. */
+function readNumberField(detail: unknown, key: string): number | null {
+  if (!detail || typeof detail !== 'object') return null;
+  const value = (detail as Record<string, unknown>)[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/** Read `key` from `detail` when it is a plain object + string value. */
+function readStringField(detail: unknown, key: string): string | null {
+  if (!detail || typeof detail !== 'object') return null;
+  const value = (detail as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.length > 0 ? value : null;
 }
 
 /**

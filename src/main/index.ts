@@ -42,6 +42,8 @@ import { NotificationRepository } from './notifications/notification-repository'
 import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
 import { CircuitBreaker } from './queue/circuit-breaker';
+import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
+import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
 import { AutonomyGate } from './autonomy/autonomy-gate';
 import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
 import { MemberProfileRepository } from './members/member-profile-repository';
@@ -276,6 +278,15 @@ app.whenReady().then(async () => {
     );
     const circuitBreaker = new CircuitBreaker();
 
+    // R9-Task6: register the breaker so CLI spawn sites (CliProcessManager
+    // deep inside CliProvider factory chain) and any future spawner can
+    // record elapsed wall-clock via `getCircuitBreaker()`. Also prime the
+    // ExecutionService cache so the next `workspace:init` IPC call builds
+    // an ExecutionService that feeds the `files_per_turn` tripwire
+    // without re-threading the breaker through workspace-handler.
+    setCircuitBreakerAccessor(() => circuitBreaker);
+    setExecutionCircuitBreaker(circuitBreaker);
+
     // R7-Task11: ApprovalNotificationBridge — ApprovalService 'created' →
     // NotificationService.show(approval_pending). NotificationService's
     // own prefs + focus gates decide whether the OS toast actually fires.
@@ -370,6 +381,11 @@ app.whenReady().then(async () => {
           // not in `online` state get their turn skipped + a system
           // message + `stream:meeting-turn-skipped` event.
           memberProfileService,
+          // R9-Task6: feed the `same_error` tripwire so N consecutive
+          // same-category turn failures downgrade the project out of
+          // auto_toggle / queue. Classification runs inside the
+          // executor — provider/message text never reaches the breaker.
+          circuitBreaker,
         });
 
         const orchestrator = new MeetingOrchestrator({

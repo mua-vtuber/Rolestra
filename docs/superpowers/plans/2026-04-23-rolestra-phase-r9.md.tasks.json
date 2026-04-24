@@ -51,10 +51,10 @@
     {
       "id": 6,
       "subject": "Task 6: Circuit Breaker 실 이벤트 feed (4 tripwire) + on('fired') downgrade handler",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** ExecutionService `dryRunApply` 직후 `circuitBreaker.recordFileChanges(n)`, CliRunner `spawn` 완료 시 `recordCliElapsed(ms)`, QueueService `startNext` 시 `recordQueueStart`, MeetingTurnExecutor/ApprovalService 실패 시 `recordError(cat)`. `circuitBreaker.on('fired')` → ProjectService.setAutonomy('manual') + `approval_item` (category=circuit_breaker) + NotificationService.show('error', { reason }) — v3-side-effects.ts 의 breakerHandler 완성.\n\n**Files:** src/main/execution/execution-service.ts, src/main/providers/cli-runner.ts, src/main/queue/queue-service.ts, src/main/meetings/engine/meeting-turn-executor.ts, src/main/engine/v3-side-effects.ts + __tests__\n\n**Verify:** `npm run test -- circuit-breaker v3-side-effects execution-service cli-runner`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/execution/execution-service.ts\",\"src/main/providers/cli-runner.ts\",\"src/main/queue/queue-service.ts\",\"src/main/meetings/engine/meeting-turn-executor.ts\"],\"verifyCommand\":\"npm run test -- circuit-breaker v3-side-effects\",\"acceptanceCriteria\":[\"4 tripwire 각각 실 이벤트 소스에서 record 호출\",\"fired 시 ProjectService.setAutonomy('manual') 호출 확인\",\"approval_item category=circuit_breaker 생성\",\"notification.show('error', {reason})\"]}\n```",
-      "lastUpdated": "2026-04-23T12:00:00.000Z"
+      "lastUpdated": "2026-04-24T17:00:00.000Z"
     },
     {
       "id": 7,

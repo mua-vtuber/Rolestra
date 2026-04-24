@@ -81,6 +81,16 @@ const KIND_LABELS: Readonly<Record<ApprovalItem['kind'], { title: string; body: 
       title: '실패 리포트',
       body: () => '자동 실행 실패가 보고되었습니다.',
     },
+    // R9-Task6: `circuit_breaker` is emitted by v3-side-effects when an
+    // autonomy tripwire fires. The primary user-facing notification is
+    // the dedicated `handleBreakerFired` path (richer per-tripwire
+    // copy), but ApprovalService 'created' still fires here — R7-Task11
+    // wiring must not leave the bridge in the "missing kind" failure
+    // branch, so we provide a calm fallback label.
+    circuit_breaker: {
+      title: '자율 모드 다운그레이드',
+      body: () => '자동 실행이 중단되어 자율 모드가 manual로 변경되었습니다.',
+    },
   });
 
 function summariseCliPermission(item: ApprovalItem): string {

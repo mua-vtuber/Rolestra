@@ -25,6 +25,7 @@ import { DEFAULT_COMMAND_POLICY } from '../../shared/execution-types';
 import { AuditLog } from './audit-log';
 import { PatchApplier } from './patch-applier';
 import { CommandRunner } from './command-runner';
+import type { CircuitBreaker } from '../queue/circuit-breaker';
 
 /** Options for creating an ExecutionService instance. */
 export interface ExecutionServiceOptions {
@@ -39,6 +40,15 @@ export interface ExecutionServiceOptions {
     targetPath: string,
     conversationId?: string,
   ) => Promise<boolean>;
+  /**
+   * R9-Task6 (spec §8 CB-5 `files_per_turn`): CircuitBreaker that
+   * receives the count of files modified by each successful non-dryRun
+   * applyPatch. Optional — tests and legacy callers without an
+   * autonomy loop leave it undefined. `recordFileChanges` is a no-op
+   * when the total stays at or under the configured limit, so wiring
+   * the breaker is safe even outside auto_toggle/queue projects.
+   */
+  circuitBreaker?: CircuitBreaker;
 }
 
 /**
@@ -52,6 +62,7 @@ export class ExecutionService {
   private readonly patchApplier: PatchApplier;
   private readonly commandRunner: CommandRunner;
   private readonly ensureAccess?: ExecutionServiceOptions['ensureAccess'];
+  private readonly circuitBreaker?: CircuitBreaker;
 
   constructor(options: ExecutionServiceOptions) {
     this.auditLog = new AuditLog();
@@ -60,6 +71,7 @@ export class ExecutionService {
       options.commandPolicy ?? DEFAULT_COMMAND_POLICY,
     );
     this.ensureAccess = options.ensureAccess;
+    this.circuitBreaker = options.circuitBreaker;
   }
 
   /**
@@ -240,6 +252,14 @@ export class ExecutionService {
         auditEntry.rollbackable = false;
       }
       this.auditLog.record(auditEntry);
+      // R9-Task6: feed `files_per_turn` on a real (non-dry-run) apply
+      // that succeeded. Dry-run previews never write to disk, so they
+      // must not count toward the per-turn tripwire. We use
+      // `appliedEntries.length` rather than `patchSet.entries.length`
+      // so partial rollback on failure doesn't get over-counted.
+      if (!patchSet.dryRun && result.success && this.circuitBreaker) {
+        this.circuitBreaker.recordFileChanges(result.appliedEntries.length);
+      }
       return result;
     } catch (err) {
       auditEntry.result = 'failed';

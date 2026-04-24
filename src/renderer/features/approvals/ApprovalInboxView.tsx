@@ -116,6 +116,12 @@ function kindLabel(
       return t('approval.kind.review_outcome');
     case 'failure_report':
       return t('approval.kind.failure_report');
+    // R9-Task6: CircuitBreaker downgrade receipts. The i18n key is added
+    // to the populate pass in R9-Task11 — the fallback key itself reads
+    // as a sensible label if a build reaches production before that
+    // populate lands.
+    case 'circuit_breaker':
+      return t('approval.kind.circuit_breaker');
   }
 }
 

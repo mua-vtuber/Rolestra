@@ -49,6 +49,7 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import type { QueueItem } from '../../shared/queue-types';
 import { QueueRepository } from './queue-repository';
+import type { CircuitBreaker } from './circuit-breaker';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
 
@@ -139,8 +140,22 @@ export const QUEUE_ORDER_STEP = 1000;
 // ── Service ────────────────────────────────────────────────────────────
 
 export class QueueService extends EventEmitter {
-  constructor(private readonly repo: QueueRepository) {
+  /**
+   * R9-Task6 (spec §8 CB-5 `queue_streak`): optional CircuitBreaker
+   * that receives a `recordQueueStart()` tick every time `claimNext()`
+   * successfully flips a pending item to `in_progress`. Left optional
+   * because legacy callers (R2 tests, Task 7 wiring) construct the
+   * service without an autonomy loop — claimNext is still a valid
+   * standalone operation when no breaker is registered.
+   */
+  private readonly circuitBreaker: CircuitBreaker | null;
+
+  constructor(
+    private readonly repo: QueueRepository,
+    options: { circuitBreaker?: CircuitBreaker } = {},
+  ) {
     super();
+    this.circuitBreaker = options.circuitBreaker ?? null;
   }
 
   /**
@@ -222,17 +237,27 @@ export class QueueService extends EventEmitter {
    * guarantees a consistent snapshot for the duration.
    */
   claimNext(projectId: string): QueueItem | null {
-    return this.repo.transaction(() => {
+    const claimed: QueueItem | null = this.repo.transaction(() => {
       const next = this.repo.nextPending(projectId);
       if (!next) return null;
       const startedAt = Date.now();
       this.repo.setStatus(next.id, 'in_progress', startedAt);
-      return {
+      const result: QueueItem = {
         ...next,
         status: 'in_progress',
         startedAt,
       };
+      return result;
     });
+    // R9-Task6: feed the `queue_streak` tripwire. Only a successful
+    // claim counts — when the queue is empty we skip the record so
+    // idle polling does not inflate the streak. Called outside the
+    // transaction so a breaker listener can emit side effects (e.g.
+    // autonomy downgrade) without re-entering SQLite.
+    if (claimed && this.circuitBreaker) {
+      this.circuitBreaker.recordQueueStart();
+    }
+    return claimed;
   }
 
   /**

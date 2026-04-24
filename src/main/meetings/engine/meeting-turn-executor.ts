@@ -76,6 +76,42 @@ import type { ApprovalCliAdapter } from '../../approvals/approval-cli-adapter';
 type ProviderRegistry = typeof providerRegistry;
 import type { MessageMeta } from '../../../shared/message-types';
 import type { MeetingSession } from './meeting-session';
+import type { CircuitBreaker } from '../../queue/circuit-breaker';
+
+/**
+ * R9-Task6 error categories fed to CircuitBreaker.recordError. Tightly
+ * enumerated so free-form strings never explode the `same_error` streak
+ * counter (spec §12 boundary: `recordError(cat)` must accept an enum
+ * only — a random error.message would let an attacker force a reset by
+ * perturbing the text).
+ */
+type TurnErrorCategory =
+  | 'cli_spawn_failed'
+  | 'provider_stream_failed'
+  | 'turn_error';
+
+/**
+ * Map a raw turn exception to a CircuitBreaker category. Narrow by the
+ * marker strings the CLI stack produces (`spawn`, `ENOENT`); everything
+ * else collapses to the generic `turn_error` bucket. We classify off the
+ * message because the exception class is invariably a plain `Error`
+ * rethrown from subprocess / HTTP layers.
+ */
+function classifyTurnError(err: unknown): TurnErrorCategory {
+  const message = err instanceof Error ? err.message : String(err);
+  const lower = message.toLowerCase();
+  if (
+    lower.includes('spawn') ||
+    lower.includes('enoent') ||
+    lower.includes('not found')
+  ) {
+    return 'cli_spawn_failed';
+  }
+  if (lower.includes('stream') || lower.includes('token')) {
+    return 'provider_stream_failed';
+  }
+  return 'turn_error';
+}
 
 const WORK_SUMMARY_PREFIX = 'work-summary-';
 
@@ -117,6 +153,14 @@ export interface MeetingTurnExecutorDeps {
    * (R8-Task8 main/index.ts) always provides it.
    */
   memberProfileService?: import('../../members/member-profile-service').MemberProfileService;
+  /**
+   * R9-Task6 (spec §8 CB-5 `same_error`): optional CircuitBreaker that
+   * receives a `recordError(category)` tick whenever a turn bubbles an
+   * exception out of `provider.streamCompletion`. Optional to match
+   * the `memberProfileService` pattern — R6/R7 smoke tests do not
+   * install an autonomy loop, so the DI slot stays null.
+   */
+  circuitBreaker?: CircuitBreaker;
 }
 
 export class MeetingTurnExecutor {
@@ -130,6 +174,7 @@ export class MeetingTurnExecutor {
   private readonly memberProfileService?: NonNullable<
     MeetingTurnExecutorDeps['memberProfileService']
   >;
+  private readonly circuitBreaker?: CircuitBreaker;
 
   private readonly messageFormatter = new MessageFormatter();
   private readonly appToolProvider = new AppToolProvider();
@@ -153,6 +198,7 @@ export class MeetingTurnExecutor {
     this.personaPrimedParticipants = deps.personaPrimedParticipants;
     this.approvalCliAdapter = deps.approvalCliAdapter;
     this.memberProfileService = deps.memberProfileService;
+    this.circuitBreaker = deps.circuitBreaker;
   }
 
   /** Abort the currently in-flight provider request, if any. */
@@ -422,6 +468,13 @@ export class MeetingTurnExecutor {
           error: errorMsg,
           fatal: false,
         });
+        // R9-Task6: feed the `same_error` tripwire. User-initiated aborts
+        // (signal.aborted) are a control-flow signal, not a failure — we
+        // must not let `meeting:abort` inflate the counter and trip the
+        // breaker. Classification is a closed enum (see
+        // `classifyTurnError`) so the streak counter cannot be perturbed
+        // by attacker-controlled error text.
+        this.circuitBreaker?.recordError(classifyTurnError(err));
       }
     } finally {
       this.abortController = null;
