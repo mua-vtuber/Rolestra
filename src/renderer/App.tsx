@@ -7,6 +7,7 @@ import type { NavRailItem, ProjectRailProject } from './components/shell';
 import { DevThemeSwitcher } from './components/shell/theme-switcher';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { MessengerPage } from './features/messenger/MessengerPage';
+import { DmListView } from './features/dms/DmListView';
 import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { QueuePanel } from './features/projects/QueuePanel';
@@ -155,12 +156,27 @@ export function App() {
         />
       }
       rail={
-        <ProjectRail
-          projects={railProjects}
-          activeProjectId={activeProjectId ?? undefined}
-          onSelectProject={handleSelectProject}
-          onCreateProject={handleCreateProject}
-        />
+        <div className="flex h-full flex-col shrink-0">
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <ProjectRail
+              projects={railProjects}
+              activeProjectId={activeProjectId ?? undefined}
+              onSelectProject={handleSelectProject}
+              onCreateProject={handleCreateProject}
+              className="h-full border-r-0"
+            />
+          </div>
+          <DmListView
+            activeChannelId={activeChannelId}
+            onSelectDm={(channelId) => {
+              if (activeProjectId !== null) {
+                setActiveChannelIdStore(activeProjectId, channelId);
+              }
+              setView('messenger');
+            }}
+            className="bg-project-bg border-r border-border"
+          />
+        </div>
       }
       topBar={
         <ShellTopBar

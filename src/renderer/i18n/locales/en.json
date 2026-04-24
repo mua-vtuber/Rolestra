@@ -138,6 +138,22 @@
       "title": "Active meetings"
     }
   },
+  "dm": {
+    "alreadyExists": "DM already exists",
+    "create": {
+      "body": "DMs are 1:1 between you and an AI. AIs that already have a DM are disabled.",
+      "close": "Close",
+      "existsBadge": "Already",
+      "loading": "Loading…",
+      "newBadge": "Create",
+      "title": "Start new DM"
+    },
+    "createError": "Failed to create DM: {{msg}}",
+    "empty": "No DMs",
+    "listTitle": "DM",
+    "loading": "Loading…",
+    "newDm": "New DM"
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "Safety circuit tripped",

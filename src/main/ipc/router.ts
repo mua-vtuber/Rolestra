@@ -147,6 +147,8 @@ import {
   handleChannelAddMembers,
   handleChannelRemoveMembers,
   handleChannelStartMeeting,
+  handleDmList,
+  handleDmCreate,
 } from './handlers/channel-handler';
 import {
   handleMessageAppend,
@@ -508,6 +510,10 @@ export function registerIpcHandlers(): void {
   handle('channel:add-members', isDev, (data) => handleChannelAddMembers(data));
   handle('channel:remove-members', isDev, (data) => handleChannelRemoveMembers(data));
   handle('channel:start-meeting', isDev, (data) => handleChannelStartMeeting(data));
+
+  // ── R10-Task3: DM (사용자↔AI 1:1) ───────────────────────────────
+  handle('dm:list', isDev, () => handleDmList());
+  handle('dm:create', isDev, (data) => handleDmCreate(data));
 
   // ── v3: Message ─────────────────────────────────────────────────
   handle('message:append', isDev, (data) => handleMessageAppend(data));

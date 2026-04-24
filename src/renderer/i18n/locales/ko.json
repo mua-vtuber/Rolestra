@@ -138,6 +138,22 @@
       "title": "진행 중인 회의"
     }
   },
+  "dm": {
+    "alreadyExists": "이미 DM 있음",
+    "create": {
+      "body": "DM 은 사용자↔AI 1:1 대화입니다. 이미 DM 이 있는 AI 는 비활성화됩니다.",
+      "close": "닫기",
+      "existsBadge": "이미 있음",
+      "loading": "불러오는 중…",
+      "newBadge": "새로 만들기",
+      "title": "새 DM 시작"
+    },
+    "createError": "DM 생성 실패: {{msg}}",
+    "empty": "DM 없음",
+    "listTitle": "DM",
+    "loading": "불러오는 중…",
+    "newDm": "새 DM"
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "자동 안전 장치 발동",
