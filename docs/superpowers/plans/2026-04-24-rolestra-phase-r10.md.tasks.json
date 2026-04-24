@@ -1,0 +1,124 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: R10 브랜치 + spec §10 R10 체크리스트 확장 + plan + tasks.json + Decision Log",
+      "status": "completed",
+      "description": "**Goal:** `rolestra-phase-r10` 브랜치 main tip(`81a55e6`)에서 분기. spec §10 Phase R10 블록을 R3~R9 템플릿(체크박스 + 산출물 링크)으로 확장 — 14 구현 체크박스 + closeout 1개 + scope 경계. Decision Log 10건(D1~D10) 기록. tasks.json 16-slot skeleton.\n\n**Files:** docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md, docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md.tasks.json, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 Phase R10만)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r10\n\n```json:metadata\n{\"files\":[\"docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md\",\"docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md.tasks.json\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r10 브랜치 생성\",\"Decision Log에 D1~D10 10건 기록\",\"§10 Phase R10 체크박스+산출물 템플릿 확장\",\"tasks.json 16-slot skeleton 존재\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Shared types + 5 IPC + member-status stream 정식 + zod + preload",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** R10 신규 shared 타입 확정 + 5 IPC 채널(`message:search`, `dm:list`, `dm:create`, `permission:dry-run-flags`, `meeting:llm-summarize`) + `stream:member-status-changed` payload 정식화(R8 D8 / R9 #3 스텁 → 정식). `message-search-types.ts` / `dm-types.ts` / `permission-flag-types.ts` 신규 + `circuit-breaker-types.ts` 에 persistence schema. preload 화이트리스트 + ipc-schemas zod 확장 + round-trip 테스트 12+ cases.\n\n**Files:** src/shared/{message-search-types,dm-types,permission-flag-types,circuit-breaker-types,ipc-types,ipc-schemas,stream-events}.ts, src/preload/index.ts, src/shared/__tests__/ipc-schemas.test.ts\n\n**Verify:** `npm run test -- ipc-schemas stream-events`\n\n```json:metadata\n{\"files\":[\"src/shared/message-search-types.ts\",\"src/shared/dm-types.ts\",\"src/shared/permission-flag-types.ts\",\"src/shared/circuit-breaker-types.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\",\"src/shared/stream-events.ts\",\"src/preload/index.ts\"],\"verifyCommand\":\"npm run test -- ipc-schemas stream-events\",\"acceptanceCriteria\":[\"5 신규 IPC + member-status-changed payload 정식\",\"zod round-trip 12+ cases green\",\"기존 R9 채널 회귀 0\",\"typecheck exit 0\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: MessageSearchView + use-message-search + ShellTopBar 진입 + message:search IPC",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** spec §10 R10 '검색 (FTS5)' 완료. R5 시점 이미 구현된 `MessageRepository.searchInChannel/searchInProject` 위에 (a) `message:search` handler + router, (b) `useMessageSearch` hook (debounce 200ms), (c) `MessageSearchView` Radix Dialog modal + `SearchResultRow`, (d) ShellTopBar 검색 아이콘 + Cmd/Ctrl+K shortcut, (e) 결과 row 클릭 → `useChannelMessages.scrollToMessage` deep-link. E2E spec `search-flow.spec.ts` + WSL DONE_WITH_CONCERNS.\n\n**Files:** src/main/ipc/handlers/message-handler.ts, src/main/ipc/router.ts, src/renderer/hooks/use-message-search.ts, src/renderer/features/search/{MessageSearchView,SearchResultRow}.tsx, src/renderer/components/shell/ShellTopBar.tsx, e2e/search-flow.spec.ts\n\n**Verify:** `npm run test -- MessageSearchView use-message-search message-handler`\n\n```json:metadata\n{\"files\":[\"src/main/ipc/handlers/message-handler.ts\",\"src/renderer/features/search/MessageSearchView.tsx\",\"src/renderer/hooks/use-message-search.ts\",\"src/renderer/components/shell/ShellTopBar.tsx\",\"e2e/search-flow.spec.ts\"],\"verifyCommand\":\"npm run test -- MessageSearchView use-message-search\",\"acceptanceCriteria\":[\"검색 입력 → invoke('message:search') 인자 정확\",\"row 클릭 → channel deep-link\",\"Cmd/Ctrl+K 단축키\",\"E2E spec 1 추가\",\"message.search.* i18n 키 placeholder\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: DM 정식 — DmListView + DmCreateModal + Thread 분기 + dm:create/list IPC",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** spec §10 R10 'DM 기능 완성'. R2 시점 channels.kind='dm' + idx_dm_unique_per_provider 위에 (a) `channel-service.createDm(providerId)` idempotent, (b) `dm:list`/`dm:create` handler, (c) `use-dms` R5 placeholder → 정식, (d) `DmListView` (NavRail 진입) + `DmCreateModal` (provider 선택 + 이미 DM 있는 provider disabled), (e) Thread 가 `kind='dm'` 분기 — 메시지 입력 활성화 + 회의 시작 버튼 비활성 (spec §7.4). E2E spec `dm-flow.spec.ts`.\n\n**Files:** src/main/channels/channel-service.ts, src/main/ipc/handlers/channel-handler.ts, src/renderer/hooks/use-dms.ts, src/renderer/features/dms/{DmListView,DmCreateModal}.tsx, src/renderer/components/shell/NavRail.tsx, src/renderer/features/messenger/Thread.tsx, e2e/dm-flow.spec.ts\n\n**Verify:** `npm run test -- DmListView DmCreateModal use-dms channel-service`\n\n```json:metadata\n{\"files\":[\"src/main/channels/channel-service.ts\",\"src/renderer/features/dms/DmListView.tsx\",\"src/renderer/features/dms/DmCreateModal.tsx\",\"src/renderer/hooks/use-dms.ts\",\"src/renderer/features/messenger/Thread.tsx\",\"e2e/dm-flow.spec.ts\"],\"verifyCommand\":\"npm run test -- DmListView DmCreateModal\",\"acceptanceCriteria\":[\"DM 생성 idx_dm_unique_per_provider idempotent\",\"DM 채널 메시지 입력 정상 / 회의 시작 비활성\",\"NavRail DM 섹션 정식 활성\",\"AI끼리 DM 불가 (spec §7.4)\",\"E2E spec 1 추가\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Queue meetingStarter production 주입 + Circuit Breaker approval UI 정식 편입",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** R9 Known Concerns #1 + #6 동시 종결. (i) `createDefaultMeetingStarter(deps)` helper → `queueService.setMeetingStarter` production 주입 — R9 에서 claim + stream 만 했던 것을 실제 meeting spawn 으로 완성. (ii) `CircuitBreakerApprovalRow` 전용 컴포넌트 — tripwire 시각 + 한계값 vs 측정값 readout + '재개' 버튼 → `approval:decide(approved)` + `circuitBreaker.resetCounter(tripwire)` + `projectService.setAutonomy(previousMode)`. `ApprovalDecisionRouter` 에 `kind='circuit_breaker'` 분기.\n\n**Files:** src/main/queue/queue-service.ts, src/main/queue/circuit-breaker.ts, src/main/approvals/approval-decision-router.ts, src/main/index.ts, src/renderer/features/approvals/{ApprovalInboxView,CircuitBreakerApprovalRow}.tsx\n\n**Verify:** `npm run test -- queue-service circuit-breaker approval-decision-router CircuitBreakerApprovalRow`\n\n```json:metadata\n{\"files\":[\"src/main/queue/queue-service.ts\",\"src/main/queue/circuit-breaker.ts\",\"src/main/approvals/approval-decision-router.ts\",\"src/renderer/features/approvals/CircuitBreakerApprovalRow.tsx\"],\"verifyCommand\":\"npm run test -- queue-service CircuitBreakerApprovalRow\",\"acceptanceCriteria\":[\"Queue 모드 meeting onFinal → 다음 항목 실제 meeting spawn\",\"ApprovalInbox 에서 circuit_breaker 전용 row\",\"재개 클릭 → autonomyMode 복귀 + counter reset\",\"R9 Known Concerns #1 + #6 종결\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: PermissionFlagBuilder — 3 모드 × 3 CLI × 3 project kind 매트릭스 통합",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** spec §7.6.3 에 흩어진 CLI 플래그 build 를 단일 `PermissionFlagBuilder` 로 통합. input: `{providerKind, permissionMode, projectKind, dangerousAutoOptIn, consensusPath}` → output: `{args: string[]} | {rejected, reason}`. external+auto 는 입력 zod 에서 reject (CA-1/CA-3). Claude `acceptEdits/allowedTools/add-dir` / Codex `-a/--sandbox/-C` / Gemini `--approval-mode` 매트릭스. 기존 cli-runner 들이 builder 사용하도록 수정 (spawn arg snapshot 회귀 0). `permission:dry-run-flags` IPC handler (settings 보안 탭 미리보기).\n\n**Files:** src/main/permissions/permission-flag-builder.ts, src/main/permissions/__tests__/permission-flag-builder.test.ts, src/main/providers/cli/*cli-runner.ts (인라인 플래그 build → builder 호출), src/main/ipc/handlers/permission-handler.ts\n\n**Verify:** `npm run test -- permission-flag-builder cli-runner`\n\n```json:metadata\n{\"files\":[\"src/main/permissions/permission-flag-builder.ts\",\"src/main/providers/cli/claude-cli-runner.ts\",\"src/main/providers/cli/codex-cli-runner.ts\",\"src/main/providers/cli/gemini-cli-runner.ts\",\"src/main/ipc/handlers/permission-handler.ts\"],\"verifyCommand\":\"npm run test -- permission-flag-builder\",\"acceptanceCriteria\":[\"3×3×3 매트릭스 27 + dangerous 6 + rejection 6 = 39 cases green\",\"external+auto 입력 → rejected:true\",\"dangerousAutoOptIn=true → Claude --dangerously-skip-permissions\",\"cli-runner 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Settings UI 정식 10탭 재구성 (SettingsTabs + 10 tab 컴포넌트)",
+      "status": "pending",
+      "blockedBy": [4, 5],
+      "description": "**Goal:** R9 임시 SettingsView (NotificationPrefsView 단일 섹션) → spec §7.10.6 '10탭' 정식 재편. tabs: Members(R8 풀버전, D8 deferred) / Notifications(R9 이전) / AutonomyDefaults / ApiKeys(safeStorage) / Theme / Language(setNotificationLocale wire) / Path / Cli(provider CRUD) / Security(위험한 자율 모드 opt-in) / About. `Tabs.tsx` Radix 래퍼 + cva (panelClip / cardTitleStyle 자동 매핑). NavRail Settings 진입 시 `view='settings'` + URL hash deep-link. E2E spec `settings-tabs-flow.spec.ts`.\n\n**Files:** src/renderer/components/primitives/Tabs.tsx, src/renderer/features/settings/SettingsTabs.tsx, src/renderer/features/settings/tabs/{Members,Notifications,AutonomyDefaults,ApiKeys,Theme,Language,Path,Cli,Security,About}Tab.tsx, src/renderer/features/settings/SettingsView.tsx, src/renderer/components/shell/NavRail.tsx, e2e/settings-tabs-flow.spec.ts\n\n**Verify:** `npm run test -- SettingsTabs MembersTab NotificationsTab ThemeTab LanguageTab SecurityTab`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/settings/SettingsTabs.tsx\",\"src/renderer/features/settings/tabs/MembersTab.tsx\",\"src/renderer/features/settings/tabs/NotificationsTab.tsx\",\"src/renderer/features/settings/tabs/AutonomyDefaultsTab.tsx\",\"src/renderer/features/settings/tabs/ThemeTab.tsx\",\"src/renderer/features/settings/tabs/LanguageTab.tsx\",\"src/renderer/features/settings/tabs/SecurityTab.tsx\",\"e2e/settings-tabs-flow.spec.ts\"],\"verifyCommand\":\"npm run test -- SettingsTabs\",\"acceptanceCriteria\":[\"10 탭 모두 mount 정상\",\"ThemeTab/LanguageTab/SecurityTab 실 동작 (theme switch / locale / opt-in)\",\"R8 D8 (멤버 풀버전) + provider CRUD 종결\",\"E2E spec 1 추가\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: 6 테마 형태-레벨 분기 정식 wire — 디자인 fidelity sign-off",
+      "status": "pending",
+      "blockedBy": [2, 3, 6],
+      "description": "**Goal:** 메모리 `rolestra-design-fidelity-gap.md` (R4 시점 피드백 '토큰 스왑만으로 공통 형태 + 색만 느낌') 해소. R3 형태 토큰 (panelClip / cardTitleStyle / miniBtnStyle / gaugeGlow / avatarShape) 를 R4~R10 신규 surface 에 실제 wire — MessengerView / ApprovalInbox / MemberProfilePopover / AutonomyConfirmDialog / QueuePanel / NotificationPrefsView / SettingsTabs / MessageSearchView / DmListView / CircuitBreakerApprovalRow. tactical 12분절 / retro ASCII / warm 라운드 패널 정식 분기. tokens.css 확장 + theme:check hardcoded color 0 + 12 스크린샷 증빙 (Windows/macOS native).\n\n**Files:** src/renderer/styles/tokens.css, src/renderer/components/primitives/{Card,Button}.tsx, src/renderer/features/dashboard/ProgressGauge.tsx, src/renderer/features/**/*.tsx (data-theme/data-mode CSS 만), docs/superpowers/specs/appendix-r10-evidence/ (12 캡처)\n\n**Verify:** `npm run theme:check && npm run test -- theme-shape-tokens`\n\n```json:metadata\n{\"files\":[\"src/renderer/styles/tokens.css\",\"src/renderer/components/primitives/Card.tsx\",\"src/renderer/components/primitives/Button.tsx\",\"src/renderer/features/dashboard/ProgressGauge.tsx\",\"docs/superpowers/specs/appendix-r10-evidence\"],\"verifyCommand\":\"npm run theme:check\",\"acceptanceCriteria\":[\"6 테마 모두 시각 차이 분명 (형태 토큰 적용)\",\"theme:check exit 0 (hardcoded color 0)\",\"12 스크린샷 증빙 (DONE_WITH_CONCERNS placeholder 허용)\",\"R4~R9 시각 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Optimistic UI + ErrorBoundary — 메시지/autonomy/queue 3 hook",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** R5/R9 mutation 흐름 optimistic 승격. `use-channel-messages.send` / `use-autonomy-mode.confirm` / `use-queue.addLines` 가 invoke 전에 pending row 추가 → 성공 시 server-id swap, 실패 시 rollback + ErrorBoundary toast. React 19 ErrorBoundary 래퍼 신규 + App.tsx 최상위 wrap. scope 는 3 hook 으로 제한 (D8).\n\n**Files:** src/renderer/hooks/{use-channel-messages,use-autonomy-mode,use-queue}.ts, src/renderer/components/ErrorBoundary.tsx, src/renderer/App.tsx\n\n**Verify:** `npm run test -- use-channel-messages use-autonomy-mode use-queue ErrorBoundary`\n\n```json:metadata\n{\"files\":[\"src/renderer/hooks/use-channel-messages.ts\",\"src/renderer/hooks/use-autonomy-mode.ts\",\"src/renderer/hooks/use-queue.ts\",\"src/renderer/components/ErrorBoundary.tsx\",\"src/renderer/App.tsx\"],\"verifyCommand\":\"npm run test -- use-channel-messages ErrorBoundary\",\"acceptanceCriteria\":[\"3 hook 모두 optimistic + rollback\",\"ErrorBoundary unhandled error 가로챔\",\"race condition ordering invariant (D8)\",\"기존 R5/R9 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Circuit Breaker persistence — 신규 migration 012 + hydrate/flush",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** R9 Known Concerns #2 종결. 신규 마이그레이션 012 `circuit_breaker_state (project_id, tripwire, counter, last_reset_at, last_updated_at)` PK (project_id, tripwire). R10 유일한 forward-only 마이그레이션 (D10). `CircuitBreakerStore` hydrate/flush(debounced 1s)/reset API. `CircuitBreaker` constructor 에 store DI + 부팅 시 hydrate + recordX 시 flush. 재시작 후 counter 유지. migration idempotent.\n\n**Files:** src/main/database/migrations/012-circuit-breaker-state.ts, src/main/database/migrations/index.ts, src/main/queue/{circuit-breaker-store,circuit-breaker}.ts, src/main/index.ts\n\n**Verify:** `npm run test -- circuit-breaker-store circuit-breaker migrations`\n\n```json:metadata\n{\"files\":[\"src/main/database/migrations/012-circuit-breaker-state.ts\",\"src/main/queue/circuit-breaker-store.ts\",\"src/main/queue/circuit-breaker.ts\"],\"verifyCommand\":\"npm run test -- circuit-breaker-store migrations\",\"acceptanceCriteria\":[\"부팅 시 hydrate → in-memory counters 초기화\",\"recordX → 1s debounce flush\",\"재시작 후 counter 유지\",\"migration 012 idempotent + down 테스트\",\"R9 Known Concerns #2 종결\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: stream:member-status-changed broadcast + Warmup provider.disabled + macOS focus gate",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** R9 Known Concerns #3/#4/#5 + R8 D8 동시 종결. (a) `MemberProfileService.emit('status-changed')` R9 스텁 → StreamBridge.connect({members}) → `stream:member-status-changed` broadcast + renderer `use-member-status-stream` reducer. R8 mutation invalidation 패턴 유지 (D9 공존). (b) MemberWarmupService backoff 중 `provider.disabled=true` 체크 → cancelRetries. (c) NotificationService macOS focus gate 보정 (process.platform='darwin' 시 app.dock.isVisible() + BrowserWindow.getAllWindows().some(isFocused && isVisible) 조합).\n\n**Files:** src/main/members/{member-profile-service,member-warmup-service}.ts, src/main/streams/stream-bridge.ts, src/main/notifications/notification-service.ts, src/renderer/hooks/use-member-status-stream.ts\n\n**Verify:** `npm run test -- member-profile-service member-warmup-service notification-service use-member-status-stream`\n\n```json:metadata\n{\"files\":[\"src/main/members/member-profile-service.ts\",\"src/main/members/member-warmup-service.ts\",\"src/main/notifications/notification-service.ts\",\"src/renderer/hooks/use-member-status-stream.ts\"],\"verifyCommand\":\"npm run test -- member-profile-service member-warmup-service\",\"acceptanceCriteria\":[\"멤버 status 변경 → 모든 surface 즉시 동기\",\"warmup provider.disabled 시 retry 중단\",\"macOS focus gate 정확\",\"R9 Known Concerns #3/#4/#5 + R8 D8 종결\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: Consensus 24h timer rehydrate + Dashboard KPI stream + mode_transition conditional + LLM 요약",
+      "status": "pending",
+      "blockedBy": [6, 10],
+      "description": "**Goal:** R7/R6 deferred 일괄. (a) ApprovalService `rehydrateConsensusTimers()` 부팅 helper — 재시작 후 pending consensus_decision 24h 타이머 재예약 (R7 D2). (b) Dashboard ApprovalsWidget KPI count stream-driven (R7 deferred) — usePendingApprovals reducer watch. (c) ApprovalBlock `mode_transition` conditional 버튼 활성 (R7 D3) — ConditionalDialog reuse. (d) `meeting-summary-service.summarize(meetingId, providerId?)` — provider capability 'summarize' fallback chain (D7), onFinal 에서 postMinutes 직후 1단락 추가. 실패 시 기존 포맷.\n\n**Files:** src/main/approvals/approval-service.ts, src/main/index.ts, src/main/llm/meeting-summary-service.ts, src/main/meetings/engine/meeting-orchestrator.ts, src/main/ipc/handlers/meeting-handler.ts, src/renderer/hooks/use-dashboard-kpis.ts, src/renderer/features/dashboard/widgets/ApprovalsWidget.tsx, src/renderer/features/messenger/ApprovalBlock.tsx\n\n**Verify:** `npm run test -- meeting-summary-service approval-service use-dashboard-kpis ApprovalBlock`\n\n```json:metadata\n{\"files\":[\"src/main/approvals/approval-service.ts\",\"src/main/llm/meeting-summary-service.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\",\"src/renderer/hooks/use-dashboard-kpis.ts\",\"src/renderer/features/messenger/ApprovalBlock.tsx\"],\"verifyCommand\":\"npm run test -- meeting-summary-service approval-service\",\"acceptanceCriteria\":[\"24h timer 재시작 후 정확히 expire\",\"Dashboard KPI stream-driven\",\"mode_transition conditional 버튼 활성\",\"LLM 요약 provider 있을 때 1단락, 없으면 기존 포맷\",\"R7 D2/D3 + Dashboard KPI + LLM 요약 종결\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: i18n 완성 ko/en parity + main-process 라벨 dictionary 이전 + setNotificationLocale wire",
+      "status": "pending",
+      "blockedBy": [2, 3, 4, 6, 8, 11],
+      "description": "**Goal:** R3~R9 누적 i18n 부채 종결. (a) R10 신규 namespace populate (message.search/dm/settings.10tabs/approval.circuitBreaker/messenger.composer.error/meeting.summary/error.boundary) ko+en 양쪽. (b) main-process 잔여 한국어 고정 라벨 (R7/R8 deferred notification.approvalPending.* 포함) → `notification-labels.ts` D8 dictionary 이전. (c) SettingsTabs.LanguageTab 에서 `i18next.changeLanguage` + `invoke('notification:set-locale')` 동시 호출. (d) R3~R9 의 ko 만 있던 키 en 일괄 populate (orphan 0). i18n:check idempotent.\n\n**Files:** src/main/notifications/{notification-labels,notification-service}.ts, src/main/ipc/handlers/notification-handler.ts, src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js, src/renderer/features/settings/tabs/LanguageTab.tsx\n\n**Verify:** `npm run i18n:check && npm run test -- notification-labels`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"src/main/notifications/notification-labels.ts\",\"i18next-parser.config.js\",\"src/renderer/features/settings/tabs/LanguageTab.tsx\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"ko+en parity orphan 0\",\"main-process 한국어 고정 라벨 0 (dictionary 전부)\",\"LanguageTab 토글 → i18next + main-process 동시 전환\",\"i18n:check idempotent 두 번째 실행 diff 0\",\"D8 잔재 종결\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: Playwright OS matrix CI 활성화 + R4~R10 9 spec 실 런 + autonomy-queue Step C 활성",
+      "status": "pending",
+      "blockedBy": [2, 3, 6, 7, 9, 11, 12],
+      "description": "**Goal:** R4~R9 WSL DONE_WITH_CONCERNS 부채 일괄 해소. `.github/workflows/playwright.yml` 신규 — matrix `[windows-latest, macos-latest, ubuntu-latest]`. 9 spec (external-project/messenger/meeting/approval/member-profile/autonomy-queue + R10 신규 search/dm/settings-tabs) 모두 OS matrix 실 런. autonomy-queue-flow Step C (Circuit Breaker downgrade) 의 mock breaker 주입 wiring 활성화 — `ROLESTRA_E2E=1` 에서 `__rolestraDevHooks.tripFilesPerTurn(21)` debug hook 노출. Linux 는 xvfb-run headless. D5 (hosted runner) / macOS hosted minutes 비용은 weekly cron 고려.\n\n**Files:** .github/workflows/playwright.yml, e2e/playwright.config.ts, e2e/autonomy-queue-flow.spec.ts (Step C 활성), src/main/index.ts (__rolestraDevHooks NODE_ENV 가드)\n\n**Verify:** GitHub Actions playwright.yml workflow dispatch — 9 spec × 3 OS = 27 matrix cell green\n\n```json:metadata\n{\"files\":[\".github/workflows/playwright.yml\",\"e2e/playwright.config.ts\",\"e2e/autonomy-queue-flow.spec.ts\",\"src/main/index.ts\"],\"verifyCommand\":\"npx playwright test\",\"acceptanceCriteria\":[\"playwright.yml 등록 + workflow dispatch 가능\",\"9 spec × 3 OS = 27 matrix cell green\",\"R4~R9 DONE_WITH_CONCERNS 일괄 해소\",\"autonomy-queue Step C 실 실행\",\"12 스크린샷 증빙 (Windows+macOS)\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    },
+    {
+      "id": 14,
+      "subject": "Task 14: R10 Closeout — typecheck/lint/test/i18n/theme/build/OS matrix + done-checklist + tasks 15/15",
+      "status": "pending",
+      "blockedBy": [7, 8, 9, 10, 11, 12, 13],
+      "description": "**Goal:** 모든 정식 게이트 녹색. `docs/superpowers/specs/r10-done-checklist.md` 작성 (14 산출물 + 게이트 결과표 + Known Concerns + Decision Log D1~D10 + R11 forward pointers). spec §10 R10 [ ] → [x]. tasks.json 15/15 completed. 사용자 시각 sign-off (12 스크린샷 증빙).\n\n**Verify:** `npm run typecheck && npm run typecheck:web && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build` + Playwright OS matrix green\n\n**Files:** docs/superpowers/specs/r10-done-checklist.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R10), tasks.json\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/r10-done-checklist.md\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build\",\"acceptanceCriteria\":[\"정식 게이트 전체 녹색 (OS matrix 포함)\",\"r10-done-checklist.md 작성\",\"§10 R10 모든 ✓\",\"tasks.json 15/15 completed\",\"12 스크린샷 사용자 sign-off\"]}\n```",
+      "lastUpdated": "2026-04-24T23:30:00.000Z"
+    }
+  ]
+}

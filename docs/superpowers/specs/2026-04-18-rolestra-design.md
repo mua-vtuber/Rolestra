@@ -1302,13 +1302,43 @@ interface SsmContext {
 - LLM 기반 회의록 요약 (R9 는 원문 + 메타 헤더 스타일, R6 와 동일) — R10
 - 24h timer rehydrate for consensus approval auto-approve (R7 D2 이월) — autonomyMode=auto_toggle 에서 consensus_decision 의 accepted 조건은 즉시 처리하므로 timeout 자체는 R9 범위 밖, 프론트엔드 countdown 은 R10
 
-**Phase R10 — 다듬기**
-- DM 기능 완성
-- 검색 (FTS5 메시지 검색)
-- 설정 UI 전체 (기존 10탭 재구성)
-- 다크모드
-- i18n ko/en 완성
-- E2E 시나리오 커버
+**Phase R10 — 다듬기(Polish)** (plan: `docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md`, done-checklist: `docs/superpowers/specs/r10-done-checklist.md`)
+
+R9 까지 자율 모드 + 시스템 알림이 닫힌 상태 위에서, R1~R9 내내 "R10 deferred" 라벨로 미뤄둔 항목들과 R9 Known Concerns 6건을 일괄 수확하는 phase. 신규 도메인 모델 0, 신규 마이그레이션 1건(D10 `012_circuit_breaker_state`) 만 예외. Decision Log D1~D10 은 `docs/superpowers/plans/2026-04-24-rolestra-phase-r10.md` 참조.
+
+구현 체크리스트 (완료 시 ✓ + 산출물 링크 채움):
+
+- [ ] §6 IPC R10 신규 — `message:search`, `dm:list`, `dm:create`, `permission:dry-run-flags`, `meeting:llm-summarize` + `stream:member-status-changed` payload 정식화(R8 D8 / R9 Known Concern #3 스텁 → 정식) + 신규 shared 타입 + zod round-trip — 산출물: `src/shared/{message-search-types,dm-types,permission-flag-types,circuit-breaker-types,ipc-types,ipc-schemas,stream-events}.ts` + `src/preload/index.ts`
+- [ ] §7.4 메시지 검색 UI (FTS5 지원) — `MessageSearchView` Radix Dialog 모달(D2) + `useMessageSearch` hook (debounce 200ms) + `ShellTopBar` 검색 아이콘 + `Cmd/Ctrl+K` shortcut + 결과 row 클릭 → 채널/메시지 deep-link (R7 `usePendingApprovals` → ApprovalInbox navigation 패턴 reuse) + `message:search` handler/router (R5 시점 land 된 `MessageRepository.searchInChannel/searchInProject` 위에 얹기 — 신규 마이그레이션 0) — 산출물: `src/main/ipc/handlers/message-handler.ts` + `src/renderer/features/search/{MessageSearchView,SearchResultRow}.tsx` + `src/renderer/hooks/use-message-search.ts` + `e2e/search-flow.spec.ts`
+- [ ] §7.4 DM 기능 정식 노출 — D1 (기존 `channels.kind='dm'` + `idx_dm_unique_per_provider` 재사용, 신규 `dm_sessions` 테이블 미도입) — `DmListView` (NavRail expand) + `DmCreateModal` (provider 단일 선택, 이미 DM 있는 provider disabled) + `Thread.tsx` `channel.kind === 'dm'` 분기 (회의 시작 버튼 비활성 — spec §7.4 DM 회의 불가 규칙) + `dm:list/create` IPC handler — 산출물: `src/main/channels/channel-service.ts` `createDm` + `src/renderer/features/dms/{DmListView,DmCreateModal}.tsx` + `src/renderer/hooks/use-dms.ts` + `e2e/dm-flow.spec.ts`
+- [ ] §8 Queue `meetingStarter` production 주입 (R9 Known Concern #1 해소) + Circuit Breaker approval UI 정식 편입 (R9 Known Concern #6 해소) — `ApprovalInboxView` 에 `kind='circuit_breaker'` 전용 `CircuitBreakerApprovalRow` (어떤 tripwire / 어떤 한계 / "재개" 버튼 → autonomy 다시 승격 + counter reset) + `MeetingOrchestrator`/`channel:start-meeting` 헬퍼 재사용으로 `QueueService.startNext` 의 meetingStarter 실 spawn wiring — 산출물: `src/main/queue/queue-service.ts` + `src/main/index.ts` boot block + `src/renderer/features/approvals/{ApprovalInboxView,CircuitBreakerApprovalRow}.tsx`
+- [ ] §7.6 `PermissionFlagBuilder` — 3 모드(`auto`/`hybrid`/`approval`) × 3 CLI(Claude/Codex/Gemini) × 3 project kind(new/external/imported) 매트릭스 통합. `provider.kind` + `permission.mode` + `project.kind` + `dangerousAutonomyOptIn` 입력 → 정확한 CLI flag 배열 출력. external+auto 의 거부(spec §7.3 CA-1/CA-3) 는 builder zod 입력에서 reject. 기존 각 cli-runner 의 inline 플래그 코드를 builder 호출로 교체 (회귀 0 보장 위한 spawn arg snapshot 테스트 필수) — 산출물: `src/main/permissions/permission-flag-builder.ts` + `src/main/permissions/__tests__/permission-flag-builder.test.ts`
+- [ ] §7.10.6 Settings UI 10탭 재구성 — R9-Task4 의 임시 단일 `SettingsView` 를 정식 10탭 `SettingsTabs` (horizontal Radix Tabs, D3) 로 재편: (1) 멤버 관리 풀버전(R8 D8 deferred — 일괄 편집/추가/삭제, Open Q2 hard DELETE 확정) / (2) 알림 (R9 `NotificationPrefsView` 이전) / (3) 자율 모드 기본값(프로젝트 생성 기본 autonomyMode + Circuit Breaker 4 tripwire 한계값 + LLM 요약 auto/off 토글 D7) / (4) API 키(safeStorage CRUD) / (5) 테마(themeKey + mode 선택) / (6) 언어(`i18next.changeLanguage` + `setNotificationLocale` wire — D8 잔재 종결) / (7) 경로(ArenaRoot 변경 안내 + 재시작 필요 배너) / (8) CLI(provider 추가/삭제 — R8 D 흐름 deferred) / (9) 보안(path-guard 상태 + 위험한 자율 모드 opt-in switch — spec §7.6.5, Open Q1 default=false) / (10) 정보(앱 버전 + 라이센스) — 산출물: `src/renderer/features/settings/SettingsTabs.tsx` + `src/renderer/features/settings/tabs/{MembersTab,NotificationsTab,AutonomyDefaultsTab,ApiKeysTab,ThemeTab,LanguageTab,PathTab,CliTab,SecurityTab,AboutTab}.tsx` (10 파일) + `e2e/settings-tabs-flow.spec.ts` + 신규 dep `@radix-ui/react-tabs`
+- [ ] 6 테마 × 2 모드 형태-레벨 분기 정식 wire + 디자인 fidelity sign-off (D4 — R11 이연 X) — 메모리 `rolestra-design-fidelity-gap.md` (R4 시점 피드백 "토큰 스왑만으로 공통 형태 + 색만") 해소. R3 시점 도입한 형태 토큰(`panelClip`/`cardTitleStyle`/`miniBtnStyle`/`gaugeGlow`/`avatarShape`) 을 R4~R9 신규 surface(MessengerView / ApprovalInboxView / MemberProfilePopover / AutonomyConfirmDialog / QueuePanel / NotificationPrefsView / SettingsTabs / R10 신규 MessageSearchView + DmListView) 에 실제 wire — Tactical 12분절 게이지 / Retro ASCII 게이지 / Warm 라운드 패널 등 시각적으로 분명한 차이가 모든 surface 에 적용. 12 스크린샷 증빙(6 테마 × 2 모드) + 사용자 sign-off — 산출물: `src/renderer/styles/tokens.css` 확장 + 각 surface 컴포넌트 형태 토큰 wire + `docs/superpowers/specs/r10-theme-fidelity-screenshots/`
+- [ ] Optimistic UI + ErrorBoundary — D8 (3 hook 만: `use-channel-messages.send` / `use-autonomy-mode.switch` / `use-queue.add`). invoke 전 zustand store 에 `{status:'pending', tempId}` 임시 row 추가 → 성공 시 server-issued id swap, 실패 시 rollback + ErrorBoundary toast. R7 `ApprovalBlock.decide` / R8 `MemberProfile.edit` 등은 R11 이후 — 산출물: `src/renderer/components/primitives/ErrorBoundary.tsx` + 3 hook 확장 + 각 optimistic reducer 단위 테스트
+- [ ] Circuit Breaker persistence (R9 Known Concern #2 해소) — D10 신규 마이그레이션 1건 허용 — `012_circuit_breaker_state` 테이블 `PRIMARY KEY (project_id, tripwire)` (D6) + ON CASCADE DELETE + `last_updated_at`. `CircuitBreakerStore.hydrate(projectId)` 부팅 시 4 row 읽어 in-memory `CircuitBreaker.counters` 주입, `recordX` 호출 시 debounced 1s flush. forward-only + idempotent 유지 — 산출물: `src/main/database/migrations/012-circuit-breaker-state.ts` + `src/main/queue/circuit-breaker-store.ts` + `src/main/queue/circuit-breaker.ts` store DI + `src/main/queue/__tests__/circuit-breaker-store.test.ts`
+- [ ] `stream:member-status-changed` 실시간 broadcast (R8 D8 + R9 Known Concern #3 해소) + `MemberWarmupService` backoff 중 `provider.disabled` 체크 (R9 Known Concern #4 해소) + `notification.show` macOS BrowserWindow focus gate (R9 Known Concern #5 해소) — D9 (invalidation + stream 공존) — `MemberProfileService.emit('status-changed')` 스텁 활성화 → `StreamBridge.connect({members})` → `useMemberStatusStream` reducer (기존 R8 mutation invalidation 은 fallback 으로 유지) + Warmup retry 체인에 disabled flag early-exit + `NotificationService.show` 가 `BrowserWindow.isFocused()` 확인 후 `app.focus()` 호출 (macOS 한정) — 산출물: `src/main/members/member-profile-service.ts` + `src/main/members/member-warmup-service.ts` + `src/main/notifications/notification-service.ts` + `src/main/streams/stream-bridge.ts` + `src/renderer/hooks/use-member-status-stream.ts`
+- [ ] Deferred 소형 항목 일괄 — consensus_decision 24h timer rehydrate (R7 D2 이월) 부팅 hook + Dashboard KPI approval count 실시간 stream wiring (R7 deferred — `useDashboardKpis` 가 `usePendingApprovals` stream reducer watch) + `mode_transition` conditional UX (R7 D3 — 비활성+툴팁 → 정식 활성화, 조건은 자연어 메타로 다음 회의 system message 주입) + LLM 회의록 요약 옵션 (D7 — `MeetingSummaryService.summarize` provider capability 'summarize' fallback chain, provider 미설치 fallback 은 R6 포맷 유지, SettingsTabs.AutonomyDefaultsTab 에서 auto/off 토글) — 산출물: `src/main/approvals/approval-service.ts` (24h rehydrate hook) + `src/main/llm/meeting-summary-service.ts` + `src/main/meetings/engine/meeting-orchestrator.ts` onFinal 확장 + `src/renderer/features/approvals/ModeTransitionConditionalBlock.tsx` + `src/renderer/hooks/use-dashboard-kpis.ts` stream subscription
+- [ ] i18n ko/en parity 완성 — 잔여 main-process 한국어 고정 라벨(`notification.approvalPending.*` 등 R7/R8 deferred) `notification-labels.ts` D8 dictionary 이전 + R3~R9 의 ko 만 채워진 키 en 일괄 populate (orphan 0) + `setNotificationLocale` SettingsTabs.LanguageTab wire (현재 `DEFAULT_LOCALE='ko'` 고정 해소) + `i18next-parser` keepRemoved regex 확장 + `npm run i18n:check` idempotent (두 번째 실행 diff 0) — 산출물: `src/renderer/i18n/locales/{ko,en}.json` + `src/main/notifications/notification-labels.ts` + `i18next-parser.config.js`
+- [ ] Playwright Electron E2E OS matrix CI 활성화 (D5 GitHub Actions 표준 hosted runner, self-hosted 미도입) — Windows + macOS + Linux(xvfb-run headless) × 9 spec(external-project / messenger / meeting / approval / member-profile / autonomy-queue + R10 신규 search / dm / settings-tabs) = 27 matrix cell. R4~R9 내내 WSL DONE_WITH_CONCERNS 로 남겨둔 부채 일괄 해소. autonomy-queue-flow Step C (mock breaker 주입 후 강제 manual 다운그레이드) 활성화. API 키 없는 환경은 mock provider fixture reuse (R4~R9 패턴) — 산출물: `.github/workflows/playwright.yml` + `e2e/playwright.config.ts` projects matrix 확장 + `e2e/autonomy-queue-flow.spec.ts` Step C 활성
+- [ ] R10 Closeout — typecheck(전체) / typecheck:web / lint / test / i18n:check / theme:check / build / migration(012) / Playwright OS matrix exit 0 + R10 신규 250+ 테스트 green + R9 회귀 0 + 6 테마 12 스크린샷 사용자 sign-off + done-checklist 작성 + spec §10 R10 ✓ 전환 + tasks.json 15/15 completed — 산출물: `docs/superpowers/specs/r10-done-checklist.md`
+
+**scope 경계 (R10에서 하지 않는 것, R11 이연):**
+- `_legacy/` 삭제 + v2 engine 5 파일 + `engine/persona-builder.ts` 물리 삭제 — R11 legacy cleanup
+- 7 legacy `@ts-nocheck` 파일 청소 — R11
+- Retro 영어 복귀 결정 D8 — R11 릴리스 전
+- Windows 인스톨러 + macOS dmg + Linux AppImage 패키징 (spec §7.9) — R11
+- 문서 갱신(`docs/설계-문서.md` → v3로 교체) — R11
+- DM read-receipt / typing indicator 실 이벤트 — V4
+- 파일 첨부 드래그앤드롭 — V3.1
+- 음성 메모 / 플러그인 시스템 — V4
+- LLM 요약 비용 가시화(token count audit log) — R11 (D7 open question)
+- CI matrix macOS hosted runner 비용 monitoring — R11 (D5 risk)
+- 사용자 onboarding 흐름 / 첫 부팅 wizard — R11
+- Optimistic UI 확장(`ApprovalBlock.decide` / `MemberProfile.edit` 등) — R11 이후 (D8)
+- 회의별 LLM 요약 provider drop-down — V4 (D7)
+- MessageSearchView 사이드 패널 레이아웃 — V4 (D2)
+- 설정 vertical sidebar nav — 각하 (D3)
 
 **Phase R11 — 레거시 청소 + 릴리스**
 - `_legacy/` 삭제
