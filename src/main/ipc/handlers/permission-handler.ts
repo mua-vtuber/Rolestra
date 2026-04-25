@@ -129,3 +129,78 @@ export function handlePermissionListRules(
   };
 }
 
+// ── R10-Task5: PermissionFlagBuilder dry-run ─────────────────────
+//
+// 설정 보안 탭이 "이 조합 (provider × mode × project × opt-in) 은 어떤
+// argv 가 붙는가" 를 미리 보여주기 위한 서버사이드 dry-run. spawn 은
+// 하지 않으며 builder 출력을 그대로 반환한다.
+
+import {
+  buildPermissionFlags,
+  type PermissionFlagBuilderInput,
+} from '../../permissions/permission-flag-builder';
+import type { CliKind } from '../../../shared/cli-types';
+import type { PermissionFlagOutput } from '../../../shared/permission-flag-types';
+import { consensusFolderService } from './workspace-handler';
+
+/**
+ * spec §7.6 의 PermissionService 가 plug 가능한 ProjectService 를 넘기는
+ * 미래를 대비해 cwd resolver 를 lazy-injectable 로 둔다. 미주입 시 빈
+ * 문자열을 사용 — Codex `-C ''` 가 발생할 수 있어 dry-run 응답의 flags 만
+ * 참고 용도로 쓰도록 frontend 에 명시. R10 은 dry-run UI 한정.
+ */
+let projectCwdResolver: (() => string) | null = null;
+
+/** Inject the resolver for project cwd (called from main bootstrap). */
+export function setDryRunProjectCwdResolver(fn: () => string): void {
+  projectCwdResolver = fn;
+}
+
+/**
+ * Map the wire `providerType` (8 enum values) to the canonical CliKind
+ * (`claude` | `codex` | `gemini`). Non-CLI provider types yield null —
+ * the caller surfaces these as `unknown_provider_type`.
+ */
+function providerTypeToCliKind(providerType: string): CliKind | null {
+  switch (providerType) {
+    case 'claude_cli':
+      return 'claude';
+    case 'codex_cli':
+      return 'codex';
+    case 'gemini_cli':
+      return 'gemini';
+    default:
+      return null;
+  }
+}
+
+/** permission:dry-run-flags */
+export function handlePermissionDryRunFlags(
+  data: IpcRequest<'permission:dry-run-flags'>,
+): IpcResponse<'permission:dry-run-flags'> {
+  const cliKind = providerTypeToCliKind(data.providerType);
+  if (!cliKind) {
+    const blocked: PermissionFlagOutput = {
+      flags: [],
+      rationale: ['permission.flag.reason.unknown_provider_type'],
+      blocked: true,
+      blockedReason: 'unknown_provider_type',
+    };
+    return blocked;
+  }
+
+  const cwd = projectCwdResolver ? projectCwdResolver() : '';
+  const consensusPath = consensusFolderService.getFolderPath() ?? '';
+
+  const builderInput: PermissionFlagBuilderInput = {
+    cliKind,
+    permissionMode: data.permissionMode,
+    projectKind: data.projectKind,
+    dangerousAutonomyOptIn: data.dangerousAutonomyOptIn,
+    cwd,
+    consensusPath,
+  };
+
+  return buildPermissionFlags(builderInput);
+}
+

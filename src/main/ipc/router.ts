@@ -58,6 +58,7 @@ import {
   handlePermissionApprove,
   handlePermissionReject,
   handlePermissionListRules,
+  handlePermissionDryRunFlags,
 } from './handlers/permission-handler';
 import {
   handleWorkspacePickFolder,
@@ -416,6 +417,8 @@ export function registerIpcHandlers(): void {
   handle('permission:approve', isDev, (data) => handlePermissionApprove(data));
   handle('permission:reject', isDev, (data) => handlePermissionReject(data));
   handle('permission:list-rules', isDev, (data) => handlePermissionListRules(data));
+  // R10-Task5: PermissionFlagBuilder dry-run for Settings 보안 탭 preview.
+  handle('permission:dry-run-flags', isDev, (data) => handlePermissionDryRunFlags(data));
 
   // ── Workspace / Files ──────────────────────────────────────────────
   handle('workspace:pick-folder', isDev, () => handleWorkspacePickFolder());

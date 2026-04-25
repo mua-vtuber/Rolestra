@@ -1,23 +1,30 @@
 /**
- * CLI Permission Adapter (Rolestra v3 / R2).
+ * CLI Permission Adapter (Rolestra v3 / R2; refactored R10-Task5).
  *
- * Ported from `tools/cli-smoke/src/permission-adapter.ts` — proven by the R1
- * live smoke matrix (13/18). Produces CLI-specific argv for each
- * (cliKind × permissionMode) cell plus a separate read-only argv used by
- * observers/reviewers.
+ * Thin wrappers around the canonical {@link buildPermissionFlags} builder
+ * (`src/main/permissions/permission-flag-builder.ts`). Prior to R10 each
+ * adapter held an inline copy of spec §7.6.3's argv table; R10-Task5
+ * consolidated all three CLI tables into a single matrix. These adapters
+ * are kept as the call-site shim so existing `cli-provider.ts` /
+ * `cli-prompt-builder.ts` / `permission-adapter.test.ts` paths remain
+ * green without touching their snapshots.
  *
- * Guard rail: spec §7.3 forbids `projectKind='external' + permissionMode='auto'`
- * because `auto` grants destructive rights and external paths are outside the
- * Rolestra root. Call {@link assertExternalNotAuto} at the top of each adapter.
+ * Guard rail: spec §7.3 forbids `projectKind='external' + permissionMode='auto'`.
+ * The builder returns `{ blocked: true }` for that combination; this shim
+ * preserves the historical `throw` contract that R1's live smoke matrix
+ * baked into call sites by re-throwing on `blocked=true`.
  *
- * NOTE: This is an intentional breaking change from the v2 API
- * (`buildReadOnlyArgs(projectPath, consensusPath)` + system-prompt helpers).
- * Call sites that still use the v2 shape are marked `@ts-expect-error
- * R2-Task21` and will be migrated in Task 21.
+ * NOTE: The breaking-change marker on the v2 `buildReadOnlyArgs(projectPath,
+ * consensusPath)` API still applies — call sites tagged `@ts-expect-error
+ * R2-Task21` continue to use the v2 shape pending Task 21 cleanup.
  */
 
 import type { CliKind } from '../../../shared/cli-types';
 import type { PermissionMode, ProjectKind } from '../../../shared/project-types';
+import {
+  buildPermissionFlags,
+  buildReadOnlyPermissionFlags,
+} from '../../permissions/permission-flag-builder';
 
 // Re-export for backwards compatibility with existing Main-side call sites;
 // Task 17 will wire the shared `CliKind` into IPC schemas directly.
@@ -30,6 +37,11 @@ export interface AdapterContext {
   cwd: string;
   /** Absolute path to the arena consensus folder (granted R+W). */
   consensusPath: string;
+  /**
+   * R10-Task5 — settings 보안 탭의 "위험한 자율 모드" opt-in (spec §7.6.5).
+   * 미지정 시 false. 기존 호출자는 모두 미지정이므로 회귀 0.
+   */
+  dangerousAutonomyOptIn?: boolean;
 }
 
 export interface CliPermissionAdapter {
@@ -40,7 +52,7 @@ export interface CliPermissionAdapter {
 }
 
 /**
- * Spec §7.3 guard: `external` projects must never run in `auto` mode —
+ * spec §7.3 guard: `external` projects must never run in `auto` mode —
  * `auto` implies unrestricted write/exec and an external folder sits outside
  * the Rolestra root where our path-guard cannot follow.
  */
@@ -50,75 +62,67 @@ export function assertExternalNotAuto(ctx: AdapterContext): void {
   }
 }
 
-// Claude Code tool whitelists — kept verbatim from R1 so the matrix stays
-// identical to what the live smoke runner validated.
-const CLAUDE_AUTO_TOOLS = 'Read,Glob,Grep,Edit,Write,Bash,WebSearch,WebFetch';
-const CLAUDE_HYBRID_TOOLS = 'Read,Glob,Grep,Edit,Write,WebSearch,WebFetch';
-const CLAUDE_READONLY_TOOLS = 'Read,Glob,Grep,WebSearch,WebFetch';
+function buildArgsViaBuilder(
+  cliKind: CliKind,
+  ctx: AdapterContext,
+): string[] {
+  // Defensive — the builder also returns blocked=true for this combo, but
+  // historical adapter contract is to throw at the spawn boundary.
+  assertExternalNotAuto(ctx);
+  const out = buildPermissionFlags({
+    cliKind,
+    permissionMode: ctx.permissionMode,
+    projectKind: ctx.projectKind,
+    dangerousAutonomyOptIn: ctx.dangerousAutonomyOptIn ?? false,
+    cwd: ctx.cwd,
+    consensusPath: ctx.consensusPath,
+  });
+  if (out.blocked) {
+    // Mirror the exact message the v2 adapter raised so any string match
+    // assertions (test names, log filters) keep working.
+    throw new Error('external project + auto mode is forbidden (spec §7.3)');
+  }
+  return out.flags;
+}
 
 export class ClaudePermissionAdapter implements CliPermissionAdapter {
   buildArgs(ctx: AdapterContext): string[] {
-    assertExternalNotAuto(ctx);
-    switch (ctx.permissionMode) {
-      case 'auto':
-        return [
-          '--permission-mode', 'acceptEdits',
-          '--allowedTools', CLAUDE_AUTO_TOOLS,
-          '--add-dir', ctx.consensusPath,
-        ];
-      case 'hybrid':
-        return [
-          '--permission-mode', 'acceptEdits',
-          '--allowedTools', CLAUDE_HYBRID_TOOLS,
-          '--add-dir', ctx.consensusPath,
-        ];
-      case 'approval':
-        return [
-          '--allowedTools', CLAUDE_READONLY_TOOLS,
-          '--permission-mode', 'default',
-          '--add-dir', ctx.consensusPath,
-        ];
-    }
+    return buildArgsViaBuilder('claude', ctx);
   }
 
   buildReadOnlyArgs(ctx: AdapterContext): string[] {
-    return [
-      '--allowedTools', CLAUDE_READONLY_TOOLS,
-      '--permission-mode', 'default',
-      '--add-dir', ctx.consensusPath,
-    ];
+    return buildReadOnlyPermissionFlags({
+      cliKind: 'claude',
+      cwd: ctx.cwd,
+      consensusPath: ctx.consensusPath,
+    });
   }
 }
 
 export class CodexPermissionAdapter implements CliPermissionAdapter {
   buildArgs(ctx: AdapterContext): string[] {
-    assertExternalNotAuto(ctx);
-    switch (ctx.permissionMode) {
-      case 'auto':
-        return ['exec', '-a', 'never', '--sandbox', 'danger-full-access', '-C', ctx.cwd, '--skip-git-repo-check', '-'];
-      case 'hybrid':
-        return ['exec', '--full-auto', '-C', ctx.cwd, '-'];
-      case 'approval':
-        return ['exec', '-a', 'on-failure', '--sandbox', 'workspace-write', '-C', ctx.cwd, '-'];
-    }
+    return buildArgsViaBuilder('codex', ctx);
   }
 
   buildReadOnlyArgs(ctx: AdapterContext): string[] {
-    return ['exec', '-a', 'never', '--sandbox', 'read-only', '-C', ctx.cwd, '-'];
+    return buildReadOnlyPermissionFlags({
+      cliKind: 'codex',
+      cwd: ctx.cwd,
+      consensusPath: ctx.consensusPath,
+    });
   }
 }
 
 export class GeminiPermissionAdapter implements CliPermissionAdapter {
   buildArgs(ctx: AdapterContext): string[] {
-    assertExternalNotAuto(ctx);
-    switch (ctx.permissionMode) {
-      case 'auto':    return ['--approval-mode', 'yolo'];
-      case 'hybrid':  return ['--approval-mode', 'auto_edit'];
-      case 'approval': return ['--approval-mode', 'default'];
-    }
+    return buildArgsViaBuilder('gemini', ctx);
   }
 
-  buildReadOnlyArgs(_ctx: AdapterContext): string[] {
-    return ['--approval-mode', 'default'];
+  buildReadOnlyArgs(ctx: AdapterContext): string[] {
+    return buildReadOnlyPermissionFlags({
+      cliKind: 'gemini',
+      cwd: ctx.cwd,
+      consensusPath: ctx.consensusPath,
+    });
   }
 }
