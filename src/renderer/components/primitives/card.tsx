@@ -11,25 +11,74 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
    * break Radix portal layouts.
    */
   applyPanelClip?: boolean;
+  /**
+   * When the active theme is `tactical`, render four L-shaped corner
+   * brackets in `border-brand` color (시안 01 fidelity). Defaults to
+   * true; set false for compact inline cards where the brackets would
+   * compete with surrounding chrome.
+   */
+  cornerBrackets?: boolean;
 }
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, style, applyPanelClip = true, ...rest }, ref) => {
-    const { token } = useTheme();
+  (
+    {
+      className,
+      style,
+      applyPanelClip = true,
+      cornerBrackets = true,
+      children,
+      ...rest
+    },
+    ref,
+  ) => {
+    const { token, themeKey } = useTheme();
     const clip = applyPanelClip && token.panelClip !== 'none' ? token.panelClip : null;
     const merged: CSSProperties | undefined =
       clip !== null ? { ...style, clipPath: clip } : style;
+    const showCornerBrackets = cornerBrackets && themeKey === 'tactical';
     return (
       <div
         ref={ref}
         data-panel-clip={clip ?? 'none'}
+        data-corner-brackets={showCornerBrackets ? 'true' : 'false'}
         style={merged}
         className={clsx(
-          'bg-panel-bg text-fg border border-panel-border rounded-panel shadow-panel',
+          'relative bg-panel-bg text-fg border border-panel-border rounded-panel shadow-panel',
           className,
         )}
         {...rest}
-      />
+      >
+        {showCornerBrackets && (
+          <>
+            <span
+              aria-hidden="true"
+              data-testid="card-corner-bracket"
+              data-corner="tl"
+              className="pointer-events-none absolute top-0 left-0 h-2.5 w-2.5 border-t border-l border-brand opacity-80"
+            />
+            <span
+              aria-hidden="true"
+              data-testid="card-corner-bracket"
+              data-corner="tr"
+              className="pointer-events-none absolute top-0 right-0 h-2.5 w-2.5 border-t border-r border-brand opacity-80"
+            />
+            <span
+              aria-hidden="true"
+              data-testid="card-corner-bracket"
+              data-corner="bl"
+              className="pointer-events-none absolute bottom-0 left-0 h-2.5 w-2.5 border-b border-l border-brand opacity-80"
+            />
+            <span
+              aria-hidden="true"
+              data-testid="card-corner-bracket"
+              data-corner="br"
+              className="pointer-events-none absolute bottom-0 right-0 h-2.5 w-2.5 border-b border-r border-brand opacity-80"
+            />
+          </>
+        )}
+        {children}
+      </div>
     );
   },
 );
@@ -46,12 +95,19 @@ export interface CardHeaderProps extends Omit<HTMLAttributes<HTMLDivElement>, 't
    * surfaces that opt-in to ASCII headers in non-retro themes (rare).
    */
   asciiHeader?: boolean;
+  /**
+   * Optional count badge at the right edge (e.g. unread/pending count).
+   * Retro renders `[N]` ASCII; warm/tactical render a small mono chip in
+   * brand tone. `undefined` hides the badge entirely.
+   */
+  count?: number;
 }
 
 export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
-  ({ className, heading, action, children, asciiHeader, ...rest }, ref) => {
+  ({ className, heading, action, children, asciiHeader, count, ...rest }, ref) => {
     const { token } = useTheme();
     const style = asciiHeader === true ? 'ascii' : token.cardTitleStyle;
+    const isAscii = style === 'ascii';
     return (
       <div
         ref={ref}
@@ -64,9 +120,45 @@ export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
         )}
         {...rest}
       >
-        {style === 'ascii' && <span aria-hidden className="text-fg-subtle font-mono text-xs">{'::'}</span>}
-        {heading && <div className="flex-1 font-display font-semibold text-sm">{heading}</div>}
+        {isAscii && (
+          <span aria-hidden="true" className="select-none font-mono text-xs text-fg-subtle">
+            ┌─
+          </span>
+        )}
+        {heading !== undefined && heading !== null && heading !== false && (
+          <div
+            className={clsx(
+              'flex-1 text-sm font-semibold',
+              isAscii ? 'font-mono' : 'font-display',
+            )}
+          >
+            {isAscii && (
+              <span aria-hidden="true" className="mr-1 text-fg-muted">
+                ./
+              </span>
+            )}
+            {heading}
+          </div>
+        )}
         {children}
+        {count !== undefined && count > 0 &&
+          (isAscii ? (
+            <span
+              data-testid="card-header-count"
+              data-count-style="ascii"
+              className="font-mono text-xs text-fg-muted"
+            >
+              [{count}]
+            </span>
+          ) : (
+            <span
+              data-testid="card-header-count"
+              data-count-style="chip"
+              className="font-mono text-xs font-semibold text-brand"
+            >
+              {count}
+            </span>
+          ))}
         {action && <div>{action}</div>}
       </div>
     );

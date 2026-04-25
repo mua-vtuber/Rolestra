@@ -52,6 +52,7 @@ export function PeopleWidget({
 }: PeopleWidgetProps): ReactElement {
   const { t } = useTranslation();
   const { members, loading, error } = useMembers();
+  const count = members === null ? undefined : members.length;
 
   const body = (() => {
     if (members === null && loading) {
@@ -154,7 +155,7 @@ export function PeopleWidget({
       data-testid="people-widget"
       className={clsx('flex flex-col', className)}
     >
-      <CardHeader heading={t('dashboard.people.title')} />
+      <CardHeader heading={t('dashboard.people.title')} count={count} />
       <CardBody className="flex flex-col gap-2">{body}</CardBody>
     </Card>
   );

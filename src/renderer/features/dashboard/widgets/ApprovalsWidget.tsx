@@ -15,7 +15,6 @@ import { useCallback, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Card, CardHeader, CardBody } from '../../../components/primitives';
-import { Badge } from '../../../components/primitives';
 import { usePendingApprovals } from '../../../hooks/use-pending-approvals';
 import { useSystemChannel } from '../../../hooks/use-system-channel';
 import { useActiveChannelStore } from '../../../stores/active-channel-store';
@@ -176,17 +175,7 @@ export function ApprovalsWidget({
     >
       <CardHeader
         heading={t('dashboard.approvals.title')}
-        action={
-          total > 0 ? (
-            <Badge
-              tone="warning"
-              data-testid="approvals-widget-count"
-              aria-label={t('dashboard.approvals.count', { count: total })}
-            >
-              {total}
-            </Badge>
-          ) : undefined
-        }
+        count={items === null ? undefined : total}
       />
       <CardBody className="flex flex-col gap-2">{body}</CardBody>
     </Card>

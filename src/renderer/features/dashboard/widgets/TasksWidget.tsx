@@ -53,6 +53,7 @@ export function TasksWidget({
 }: TasksWidgetProps): ReactElement {
   const { t } = useTranslation();
   const { meetings, loading, error } = useActiveMeetings(limit);
+  const count = meetings === null ? undefined : meetings.length;
 
   const body = (() => {
     if (meetings === null && loading) {
@@ -139,7 +140,7 @@ export function TasksWidget({
       data-testid="tasks-widget"
       className={clsx('flex flex-col', className)}
     >
-      <CardHeader heading={t('dashboard.tasks.title')} />
+      <CardHeader heading={t('dashboard.tasks.title')} count={count} />
       <CardBody className="flex flex-col gap-2">{body}</CardBody>
     </Card>
   );

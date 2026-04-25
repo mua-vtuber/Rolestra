@@ -116,7 +116,7 @@ describe('ApprovalsWidget', () => {
     state.loading = false;
     renderWidget();
     expect(screen.getByTestId('approvals-widget-empty')).toBeTruthy();
-    expect(screen.queryByTestId('approvals-widget-count')).toBeNull();
+    expect(screen.queryByTestId('card-header-count')).toBeNull();
   });
 
   it('renders count badge + only the first N rows when items exceed visibleLimit', () => {
@@ -129,8 +129,8 @@ describe('ApprovalsWidget', () => {
     renderWidget(2);
 
     expect(screen.getAllByTestId('approvals-widget-row')).toHaveLength(2);
-    const badge = screen.getByTestId('approvals-widget-count');
-    expect(badge.textContent).toBe('3');
+    const badge = screen.getByTestId('card-header-count');
+    expect(badge.textContent?.replace(/[[\]]/g, '')).toBe('3');
   });
 });
 

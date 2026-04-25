@@ -55,6 +55,7 @@ export function RecentWidget({
 }: RecentWidgetProps): ReactElement {
   const { t } = useTranslation();
   const { messages, loading, error } = useRecentMessages(limit);
+  const count = messages === null ? undefined : messages.length;
 
   const resolveSenderLabel = (m: RecentMessage): string => {
     if (m.senderKind === 'user') return t('dashboard.recent.you');
@@ -151,7 +152,7 @@ export function RecentWidget({
       data-testid="recent-widget"
       className={clsx('flex flex-col', className)}
     >
-      <CardHeader heading={t('dashboard.recent.title')} />
+      <CardHeader heading={t('dashboard.recent.title')} count={count} />
       <CardBody className="flex flex-col gap-2">{body}</CardBody>
     </Card>
   );
