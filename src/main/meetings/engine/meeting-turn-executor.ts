@@ -56,10 +56,7 @@ import type {
 } from '../../../shared/provider-types';
 import type { SessionState } from '../../../shared/session-state-types';
 import type { ParsedAiOutput } from '../../../shared/message-protocol-types';
-import {
-  buildEffectivePersona,
-  buildPermissionRules,
-} from '../../engine/persona-builder';
+import { buildPermissionRules } from '../../members/persona-permission-rules';
 import { MessageFormatter } from '../../engine/message-formatter';
 import { AppToolProvider, type AppTool } from '../../engine/app-tool-provider';
 import type { BaseProvider } from '../../providers/provider-interface';
@@ -142,17 +139,14 @@ export interface MeetingTurnExecutorDeps {
    *  adapter. One instance can be shared across every turn executor. */
   approvalCliAdapter: ApprovalCliAdapter;
   /**
-   * R8-Task9: optional MemberProfileService for the work-status gate
-   * (spec §7.2 "턴매니저는 online 상태 멤버만 선발"). When present, every
-   * `executeTurn` first checks `getWorkStatus(speakerId)` and emits
-   * `meeting:turn-skipped` + system message + early-returns if the
-   * speaker is anything other than `online`.
-   *
-   * Optional to keep R7 callers (existing tests, smoke harnesses) working
-   * without forcing them to inject the dependency. Production wiring
-   * (R8-Task8 main/index.ts) always provides it.
+   * R8-Task9 / R11-Task2: MemberProfileService for the work-status gate
+   * (spec §7.2 "턴매니저는 online 상태 멤버만 선발") and the persona
+   * Identity block. R8 made it optional so R7 smoke harnesses kept
+   * compiling; R11 made it required when the v2 fallback path was
+   * deleted along with `engine/persona-builder.ts`. Tests construct a
+   * minimal mock — see `meeting-turn-executor.test.ts:buildDeps`.
    */
-  memberProfileService?: import('../../members/member-profile-service').MemberProfileService;
+  memberProfileService: import('../../members/member-profile-service').MemberProfileService;
   /**
    * R9-Task6 (spec §8 CB-5 `same_error`): optional CircuitBreaker that
    * receives a `recordError(category)` tick whenever a turn bubbles an
@@ -171,9 +165,7 @@ export class MeetingTurnExecutor {
   private readonly providerRegistry: ProviderRegistry;
   private readonly personaPrimedParticipants: Set<string>;
   private readonly approvalCliAdapter: ApprovalCliAdapter;
-  private readonly memberProfileService?: NonNullable<
-    MeetingTurnExecutorDeps['memberProfileService']
-  >;
+  private readonly memberProfileService: MeetingTurnExecutorDeps['memberProfileService'];
   private readonly circuitBreaker?: CircuitBreaker;
 
   private readonly messageFormatter = new MessageFormatter();
@@ -208,11 +200,11 @@ export class MeetingTurnExecutor {
 
   /** Execute a single AI turn for the given speaker. */
   async executeTurn(speaker: Participant): Promise<void> {
-    // R8-Task9: work-status gate (spec §7.2). Skip the turn entirely
-    // when the speaker is not `online`. The skip is NOT a turn failure
-    // — we do not emit TURN_DONE/TURN_FAIL. The orchestrator's turn
-    // rotation decides what to do next (move to the next speaker).
-    if (this.memberProfileService) {
+    // R8-Task9 / R11-Task2: work-status gate (spec §7.2). Skip the turn
+    // entirely when the speaker is not `online`. The skip is NOT a turn
+    // failure — we do not emit TURN_DONE/TURN_FAIL. The orchestrator's
+    // turn rotation decides what to do next (move to the next speaker).
+    {
       const status = this.memberProfileService.getWorkStatus(speaker.id);
       if (status !== 'online') {
         this.streamBridge.emitMeetingTurnSkipped({
@@ -295,22 +287,13 @@ export class MeetingTurnExecutor {
         messages.unshift({ role: 'system', content: formatInstruction });
       }
 
-      // R8-Task10: v3 PersonaBuilder swap. Previously called the v2
-      // `buildEffectivePersona(provider, opts)` which composed the persona
-      // from `provider.persona` (the legacy free-text field). The v3
-      // swap reads the structured `member_profiles` row via
-      // `MemberProfileService.buildPersona()` so user edits in
-      // {@link MemberProfileEditModal} land in the AI's system prompt
-      // STARTING NEXT TURN (no caching — buildPersona reads the row
-      // fresh every call).
-      //
-      // Permission rules are appended as a separate block via the
-      // `buildPermissionRules` shim (R8-Task10 promotion). Identical
-      // wording to v2 so AI behaviour does not drift across the swap.
-      //
-      // When `memberProfileService` is missing (R7 callers / smoke tests
-      // that never opted into the v3 wiring), fall back to the v2 path
-      // for compatibility.
+      // R11-Task2: v3 PersonaBuilder is now the single path. Identity
+      // section comes from {@link MemberProfileService.buildPersona}
+      // (reads the `member_profiles` row fresh every call so user edits
+      // in {@link MemberProfileEditModal} land in the AI's system prompt
+      // starting next turn). Permission rules are appended via the v3
+      // {@link buildPermissionRules} helper. The v2 `buildEffectivePersona`
+      // fallback is gone with the v2 engine deletion.
       let persona = '';
       if (this.shouldIncludePersona(provider, speaker.id)) {
         const permissionRules = buildPermissionRules({
@@ -318,17 +301,8 @@ export class MeetingTurnExecutor {
           projectFolder: this.session.sessionMachine.ctx.projectPath || null,
           arenaFolder: this.arenaRootService.getPath(),
         });
-        if (this.memberProfileService) {
-          const v3Identity = this.memberProfileService.buildPersona(speaker.id);
-          persona = `${v3Identity}${permissionRules}`;
-        } else {
-          persona = buildEffectivePersona(provider, {
-            permission: null,
-            projectFolder:
-              this.session.sessionMachine.ctx.projectPath || null,
-            arenaFolder: this.arenaRootService.getPath(),
-          });
-        }
+        const v3Identity = this.memberProfileService.buildPersona(speaker.id);
+        persona = `${v3Identity}${permissionRules}`;
       }
 
       if (provider.type === 'cli') {

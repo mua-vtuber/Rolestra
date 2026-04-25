@@ -4,14 +4,12 @@ import { runMigrations } from './database/migrator';
 import { closeDatabase, initDatabaseRoot } from './database/connection';
 import { registerIpcHandlers } from './ipc/router';
 import { providerRegistry } from './providers/registry';
-import { setMainWindow } from './ipc/handlers/chat-handler';
 import { setExecutionWebContents } from './ipc/handlers/execution-handler';
-import { setPermissionWebContents, setPermissionServiceAccessor } from './ipc/handlers/permission-handler';
 import { setLoggerAccessor } from './ipc/handlers/log-handler';
 import { configureApplicationMenu } from './ui/app-menu';
 import { restoreProvidersFromDb } from './providers/provider-restore';
 import { createLogger } from './log/structured-logger';
-import { permissionService, consensusFolderService } from './ipc/handlers/workspace-handler';
+import { consensusFolderService } from './ipc/handlers/workspace-handler';
 import { getConfigService } from './config/instance';
 import { ArenaRootService } from './arena/arena-root-service';
 import { getDatabase } from './database/connection';
@@ -77,13 +75,7 @@ function createWindow(): BrowserWindow {
     },
   });
 
-  setMainWindow(mainWindow);
   setExecutionWebContents(mainWindow.webContents);
-  setPermissionWebContents(mainWindow.webContents);
-
-  mainWindow.on('closed', () => {
-    setMainWindow(null);
-  });
 
   // Block navigation to external URLs (prevents open redirect / phishing)
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -138,7 +130,6 @@ app.whenReady().then(async () => {
     // Wire lazy accessors for cross-module dependencies (C1, I2)
     const logger = createLogger();
     setLoggerAccessor(() => logger);
-    setPermissionServiceAccessor(() => permissionService);
 
     // R4 dashboard aggregator — repositories are owned by the singleton
     // DB handle so the three repos are cheap to construct here. The

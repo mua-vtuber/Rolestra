@@ -3,8 +3,11 @@
  *
  * Tests zod schemas defined in shared/ipc-schemas.ts for security-sensitive
  * channels: config:set-secret, config:delete-secret, execution:approve,
- * execution:reject, consensus:respond, permission:approve, permission:reject,
- * consensus:set-facilitator, provider:add, provider:remove.
+ * execution:reject, provider:add, provider:remove.
+ *
+ * R11-Task2 retired the v2 critical schemas (`consensus:respond`,
+ * `consensus:set-facilitator`, `permission:approve`, `permission:reject`,
+ * `workspace:init`) along with their IPC channels.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -130,155 +133,10 @@ describe('Critical Validation — execution:reject', () => {
   });
 });
 
-// ═════════════════════════════════════════════════════════════════════════
-// consensus:respond
-// ═════════════════════════════════════════════════════════════════════════
-
-describe('Critical Validation — consensus:respond', () => {
-  const schema = criticalChannelSchemas['consensus:respond'];
-
-  it('accepts AGREE decision', () => {
-    expect(() => schema.parse({ decision: 'AGREE' })).not.toThrow();
-  });
-
-  it('accepts DISAGREE decision', () => {
-    expect(() => schema.parse({ decision: 'DISAGREE' })).not.toThrow();
-  });
-
-  it('accepts ABORT decision', () => {
-    expect(() => schema.parse({ decision: 'ABORT' })).not.toThrow();
-  });
-
-  it('accepts BLOCK decision with blockReasonType', () => {
-    const data = { decision: 'BLOCK', blockReasonType: 'security' };
-    expect(() => schema.parse(data)).not.toThrow();
-  });
-
-  it('rejects BLOCK decision without blockReasonType', () => {
-    const data = { decision: 'BLOCK' };
-    expect(() => schema.parse(data)).toThrow(ZodError);
-  });
-
-  it('rejects blockReasonType on non-BLOCK decision', () => {
-    const data = { decision: 'AGREE', blockReasonType: 'security' };
-    expect(() => schema.parse(data)).toThrow(ZodError);
-  });
-
-  it('rejects invalid decision enum value', () => {
-    expect(() => schema.parse({ decision: 'INVALID' })).toThrow(ZodError);
-  });
-
-  it('rejects missing decision', () => {
-    expect(() => schema.parse({})).toThrow(ZodError);
-  });
-
-  it('accepts AGREE with optional comment', () => {
-    const data = { decision: 'AGREE', comment: 'Looks good' };
-    expect(() => schema.parse(data)).not.toThrow();
-  });
-
-  it('rejects comment exceeding 4000 characters', () => {
-    const data = { decision: 'AGREE', comment: 'x'.repeat(4001) };
-    expect(() => schema.parse(data)).toThrow(ZodError);
-  });
-
-  it('accepts BLOCK with all valid blockReasonType values', () => {
-    for (const reason of ['security', 'data_loss', 'spec_conflict', 'unknown']) {
-      expect(() =>
-        schema.parse({ decision: 'BLOCK', blockReasonType: reason }),
-      ).not.toThrow();
-    }
-  });
-
-  it('rejects invalid blockReasonType value', () => {
-    const data = { decision: 'BLOCK', blockReasonType: 'invalid_reason' };
-    expect(() => schema.parse(data)).toThrow(ZodError);
-  });
-
-  it('requires reassignFacilitatorId when failureResolution=reassign', () => {
-    const data = { decision: 'AGREE', failureResolution: 'reassign' };
-    expect(() => schema.parse(data)).toThrow(ZodError);
-  });
-
-  it('accepts failureResolution=reassign with reassignFacilitatorId', () => {
-    const data = {
-      decision: 'AGREE',
-      failureResolution: 'reassign',
-      reassignFacilitatorId: 'ai-2',
-    };
-    expect(() => schema.parse(data)).not.toThrow();
-  });
-
-  it('accepts failureResolution=retry without reassignFacilitatorId', () => {
-    const data = { decision: 'AGREE', failureResolution: 'retry' };
-    expect(() => schema.parse(data)).not.toThrow();
-  });
-
-  it('accepts failureResolution=stop without reassignFacilitatorId', () => {
-    const data = { decision: 'AGREE', failureResolution: 'stop' };
-    expect(() => schema.parse(data)).not.toThrow();
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════
-// consensus:set-facilitator
-// ═════════════════════════════════════════════════════════════════════════
-
-describe('Critical Validation — consensus:set-facilitator', () => {
-  const schema = criticalChannelSchemas['consensus:set-facilitator'];
-
-  it('accepts valid facilitatorId', () => {
-    expect(() => schema.parse({ facilitatorId: 'ai-1' })).not.toThrow();
-  });
-
-  it('rejects empty facilitatorId', () => {
-    expect(() => schema.parse({ facilitatorId: '' })).toThrow(ZodError);
-  });
-
-  it('rejects missing facilitatorId', () => {
-    expect(() => schema.parse({})).toThrow(ZodError);
-  });
-
-  it('rejects facilitatorId exceeding 128 characters', () => {
-    expect(() => schema.parse({ facilitatorId: 'a'.repeat(129) })).toThrow(ZodError);
-  });
-});
-
-// ═════════════════════════════════════════════════════════════════════════
-// permission:approve / permission:reject
-// ═════════════════════════════════════════════════════════════════════════
-
-describe('Critical Validation — permission:approve', () => {
-  const schema = criticalChannelSchemas['permission:approve'];
-
-  it('accepts valid UUID requestId', () => {
-    expect(() =>
-      schema.parse({ requestId: '550e8400-e29b-41d4-a716-446655440000' }),
-    ).not.toThrow();
-  });
-
-  it('rejects non-UUID requestId', () => {
-    expect(() => schema.parse({ requestId: 'not-uuid' })).toThrow(ZodError);
-  });
-
-  it('rejects missing requestId', () => {
-    expect(() => schema.parse({})).toThrow(ZodError);
-  });
-});
-
-describe('Critical Validation — permission:reject', () => {
-  const schema = criticalChannelSchemas['permission:reject'];
-
-  it('accepts valid UUID requestId', () => {
-    expect(() =>
-      schema.parse({ requestId: '550e8400-e29b-41d4-a716-446655440000' }),
-    ).not.toThrow();
-  });
-
-  it('rejects non-UUID requestId', () => {
-    expect(() => schema.parse({ requestId: 'invalid' })).toThrow(ZodError);
-  });
-});
+// R11-Task2: the `consensus:respond` / `consensus:set-facilitator` /
+// `permission:approve` / `permission:reject` validation suites used to
+// sit here. They were removed when the v2 IPC surface was retired —
+// see the same commit's router.ts + ipc-schemas.ts changes.
 
 // ═════════════════════════════════════════════════════════════════════════
 // provider:add / provider:remove
@@ -368,9 +226,10 @@ describe('Critical Validation — validateCriticalPayload', () => {
   it('CRITICAL_CHANNELS set contains expected channels', () => {
     expect(CRITICAL_CHANNELS.has('config:set-secret')).toBe(true);
     expect(CRITICAL_CHANNELS.has('execution:approve')).toBe(true);
-    expect(CRITICAL_CHANNELS.has('consensus:respond')).toBe(true);
-    expect(CRITICAL_CHANNELS.has('permission:approve')).toBe(true);
     expect(CRITICAL_CHANNELS.has('provider:add')).toBe(true);
     expect(CRITICAL_CHANNELS.has('provider:remove')).toBe(true);
+    // R11-Task2: the v2 channels below were removed from the schema map.
+    expect(CRITICAL_CHANNELS.has('consensus:respond')).toBe(false);
+    expect(CRITICAL_CHANNELS.has('permission:approve')).toBe(false);
   });
 });

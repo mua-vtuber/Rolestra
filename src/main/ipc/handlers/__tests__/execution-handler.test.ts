@@ -14,12 +14,10 @@ vi.mock('../../../execution/execution-service', () => ({
   }),
 }));
 
-const mockResolveApproval = vi.fn();
-vi.mock('../chat-handler', () => ({
-  getActiveOrchestrator: vi.fn(() => ({
-    resolveExecutionApproval: mockResolveApproval,
-  })),
-}));
+// R11-Task2: the v2 chat-handler `getActiveOrchestrator()` notification was
+// retired together with the v2 conversation engine. The execution handlers
+// no longer notify any orchestrator on approve/reject — the v3 path routes
+// through ApprovalService instead.
 
 import {
   setExecutionWorkspaceRoot,
@@ -112,7 +110,6 @@ describe('execution-handler', () => {
       const result = await handleExecutionApprove({ operationId: 'op-approve' });
 
       expect(result.success).toBe(true);
-      expect(mockResolveApproval).toHaveBeenCalledWith(true);
 
       // Should be removed from pending
       expect(() => handleExecutionPreview({ operationId: 'op-approve' })).toThrow(
@@ -146,14 +143,13 @@ describe('execution-handler', () => {
   });
 
   describe('handleExecutionReject', () => {
-    it('happy path — removes pending patch and notifies orchestrator', () => {
+    it('happy path — removes pending patch (v3: no orchestrator notification)', () => {
       mockGenerateDiff.mockReturnValueOnce(makeDiffs());
       submitPatchForReview(makePatchSet('op-reject'), 'conv-1');
 
       const result = handleExecutionReject({ operationId: 'op-reject' });
 
       expect(result.success).toBe(true);
-      expect(mockResolveApproval).toHaveBeenCalledWith(false);
     });
 
     it('non-existent operation — returns success: false', () => {

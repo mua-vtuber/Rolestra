@@ -7,32 +7,23 @@
 import type { IpcRequest } from '../../../shared/ipc-types';
 import type { KnowledgeNode, MemorySearchResult, ExtractionResult, AssembledContext } from '../../../shared/memory-types';
 import { getMemoryFacade } from '../../memory/instance';
-import { getActiveSession } from './chat-handler';
 
 /**
  * Handle memory:pin — pin a message to memory.
  *
- * Looks up message content from the active conversation session,
- * then delegates to MemoryFacade.pinMessage().
+ * R11-Task2: the v2 active conversation session lookup that resolved
+ * `messageId → content` is gone (chat-handler was retired with the v2
+ * engine). Until a v3 message lookup helper lands, this handler errors
+ * out cleanly so the renderer's pin button surfaces the regression
+ * instead of silently failing. A v3 wire (likely `MessageService.get`)
+ * is tracked separately.
  */
 export async function handleMemoryPin(
-  data: IpcRequest<'memory:pin'>,
+  _data: IpcRequest<'memory:pin'>,
 ): Promise<{ success: true; nodeId: string }> {
-  const facade = getMemoryFacade();
-
-  // Look up message content from the active session
-  const session = getActiveSession();
-  const message = session?.messages.find((m) => m.id === data.messageId);
-  const content = message
-    ? (typeof message.content === 'string' ? message.content : '')
-    : '';
-
-  if (!content) {
-    throw new Error(`Message not found or empty: ${data.messageId}`);
-  }
-
-  const nodeId = facade.pinMessage(data.messageId, content, data.topic);
-  return { success: true, nodeId };
+  throw new Error(
+    'memory:pin: v2 session lookup retired in R11-Task2 — v3 wiring pending.',
+  );
 }
 
 /**

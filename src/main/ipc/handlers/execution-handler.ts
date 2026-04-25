@@ -10,7 +10,6 @@ import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { DiffEntry, PatchSet } from '../../../shared/execution-types';
 import { ExecutionService } from '../../execution/execution-service';
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
-import { getActiveOrchestrator } from './chat-handler';
 import { setAuditLogAccessor } from './audit-handler';
 
 /**
@@ -150,9 +149,11 @@ export async function handleExecutionApprove(
     pendingPatches.delete(data.operationId);
   }
 
-  // Notify the orchestrator that execution was approved
-  getActiveOrchestrator()?.resolveExecutionApproval(result.success);
-
+  // R11-Task2: v2 ConversationOrchestrator.resolveExecutionApproval was
+  // dropped along with the v2 engine. The v3 path routes execution
+  // approvals through ApprovalService (`approval:decide`); this v2 IPC
+  // surface remains only as a fallback for any caller that still talks
+  // to it directly during the migration window.
   return { success: result.success, error: result.error };
 }
 
@@ -164,10 +165,7 @@ export function handleExecutionReject(
 ): IpcResponse<'execution:reject'> {
   const deleted = pendingPatches.delete(data.operationId);
 
-  // Notify the orchestrator that execution was rejected
-  if (deleted) {
-    getActiveOrchestrator()?.resolveExecutionApproval(false);
-  }
-
+  // R11-Task2: v2 orchestrator notification path removed (see notes in
+  // handleExecutionApprove).
   return { success: deleted };
 }

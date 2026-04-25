@@ -94,6 +94,15 @@ function buildDeps(
     createCliPermissionApproval: vi.fn(async () => true),
   } as unknown as ApprovalCliAdapter;
 
+  // R11-Task2: memberProfileService is required after the v2 fallback
+  // path was deleted. Default mock returns 'online' so the gate passes
+  // and an empty persona Identity so `buildPersona()` callers don't
+  // crash.
+  const defaultMemberProfileService = {
+    getWorkStatus: vi.fn(() => 'online'),
+    buildPersona: vi.fn(() => ''),
+  } as unknown as MeetingTurnExecutorDeps['memberProfileService'];
+
   return {
     session: overrides.session ?? buildSession(),
     streamBridge: overrides.streamBridge ?? streamBridge,
@@ -103,10 +112,8 @@ function buildDeps(
     personaPrimedParticipants:
       overrides.personaPrimedParticipants ?? new Set<string>(),
     approvalCliAdapter: overrides.approvalCliAdapter ?? approvalCliAdapter,
-    // R8-Task9: optional — only forwarded when an explicit override is
-    // passed (most R7 callers don't supply it and rely on the gate being
-    // dormant).
-    memberProfileService: overrides.memberProfileService,
+    memberProfileService:
+      overrides.memberProfileService ?? defaultMemberProfileService,
     // R9-Task6: optional CircuitBreaker. Dormant by default so existing
     // tests that never installed the breaker continue to run with the
     // recordError hook muted.
@@ -156,7 +163,8 @@ describe('MeetingTurnExecutor — work-status gate (R8-Task9, spec §7.2)', () =
   ): { deps: MeetingTurnExecutorDeps; executor: MeetingTurnExecutor } {
     const memberProfileService = {
       getWorkStatus: vi.fn(() => status),
-    } as unknown as NonNullable<MeetingTurnExecutorDeps['memberProfileService']>;
+      buildPersona: vi.fn(() => ''),
+    } as unknown as MeetingTurnExecutorDeps['memberProfileService'];
     const deps = buildDeps({ memberProfileService });
     return { deps, executor: new MeetingTurnExecutor(deps) };
   }
@@ -202,13 +210,11 @@ describe('MeetingTurnExecutor — work-status gate (R8-Task9, spec §7.2)', () =
     },
   );
 
-  it('absent memberProfileService: gate is dormant, behaves like R7 (provider lookup fires)', async () => {
-    const deps = buildDeps(); // memberProfileService omitted
-    const exec = new MeetingTurnExecutor(deps);
-    await exec.executeTurn(participants(1)[0]);
-    expect(deps.streamBridge.emitMeetingTurnSkipped).not.toHaveBeenCalled();
-    expect(deps.streamBridge.emitMeetingError).toHaveBeenCalled();
-  });
+  // R11-Task2 removed the "absent memberProfileService" dormant-gate
+  // case: the v2 persona fallback is gone, so memberProfileService is a
+  // required dep. The default `buildDeps()` mock returns 'online', so
+  // the gate continues to be exercised by every other test in this file
+  // implicitly.
 });
 
 describe('MeetingTurnExecutor — circuit breaker feed (R9-Task6)', () => {

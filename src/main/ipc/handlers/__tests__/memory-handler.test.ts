@@ -35,17 +35,10 @@ vi.mock('../../../memory/instance', () => ({
   })),
 }));
 
-// Mock active session with messages
-const mockMessages = [
-  { id: 'msg-1', content: 'This is a test message', role: 'user' },
-  { id: 'msg-2', content: 'AI reply', role: 'assistant' },
-];
-
-vi.mock('../chat-handler', () => ({
-  getActiveSession: vi.fn(() => ({
-    messages: mockMessages,
-  })),
-}));
+// R11-Task2 retired the v2 chat-handler `getActiveSession` lookup that
+// memory:pin used to resolve `messageId → content`. Until the v3 wiring
+// (likely `MessageService.get`) lands, the handler errors out and the
+// pin tests below assert that explicit "v3 wiring pending" surface.
 
 import {
   handleMemoryPin,
@@ -65,25 +58,21 @@ describe('memory-handler', () => {
   });
 
   describe('handleMemoryPin', () => {
-    it('happy path — pins message and returns nodeId', async () => {
-      const result = await handleMemoryPin({
-        messageId: 'msg-1',
-        topic: 'technical',
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.nodeId).toBe('node-123');
-      expect(mockPinMessage).toHaveBeenCalledWith(
-        'msg-1',
-        'This is a test message',
-        'technical',
-      );
+    // R11-Task2: v2 active session lookup retired. Both pin paths now
+    // surface the explicit v3-wiring-pending error so a regression
+    // (e.g. silent success after the v2 facade is reintroduced) gets
+    // caught immediately.
+    it('always throws until v3 message lookup lands', async () => {
+      await expect(
+        handleMemoryPin({ messageId: 'msg-1', topic: 'technical' }),
+      ).rejects.toThrow('v2 session lookup retired in R11-Task2');
+      expect(mockPinMessage).not.toHaveBeenCalled();
     });
 
-    it('message not found — throws error', async () => {
+    it('still throws for an unknown messageId', async () => {
       await expect(
         handleMemoryPin({ messageId: 'nonexistent', topic: 'technical' }),
-      ).rejects.toThrow('Message not found or empty');
+      ).rejects.toThrow('v2 session lookup retired in R11-Task2');
     });
   });
 

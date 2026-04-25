@@ -27,47 +27,12 @@ import {
   handleProviderListModels,
 } from './handlers/provider-handler';
 import {
-  handleChatSend,
-  handleChatPause,
-  handleChatResume,
-  handleChatStop,
-  handleChatSetRounds,
-  handleChatDeepDebate,
-  handleChatContinue,
-  handleChatFork,
-  handleChatListBranches,
-  handleChatSwitchBranch,
-  handleSessionModeTransitionRespond,
-  handleSessionSelectWorker,
-  handleSessionUserDecision,
-  handleSessionStatus,
-} from './handlers/chat-handler';
-import {
-  handleConsensusRespond,
-  handleConsensusStatus,
-  handleConsensusSetFacilitator,
-} from './handlers/consensus-handler';
-import {
   handleExecutionPreview,
   handleExecutionListPending,
   handleExecutionApprove,
   handleExecutionReject,
 } from './handlers/execution-handler';
-import {
-  handlePermissionListPending,
-  handlePermissionApprove,
-  handlePermissionReject,
-  handlePermissionListRules,
-  handlePermissionDryRunFlags,
-} from './handlers/permission-handler';
-import {
-  handleWorkspacePickFolder,
-  handleWorkspaceInit,
-  handleWorkspaceStatus,
-  handleConsensusFolderStatus,
-  handleConsensusFolderPick,
-  handleConsensusFolderInit,
-} from './handlers/workspace-handler';
+import { handlePermissionDryRunFlags } from './handlers/permission-handler';
 import {
   handleMemoryPin,
   handleMemorySearch,
@@ -104,12 +69,6 @@ import {
   handleRemoteServerStatus,
 } from './handlers/remote-handler';
 import { handleProviderDetectCli } from './handlers/cli-detect-handler';
-import {
-  handleConversationList,
-  handleConversationLoad,
-  handleConversationNew,
-  handleConversationDelete,
-} from './handlers/conversation-handler';
 import {
   handleAuditList,
   handleAuditClear,
@@ -247,65 +206,18 @@ function classifyError(err: unknown): IpcErrorCode {
 const registeredChannels: string[] = [];
 
 /**
- * Channels that are still wired but scheduled for removal in R3 once
- * the renderer migrates to the v3 shape. Invocations keep working so
- * the app stays bootable — we only surface a console warning the first
- * time each channel is called, so ops can spot leftover callers in
- * logs without getting spammed on every invocation.
- *
- * Keep this list additive only: R3 removes, R2 annotates. Adding or
- * removing entries here MUST be paired with an IpcChannelMap change or
- * a handler removal to stay honest.
- */
-const LEGACY_V2_CHANNELS: ReadonlySet<string> = new Set([
-  // Chat / conversation UI still drives a v2-shaped session today.
-  'chat:send',
-  'chat:pause',
-  'chat:resume',
-  'chat:stop',
-  'chat:set-rounds',
-  'chat:deep-debate',
-  'chat:continue',
-  'chat:fork',
-  'chat:list-branches',
-  'chat:switch-branch',
-  'conversation:list',
-  'conversation:load',
-  'conversation:new',
-  'conversation:delete',
-  // Workspace/consensus folder flow predates the Rolestra ArenaRoot.
-  'workspace:pick-folder',
-  'workspace:init',
-  'workspace:status',
-  'consensus-folder:status',
-  'consensus-folder:pick',
-  'consensus-folder:init',
-  // Consensus + session v2 surface; replaced in v3 by approval + meeting.
-  'consensus:respond',
-  'consensus:status',
-  'consensus:set-facilitator',
-  'session:mode-transition-respond',
-  'session:select-worker',
-  'session:user-decision',
-  'session:status',
-]);
-
-/** Channels we've already warned about — console is warned once per run. */
-const legacyChannelsWarned = new Set<string>();
-
-function warnOnceLegacy(channel: string): void {
-  if (legacyChannelsWarned.has(channel)) return;
-  legacyChannelsWarned.add(channel);
-  console.warn(
-    `[IPC] legacy v2 channel "${channel}" invoked — scheduled for removal in R11`,
-  );
-}
-
-/**
  * Register a typed IPC handler with validation.
  *
  * - Critical channel payloads are always validated (dev + production).
  * - Meta is always validated (dev + production) for security hardening.
+ *
+ * R11-Task2 retired the v2 channel warning helper that used to wrap
+ * every invocation: the 27-entry `LEGACY_V2_CHANNELS` set + the four
+ * runtime `permission:list-pending|approve|reject|list-rules` handlers
+ * are gone, along with their typedefs and IPC registrations. The
+ * appendix `appendix-legacy-channels.md` and the renderer-side
+ * `legacy-channel-isolation.test.ts` guard were removed in the same
+ * commit because there is no longer a v2 surface to guard against.
  */
 function handle<C extends IpcChannel>(
   channel: C,
@@ -317,13 +229,6 @@ function handle<C extends IpcChannel>(
   ipcMain.handle(channel, async (_event, envelope: IpcEnvelope<C>) => {
     await validateMeta(envelope.meta);
     checkSchemaVersion(envelope.meta, channel);
-
-    // Legacy v2 channel warning (once per channel per run). Keeps the
-    // call working so the v2 renderer stays bootable; the log is a
-    // migration signal for R3 cleanup.
-    if (LEGACY_V2_CHANNELS.has(channel)) {
-      warnOnceLegacy(channel);
-    }
 
     // Critical channels: always validate payload (dev + production)
     validateCriticalPayload(channel, envelope.data);
@@ -381,28 +286,6 @@ export function registerIpcHandlers(): void {
   handle('provider:list-models', isDev, (data) => handleProviderListModels(data));
   handle('provider:list-embedding-models', isDev, (data) => handleProviderListEmbeddingModels(data));
 
-  // ── Chat ───────────────────────────────────────────────────────────
-  handle('chat:send', isDev, (data) => handleChatSend(data));
-  handle('chat:pause', isDev, () => handleChatPause());
-  handle('chat:resume', isDev, () => handleChatResume());
-  handle('chat:stop', isDev, () => handleChatStop());
-  handle('chat:set-rounds', isDev, (data) => handleChatSetRounds(data));
-  handle('chat:deep-debate', isDev, (data) => handleChatDeepDebate(data));
-  handle('chat:continue', isDev, () => handleChatContinue());
-  handle('chat:fork', isDev, (data) => handleChatFork(data));
-  handle('chat:list-branches', isDev, () => handleChatListBranches());
-  handle('chat:switch-branch', isDev, (data) => handleChatSwitchBranch(data));
-
-  // -- Session (SSM user events) -------------------------------------------
-  handle('session:mode-transition-respond', isDev, (data) => handleSessionModeTransitionRespond(data));
-  handle('session:select-worker', isDev, (data) => handleSessionSelectWorker(data));
-  handle('session:user-decision', isDev, (data) => handleSessionUserDecision(data));
-  handle('session:status', isDev, () => handleSessionStatus());
-  // ── Consensus ──────────────────────────────────────────────────────
-  handle('consensus:respond', isDev, (data) => handleConsensusRespond(data));
-  handle('consensus:status', isDev, () => handleConsensusStatus());
-  handle('consensus:set-facilitator', isDev, (data) => handleConsensusSetFacilitator(data));
-
   // ── Execution ──────────────────────────────────────────────────────
   handle('execution:preview', isDev, (data) => handleExecutionPreview(data));
   handle('execution:list-pending', isDev, () => handleExecutionListPending());
@@ -414,22 +297,9 @@ export function registerIpcHandlers(): void {
   // lifecycle (approval:list + approval:decide already registered below).
 
   // ── Runtime Permission Requests ───────────────────────────────────────
-  handle('permission:list-pending', isDev, () => handlePermissionListPending());
-  handle('permission:approve', isDev, (data) => handlePermissionApprove(data));
-  handle('permission:reject', isDev, (data) => handlePermissionReject(data));
-  handle('permission:list-rules', isDev, (data) => handlePermissionListRules(data));
-  // R10-Task5: PermissionFlagBuilder dry-run for Settings 보안 탭 preview.
+  // R11-Task2 retired the v2 list-pending/approve/reject/list-rules
+  // surface. Only the R10-Task5 dry-run preview remains.
   handle('permission:dry-run-flags', isDev, (data) => handlePermissionDryRunFlags(data));
-
-  // ── Workspace / Files ──────────────────────────────────────────────
-  handle('workspace:pick-folder', isDev, () => handleWorkspacePickFolder());
-  handle('workspace:init', isDev, (data) => handleWorkspaceInit(data));
-  handle('workspace:status', isDev, () => handleWorkspaceStatus());
-
-  // ── Consensus Folder ──────────────────────────────────────────────
-  handle('consensus-folder:status', isDev, () => handleConsensusFolderStatus());
-  handle('consensus-folder:pick', isDev, () => handleConsensusFolderPick());
-  handle('consensus-folder:init', isDev, (data) => handleConsensusFolderInit(data));
 
   // ── Memory ─────────────────────────────────────────────────────────
   handle('memory:pin', isDev, (data) => handleMemoryPin(data));
@@ -461,12 +331,6 @@ export function registerIpcHandlers(): void {
   handle('recovery:list', isDev, () => handleRecoveryList());
   handle('recovery:restore', isDev, (data) => handleRecoveryRestore(data));
   handle('recovery:discard', isDev, (data) => handleRecoveryDiscard(data));
-
-  // ── Conversation History ───────────────────────────────────────────
-  handle('conversation:list', isDev, (data) => handleConversationList(data));
-  handle('conversation:load', isDev, (data) => handleConversationLoad(data));
-  handle('conversation:new', isDev, () => handleConversationNew());
-  handle('conversation:delete', isDev, (data) => handleConversationDelete(data));
 
   // ── Remote Access ──────────────────────────────────────────────────
   handle('remote:get-policy', isDev, () => handleRemoteGetPolicy());

@@ -10,16 +10,12 @@
  */
 
 import type { ProviderConfig, ProviderInfo, ProviderType } from './provider-types';
-import type { RoundSetting, BranchInfo, ForkResult, ConversationSummary, ChatMessageData } from './engine-types';
-import type { ConsensusInfo } from './consensus-types';
 import type { AuditEntry, DiffEntry } from './execution-types';
-import type { WorkspaceInfo, PermissionRequest, ConsensusFolderInfo } from './file-types';
 import type { StructuredLogEntry } from './log-types';
 import type { MemoryTopic, MemorySearchResult, KnowledgeNode, ExtractionResult, AssembledContext } from './memory-types';
 import type { SettingsConfig } from './config-types';
 import type { ConversationSnapshot, StateRecoveryData } from './recovery-types';
 import type { RemoteAccessPolicy, RemoteAccessGrant, RemotePermissionSet, RemoteSession, TailscaleStatus } from './remote-types';
-import type { SessionInfo } from './session-state-types';
 import type {
   Project,
   ProjectCreateInput,
@@ -200,104 +196,11 @@ export type IpcChannelMap = {
     response: { models: string[] };
   };
 
-  // ── Chat ─────────────────────────────────────────────────────────
-  'chat:send': {
-    request: { content: string; activeProviderIds?: string[]; attachments?: string[] };
-    response: undefined;
-  };
-  'chat:pause': {
-    request: undefined;
-    response: undefined;
-  };
-  'chat:resume': {
-    request: undefined;
-    response: undefined;
-  };
-  'chat:stop': {
-    request: undefined;
-    response: undefined;
-  };
-  'chat:set-rounds': {
-    request: { rounds: RoundSetting };
-    response: undefined;
-  };
-  'chat:deep-debate': {
-    request: { facilitatorId?: string } | undefined;
-    response: undefined;
-  };
-  'chat:continue': {
-    request: undefined;
-    response: undefined;
-  };
-  // ── Fork / Branch ─────────────────────────────────────────────────
-  'chat:fork': {
-    request: { messageId: string };
-    response: ForkResult;
-  };
-  'chat:list-branches': {
-    request: undefined;
-    response: { branches: BranchInfo[]; currentBranchId: string };
-  };
-  'chat:switch-branch': {
-    request: { branchId: string };
-    response: undefined;
-  };
-
-  // ── Conversation History ──────────────────────────────────────────
-  'conversation:list': {
-    request: { limit?: number; offset?: number };
-    response: { conversations: ConversationSummary[] };
-  };
-  'conversation:load': {
-    request: { conversationId: string };
-    response: { messages: ChatMessageData[] };
-  };
-  'conversation:new': {
-    request: undefined;
-    response: undefined;
-  };
-  'conversation:delete': {
-    request: { conversationId: string };
-    response: { success: true };
-  };
-
-  // ── Consensus ─────────────────────────────────────────────────────
-  'consensus:respond': {
-    request: {
-      decision: 'AGREE' | 'DISAGREE' | 'BLOCK' | 'ABORT';
-      comment?: string;
-      blockReasonType?: 'security' | 'data_loss' | 'spec_conflict' | 'unknown';
-      failureResolution?: 'retry' | 'stop' | 'reassign';
-      reassignFacilitatorId?: string;
-    };
-    response: undefined;
-  };
-  'consensus:set-facilitator': {
-    request: { facilitatorId: string };
-    response: { success: true };
-  };
-  'consensus:status': {
-    request: undefined;
-    response: { consensus: ConsensusInfo | null };
-  };
-
-  // ── Session (mode transition / worker / review) ─────────────────
-  'session:mode-transition-respond': {
-    request: { approved: boolean };
-    response: undefined;
-  };
-  'session:select-worker': {
-    request: { workerId: string };
-    response: undefined;
-  };
-  'session:user-decision': {
-    request: { decision: 'accept' | 'rework' | 'reassign' | 'stop'; reassignWorkerId?: string };
-    response: undefined;
-  };
-  'session:status': {
-    request: undefined;
-    response: { session: SessionInfo | null };
-  };
+  // ── Chat / Conversation / Consensus / Session (v2) ──────────────
+  // R11-Task2 retired the 21 v2 channels (`chat:*` × 10, `conversation:*` × 4,
+  // `consensus:*` × 3, `session:*` × 4). The v3 surface is `meeting:*` +
+  // `approval:*` + `member:*` + the new dashboard / channel / message
+  // handlers below.
 
   // ── Execution ───────────────────────────────────────────────────
   'execution:preview': {
@@ -321,51 +224,16 @@ export type IpcChannelMap = {
   // R7-Task4 removed `cli-permission:respond` — the v3 flow uses
   // `approval:decide` (ApprovalService) for every CLI permission decision.
 
-  // ── Runtime Permission Requests ───────────────────────────────────────
-  'permission:list-pending': {
-    request: undefined;
-    response: { requests: PermissionRequest[] };
-  };
-  'permission:approve': {
-    request: { requestId: string };
-    response: { success: boolean; error?: string };
-  };
-  'permission:reject': {
-    request: { requestId: string };
-    response: { success: boolean; error?: string };
-  };
-  'permission:list-rules': {
-    request: { aiId?: string };
-    response: { rules: Array<{ aiId: string; path: string; read: boolean; write: boolean; execute: boolean }> };
-  };
+  // ── Runtime Permission Requests / Workspace / Consensus Folder (v2) ──
+  // R11-Task2 retired the v2 runtime permission channels
+  // (`permission:list-pending` / `:approve` / `:reject` / `:list-rules`),
+  // the workspace IPC (`workspace:pick-folder` / `:init` / `:status`), and
+  // the consensus-folder IPC (`consensus-folder:status` / `:pick` / `:init`).
+  // The v3 path uses `approval:list` + `approval:decide` for runtime
+  // permission prompts (R7+) and `arena-root:*` + project-level services
+  // for filesystem boundaries. Only the R10-Task5
+  // `permission:dry-run-flags` preview survives.
 
-  // ── Workspace / Files ───────────────────────────────────────────
-  'workspace:pick-folder': {
-    request: undefined;
-    response: { folderPath: string | null };
-  };
-  'workspace:init': {
-    request: { projectFolder: string };
-    response: { workspace: WorkspaceInfo };
-  };
-  'workspace:status': {
-    request: undefined;
-    response: { workspace: WorkspaceInfo | null };
-  };
-
-  // ── Consensus Folder ──────────────────────────────────────────
-  'consensus-folder:status': {
-    request: undefined;
-    response: { folder: ConsensusFolderInfo | null };
-  };
-  'consensus-folder:pick': {
-    request: undefined;
-    response: { folderPath: string | null };
-  };
-  'consensus-folder:init': {
-    request: { folderPath?: string };
-    response: { folder: ConsensusFolderInfo };
-  };
   // ── Memory ──────────────────────────────────────────────────────────
   'memory:pin': {
     request: { messageId: string; topic: MemoryTopic };

@@ -32,53 +32,9 @@ export const criticalChannelSchemas = {
     operationId: z.string().uuid('Invalid operation ID'),
   }),
 
-  'permission:approve': z.object({
-    requestId: z.string().uuid('Invalid request ID'),
-  }),
-
-  'permission:reject': z.object({
-    requestId: z.string().uuid('Invalid request ID'),
-  }),
-
-  'consensus:respond': z.object({
-    decision: z.enum(['AGREE', 'DISAGREE', 'BLOCK', 'ABORT']),
-    comment: z.string().max(4000).optional(),
-    blockReasonType: z.enum(['security', 'data_loss', 'spec_conflict', 'unknown']).optional(),
-    failureResolution: z.enum(['retry', 'stop', 'reassign']).optional(),
-    reassignFacilitatorId: z.string().min(1).max(128).optional(),
-  }).superRefine((data, ctx) => {
-    if (data.decision === 'BLOCK' && !data.blockReasonType) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['blockReasonType'],
-        message: 'blockReasonType is required when decision=BLOCK',
-      });
-    }
-    if (data.decision !== 'BLOCK' && data.blockReasonType) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['blockReasonType'],
-        message: 'blockReasonType is only allowed when decision=BLOCK',
-      });
-    }
-    if (data.failureResolution === 'reassign' && !data.reassignFacilitatorId) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['reassignFacilitatorId'],
-        message: 'reassignFacilitatorId is required when failureResolution=reassign',
-      });
-    }
-  }),
-
-  'consensus:set-facilitator': z.object({
-    facilitatorId: z.string().min(1).max(128),
-  }),
-
-  'workspace:init': z.object({
-    projectFolder: z.string()
-      .min(1, 'Project folder must not be empty')
-      .max(1024, 'Project folder path too long'),
-  }),
+  // R11-Task2 retired the v2 `permission:approve` / `:reject` /
+  // `consensus:respond` / `:set-facilitator` / `workspace:init` schemas
+  // along with the IPC channels they validated.
 
   'remote:set-policy': z.object({
     policy: z.object({
