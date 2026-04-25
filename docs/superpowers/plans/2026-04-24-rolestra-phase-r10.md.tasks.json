@@ -140,7 +140,7 @@
     {
       "id": 13,
       "subject": "Task 13: Playwright OS matrix CI 활성화 + R4~R10 9 spec 실 런 + autonomy-queue Step C 활성",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2,
         3,
