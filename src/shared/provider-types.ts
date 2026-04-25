@@ -13,7 +13,12 @@ export type ProviderCapability =
   | 'tools'
   | 'json-mode'
   | 'multimodal'
-  | 'code-execution';
+  | 'code-execution'
+  // R11-Task5: 회의록 요약 / 메모 압축에 안정적인 1-shot 응답을 낼 수 있는
+  // provider 임을 표시한다. R11-Task9 가 6 provider config 갱신 + meeting
+  // -summary-service 의 'streaming' 임시 우회를 'summarize' fallback chain 으로
+  // 교체한다.
+  | 'summarize';
 
 /** Provider type discriminator. */
 export type ProviderType = 'api' | 'cli' | 'local';

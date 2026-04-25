@@ -50,6 +50,17 @@ import type {
   PermissionFlagOutput,
 } from './permission-flag-types';
 import type { MessageSearchResponse } from './message-search-types';
+import type {
+  OnboardingState,
+  ProviderDetectionSnapshot,
+} from './onboarding-types';
+import type { LlmCostSummary } from './llm-cost-types';
+import type {
+  ApprovalDetail,
+  ApprovalConsensusContext,
+  ApprovalImpactedFile,
+  ApprovalDiffPreview,
+} from './approval-detail-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -666,6 +677,88 @@ export type IpcChannelMap = {
   'db:stats': {
     request: undefined;
     response: { tables: Array<{ name: string; count: number }>; sizeBytes: number };
+  };
+
+  // ── R11-Task5: Onboarding wizard (single-window) ────────────────
+  /**
+   * R11-Task5/6: 첫 부팅 wizard 의 마지막 저장 상태를 한 번에 읽어 온다.
+   * 마이그레이션 013 의 `onboarding_state` 단일행 테이블이 source-of-truth.
+   * 처음 부팅이라 row 가 없으면 service 가 `completed=false, currentStep=1`
+   * 의 default 를 만들어 응답한다.
+   */
+  'onboarding:get-state': {
+    request: undefined;
+    response: { state: OnboardingState };
+  };
+  /**
+   * R11-Task5/6: 진행 중 step 별 부분 patch. `partial.completed=true` 가
+   * 들어와도 service 는 무시 (`onboarding:complete` 채널만 완료 처리).
+   * 응답은 patch 적용 후의 전체 state.
+   */
+  'onboarding:set-state': {
+    request: { partial: Partial<OnboardingState> };
+    response: { state: OnboardingState };
+  };
+  /**
+   * R11-Task5/6: wizard 마무리 — `completed=true + updatedAt=now` 로 row 갱신.
+   * 호출 후 ShellTopBar 의 "Restart onboarding" CTA 외에는 wizard 진입 경로가
+   * 없다.
+   */
+  'onboarding:complete': {
+    request: undefined;
+    response: { success: true };
+  };
+
+  // ── R11-Task5: Provider auto-detection (Onboarding step 2) ──────
+  /**
+   * R11-Task5/6: 로컬에 설치된 provider (CLI binary / API key) 를 한 번에
+   * 스캔. wizard 의 step 2 가 결과를 그대로 카드 grid 로 렌더한다. 호출자는
+   * 결과 capabilities snapshot 의 'summarize' 여부로 디폴트 선택을 정한다.
+   */
+  'provider:detect': {
+    request: undefined;
+    response: { snapshots: ProviderDetectionSnapshot[] };
+  };
+
+  // ── R11-Task5: LLM cost summary (Settings 누적 카드) ────────────
+  /**
+   * R11-Task5/8: Settings 의 "누적 비용" 카드용 집계. periodDays 미지정 시
+   * service default (R11 default = 30일) 를 사용한다. estimatedUsd 는
+   * 사용자가 Settings 에서 단가를 입력한 provider 만 채워지고 나머지는 null.
+   */
+  'llm:cost-summary': {
+    request: { periodDays?: number };
+    response: { summary: LlmCostSummary };
+  };
+
+  // ── R11-Task5: Approval 상세 패널 (R11-Task7 의존) ──────────────
+  /**
+   * R11-Task5/7: ExecutionService 의 dry-run preview 결과만 반환한다 — 실제
+   * apply 는 하지 않는다. Approval 상세 패널의 "변경 미리보기" 카드용.
+   */
+  'execution:dry-run-preview': {
+    request: { approvalId: string };
+    response: {
+      impactedFiles: ApprovalImpactedFile[];
+      diffPreviews: ApprovalDiffPreview[];
+    };
+  };
+  /**
+   * R11-Task5/7: 카드 한 장에 필요한 모든 라운드트립을 1건으로 합친다 —
+   * (approval row + impacted files + diff preview + consensus context).
+   */
+  'approval:detail-fetch': {
+    request: { approvalId: string };
+    response: { detail: ApprovalDetail };
+  };
+  /**
+   * R11-Task5/7: 패널의 "회의 맥락" 카드 — 합의 turn 의 투표 결과를 따로
+   * 조회하기 위한 별도 채널. detail-fetch 로도 받아오지만 갱신 시 부분
+   * refresh 가 가능하도록 분리.
+   */
+  'meeting:voting-history': {
+    request: { meetingId: string };
+    response: { context: ApprovalConsensusContext };
   };
 
   // ── R11-Task4: dev hooks (E2E only, gated by ROLESTRA_E2E=1) ────

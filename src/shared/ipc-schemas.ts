@@ -411,6 +411,91 @@ export const meetingLlmSummarizeSchema = z.object({
   providerId: z.string().min(1).max(128).optional(),
 });
 
+// ── R11-Task5 신규 zod schemas ─────────────────────────────────────
+
+/**
+ * R11-Task5/6: `onboarding:get-state` / `onboarding:complete` 둘 다
+ * 입력이 없는 unit 채널.
+ */
+export const onboardingGetStateSchema = z.undefined();
+export const onboardingCompleteSchema = z.undefined();
+
+const onboardingStepSchema = z.union([
+  z.literal(1),
+  z.literal(2),
+  z.literal(3),
+  z.literal(4),
+  z.literal(5),
+]);
+
+const onboardingSelectionsSchema = z.object({
+  staff: z.array(z.string().min(1).max(128)).max(64).optional(),
+  roles: z.record(z.string().min(1).max(128), z.string().min(1).max(200)).optional(),
+  permissions: permissionModeSchema.optional(),
+  firstProject: z
+    .object({
+      slug: z.string().min(1).max(200),
+      kind: projectKindSchema,
+    })
+    .optional(),
+});
+
+const onboardingStatePartialSchema = z
+  .object({
+    completed: z.boolean().optional(),
+    currentStep: onboardingStepSchema.optional(),
+    selections: onboardingSelectionsSchema.optional(),
+    updatedAt: z.number().int().nonnegative().optional(),
+  })
+  .refine((v) => Object.keys(v).length > 0, {
+    message: 'partial must contain at least one field',
+  });
+
+/**
+ * R11-Task5/6: `onboarding:set-state` — 부분 patch. service 가 partial 을
+ * 받아 row 의 누락 필드를 보존하며 갱신한다. completed 필드는 받아도 무시
+ * (별도 onboarding:complete 채널만 완료 처리).
+ */
+export const onboardingSetStateSchema = z.object({
+  partial: onboardingStatePartialSchema,
+});
+
+/** R11-Task5/6: `provider:detect` — input 없음. */
+export const providerDetectSchema = z.undefined();
+
+/**
+ * R11-Task5/8: `llm:cost-summary` — periodDays 미지정 시 service default
+ * (R11 default = 30일). 365일 초과는 거부 (Settings UI 에 1년 이상 표시 X).
+ */
+export const llmCostSummarySchema = z
+  .object({
+    periodDays: z.number().int().positive().max(365).optional(),
+  })
+  .optional();
+
+/**
+ * R11-Task5/7: `execution:dry-run-preview` — approvalId 1건 조회. 실제
+ * apply 는 하지 않으므로 zod 가 검증하는 부분은 단일 ID 형식뿐.
+ */
+export const executionDryRunPreviewSchema = z.object({
+  approvalId: z.string().min(1).max(128),
+});
+
+/**
+ * R11-Task5/7: `approval:detail-fetch` — approvalId 1건 조회. 응답이 큰
+ * 합집합 타입이라 입력은 단일 ID 만.
+ */
+export const approvalDetailFetchSchema = z.object({
+  approvalId: z.string().min(1).max(128),
+});
+
+/**
+ * R11-Task5/7: `meeting:voting-history` — meetingId 1건 조회.
+ */
+export const meetingVotingHistorySchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
 /**
  * R11-Task4: `dev:trip-circuit-breaker` — discriminated by `tripwire`.
  * Dev-only channel (gated by ROLESTRA_E2E=1 in router.ts), but the
@@ -485,6 +570,15 @@ export const v3ChannelSchemas = {
   // is gated, but the schema entry is unconditional so the dev-mode zod
   // round-trip catches malformed payloads when the handler IS registered).
   'dev:trip-circuit-breaker': devTripCircuitBreakerSchema,
+  // ── R11-Task5 신규 채널 ──────────────────────────────────────────
+  'onboarding:get-state': onboardingGetStateSchema,
+  'onboarding:set-state': onboardingSetStateSchema,
+  'onboarding:complete': onboardingCompleteSchema,
+  'provider:detect': providerDetectSchema,
+  'llm:cost-summary': llmCostSummarySchema,
+  'execution:dry-run-preview': executionDryRunPreviewSchema,
+  'approval:detail-fetch': approvalDetailFetchSchema,
+  'meeting:voting-history': meetingVotingHistorySchema,
 } as const;
 
 export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;
