@@ -45,6 +45,7 @@
  * override first.
  */
 
+import { EventEmitter } from 'node:events';
 import {
   AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS,
   type AvatarKind,
@@ -52,6 +53,7 @@ import {
   type MemberView,
   type WorkStatus,
 } from '../../shared/member-profile-types';
+import type { StreamMemberStatusChangedPayload } from '../../shared/stream-events';
 import { MemberProfileRepository } from './member-profile-repository';
 import { buildEffectivePersona } from './persona-builder';
 
@@ -173,7 +175,42 @@ export interface MemberProfileServiceOptions {
   now?: () => number;
 }
 
-export class MemberProfileService {
+/**
+ * Event name emitted by {@link MemberProfileService} whenever a member's
+ * runtime status OR persisted profile metadata changes (R10-Task10).
+ *
+ * Wired to the renderer via `StreamBridge.connect({members})` →
+ * `stream:member-status-changed` (spec §6, plan R10 D9). The payload
+ * shape mirrors {@link StreamMemberStatusChangedPayload} so the bridge
+ * can forward it verbatim with no adapter logic.
+ *
+ * D9 coexistence: the existing R8 mutation-after-invalidation pattern
+ * (renderer surfaces calling `notifyChannelsChanged()` post-mutation)
+ * keeps working as a fallback. The stream is an ADDITIVE layer — when
+ * the bridge is offline (e.g. unit tests without a renderer) consumers
+ * still see fresh data via their next mount-fetch + invalidation.
+ */
+export const MEMBER_STATUS_CHANGED_EVENT = 'status-changed' as const;
+
+/**
+ * Strongly-typed event map for {@link MemberProfileService}. A separate
+ * symbol keeps the listener signature pinned to {@link StreamMemberStatusChangedPayload}
+ * so a future event addition cannot accidentally widen the surface to
+ * `unknown`.
+ */
+export interface MemberProfileServiceEvents {
+  'status-changed': (payload: StreamMemberStatusChangedPayload) => void;
+}
+
+/**
+ * Causes that label why a `'status-changed'` event was emitted. Mirrors
+ * the `cause` field on {@link StreamMemberStatusChangedPayload}; kept as
+ * a private alias so the service does not import the renderer-facing
+ * type for every internal call site.
+ */
+type StatusChangeCause = StreamMemberStatusChangedPayload['cause'];
+
+export class MemberProfileService extends EventEmitter {
   /**
    * In-memory runtime status per provider. Keyed by `providerId`. Absent
    * keys resolve to {@link DEFAULT_RUNTIME_STATUS} via
@@ -212,9 +249,85 @@ export class MemberProfileService {
     private readonly providers: MemberProviderLookup,
     options: MemberProfileServiceOptions = {},
   ) {
+    super();
     this.offlineManualTimeoutMs =
       options.offlineManualTimeoutMs ?? AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS;
     this.now = options.now ?? Date.now;
+  }
+
+  /**
+   * Centralised emitter for the `'status-changed'` event. Builds the
+   * full {@link StreamMemberStatusChangedPayload} (providerId + member +
+   * status + cause) so subscribers — including the StreamBridge that
+   * forwards verbatim — never have to re-derive {@link MemberView}.
+   *
+   * If the provider is no longer registered (deletion mid-flight) we
+   * skip emitting: the renderer surface that just heard about the
+   * deletion already knows to drop the row, and a payload without a
+   * MemberView would fail the bridge's shape validation. Emit
+   * exceptions are isolated so a buggy listener cannot break the
+   * caller (mirrors the MessageService / NotificationService pattern).
+   */
+  private emitStatusChanged(
+    providerId: string,
+    cause: StatusChangeCause,
+  ): void {
+    const providerMeta = this.providers.get(providerId);
+    if (!providerMeta) return;
+    const profile = this.getProfile(providerId);
+    const status = this.getWorkStatus(providerId);
+    const payload: StreamMemberStatusChangedPayload = {
+      providerId,
+      member: {
+        ...profile,
+        displayName: providerMeta.displayName,
+        persona: providerMeta.persona,
+        workStatus: status,
+      },
+      status,
+      cause,
+    };
+    try {
+      this.emit(MEMBER_STATUS_CHANGED_EVENT, payload);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // TODO R2-log: swap for structured logger (src/main/log/)
+      console.warn('[rolestra.members] status-changed listener threw:', {
+        providerId,
+        cause,
+        name: err instanceof Error ? err.name : undefined,
+        message,
+      });
+    }
+  }
+
+  // ── typed EventEmitter overloads ───────────────────────────────────
+
+  on<E extends keyof MemberProfileServiceEvents>(
+    event: E,
+    listener: MemberProfileServiceEvents[E],
+  ): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this {
+    return super.on(event, listener);
+  }
+
+  off<E extends keyof MemberProfileServiceEvents>(
+    event: E,
+    listener: MemberProfileServiceEvents[E],
+  ): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this {
+    return super.off(event, listener);
+  }
+
+  emit<E extends keyof MemberProfileServiceEvents>(
+    event: E,
+    ...args: Parameters<MemberProfileServiceEvents[E]>
+  ): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean {
+    return super.emit(event, ...args);
   }
 
   /**
@@ -277,6 +390,11 @@ export class MemberProfileService {
       updatedAt: this.now(),
     };
     this.repo.upsert(next);
+    // R10-Task10: notify subscribers (StreamBridge → renderer reducer).
+    // `cause: 'profile'` lets the UI distinguish a metadata edit from a
+    // runtime status flip — the avatar / role row may need to re-render
+    // even when workStatus is unchanged.
+    this.emitStatusChanged(providerId, 'profile');
     return next;
   }
 
@@ -308,6 +426,10 @@ export class MemberProfileService {
       // honest default instead of reporting a cached 'online'/'connecting'.
       this.runtimeStatus.delete(providerId);
     }
+    // R10-Task10: emit AFTER the override + runtime mutation lands so
+    // subscribers see the post-toggle state (manual → offline-manual,
+    // online → cleared override + default runtime).
+    this.emitStatusChanged(providerId, 'status');
     return this.getProfile(providerId);
   }
 
@@ -376,12 +498,19 @@ export class MemberProfileService {
    */
   private async runProbe(providerId: string): Promise<WorkStatus> {
     this.runtimeStatus.set(providerId, 'connecting');
+    // R10-Task10: emit the in-flight 'connecting' tick so the renderer
+    // can render an immediate spinner — a slow warmup otherwise waits
+    // out the full timeout before any status change is visible.
+    this.emitStatusChanged(providerId, 'warmup');
     try {
       await this.providers.warmup(providerId);
       this.runtimeStatus.set(providerId, 'online');
     } catch {
       this.runtimeStatus.set(providerId, 'offline-connection');
     }
+    // Terminal status — emit again so subscribers transition off the
+    // 'connecting' spinner regardless of outcome.
+    this.emitStatusChanged(providerId, 'warmup');
     return this.getWorkStatus(providerId);
   }
 
@@ -408,6 +537,7 @@ export class MemberProfileService {
    */
   getWorkStatus(providerId: string): WorkStatus {
     const profile = this.repo.get(providerId);
+    let didAutoClear = false;
     if (profile && profile.statusOverride === 'offline-manual') {
       if (this.isOfflineManualExpired(profile)) {
         // Side-effect: clear the persisted override so the next call
@@ -418,11 +548,21 @@ export class MemberProfileService {
         // latest warmup outcome and we want to surface that truth, not
         // the 'offline-connection' default.
         this.repo.setStatusOverride(providerId, null, this.now());
+        didAutoClear = true;
       } else {
         return 'offline-manual';
       }
     }
-    return this.runtimeStatus.get(providerId) ?? DEFAULT_RUNTIME_STATUS;
+    const result = this.runtimeStatus.get(providerId) ?? DEFAULT_RUNTIME_STATUS;
+    // R10-Task10: surface the auto-clear as a `'status'` event so any
+    // renderer surface (PeopleWidget badge / MemberRow) sees the user
+    // automatically "come back from leave" without an explicit refetch.
+    // Emit AFTER deriving `result` to avoid re-entering getWorkStatus
+    // through the emitter (emitStatusChanged calls getWorkStatus too).
+    if (didAutoClear) {
+      this.emitStatusChanged(providerId, 'status');
+    }
+    return result;
   }
 
   /**

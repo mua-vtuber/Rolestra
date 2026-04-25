@@ -361,6 +361,7 @@ app.whenReady().then(async () => {
       messages: messageService,
       approvals: approvalService,
       notifications: notificationService,
+      members: memberProfileService,
       // R9-Task5: project autonomy toggles + system downgrades become
       // `stream:autonomy-mode-changed` pushes without a dedicated emit
       // helper at each call site.

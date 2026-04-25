@@ -27,14 +27,41 @@
  *   can wire a single callback today and future fan-out tomorrow.
  */
 
-import { BrowserWindow, Notification } from 'electron';
+import { app, BrowserWindow, Notification } from 'electron';
 import type { NotifierAdapter, NotifierHandle } from './notification-service';
 
 export class ElectronNotifierAdapter implements NotifierAdapter {
+  /**
+   * Returns true iff at least one non-destroyed, VISIBLE BrowserWindow
+   * is currently focused. The visibility gate (R10-Task10) closes a
+   * macOS edge case where a hidden window can still report focus
+   * after the user cmd-tabbed to another app — without it the
+   * NotificationService would suppress every toast even though the
+   * user clearly is not looking at our renderer.
+   */
   isAnyWindowFocused(): boolean {
     const windows = BrowserWindow.getAllWindows();
     if (windows.length === 0) return false;
-    return windows.some((w) => !w.isDestroyed() && w.isFocused());
+    return windows.some(
+      (w) => !w.isDestroyed() && w.isFocused() && w.isVisible(),
+    );
+  }
+
+  /**
+   * R10-Task10 (R9 Known Concern #5): macOS dock visibility signal.
+   * Returns `true` on non-darwin platforms (no dock concept), and on
+   * darwin when `app.dock.isVisible()` confirms the dock icon is up.
+   * Defensive default of `true` mirrors the spec's "treat as visible
+   * when in doubt" rule — we would rather err on the side of
+   * suppressing duplicate toasts than spam the user.
+   */
+  isDockVisible(): boolean {
+    if (process.platform !== 'darwin') return true;
+    // Electron's `app.dock` is only present on macOS; the optional-chain
+    // call is defensive against the build-time type erroring on other
+    // platforms even when this branch is unreachable there.
+    const dock = (app as typeof app & { dock?: { isVisible?: () => boolean } }).dock;
+    return dock?.isVisible?.() ?? true;
   }
 
   notify(title: string, body: string): NotifierHandle {

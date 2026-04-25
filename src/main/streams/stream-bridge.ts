@@ -122,6 +122,21 @@ export interface StreamBridgeServices {
    */
   notifications?: EventEmitter;
   /**
+   * R10-Task10: MemberProfileService whose `'status-changed'` event
+   * feeds `stream:member-status-changed`. The service emits the full
+   * payload shape (providerId + member view + status + cause) so the
+   * bridge forwards verbatim — no payload adapter needed (mirrors the
+   * R8 D8 stub spec, now activated).
+   *
+   * D9 coexistence (plan R10): the existing R8 mutation-after-invalidation
+   * pattern (renderer surfaces calling `notifyChannelsChanged()` after
+   * `member:set-status` / `member:update-profile`) keeps working as a
+   * fallback when the bridge is offline. The stream is an ADDITIVE
+   * layer — see `use-member-status-stream.ts` for the renderer-side
+   * dual-path note.
+   */
+  members?: EventEmitter;
+  /**
    * R9-Task5: ProjectService whose `'autonomy-changed'` event feeds
    * `stream:autonomy-mode-changed`. Fires on both user-initiated
    * toggles (`project:set-autonomy` IPC) and system-initiated
@@ -295,6 +310,18 @@ export class StreamBridge {
         this.emit({
           type: 'stream:notification-clicked',
           payload: payload as StreamNotificationClickedPayload,
+        });
+      });
+    }
+
+    if (services.members) {
+      services.members.on('status-changed', (payload: unknown) => {
+        // MemberProfileService emits the full StreamMemberStatusChangedPayload
+        // shape (Task 10), so we forward verbatim. Shape validation in
+        // emit() catches any drift from a future refactor.
+        this.emit({
+          type: 'stream:member-status-changed',
+          payload: payload as StreamMemberStatusChangedPayload,
         });
       });
     }

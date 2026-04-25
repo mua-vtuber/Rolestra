@@ -64,14 +64,32 @@ function createConfigStub(arenaRoot: string): ArenaRootConfigAccessor {
  * Minimal in-memory {@link NotifierAdapter} for tests. Tracks a focus
  * flag that the test can flip, records every `notify()` call, and lets
  * the test manually fire click callbacks via {@link triggerClick}.
+ *
+ * R10-Task10: also exposes `dockVisible` so the macOS focus gate tests
+ * can independently control the dock signal vs. the window-focus
+ * signal. `dockVisibleOverride === undefined` ⇒ the adapter does NOT
+ * expose `isDockVisible`, exercising the legacy-adapter fallback path.
  */
 class MockNotifierAdapter implements NotifierAdapter {
   public focused = false;
+  public dockVisibleOverride: boolean | undefined = true;
   public readonly notifyCalls: Array<{ title: string; body: string }> = [];
   private readonly pending: Array<() => void> = [];
 
   isAnyWindowFocused(): boolean {
     return this.focused;
+  }
+
+  // R10-Task10: defined as a property accessor so the test can swap it
+  // for `undefined` and exercise the legacy-adapter fallback in the
+  // service's optional-chain (`this.adapter.isDockVisible?.()`). A
+  // plain method would be present even when the underlying flag is
+  // unset — this getter returns `undefined` when the test wants to
+  // simulate a pre-Task-10 adapter.
+  get isDockVisible(): (() => boolean) | undefined {
+    if (this.dockVisibleOverride === undefined) return undefined;
+    const flag = this.dockVisibleOverride;
+    return () => flag;
   }
 
   notify(title: string, body: string): NotifierHandle {
@@ -357,6 +375,106 @@ describe('NotificationService', () => {
     // kind filter limits to just the one kind.
     const errors = repo.listLog({ kind: 'error' });
     expect(errors.map((r) => r.id)).toEqual(['log-b']);
+  });
+
+  // ── R10-Task10: macOS focus gate ──────────────────────────────────
+
+  describe('macOS focus gate (R10-Task10)', () => {
+    /**
+     * Wraps a body of test code with `process.platform` set to `value`,
+     * restoring the original after the body returns. Uses
+     * `Object.defineProperty` because `process.platform` is non-writable
+     * via direct assignment in some Node builds — matches the existing
+     * pattern in `cli-spawn.test.ts`.
+     */
+    function withPlatform(value: NodeJS.Platform, fn: () => void): void {
+      const original = process.platform;
+      Object.defineProperty(process, 'platform', {
+        value,
+        configurable: true,
+      });
+      try {
+        fn();
+      } finally {
+        Object.defineProperty(process, 'platform', {
+          value: original,
+          configurable: true,
+        });
+      }
+    }
+
+    it('darwin: focused + dock-visible → suppress (gate engaged)', () => {
+      adapter.focused = true;
+      adapter.dockVisibleOverride = true;
+
+      withPlatform('darwin', () => {
+        const result = service.show({ kind: 'new_message', title: 't', body: 'b' });
+        expect(result).toBeNull();
+        expect(adapter.notifyCalls).toHaveLength(0);
+      });
+    });
+
+    it('darwin: focused but dock HIDDEN → fire (user has no in-app surface)', () => {
+      // Accessory / kiosk mode — even when a BrowserWindow reports
+      // focus, the user has no dock icon to look at, so suppressing
+      // the toast would be the wrong call.
+      adapter.focused = true;
+      adapter.dockVisibleOverride = false;
+
+      withPlatform('darwin', () => {
+        const result = service.show({ kind: 'new_message', title: 't', body: 'b' });
+        expect(result).not.toBeNull();
+        expect(adapter.notifyCalls).toHaveLength(1);
+      });
+    });
+
+    it('darwin: dock visible but no window focused → fire', () => {
+      adapter.focused = false;
+      adapter.dockVisibleOverride = true;
+
+      withPlatform('darwin', () => {
+        const result = service.show({ kind: 'new_message', title: 't', body: 'b' });
+        expect(result).not.toBeNull();
+      });
+    });
+
+    it('linux: dock signal ignored — only window focus matters', () => {
+      // Sanity: the dock branch is darwin-only. A Linux app with the
+      // (irrelevant) dockVisibleOverride flipped off must still
+      // suppress when a window is focused.
+      adapter.focused = true;
+      adapter.dockVisibleOverride = false;
+
+      withPlatform('linux', () => {
+        const result = service.show({ kind: 'new_message', title: 't', body: 'b' });
+        expect(result).toBeNull();
+        expect(adapter.notifyCalls).toHaveLength(0);
+      });
+    });
+
+    it('win32: dock signal ignored — only window focus matters', () => {
+      adapter.focused = false;
+      adapter.dockVisibleOverride = false;
+
+      withPlatform('win32', () => {
+        const result = service.show({ kind: 'new_message', title: 't', body: 'b' });
+        expect(result).not.toBeNull();
+      });
+    });
+
+    it('legacy adapter without isDockVisible() → defensive default treats dock as visible (darwin)', () => {
+      // Pre-Task-10 NotifierAdapter implementations didn't define
+      // isDockVisible. The service must NOT crash on the optional-chain
+      // call and must default to "dock visible = true". With a focused
+      // window that means SUPPRESS — the safest behaviour, mirrors R9.
+      adapter.focused = true;
+      adapter.dockVisibleOverride = undefined;
+
+      withPlatform('darwin', () => {
+        const result = service.show({ kind: 'new_message', title: 't', body: 'b' });
+        expect(result).toBeNull();
+      });
+    });
   });
 
   // ── listener isolation ────────────────────────────────────────────
