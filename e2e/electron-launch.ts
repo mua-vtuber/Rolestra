@@ -82,6 +82,17 @@ export async function launchRolestra(): Promise<LaunchedApp> {
       // and would point the renderer at localhost:5173 if left set.
       ELECTRON_RENDERER_URL: '',
       NODE_ENV: 'test',
+      // R11-Task4: every Playwright Electron run gets the dev hooks
+      // surface (preload `__rolestraDevHooks` + main `dev:trip-circuit-
+      // breaker` channel). Production builds never set this variable, so
+      // the gates in `src/preload/index.ts` and `src/main/ipc/router.ts`
+      // keep the trip path locked away from end-user installs. Setting it
+      // unconditionally here means specs that don't need the hooks pay
+      // zero observable cost (the registration just registers an extra
+      // channel and exposes one more `window.*` binding) while specs
+      // that DO need them — autonomy-queue Step C — get a deterministic
+      // hook regardless of host OS.
+      ROLESTRA_E2E: '1',
     },
   });
 

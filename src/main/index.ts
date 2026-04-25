@@ -41,6 +41,7 @@ import { NotificationRepository } from './notifications/notification-repository'
 import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
 import { setNotificationServiceAccessor } from './ipc/handlers/notification-handler';
+import { setDevHooksAccessors } from './ipc/handlers/dev-hooks-handler';
 import { setQueueServiceAccessor } from './ipc/handlers/queue-handler';
 import { CircuitBreaker } from './queue/circuit-breaker';
 import { CircuitBreakerStore } from './queue/circuit-breaker-store';
@@ -398,6 +399,20 @@ app.whenReady().then(async () => {
       channelService,
     });
     autonomyGate.wire();
+
+    // R11-Task4: dev hooks accessor wire (E2E only). The IPC channel
+    // registration in `router.ts` is itself gated by ROLESTRA_E2E=1, so
+    // setting accessors here is a no-op cost in production builds (the
+    // four refs hold real services, but the renderer can never reach the
+    // handler that reads them). Done here so the accessors track the
+    // exact same singletons the rest of the boot block uses — avoids a
+    // second instantiation path for tests.
+    setDevHooksAccessors({
+      projectService: () => projectService,
+      approvalService: () => approvalService,
+      notificationService: () => notificationService,
+      circuitBreaker: () => circuitBreaker,
+    });
 
     // R10-Task11: optional LLM summary service. Singleton — picks the
     // first ready provider with the summarize capability at call time so

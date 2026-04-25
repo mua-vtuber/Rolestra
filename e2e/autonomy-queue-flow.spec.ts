@@ -1,5 +1,5 @@
 /**
- * Playwright Electron E2E — "autonomy + queue flow" (R9-Task12).
+ * Playwright Electron E2E — "autonomy + queue flow" (R9-Task12, R11-Task4).
  *
  * Flow under test (spec §8 + §11 scenarios 3, 4, 5):
  *
@@ -20,23 +20,26 @@
  *     and instead verifies the queue snapshot round-trips + the first
  *     item is eligible to claim when `queue:start-next` fires.
  *
- *   Step C — Circuit Breaker files_per_turn > 20 강제 manual:
- *     Mock dispatch via `window.eval` into the renderer's debug hook
- *     (R9-Task6 wired the breaker behind `circuitBreaker.recordFileChanges`)
- *     is out of scope for R9 because the breaker lives in the main
- *     process. The E2E documents the expected observable effect —
- *     `stream:autonomy-mode-changed` arrives with `reason='circuit_breaker'`
- *     and the toggle's `data-mode` flips back to `manual` + an OS
- *     notification fires through the Electron notifier mock. Full
- *     execution waits for R10 when the mock provider + mock breaker
- *     injection land.
+ *   Step C — Circuit Breaker files_per_turn > 20 강제 manual (R11-Task4):
+ *     Driven through the `__rolestraDevHooks.tripFilesPerTurn(21)` debug
+ *     hook (preload + main are gated on `ROLESTRA_E2E=1` set by
+ *     `electron-launch.ts`). The hook replays the production downgrade
+ *     side-effect chain — `projectService.setAutonomy('manual',
+ *     {reason:'circuit_breaker'})` + `circuit_breaker` approval row +
+ *     OS notification — so the renderer observes:
+ *       - the toggle's `data-mode` attribute flips back to `manual`
+ *         (driven by `stream:autonomy-mode-changed`).
+ *     The OS notification side-effect is verified at the unit-test
+ *     layer (`dev-hooks-handler.test.ts`); the E2E intentionally only
+ *     asserts the visible `data-mode` flip because the `Notification`
+ *     surface inside Electron under hosted CI runners is unreliable
+ *     (Linux xvfb suppresses native toasts entirely).
  *
- * Scope notes (R9, same as prior phases):
+ * Scope notes (R11):
  *   - No AI provider is registered, so Step B's "first item in_progress"
  *     can only be asserted up to the pending → claim handoff (QueueService
  *     does the DB flip; the meeting-start callback is R10).
- *   - Step C is a documented placeholder — the E2E shape is here so the
- *     R10 breaker-mock can reuse the spec skeleton verbatim.
+ *   - Step C is now active end-to-end and closes R10 Known Concern #2.
  *
  * WSL caveat (same as R4/R5/R6/R7/R8 E2E specs):
  *   Electron under WSL requires WSLg + Linux Electron/better-sqlite3
@@ -142,21 +145,40 @@ test.describe('autonomy + queue flow — R9 promotion → queue → breaker', ()
     await window.click('[data-testid="queue-panel-pause-toggle"]');
     await expect(queuePanel).toHaveAttribute('data-paused', 'false');
 
-    // ── Step C — Circuit Breaker downgrade (R10 placeholder) ─────────
-    // Real tripwire dispatch needs main-process injection (ExecutionService
-    // mock + CliRunner mock). R9 documents the expected stream event
-    // shape; R10 wires the breaker mock into the E2E harness. Until
-    // then this step is a no-op assertion — the observable is captured
-    // as a comment so the spec diff on R10 is additive-only.
-    //
-    // Expected (R10):
-    //   await window.evaluate(() => {
-    //     void window.rolestra.dev.tripFilesPerTurn(21);
-    //   });
-    //   await expect(toggle).toHaveAttribute('data-mode', 'manual', {
-    //     timeout: 10_000,
-    //   });
-    //   await expect(notifyMock.calls.length).toBeGreaterThan(0);
+    // ── Step C — Circuit Breaker downgrade (R11-Task4) ───────────────
+    // The dev hook is exposed as `window.__rolestraDevHooks` only when
+    // `ROLESTRA_E2E=1` (set unconditionally inside `electron-launch.ts`
+    // for every E2E run). The handler replicates the production
+    // `handleBreakerFired` side-effect chain — including
+    // `projectService.setAutonomy('manual', {reason:'circuit_breaker'})`
+    // — so the toggle's `data-mode` attribute flips back to `manual`
+    // through the same `stream:autonomy-mode-changed` push that drives
+    // the user-initiated transitions above.
+    const tripResult = await window.evaluate(async () => {
+      // `globalThis` aliases the renderer-side window inside the page
+      // evaluate callback. We deliberately avoid `window` here so the
+      // outer Playwright `Page` binding (also named `window` in this
+      // spec) does not shadow the renderer global at the type level.
+      const hooks = (
+        globalThis as typeof globalThis & {
+          __rolestraDevHooks?: RolestraDevHooks;
+        }
+      ).__rolestraDevHooks;
+      if (!hooks) {
+        throw new Error(
+          '__rolestraDevHooks missing — ROLESTRA_E2E must be set by electron-launch.ts',
+        );
+      }
+      return hooks.tripFilesPerTurn(21);
+    });
+
+    expect(tripResult.ok).toBe(true);
+    expect(tripResult.tripwire).toBe('files_per_turn');
+    expect(tripResult.projectId).not.toBeNull();
+
+    await expect(toggle).toHaveAttribute('data-mode', 'manual', {
+      timeout: 10_000,
+    });
 
     // Evidence.
     const shotPath = testInfo.outputPath(SCREENSHOT_FILENAME);

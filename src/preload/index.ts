@@ -118,3 +118,57 @@ contextBridge.exposeInMainWorld('arena', {
    */
   onStream: typedOnStream,
 });
+
+/**
+ * R11-Task4: __rolestraDevHooks — Playwright Electron E2E debug hooks.
+ *
+ * Exposed only when `process.env.ROLESTRA_E2E === '1'` so a production
+ * renderer (or DevTools console of an end-user build) cannot reach the
+ * trip surface. The matching IPC handler in `src/main/ipc/router.ts` is
+ * gated on the same env var — both gates have to fail open for the trip
+ * channel to exist, which is impossible in a production-built bundle
+ * because the launcher never sets the variable.
+ *
+ * The four `trip*` functions wrap the single
+ * `dev:trip-circuit-breaker` channel with a discriminated payload so an
+ * E2E spec writes the same call shape documented in the R11 plan:
+ *
+ *     await window.__rolestraDevHooks.tripFilesPerTurn(21);
+ *
+ * Each returns a Promise resolving to the handler's structured response
+ * `{ ok, projectId, tripwire }` so the spec can assert the trip applied.
+ */
+if (process.env.ROLESTRA_E2E === '1') {
+  contextBridge.exposeInMainWorld('__rolestraDevHooks', {
+    tripFilesPerTurn(count: number, projectId?: string) {
+      return typedInvoke('dev:trip-circuit-breaker', {
+        tripwire: 'files_per_turn',
+        count,
+        ...(projectId !== undefined && { projectId }),
+      });
+    },
+    tripCumulativeCliMs(ms: number, projectId?: string) {
+      return typedInvoke('dev:trip-circuit-breaker', {
+        tripwire: 'cumulative_cli_ms',
+        ms,
+        ...(projectId !== undefined && { projectId }),
+      });
+    },
+    tripQueueStreak(count: number, projectId?: string) {
+      return typedInvoke('dev:trip-circuit-breaker', {
+        tripwire: 'queue_streak',
+        count,
+        ...(projectId !== undefined && { projectId }),
+      });
+    },
+    tripSameError(category: string, count: number, projectId?: string) {
+      return typedInvoke('dev:trip-circuit-breaker', {
+        tripwire: 'same_error',
+        category,
+        count,
+        ...(projectId !== undefined && { projectId }),
+      });
+    },
+  });
+  console.info('[rolestra] __rolestraDevHooks exposed (ROLESTRA_E2E=1)');
+}

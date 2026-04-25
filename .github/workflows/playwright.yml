@@ -1,20 +1,23 @@
 name: Playwright Electron E2E
 
-# R10-Task13: cross-OS Electron E2E matrix.
+# R10-Task13 + R11-Task4: cross-OS Electron E2E matrix.
 #
 # Triggers manually via workflow_dispatch and on push to main. PR runs are
 # explicitly NOT enabled by default — Electron E2E on hosted runners burns
-# minutes (especially macOS); D5 deferred a "weekly cron" decision to R11.
+# minutes (especially macOS); R11-Task14 splits PR triggers (Win + Linux
+# only) from a weekly macOS cron and lands a usage-report workflow.
 #
 # Matrix:
 #   - 3 OS  : ubuntu-latest, windows-latest, macos-latest
-#   - 7 spec: approval-flow, autonomy-queue-flow, external-project-flow,
-#             meeting-flow, member-profile-flow, messenger-flow,
-#             settings-tabs-flow
+#   - 9 spec: approval-flow, autonomy-queue-flow, dm-flow,
+#             external-project-flow, meeting-flow, member-profile-flow,
+#             messenger-flow, search-flow, settings-tabs-flow
 #
-# search-flow / dm-flow specs were planned but not delivered in R10 (R10
-# Tasks 2/3 shipped the surfaces with vitest coverage instead). Adding
-# them in R11 only requires extending the spec list below.
+# 9 × 3 = 27 cells. R11-Task4 added `search-flow` (R10 Known Concern #3)
+# and `dm-flow` (Known Concern #3) and activated `autonomy-queue-flow`
+# Step C end-to-end via the `__rolestraDevHooks` preload bridge (Known
+# Concern #2). The closeout in Task 16 verifies all 27 cells green from a
+# workflow_dispatch run + signs off on the 12 native screenshots.
 
 on:
   workflow_dispatch:
@@ -33,10 +36,12 @@ jobs:
         spec:
           - approval-flow
           - autonomy-queue-flow
+          - dm-flow
           - external-project-flow
           - meeting-flow
           - member-profile-flow
           - messenger-flow
+          - search-flow
           - settings-tabs-flow
     env:
       ROLESTRA_E2E: '1'

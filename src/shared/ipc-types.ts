@@ -667,6 +667,47 @@ export type IpcChannelMap = {
     request: undefined;
     response: { tables: Array<{ name: string; count: number }>; sizeBytes: number };
   };
+
+  // ── R11-Task4: dev hooks (E2E only, gated by ROLESTRA_E2E=1) ────
+  // Registered by router.ts only when `process.env.ROLESTRA_E2E === '1'`
+  // and exposed to the renderer through `__rolestraDevHooks` in preload.
+  // Not part of the production surface — production builds boot without
+  // the channel and the renderer-side helper, so a renderer bug or
+  // DevTools console session cannot accidentally trigger an autonomy
+  // downgrade.
+  'dev:trip-circuit-breaker': {
+    request:
+      | {
+          tripwire: 'files_per_turn';
+          count: number;
+          projectId?: string;
+        }
+      | {
+          tripwire: 'cumulative_cli_ms';
+          ms: number;
+          projectId?: string;
+        }
+      | {
+          tripwire: 'queue_streak';
+          count: number;
+          projectId?: string;
+        }
+      | {
+          tripwire: 'same_error';
+          category: string;
+          count: number;
+          projectId?: string;
+        };
+    response: {
+      ok: boolean;
+      projectId: string | null;
+      tripwire:
+        | 'files_per_turn'
+        | 'cumulative_cli_ms'
+        | 'queue_streak'
+        | 'same_error';
+    };
+  };
 };
 
 /** Helper: extract channel names as a union type. */

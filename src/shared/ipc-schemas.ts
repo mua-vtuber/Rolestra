@@ -411,6 +411,36 @@ export const meetingLlmSummarizeSchema = z.object({
   providerId: z.string().min(1).max(128).optional(),
 });
 
+/**
+ * R11-Task4: `dev:trip-circuit-breaker` — discriminated by `tripwire`.
+ * Dev-only channel (gated by ROLESTRA_E2E=1 in router.ts), but the
+ * schema is still validated in dev mode so a malformed E2E payload fails
+ * loudly instead of silently no-op'ing inside the handler.
+ */
+export const devTripCircuitBreakerSchema = z.discriminatedUnion('tripwire', [
+  z.object({
+    tripwire: z.literal('files_per_turn'),
+    count: z.number().int().min(0).max(10_000),
+    projectId: z.string().min(1).max(128).optional(),
+  }),
+  z.object({
+    tripwire: z.literal('cumulative_cli_ms'),
+    ms: z.number().int().min(0).max(24 * 60 * 60 * 1000),
+    projectId: z.string().min(1).max(128).optional(),
+  }),
+  z.object({
+    tripwire: z.literal('queue_streak'),
+    count: z.number().int().min(1).max(1000),
+    projectId: z.string().min(1).max(128).optional(),
+  }),
+  z.object({
+    tripwire: z.literal('same_error'),
+    category: z.string().min(1).max(256),
+    count: z.number().int().min(1).max(1000),
+    projectId: z.string().min(1).max(128).optional(),
+  }),
+]);
+
 /** Channel-keyed map of v3 schemas for router/handler wiring. */
 export const v3ChannelSchemas = {
   'arena-root:set': arenaRootSetSchema,
@@ -451,6 +481,10 @@ export const v3ChannelSchemas = {
   'dm:create': dmCreateSchema,
   'permission:dry-run-flags': permissionDryRunFlagsSchema,
   'meeting:llm-summarize': meetingLlmSummarizeSchema,
+  // R11-Task4: dev hook (ROLESTRA_E2E=1 only — registration in router.ts
+  // is gated, but the schema entry is unconditional so the dev-mode zod
+  // round-trip catches malformed payloads when the handler IS registered).
+  'dev:trip-circuit-breaker': devTripCircuitBreakerSchema,
 } as const;
 
 export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;

@@ -140,6 +140,7 @@ import {
   handleNotificationTest,
   handleNotificationSetLocale,
 } from './handlers/notification-handler';
+import { handleDevTripCircuitBreaker } from './handlers/dev-hooks-handler';
 import {
   handleQueueList,
   handleQueueAdd,
@@ -424,6 +425,18 @@ export function registerIpcHandlers(): void {
   handle('queue:cancel', isDev, (data) => handleQueueCancel(data));
   handle('queue:pause', isDev, (data) => handleQueuePause(data));
   handle('queue:resume', isDev, (data) => handleQueueResume(data));
+
+  // ── R11-Task4: dev hooks (E2E only) ─────────────────────────────
+  // Gated on ROLESTRA_E2E=1 so production builds never expose the trip
+  // surface. Renderer side is gated by the same env in `src/preload/
+  // index.ts`, so the channel is unreachable from a production renderer
+  // even if a malicious actor poked at the typed IPC bridge directly.
+  if (process.env.ROLESTRA_E2E === '1') {
+    handle('dev:trip-circuit-breaker', isDev, (data) =>
+      handleDevTripCircuitBreaker(data),
+    );
+    console.info('[rolestra] dev hooks IPC registered (ROLESTRA_E2E=1)');
+  }
 }
 
 /**
