@@ -45,6 +45,7 @@ import type {
   CircuitBreakerLimits,
   CircuitBreakerState,
 } from '../../shared/queue-types';
+import type { CircuitBreakerTripwire } from '../../shared/circuit-breaker-types';
 
 /**
  * Default limits per spec §8 CB-5. Exported so callers can compare
@@ -240,6 +241,44 @@ export class CircuitBreaker extends EventEmitter {
     this.state.recentErrorCategory = null;
     this.state.recentErrorCount = 0;
     this.errorFired = false;
+  }
+
+  // ── R10-Task4: tripwire-keyed reset (Circuit Breaker approval) ────
+
+  /**
+   * Reset a single tripwire by name. Used by
+   * {@link ApprovalDecisionRouter} when the user approves the
+   * `circuit_breaker` resume row — the breaker can then re-arm against
+   * the same tripwire without forcing a process restart.
+   *
+   * The mapping mirrors the four pre-existing reset gestures:
+   *   - `files_per_turn`     → {@link resetTurn} (turn boundary).
+   *   - `cumulative_cli_ms`  → drop the lifetime CLI total + latch.
+   *   - `queue_streak`       → {@link confirmContinue} (also clears the
+   *                            CLI latch, mirroring the spec §8 CB-5
+   *                            "user reviewed autonomy" gesture).
+   *   - `same_error`         → {@link clearError}.
+   *
+   * Calling with an unknown literal is a no-op (TypeScript's exhaustive
+   * check makes this dead code at compile time, but the runtime guard
+   * keeps a misrouted IPC payload from throwing).
+   */
+  resetCounter(tripwire: CircuitBreakerTripwire): void {
+    switch (tripwire) {
+      case 'files_per_turn':
+        this.resetTurn();
+        return;
+      case 'cumulative_cli_ms':
+        this.state.cumulativeCliMs = 0;
+        this.cliFired = false;
+        return;
+      case 'queue_streak':
+        this.confirmContinue();
+        return;
+      case 'same_error':
+        this.clearError();
+        return;
+    }
   }
 
   // ── Introspection ─────────────────────────────────────────────────

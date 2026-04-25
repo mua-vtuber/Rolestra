@@ -48,8 +48,12 @@ import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
 import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
 import { QueueRepository } from './queue/queue-repository';
 import { QueueService } from './queue/queue-service';
+import { createDefaultMeetingStarter } from './queue/default-meeting-starter';
 import { AutonomyGate } from './autonomy/autonomy-gate';
-import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
+import {
+  setMeetingOrchestratorFactory,
+  type MeetingOrchestratorFactory,
+} from './ipc/handlers/channel-handler';
 import { MemberProfileRepository } from './members/member-profile-repository';
 import { MemberProfileService } from './members/member-profile-service';
 import { MemberWarmupService } from './members/member-warmup-service';
@@ -258,18 +262,16 @@ app.whenReady().then(async () => {
     });
     approvalSystemMessageInjector.wire();
 
-    // R7-Task8: ApprovalDecisionRouter — dispatches 'decided' events by
-    // `item.kind` to the owning service. Currently routes `mode_transition`
-    // → ProjectService.applyPermissionModeChange. R7-Task9 wires
-    // `consensus_decision` on the same router.
+    // R7-Task8 + R10-Task4: ApprovalDecisionRouter — dispatches 'decided'
+    // events by `item.kind` to the owning service. Routes:
+    //   - `mode_transition`  → ProjectService.applyPermissionModeChange
+    //   - `circuit_breaker`  → CircuitBreaker.resetCounter + setAutonomy
+    //                          (resume to the recorded previousMode).
+    // The circuit breaker dep is bound after construction (line below) so
+    // the legacy 2-arg deps shape stays optional for tests.
     const { ApprovalDecisionRouter } = await import(
       './approvals/approval-decision-router'
     );
-    const approvalDecisionRouter = new ApprovalDecisionRouter({
-      approvalService,
-      projectService,
-    });
-    approvalDecisionRouter.wire();
 
     // R6-Task4: MeetingOrchestrator support services.
     // NotificationService lands here (not its own handler block) because
@@ -307,17 +309,61 @@ app.whenReady().then(async () => {
     setCircuitBreakerAccessor(() => circuitBreaker);
     setExecutionCircuitBreaker(circuitBreaker);
 
-    // R9-Task7: QueueService — autonomy-queue run loop owner. Construct
-    // before StreamBridge.connect so the bridge can subscribe to the
-    // service's `'changed'` event and fan out `stream:queue-updated`
-    // snapshots. The optional `meetingStarter` injection that spawns a
-    // meeting for each claimed item lands with Task 9 production wiring
-    // (needs the fully-built MeetingOrchestratorFactory reference); for
-    // now `startNext` still performs the atomic claim + snapshot emit so
-    // the onFinalized hook can observe the flip.
-    const queueService = new QueueService(new QueueRepository(db), {
+    // R10-Task4: ApprovalDecisionRouter wire — `circuit_breaker` resume
+    // routes to the breaker (resetCounter) + projectService (setAutonomy
+    // restore previousMode). Construction sits below the breaker so the
+    // dep is non-null in production; tests still construct without it.
+    const approvalDecisionRouter = new ApprovalDecisionRouter({
+      approvalService,
+      projectService,
       circuitBreaker,
     });
+    approvalDecisionRouter.wire();
+
+    // R9-Task7 + R10-Task4: QueueService — autonomy-queue run loop owner.
+    // Construct before StreamBridge.connect so the bridge can subscribe to
+    // the service's `'changed'` event and fan out `stream:queue-updated`
+    // snapshots. The `meetingStarter` is the production wiring that
+    // closes R9 Known Concern #1 — it spawns a meeting through the same
+    // orchestrator factory `channel:start-meeting` uses.
+    //
+    // Forward-reference dance: the orchestrator factory is registered
+    // below (after StreamBridge wiring), but QueueService and the factory
+    // reference each other (queue→factory for spawn, factory→queue for
+    // `onFinalized`). We bind via a holder so both can be constructed
+    // independently and the starter resolves the factory at call time.
+    const orchestratorFactoryHolder: {
+      current: MeetingOrchestratorFactory | null;
+    } = { current: null };
+
+    // Use a forward-declared queueService reference inside the starter so
+    // the lookup hands back the just-claimed row's `targetChannelId`.
+    let queueServiceRef: QueueService | null = null;
+
+    const meetingStarter = createDefaultMeetingStarter({
+      channelService,
+      meetingService,
+      projectService,
+      queueItemLookup: {
+        get: (id) => (queueServiceRef ? queueServiceRef.get(id) : null),
+      },
+      orchestratorFactory: {
+        createAndRun: (input) => {
+          if (!orchestratorFactoryHolder.current) {
+            throw new Error(
+              'queue meetingStarter: orchestrator factory not initialized',
+            );
+          }
+          return orchestratorFactoryHolder.current.createAndRun(input);
+        },
+      },
+    });
+
+    const queueService = new QueueService(new QueueRepository(db), {
+      circuitBreaker,
+      meetingStarter,
+    });
+    queueServiceRef = queueService;
     // R9-Task9: production wire for `queue:*` IPC. 7 queue handlers all
     // throw `'queue handler: service not initialized'` until this runs.
     setQueueServiceAccessor(() => queueService);
@@ -395,7 +441,12 @@ app.whenReady().then(async () => {
     // `channel:start-meeting` after MeetingService.start() has created
     // the DB row. The factory owns the session + turn-executor + per-
     // meeting side-effect wiring lifecycle (disposer on DONE/FAILED).
-    setMeetingOrchestratorFactory({
+    //
+    // R10-Task4: the same factory is also bound to
+    // `orchestratorFactoryHolder.current` so the queue's
+    // `meetingStarter` (constructed earlier) can invoke it without a
+    // direct import of the closure body.
+    const meetingOrchestratorFactory: MeetingOrchestratorFactory = {
       createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx }) => {
         const { MeetingSession } = await import(
           './meetings/engine/meeting-session'
@@ -504,7 +555,14 @@ app.whenReady().then(async () => {
             unregisterOrchestrator(meeting.id);
           });
       },
-    });
+    };
+
+    setMeetingOrchestratorFactory(meetingOrchestratorFactory);
+    // R10-Task4: bind the factory holder so the queue meetingStarter can
+    // resolve `createAndRun` at call time. Setting this AFTER the IPC
+    // handler is registered keeps the production path identical to a
+    // manually-started meeting.
+    orchestratorFactoryHolder.current = meetingOrchestratorFactory;
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {
