@@ -32,11 +32,14 @@ export interface MemberRowProps {
 }
 
 export function MemberRow({ member, className }: MemberRowProps): ReactElement {
-  const { themeKey } = useTheme();
+  const { themeKey, token } = useTheme();
   const statusClass = STATUS_DOT_CLASS[member.workStatus];
   const fontClass = themeKey === 'retro' ? 'font-mono' : 'font-sans';
 
-  const avatarShape = themeKey === 'tactical' ? 'diamond' : 'circle';
+  // R10 form-level wiring: drive avatar shape from token. retro theme has
+  // avatarShape='status' but renders dot-only above, so fallback to circle
+  // for the warm/tactical avatar branch keeps the contract intact.
+  const avatarShape = token.avatarShape === 'status' ? 'circle' : token.avatarShape;
 
   return (
     <li

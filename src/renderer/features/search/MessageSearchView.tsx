@@ -30,6 +30,7 @@ import {
   useMessageSearch,
   type MessageSearchScope,
 } from '../../hooks/use-message-search';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import { SearchResultRow } from './SearchResultRow';
 
 export type MessageSearchScopeChoice = 'currentChannel' | 'currentProject';
@@ -71,6 +72,7 @@ export function MessageSearchView({
 }: MessageSearchViewProps): ReactElement {
   const { t, i18n } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const panelClip = usePanelClipStyle();
 
   // 기본 scope 결정: 채널 > 프로젝트. 둘 다 없으면 disabled 상태.
   const initialChoice: MessageSearchScopeChoice =
@@ -158,6 +160,8 @@ export function MessageSearchView({
         />
         <Dialog.Content
           data-testid="message-search-dialog"
+          data-panel-clip={panelClip.rawClip}
+          style={panelClip.style}
           className={clsx(
             'fixed left-1/2 top-[10%] z-50 -translate-x-1/2',
             'w-[min(42rem,calc(100vw-2rem))] max-h-[80vh]',

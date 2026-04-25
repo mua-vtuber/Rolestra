@@ -43,6 +43,7 @@ import { Avatar } from '../../components/members/Avatar';
 import { WorkStatusDot } from '../../components/members/WorkStatusDot';
 import { Button } from '../../components/primitives/button';
 import { invoke } from '../../ipc/invoke';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import type { Channel } from '../../../shared/channel-types';
 import type {
   MemberView,
@@ -94,6 +95,7 @@ export function MemberProfilePopover({
   className,
 }: MemberProfilePopoverProps): ReactElement {
   const { t } = useTranslation();
+  const panelClip = usePanelClipStyle();
 
   // Local override that wins over `member.workStatus` after a successful
   // mutation — until the surrounding surfaces refetch on next mount.
@@ -186,9 +188,11 @@ export function MemberProfilePopover({
         <Popover.Content
           data-testid="profile-popover"
           data-provider-id={member.providerId}
+          data-panel-clip={panelClip.rawClip}
           side="bottom"
           align="start"
           sideOffset={6}
+          style={panelClip.style}
           className={clsx(
             'z-50 w-[min(20rem,calc(100vw-2rem))]',
             'bg-panel-bg text-fg border border-panel-border rounded-panel shadow-panel',

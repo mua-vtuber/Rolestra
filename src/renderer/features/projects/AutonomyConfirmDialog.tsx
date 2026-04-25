@@ -18,6 +18,7 @@ import { useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import type { AutonomyMode } from '../../../shared/project-types';
 
 export interface AutonomyConfirmDialogProps {
@@ -50,6 +51,7 @@ export function AutonomyConfirmDialog({
 }: AutonomyConfirmDialogProps): ReactElement {
   const { t } = useTranslation();
   const [acked, setAcked] = useState<boolean>(false);
+  const panelClip = usePanelClipStyle();
 
   // Reset the acknowledge checkbox every time the dialog re-opens so stale
   // state from a prior cancelled attempt cannot bypass the guard. Uses the
@@ -98,6 +100,8 @@ export function AutonomyConfirmDialog({
           data-testid="autonomy-confirm-dialog"
           data-from={from}
           data-to={to}
+          data-panel-clip={panelClip.rawClip}
+          style={panelClip.style}
           className={clsx(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-[min(34rem,calc(100vw-2rem))]',

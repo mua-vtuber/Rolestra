@@ -14,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '../../ipc/invoke';
 import { useDmSummaries } from '../../hooks/use-dm-summaries';
 import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import type { Channel } from '../../../shared/channel-types';
 import type { DmSummary } from '../../../shared/dm-types';
 
@@ -37,6 +38,7 @@ export function DmCreateModal({
   const { data, loading } = useDmSummaries();
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const panelClip = usePanelClipStyle();
 
   const handleSelect = async (row: DmSummary): Promise<void> => {
     if (row.exists) return;
@@ -78,6 +80,8 @@ export function DmCreateModal({
         />
         <Dialog.Content
           data-testid="dm-create-dialog"
+          data-panel-clip={panelClip.rawClip}
+          style={panelClip.style}
           className={clsx(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-[min(28rem,calc(100vw-2rem))]',

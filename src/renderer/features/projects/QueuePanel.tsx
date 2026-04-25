@@ -19,6 +19,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
 import { useQueue } from '../../hooks/use-queue';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import type { QueueItem, QueueItemStatus } from '../../../shared/queue-types';
 
 export interface QueuePanelProps {
@@ -58,6 +59,7 @@ function statusBadgeClass(status: QueueItemStatus): string {
 
 export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElement {
   const { t } = useTranslation();
+  const panelClip = usePanelClipStyle();
   const {
     items,
     paused,
@@ -157,6 +159,8 @@ export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElem
       data-project-id={projectId}
       data-paused={paused ? 'true' : 'false'}
       data-collapsed={collapsed ? 'true' : 'false'}
+      data-panel-clip={panelClip.rawClip}
+      style={panelClip.style}
       className={clsx(
         'border border-panel-border rounded-panel bg-panel-bg',
         className,

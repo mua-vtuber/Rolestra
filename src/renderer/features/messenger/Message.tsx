@@ -77,7 +77,7 @@ export function Message({
   className,
 }: MessageProps): ReactElement {
   const { i18n } = useTranslation();
-  const { themeKey } = useTheme();
+  const { themeKey, token } = useTheme();
 
   const showHeader = !compact;
   const name = member?.name ?? message.authorId;
@@ -119,7 +119,11 @@ export function Message({
     );
   }
 
-  const avatarShape = themeKey === 'tactical' ? 'diamond' : 'circle';
+  // Drive avatar shape from the theme token directly (R10 form-level
+  // wiring). Retro renders without an avatar above, so the only callers
+  // here are warm (circle) and tactical (diamond) — we still go through
+  // the token for parity with future theme additions.
+  const avatarShape = token.avatarShape === 'status' ? 'circle' : token.avatarShape;
 
   return (
     <div

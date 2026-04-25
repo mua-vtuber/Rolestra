@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
 import { invoke } from '../../ipc/invoke';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 
 export interface RejectDialogProps {
   open: boolean;
@@ -79,6 +80,7 @@ export function RejectDialog({
   onDecided,
 }: RejectDialogProps): ReactElement {
   const { t } = useTranslation();
+  const panelClip = usePanelClipStyle();
   const [{ comment, submitting, error }, dispatch] = useReducer(
     reducer,
     INITIAL_STATE,
@@ -123,6 +125,8 @@ export function RejectDialog({
         <Dialog.Content
           data-testid="approval-reject-dialog"
           data-approval-id={approvalId ?? ''}
+          data-panel-clip={panelClip.rawClip}
+          style={panelClip.style}
           className={clsx(
             'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
             'w-[min(28rem,calc(100vw-2rem))]',
