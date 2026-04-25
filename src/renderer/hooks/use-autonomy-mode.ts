@@ -24,6 +24,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 
+import { useThrowToBoundary } from '../components/ErrorBoundary';
 import { invoke } from '../ipc/invoke';
 import type { AutonomyMode } from '../../shared/project-types';
 import type { StreamV3PayloadOf } from '../../shared/stream-events';
@@ -60,6 +61,7 @@ export function useAutonomyMode(
   );
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [error, setError] = useState<Error | null>(null);
+  const throwToBoundary = useThrowToBoundary();
 
   // React "adjusting state during render" pattern — re-sync if the parent
   // passes a different initialMode (e.g. active project changed). Using
@@ -102,19 +104,29 @@ export function useAutonomyMode(
       setIsSaving(true);
       setError(null);
       const prev = mode;
+      // D8 ordering invariant: the optimistic setMode(target) below races
+      // with `stream:autonomy-mode-changed` from the main process. If the
+      // stream lands first AND its payload disagrees with `target` (e.g.
+      // a Circuit Breaker downgrade preempted us), the stream subscriber
+      // already cleared `pendingTarget` and reset `mode` to authoritative
+      // — we must NOT undo that with the rollback path below. Detection:
+      // by the time we rollback, current `mode` is no longer `target`,
+      // meaning the stream wrote a different value first; in that case
+      // the stream IS the truth, so skip rollback.
       setMode(target); // optimistic
       try {
         await invoke('project:set-autonomy', { id: projectId, mode: target });
         setPendingTarget(null);
       } catch (reason) {
-        setMode(prev); // rollback
+        setMode((current) => (current === target ? prev : current));
         setError(toError(reason));
+        throwToBoundary(reason);
         throw reason;
       } finally {
         setIsSaving(false);
       }
     },
-    [mode, projectId],
+    [mode, projectId, throwToBoundary],
   );
 
   const request = useCallback(

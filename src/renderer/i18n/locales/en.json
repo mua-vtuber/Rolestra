@@ -138,6 +138,17 @@
       "title": "Active meetings"
     }
   },
+  "error": {
+    "boundary": {
+      "description": "An unexpected error prevented this view from rendering. Try again or restart the app.",
+      "retry": "Try again",
+      "title": "Something went wrong"
+    },
+    "toast": {
+      "dismiss": "Dismiss",
+      "title": "Error"
+    }
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "Safety circuit tripped",

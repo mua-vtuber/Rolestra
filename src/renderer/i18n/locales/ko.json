@@ -138,6 +138,17 @@
       "title": "진행 중인 회의"
     }
   },
+  "error": {
+    "boundary": {
+      "description": "예기치 않은 오류로 화면을 표시할 수 없습니다. 다시 시도하거나 앱을 재시작해 주세요.",
+      "retry": "다시 시도",
+      "title": "문제가 발생했습니다"
+    },
+    "toast": {
+      "dismiss": "닫기",
+      "title": "오류"
+    }
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "자동 안전 장치 발동",
