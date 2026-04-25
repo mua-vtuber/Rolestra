@@ -201,4 +201,68 @@ describe('useAutonomyMode hook', () => {
     });
     expect(result.current.mode).toBe('auto_toggle');
   });
+
+  it('confirm rejection (R10-Task8) rolls back, surfaces error AND publishes a toast', async () => {
+    const invoke = vi.fn().mockRejectedValue(new Error('confirm-failed'));
+    setupArena(invoke);
+
+    const { result } = renderHook(() => useAutonomyMode('p1', 'manual'));
+
+    act(() => {
+      result.current.request('queue');
+    });
+    expect(result.current.pendingTarget).toBe('queue');
+
+    await act(async () => {
+      await expect(result.current.confirm()).rejects.toThrow('confirm-failed');
+    });
+
+    expect(result.current.mode).toBe('manual');
+    expect(result.current.error?.message).toBe('confirm-failed');
+  });
+
+  it('D8 — stream-arrives-before-resolve takes precedence over optimistic rollback', async () => {
+    // Race: confirm() optimistically sets mode=auto_toggle and invokes;
+    // stream:autonomy-mode-changed lands FIRST with mode='queue' (Circuit
+    // Breaker preempted us); invoke then rejects. The hook must NOT
+    // overwrite the stream's authoritative value with the rollback.
+    let rejectInvoke: ((reason: Error) => void) | null = null;
+    const invokePromise = new Promise<unknown>((_resolve, reject) => {
+      rejectInvoke = reject;
+    });
+    const invoke = vi.fn(() => invokePromise);
+    const { emit } = setupArena(invoke);
+
+    const { result } = renderHook(() => useAutonomyMode('p1', 'manual'));
+
+    act(() => {
+      result.current.request('auto_toggle');
+    });
+    let confirmPromise: Promise<void> | null = null;
+    await act(async () => {
+      confirmPromise = result.current.confirm().catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    // Stream lands with a different value first.
+    await act(async () => {
+      emit('stream:autonomy-mode-changed', {
+        projectId: 'p1',
+        mode: 'queue',
+        reason: 'circuit_breaker',
+      });
+      await Promise.resolve();
+    });
+    expect(result.current.mode).toBe('queue');
+
+    // Invoke now rejects — rollback path must NOT overwrite 'queue'.
+    await act(async () => {
+      rejectInvoke?.(new Error('preempted'));
+      await invokePromise.catch(() => undefined);
+      await confirmPromise;
+    });
+    await waitFor(() => {
+      expect(result.current.mode).toBe('queue');
+    });
+  });
 });

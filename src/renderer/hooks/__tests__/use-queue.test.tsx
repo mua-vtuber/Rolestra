@@ -213,4 +213,115 @@ describe('useQueue — mutations', () => {
     const removeCall = invoke.mock.calls.find((c) => c[0] === 'queue:remove');
     expect(removeCall?.[1]).toEqual({ id: 'q-1' });
   });
+
+  it('R10-Task8: addLines optimistically inserts pending rows BEFORE invoke resolves', async () => {
+    let resolveAdd: ((value: { item: QueueItem }) => void) | null = null;
+    const addPromise = new Promise<{ item: QueueItem }>((resolve) => {
+      resolveAdd = resolve;
+    });
+    const invoke = makeRouter({
+      'queue:list': () => ({ items: [] }),
+      'queue:add': () => addPromise,
+    });
+    setupArena(invoke);
+
+    const { result } = renderHook(() => useQueue('p1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    // Fire addLines without awaiting; capture the promise.
+    let addPromiseRef: Promise<void> | null = null;
+    await act(async () => {
+      addPromiseRef = result.current.addLines('A\nB');
+      await Promise.resolve();
+    });
+
+    // Optimistic rows should be visible immediately.
+    expect(
+      result.current.items.filter((it) => it.id.startsWith('pending-')),
+    ).toHaveLength(2);
+
+    // Resolve add then await addLines completion.
+    await act(async () => {
+      resolveAdd?.({ item: makeItem({ id: 'srv-1' }) });
+      await addPromiseRef;
+    });
+  });
+
+  it('R10-Task8: addLines rollback on failure removes pending rows', async () => {
+    const failure = new Error('queue-add-failed');
+    let calls = 0;
+    const invoke = makeRouter({
+      'queue:list': () => ({ items: [] }),
+      'queue:add': () => {
+        calls += 1;
+        if (calls === 2) throw failure;
+        return { item: makeItem() };
+      },
+    });
+    setupArena(invoke);
+
+    const { result } = renderHook(() => useQueue('p1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    await act(async () => {
+      await expect(result.current.addLines('A\nB\nC')).rejects.toBe(failure);
+    });
+
+    // All optimistic rows rolled back.
+    expect(result.current.items.filter((it) => it.id.startsWith('pending-'))).toHaveLength(0);
+    expect(result.current.error).toBe(failure);
+  });
+
+  it('D8: stream:queue-updated arriving before invoke resolve replaces pending rows', async () => {
+    let resolveAdd: ((value: { item: QueueItem }) => void) | null = null;
+    const addPromise = new Promise<{ item: QueueItem }>((resolve) => {
+      resolveAdd = resolve;
+    });
+    // queue:list returns whatever serverItems holds at call time —
+    // simulating a server that's eventually consistent with the stream.
+    let serverItems: QueueItem[] = [];
+    const invoke = makeRouter({
+      'queue:list': () => ({ items: serverItems }),
+      'queue:add': () => addPromise,
+    });
+    const { emit } = setupArena(invoke);
+
+    const { result } = renderHook(() => useQueue('p1'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let addLinesPromise: Promise<void> | null = null;
+    await act(async () => {
+      addLinesPromise = result.current.addLines('A').catch(() => undefined);
+      await Promise.resolve();
+    });
+
+    // Optimistic insertion is visible.
+    expect(
+      result.current.items.filter((it) => it.id.startsWith('pending-')),
+    ).toHaveLength(1);
+
+    // Stream arrives with authoritative snapshot (canonical row 'srv-A')
+    // and the server-side list also catches up so the post-resolve
+    // refresh() remains consistent.
+    serverItems = [makeItem({ id: 'srv-A', prompt: 'A' })];
+    act(() => {
+      emit('stream:queue-updated', {
+        projectId: 'p1',
+        items: [makeItem({ id: 'srv-A', prompt: 'A' })],
+        paused: false,
+      });
+    });
+
+    // Pending row dropped, only canonical row remains.
+    expect(result.current.items.filter((it) => it.id.startsWith('pending-'))).toHaveLength(0);
+    expect(result.current.items.map((it) => it.id)).toEqual(['srv-A']);
+
+    // Resolve the in-flight add — must NOT reintroduce the pending row.
+    await act(async () => {
+      resolveAdd?.({ item: makeItem({ id: 'srv-A' }) });
+      await addPromise;
+      await addLinesPromise;
+    });
+    expect(result.current.items.filter((it) => it.prompt === 'A')).toHaveLength(1);
+  });
 });

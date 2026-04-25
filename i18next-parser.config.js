@@ -174,6 +174,12 @@ export default {
     // full settings subtree because R10 will populate provider / theme /
     // memory sections that land in the same catalogue pass.
     /^translation:settings(\..+)?$/,
+    // R10-Task8 error.boundary.* / error.toast.* — ErrorBoundary fallback
+    // and the toast viewport pull localized title/description/retry/dismiss.
+    // The boundary itself uses static t() literals so the parser would
+    // detect them, but anchor the whole `error.*` namespace so future
+    // categorized error keys (network, permission, …) populate cleanly.
+    /^translation:error(\..+)?$/,
   ],
   failOnWarnings: false,
 };
