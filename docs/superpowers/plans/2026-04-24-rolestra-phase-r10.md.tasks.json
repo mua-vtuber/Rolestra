@@ -125,7 +125,7 @@
     {
       "id": 12,
       "subject": "Task 12: i18n 완성 ko/en parity + main-process 라벨 dictionary 이전 + setNotificationLocale wire",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2,
         3,
