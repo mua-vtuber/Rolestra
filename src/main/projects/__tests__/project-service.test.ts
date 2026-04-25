@@ -999,4 +999,44 @@ describe('ProjectService', () => {
       void ApprovalServiceUnavailableError;
     });
   });
+
+  // ── R11-Task10: pendingAdvisory in-memory slot ────────────────────────
+
+  describe('pendingAdvisory (R11-Task10)', () => {
+    it('returns null when no advisory has been set', () => {
+      expect(service.consumePendingAdvisory('p-no-advisory')).toBeNull();
+    });
+
+    it('round-trip: set then consume returns the trimmed advisory once', () => {
+      service.setPendingAdvisory('p-1', '  read-only mode for src/external/  ');
+      expect(service.consumePendingAdvisory('p-1')).toBe(
+        'read-only mode for src/external/',
+      );
+      // 두 번째 consume 은 null — 1회용 slot.
+      expect(service.consumePendingAdvisory('p-1')).toBeNull();
+    });
+
+    it('overwrites with last-write-wins semantics on repeated set', () => {
+      service.setPendingAdvisory('p-2', 'first comment');
+      service.setPendingAdvisory('p-2', 'second comment supersedes');
+      expect(service.consumePendingAdvisory('p-2')).toBe(
+        'second comment supersedes',
+      );
+    });
+
+    it('keeps per-project slots independent', () => {
+      service.setPendingAdvisory('p-A', 'note A');
+      service.setPendingAdvisory('p-B', 'note B');
+      expect(service.consumePendingAdvisory('p-A')).toBe('note A');
+      // Consuming p-A must not affect p-B.
+      expect(service.consumePendingAdvisory('p-B')).toBe('note B');
+      expect(service.consumePendingAdvisory('p-A')).toBeNull();
+    });
+
+    it('clears the slot when set with whitespace-only advisory', () => {
+      service.setPendingAdvisory('p-3', 'real comment');
+      service.setPendingAdvisory('p-3', '   ');
+      expect(service.consumePendingAdvisory('p-3')).toBeNull();
+    });
+  });
 });

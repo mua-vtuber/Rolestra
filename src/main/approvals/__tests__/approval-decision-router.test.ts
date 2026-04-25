@@ -33,19 +33,27 @@ function makeItem(overrides: Partial<ApprovalItem> = {}): ApprovalItem {
 
 interface Harness {
   approvalService: EventEmitter;
-  projectService: { applyPermissionModeChange: ReturnType<typeof vi.fn> };
+  projectService: {
+    applyPermissionModeChange: ReturnType<typeof vi.fn>;
+    setPendingAdvisory: ReturnType<typeof vi.fn>;
+  };
   router: ApprovalDecisionRouter;
   dispose: () => void;
   emitDecided(payload: ApprovalDecidedPayload): void;
 }
 
-function makeHarness(options: { applyThrows?: Error } = {}): Harness {
+function makeHarness(
+  options: { applyThrows?: Error; advisoryThrows?: Error } = {},
+): Harness {
   const approvalService = new EventEmitter();
   const applyPermissionModeChange = vi.fn((id: string) => {
     if (options.applyThrows) throw options.applyThrows;
     return { id, permissionMode: 'approval' };
   });
-  const projectService = { applyPermissionModeChange };
+  const setPendingAdvisory = vi.fn((_projectId: string, _advisory: string) => {
+    if (options.advisoryThrows) throw options.advisoryThrows;
+  });
+  const projectService = { applyPermissionModeChange, setPendingAdvisory };
   const router = new ApprovalDecisionRouter({
     approvalService,
     projectService,
@@ -172,5 +180,93 @@ describe('ApprovalDecisionRouter — lifecycle', () => {
     expect(h.approvalService.listenerCount(APPROVAL_DECIDED_EVENT)).toBe(1);
     h.dispose();
     expect(h.approvalService.listenerCount(APPROVAL_DECIDED_EVENT)).toBe(0);
+  });
+});
+
+// ── R11-Task10: mode_transition conditional → setPendingAdvisory ─────────
+
+describe('ApprovalDecisionRouter — R11-Task10 mode_transition advisory', () => {
+  it('conditional + comment → setPendingAdvisory called with trimmed comment', () => {
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({ projectId: 'proj-A' }),
+      decision: 'conditional',
+      comment: '  src/external/ 만 read-only 로  ',
+    });
+    expect(h.projectService.setPendingAdvisory).toHaveBeenCalledWith(
+      'proj-A',
+      'src/external/ 만 read-only 로',
+    );
+    // apply 도 같이 호출돼야 한다 — advisory 와 apply 는 독립적인 책임.
+    expect(h.projectService.applyPermissionModeChange).toHaveBeenCalledWith(
+      'appr-1',
+    );
+    h.dispose();
+  });
+
+  it('approve → setPendingAdvisory NOT called (apply만 진행)', () => {
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({ projectId: 'proj-B' }),
+      decision: 'approve',
+      comment: 'unused on approve',
+    });
+    expect(h.projectService.setPendingAdvisory).not.toHaveBeenCalled();
+    expect(h.projectService.applyPermissionModeChange).toHaveBeenCalled();
+    h.dispose();
+  });
+
+  it('conditional + null comment → setPendingAdvisory NOT called', () => {
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({ projectId: 'proj-C' }),
+      decision: 'conditional',
+      comment: null,
+    });
+    expect(h.projectService.setPendingAdvisory).not.toHaveBeenCalled();
+    h.dispose();
+  });
+
+  it('conditional + whitespace-only comment → setPendingAdvisory NOT called', () => {
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({ projectId: 'proj-D' }),
+      decision: 'conditional',
+      comment: '   \n\t   ',
+    });
+    expect(h.projectService.setPendingAdvisory).not.toHaveBeenCalled();
+    h.dispose();
+  });
+
+  it('conditional + projectId=null → setPendingAdvisory NOT called', () => {
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({ projectId: null }),
+      decision: 'conditional',
+      comment: 'orphan comment',
+    });
+    expect(h.projectService.setPendingAdvisory).not.toHaveBeenCalled();
+    // orphan mode_transition row 자체는 비정상 — apply 는 시도되지만
+    // applyPermissionModeChange 가 자체 검증으로 throw 후 warn 처리.
+    h.dispose();
+  });
+
+  it('conditional + advisory throws → warn logged, apply still called', () => {
+    const h = makeHarness({ advisoryThrows: new Error('slot full') });
+    h.emitDecided({
+      item: makeItem({ projectId: 'proj-E' }),
+      decision: 'conditional',
+      comment: 'still apply',
+    });
+    expect(h.projectService.setPendingAdvisory).toHaveBeenCalled();
+    // advisory 저장 실패는 apply 를 막지 않는다.
+    expect(h.projectService.applyPermissionModeChange).toHaveBeenCalledWith(
+      'appr-1',
+    );
+    expect(warnSpy).toHaveBeenCalled();
+    expect(String(warnSpy.mock.calls[0][0])).toContain(
+      '[rolestra.approvals.router] setPendingAdvisory failed',
+    );
+    h.dispose();
   });
 });

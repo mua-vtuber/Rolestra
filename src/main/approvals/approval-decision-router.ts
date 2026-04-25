@@ -48,6 +48,9 @@ export interface ApprovalDecisionRouterSource {
  * - `applyPermissionModeChange` for `mode_transition` (R7-Task8).
  * - `setAutonomy` for `circuit_breaker` resume (R10-Task4) — restores the
  *   project to the autonomy mode it held before the breaker downgrade.
+ * - `setPendingAdvisory` for `mode_transition` conditional comments
+ *   (R11-Task10) — saves the user's qualifying note so the next meeting
+ *   on the same project prepends it as a system message.
  */
 export interface ModeTransitionApplier {
   applyPermissionModeChange(approvalId: string): unknown;
@@ -56,6 +59,7 @@ export interface ModeTransitionApplier {
     mode: AutonomyMode,
     opts?: { reason?: string },
   ): unknown;
+  setPendingAdvisory?(projectId: string, advisory: string): void;
 }
 
 /**
@@ -116,7 +120,7 @@ export class ApprovalDecisionRouter {
   }
 
   private route(payload: ApprovalDecidedPayload): void {
-    const { item, decision } = payload;
+    const { item, decision, comment } = payload;
 
     // Router 는 긍정 결정만 반응 — 거절 / 만료는 다른 side-effect 가 처리.
     if (decision !== 'approve' && decision !== 'conditional') {
@@ -124,6 +128,37 @@ export class ApprovalDecisionRouter {
     }
 
     if (item.kind === 'mode_transition') {
+      // R11-Task10: conditional 결정의 comment 는 다음 회의에서 system
+      // message 로 자동 prepend 되도록 ProjectService 의 in-memory
+      // advisory slot 에 보관한다. apply 와 advisory 저장은 서로 다른
+      // 책임이므로 try/catch 도 분리 — advisory 저장이 실패해도
+      // applyPermissionModeChange 는 그대로 시도한다.
+      if (
+        decision === 'conditional' &&
+        item.projectId !== null &&
+        this.deps.projectService.setPendingAdvisory
+      ) {
+        const trimmed = comment?.trim() ?? '';
+        if (trimmed.length > 0) {
+          try {
+            this.deps.projectService.setPendingAdvisory(
+              item.projectId,
+              trimmed,
+            );
+          } catch (err) {
+            console.warn(
+              '[rolestra.approvals.router] setPendingAdvisory failed:',
+              {
+                approvalId: item.id,
+                projectId: item.projectId,
+                name: err instanceof Error ? err.name : undefined,
+                message: err instanceof Error ? err.message : String(err),
+              },
+            );
+          }
+        }
+      }
+
       try {
         this.deps.projectService.applyPermissionModeChange(item.id);
       } catch (err) {

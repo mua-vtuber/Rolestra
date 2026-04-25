@@ -285,12 +285,51 @@ export interface ProjectServiceEvents {
 // ── Service ────────────────────────────────────────────────────────────
 
 export class ProjectService extends EventEmitter {
+  /**
+   * R11-Task10: in-memory pending advisory per projectId.
+   *
+   * `mode_transition` conditional 결정의 comment 가 다음 회의까지만 유효한
+   * 1회성 안내로 보관된다. 영속화 안 함 (Decision D7) — 프로세스 재시작 시
+   * advisory 는 사라지며, MeetingOrchestrator.run() 가 consume 시 slot 을
+   * 비워 이중 주입을 방지한다. 같은 projectId 에 conditional 가 연속 발사
+   * 되면 last-write-wins (single-slot 의 의도된 단순화).
+   */
+  private readonly pendingAdvisory = new Map<string, string>();
+
   constructor(
     private readonly repo: ProjectRepository,
     private readonly arenaRoot: ArenaRootService,
     private readonly opts: ProjectServiceOptions = {},
   ) {
     super();
+  }
+
+  /**
+   * R11-Task10: 다음 회의 시작 직후 system message 로 prepend 될 advisory
+   * 를 in-memory slot 에 저장한다. 빈 문자열은 받아도 기록 — caller
+   * (`ApprovalDecisionRouter`) 가 trim 후 non-empty 검증을 책임지지만,
+   * 방어적으로 trim 후 길이 0 이면 slot 을 비운다.
+   */
+  setPendingAdvisory(projectId: string, advisory: string): void {
+    const trimmed = advisory.trim();
+    if (trimmed.length === 0) {
+      this.pendingAdvisory.delete(projectId);
+      return;
+    }
+    this.pendingAdvisory.set(projectId, trimmed);
+  }
+
+  /**
+   * R11-Task10: pending advisory 를 한 번 읽어 즉시 slot 을 비운다.
+   * 호출자 (MeetingOrchestrator) 가 결과가 null 이 아니면 system message
+   * 로 prepend. 같은 회의에서 두 번 호출돼도 두 번째는 null 을 받아
+   * 이중 주입이 발생하지 않는다 (in-process latch 역할).
+   */
+  consumePendingAdvisory(projectId: string): string | null {
+    const advisory = this.pendingAdvisory.get(projectId);
+    if (advisory === undefined) return null;
+    this.pendingAdvisory.delete(projectId);
+    return advisory;
   }
 
   /**

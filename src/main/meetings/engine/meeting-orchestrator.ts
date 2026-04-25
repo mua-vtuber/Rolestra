@@ -242,6 +242,7 @@ export class MeetingOrchestrator {
       if (this.session.turnManager.state !== 'running') {
         this.session.start();
       }
+      this.consumePendingAdvisory();
       await this.loop();
     } finally {
       unsubTerminal();
@@ -249,6 +250,52 @@ export class MeetingOrchestrator {
       this.abortController = null;
       this.sideEffectDisposer?.();
       this.sideEffectDisposer = null;
+    }
+  }
+
+  /**
+   * R11-Task10: 회의 시작 직후 ProjectService 의 pendingAdvisory slot 을
+   * 한 번 읽어 system message 로 prepend 한다. slot 이 비어있으면 no-op.
+   * 모든 실패 (advisory 자체가 없거나, append 가 throw 하거나) 는 warn 만
+   * 남기고 회의 흐름에는 예외를 흘리지 않는다 — advisory 는 보조 안내라서
+   * 실패 시 기본 회의 진행을 막을 이유가 없다. consume 은 1회용 — 두 번째
+   * 호출은 null 을 반환하므로 같은 run() 안에서 불려도 이중 prepend 가
+   * 발생하지 않는다.
+   */
+  private consumePendingAdvisory(): void {
+    let advisory: string | null = null;
+    try {
+      advisory = this.projectService.consumePendingAdvisory(
+        this.session.projectId,
+      );
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] consumePendingAdvisory failed',
+        errorPayload(err),
+      );
+      return;
+    }
+    if (advisory === null || advisory.length === 0) return;
+
+    const prefix = resolveNotificationLabel(
+      'approvalSystemMessage.modeTransitionAdvisoryPrefix',
+    );
+    const content = `${prefix} ${advisory}`;
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content,
+        meta: null,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] advisory append failed',
+        errorPayload(err),
+      );
     }
   }
 

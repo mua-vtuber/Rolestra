@@ -87,6 +87,12 @@ interface NotificationDictionary {
   approvalSystemMessage: {
     rejectPrefix: string;
     conditionalPrefix: string;
+    /**
+     * R11-Task10: `mode_transition` conditional 결정 시, 다음 회의 시작
+     * 직후 자동 prepend 되는 advisory 헤더. comment 자체는 별도 line 으로
+     * 따라붙는다.
+     */
+    modeTransitionAdvisoryPrefix: string;
   };
   meetingMinutes: {
     rejection: string;
@@ -156,6 +162,7 @@ const KO: NotificationDictionary = {
   approvalSystemMessage: {
     rejectPrefix: '[승인 거절]',
     conditionalPrefix: '[조건부 승인]',
+    modeTransitionAdvisoryPrefix: '[권한 모드 변경 — 조건부 안내]',
   },
   meetingMinutes: {
     rejection: '회의 합의 거절됨',
@@ -223,6 +230,7 @@ const EN: NotificationDictionary = {
   approvalSystemMessage: {
     rejectPrefix: '[Approval rejected]',
     conditionalPrefix: '[Approval conditional]',
+    modeTransitionAdvisoryPrefix: '[Permission mode change — conditional note]',
   },
   meetingMinutes: {
     rejection: 'Consensus rejected',
@@ -263,6 +271,7 @@ export type NotificationLabelKey =
   | 'generalMeetingDone.untitled'
   | 'approvalSystemMessage.rejectPrefix'
   | 'approvalSystemMessage.conditionalPrefix'
+  | 'approvalSystemMessage.modeTransitionAdvisoryPrefix'
   | 'meetingMinutes.rejection'
   | 'meetingMinutes.rejectionWithComment'
   | 'meetingMinutes.summaryPrefix';

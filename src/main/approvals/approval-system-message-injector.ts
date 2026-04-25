@@ -7,9 +7,15 @@
  *   1. `decision ∈ {'reject', 'conditional'}` — approve 는 주입할 이유 없음.
  *   2. `comment != null` 이고 `trim()` 후 길이 > 0 — 비어있는 comment 는 AI 에게
  *      줄 정보가 없다.
- *   3. 승인 row 에 `meetingId`, `channelId` 가 모두 살아있음 — mode_transition /
- *      review_outcome 처럼 routing 대상이 없는 approval 은 skip. (meetingId 만
- *      null, channelId 만 null 어느 쪽이든 skip 한다.)
+ *   3. 승인 row 에 `meetingId`, `channelId` 가 모두 살아있음 — review_outcome
+ *      처럼 routing 대상이 없는 approval 은 skip. (meetingId 만 null,
+ *      channelId 만 null 어느 쪽이든 skip 한다.)
+ *      R11-Task10 부터 `mode_transition` 은 channel/meeting 이 둘 다 null 인
+ *      구조 자체는 그대로지만, 이 경로가 더 이상 "comment 가 묻혀버린다"는
+ *      뜻이 아니다 — `ApprovalDecisionRouter` 가 같은 'decided' 이벤트를 받아
+ *      `ProjectService.setPendingAdvisory` 로 라우팅하고, 다음 회의 시작 시
+ *      `MeetingOrchestrator.run()` 가 consume 해 system message 로 prepend
+ *      한다 (Decision D7 — in-memory 1회용 slot).
  *
  * 주입된 system 메시지는 두 역할을 동시에 수행한다:
  *   a. Thread 에 SystemMessage 컴포넌트로 사용자에게 표시 (spec §7.7 "코멘트 자체가
@@ -120,7 +126,15 @@ export class ApprovalSystemMessageInjector {
     const trimmed = comment.trim();
     if (trimmed.length === 0) return;
 
-    // Filter 3: routable context
+    // Filter 3: routable context.
+    // R11-Task10 — `mode_transition` 은 channel/meeting 자체가 null 인
+    // approval 이라 여기서 channel system message 를 만들 길이 없다. 대신
+    // ApprovalDecisionRouter 가 같은 이벤트를 받아 ProjectService 의
+    // pendingAdvisory slot 으로 라우팅하므로 여기서는 명시적으로 skip 한다
+    // (이중 주입을 피하기 위해 Router 와 책임을 분리).
+    if (item.kind === 'mode_transition') {
+      return;
+    }
     if (item.channelId === null || item.meetingId === null) {
       return;
     }

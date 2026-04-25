@@ -140,8 +140,13 @@ function buildMocks(): Mocks {
   // autonomyMode before posting to `#일반`. Default to a `manual` project
   // so the existing R6/R7 assertions stay green; tests that exercise
   // auto_toggle/queue override this mock explicitly.
+  // R11-Task10: consumePendingAdvisory is invoked by run() right after
+  // session.start(). Default returns null so the existing tests behave
+  // identically; advisory-specific tests override this mock to assert
+  // the system message prepend path.
   const projectService = {
     setAutonomy: vi.fn(),
+    consumePendingAdvisory: vi.fn(() => null as string | null),
     get: vi.fn(() => ({
       id: PROJECT_ID,
       slug: 'proj',
@@ -804,6 +809,93 @@ describe('MeetingOrchestrator — R7-Task9 consensus_decision approval gate', ()
       mocks.approvalService as unknown as EventEmitter
     ).listenerCount(APPROVAL_DECIDED_EVENT);
     expect(listenerCountAfter).toBe(0);
+  });
+});
+
+describe('MeetingOrchestrator — R11-Task10 advisory consume on run()', () => {
+  it('null advisory → no system message append (existing flow unchanged)', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    await orc.run();
+    expect(mocks.projectService.consumePendingAdvisory).toHaveBeenCalledWith(
+      PROJECT_ID,
+    );
+    const appendSpy = mocks.messageService.append as ReturnType<typeof vi.fn>;
+    const advisoryAppends = appendSpy.mock.calls.filter((args) =>
+      typeof args[0]?.content === 'string' &&
+      args[0].content.includes('권한 모드 변경'),
+    );
+    expect(advisoryAppends).toHaveLength(0);
+  });
+
+  it('non-null advisory → system message prepended once with prefix + comment', async () => {
+    const mocks = buildMocks();
+    (mocks.projectService.consumePendingAdvisory as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce('src/external/ 만 read-only')
+      .mockReturnValue(null);
+    const orc = buildOrchestrator(mocks);
+    await orc.run();
+
+    const appendSpy = mocks.messageService.append as ReturnType<typeof vi.fn>;
+    const advisoryAppends = appendSpy.mock.calls.filter((args) =>
+      typeof args[0]?.content === 'string' &&
+      args[0].content.includes('src/external/ 만 read-only'),
+    );
+    expect(advisoryAppends).toHaveLength(1);
+    const call = advisoryAppends[0][0];
+    expect(call.channelId).toBe(CHANNEL_ID);
+    expect(call.meetingId).toBe(MEETING_ID);
+    expect(call.authorKind).toBe('system');
+    expect(call.role).toBe('system');
+    // prefix 가 붙어 있어야 한다 (notification-labels modeTransitionAdvisoryPrefix).
+    expect(call.content).toMatch(/\[권한 모드 변경/);
+  });
+
+  it('consume is invoked exactly once per run() — second run() pulls again', async () => {
+    const mocks = buildMocks();
+    const orc = buildOrchestrator(mocks);
+    await orc.run();
+    expect(mocks.projectService.consumePendingAdvisory).toHaveBeenCalledTimes(1);
+    // run() that's already finished can be invoked again — consume runs again.
+    await orc.run().catch(() => {});
+    expect(
+      (mocks.projectService.consumePendingAdvisory as ReturnType<typeof vi.fn>)
+        .mock.calls.length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  it('append failure is swallowed (warn) — meeting still proceeds', async () => {
+    const mocks = buildMocks();
+    (mocks.projectService.consumePendingAdvisory as ReturnType<typeof vi.fn>)
+      .mockReturnValueOnce('advisory body')
+      .mockReturnValue(null);
+    // Make the FIRST append (the advisory one) throw. Subsequent appends
+    // (minutes etc.) keep working with a passthrough.
+    let appendCallIdx = 0;
+    (mocks.messageService as unknown as { append: ReturnType<typeof vi.fn> }).append = vi.fn(
+      (input: Record<string, unknown>) => {
+        appendCallIdx += 1;
+        if (appendCallIdx === 1) {
+          throw new Error('synthetic append failure');
+        }
+        return {
+          id: `msg-${appendCallIdx}`,
+          ...input,
+          meta: input.meta ?? null,
+          createdAt: Date.now(),
+        };
+      },
+    );
+
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const orc = buildOrchestrator(mocks);
+    await expect(orc.run()).resolves.not.toThrow();
+    expect(warnSpy).toHaveBeenCalled();
+    const advisoryWarn = warnSpy.mock.calls.find((args) =>
+      typeof args[0] === 'string' && args[0].includes('advisory append failed'),
+    );
+    expect(advisoryWarn).toBeDefined();
+    warnSpy.mockRestore();
   });
 });
 

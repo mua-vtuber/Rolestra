@@ -207,6 +207,41 @@ describe('ApprovalSystemMessageInjector — skip paths', () => {
     expect(h.appendSpy).not.toHaveBeenCalled();
     h.dispose();
   });
+
+  // ── R11-Task10: mode_transition 은 Router/advisory slot 으로 라우팅 ──
+
+  it('R11-Task10: mode_transition + comment + null channel/meeting → no append (Router 가 advisory 로 라우팅)', () => {
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({
+        kind: 'mode_transition',
+        channelId: null,
+        meetingId: null,
+      }),
+      decision: 'conditional',
+      comment: '읽기만 허용',
+    });
+    expect(h.appendSpy).not.toHaveBeenCalled();
+    h.dispose();
+  });
+
+  it('R11-Task10: mode_transition + 가상의 channel/meeting 이 살아있어도 skip (kind 자체가 advisory 경로)', () => {
+    // 방어적 케이스 — repository 가 실수로 mode_transition 에 channel/meeting
+    // 을 채워 보내도 Router/advisory 경로가 정답이므로 Injector 는 침묵해야
+    // 한다. 이중 주입(Router 의 advisory + Injector 의 system message) 방지.
+    const h = makeHarness();
+    h.emitDecided({
+      item: makeItem({
+        kind: 'mode_transition',
+        channelId: 'c-stray',
+        meetingId: 'm-stray',
+      }),
+      decision: 'conditional',
+      comment: '동시 라우팅 방지',
+    });
+    expect(h.appendSpy).not.toHaveBeenCalled();
+    h.dispose();
+  });
 });
 
 describe('ApprovalSystemMessageInjector — failure isolation', () => {
