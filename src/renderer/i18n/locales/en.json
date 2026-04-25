@@ -19,6 +19,17 @@
         "same_error": "Circuit Breaker — repeated error"
       }
     },
+    "filter": {
+      "all": "All",
+      "allRetro": "[*] All",
+      "approved": "Approved",
+      "approvedRetro": "[A] Approved",
+      "aria": "Approval filter",
+      "pending": "Pending",
+      "pendingRetro": "[P] Pending",
+      "rejected": "Rejected",
+      "rejectedRetro": "[R] Rejected"
+    },
     "kind": {
       "circuit_breaker": "Circuit breaker",
       "cli_permission": "CLI permission",
@@ -26,6 +37,14 @@
       "failure_report": "Failure report",
       "mode_transition": "Mode transition",
       "review_outcome": "Review outcome"
+    },
+    "statusBadge": {
+      "approved": "Approved",
+      "approvedRetro": "[Y]",
+      "pending": "Pending",
+      "pendingRetro": "[P]",
+      "rejected": "Rejected",
+      "rejectedRetro": "[N]"
     },
     "systemMessage": {
       "conditionalPrefix": "[Conditional approval]",
@@ -607,6 +626,14 @@
       "inProgress": "In progress",
       "paused": "Paused",
       "pending": "Pending"
+    },
+    "statusMark": {
+      "cancelled": "[/]",
+      "done": "[✓]",
+      "failed": "[✗]",
+      "inProgress": "[→]",
+      "paused": "[‖]",
+      "pending": "[ ]"
     },
     "toast": {
       "added": "Added {{count}} item(s) to the queue.",

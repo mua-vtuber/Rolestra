@@ -290,6 +290,64 @@ describe('ApprovalInboxView — approve click invokes approval:decide', () => {
   });
 });
 
+describe('ApprovalInboxView — filter bar (Set 1 polish)', () => {
+  it('renders the 4-tab filter bar with pending active by default', async () => {
+    stubBridge([makeItem(), makeItem({ id: 'appr-2' })]);
+    renderInbox();
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-filter-bar')).toBeTruthy();
+    });
+    const tabs = screen.getAllByTestId('approval-filter-tab');
+    expect(tabs.map((t) => t.getAttribute('data-filter'))).toEqual([
+      'pending',
+      'approved',
+      'rejected',
+      'all',
+    ]);
+    expect(tabs[0].getAttribute('data-active')).toBe('true');
+  });
+
+  it('pending count reflects fetched items; approved/rejected default to 0', async () => {
+    stubBridge([makeItem(), makeItem({ id: 'appr-2' })]);
+    renderInbox();
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-filter-bar')).toBeTruthy();
+    });
+    const counts = screen.getAllByTestId('approval-filter-count');
+    expect(counts[0].textContent).toBe('2'); // pending
+    expect(counts[1].textContent).toBe('0'); // approved
+    expect(counts[2].textContent).toBe('0'); // rejected
+    expect(counts[3].textContent).toBe('2'); // all
+  });
+
+  it('switching to the approved tab hides the pending list (placeholder until R11)', async () => {
+    stubBridge([makeItem()]);
+    renderInbox();
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-inbox-list')).toBeTruthy();
+    });
+    fireEvent.click(screen.getAllByTestId('approval-filter-tab')[1]);
+    await waitFor(() => {
+      expect(screen.queryByTestId('approval-inbox-list')).toBeNull();
+      expect(screen.getByTestId('approval-inbox-empty')).toBeTruthy();
+    });
+  });
+
+  it('renders a pending status badge on every pending row', async () => {
+    stubBridge([makeItem(), makeItem({ id: 'appr-2' })]);
+    renderInbox();
+    await waitFor(() => {
+      expect(screen.getAllByTestId('approval-inbox-row').length).toBe(2);
+    });
+    const badges = screen.getAllByTestId('approval-status-badge');
+    expect(badges.length).toBeGreaterThanOrEqual(2);
+    for (const badge of badges) {
+      expect(badge.getAttribute('data-decision')).toBe('pending');
+      expect(badge.getAttribute('data-compact')).toBe('true');
+    }
+  });
+});
+
 describe('ApprovalInboxView — source-level hex color literal guard', () => {
   it('ApprovalInboxView.tsx contains zero hex color literals', () => {
     const source = readFileSync(

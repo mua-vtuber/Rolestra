@@ -19,6 +19,17 @@
         "same_error": "Circuit Breaker — 같은 오류 반복"
       }
     },
+    "filter": {
+      "all": "전체",
+      "allRetro": "[*] 전체",
+      "approved": "허가",
+      "approvedRetro": "[A] 허가",
+      "aria": "결재 필터",
+      "pending": "대기",
+      "pendingRetro": "[P] 대기",
+      "rejected": "거절",
+      "rejectedRetro": "[R] 거절"
+    },
     "kind": {
       "circuit_breaker": "회로 차단기",
       "cli_permission": "CLI 권한 요청",
@@ -26,6 +37,14 @@
       "failure_report": "실패 리포트",
       "mode_transition": "모드 전환",
       "review_outcome": "리뷰 결과"
+    },
+    "statusBadge": {
+      "approved": "허가",
+      "approvedRetro": "[Y]",
+      "pending": "대기",
+      "pendingRetro": "[P]",
+      "rejected": "거절",
+      "rejectedRetro": "[N]"
     },
     "systemMessage": {
       "conditionalPrefix": "[조건부 승인]",
@@ -607,6 +626,14 @@
       "inProgress": "진행 중",
       "paused": "일시 정지",
       "pending": "대기"
+    },
+    "statusMark": {
+      "cancelled": "[/]",
+      "done": "[✓]",
+      "failed": "[✗]",
+      "inProgress": "[→]",
+      "paused": "[‖]",
+      "pending": "[ ]"
     },
     "toast": {
       "added": "{{count}}개 항목을 큐에 추가했습니다.",

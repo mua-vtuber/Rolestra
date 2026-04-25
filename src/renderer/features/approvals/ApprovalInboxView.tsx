@@ -15,13 +15,19 @@
  * hex literal 금지.
  */
 import { clsx } from 'clsx';
-import { useMemo, type ReactElement } from 'react';
+import { useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePendingApprovals } from '../../hooks/use-pending-approvals';
 import type { ApprovalItem } from '../../../shared/approval-types';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 import { ApprovalBlock } from '../messenger/ApprovalBlock';
+import {
+  ApprovalFilterBar,
+  type ApprovalFilter,
+  type ApprovalFilterCounts,
+} from './ApprovalFilterBar';
+import { ApprovalStatusBadge } from './ApprovalStatusBadge';
 import { CircuitBreakerApprovalRow } from './CircuitBreakerApprovalRow';
 
 export interface ApprovalInboxViewProps {
@@ -133,10 +139,31 @@ export function ApprovalInboxView({
   const { t } = useTranslation();
   const { items, loading, error } = usePendingApprovals(projectId);
 
+  // Filter state — only `pending` resolves to real data; the other tabs
+  // hold visual placeholders until R11 wires the historical query
+  // (approval list endpoint with decided=approved/rejected). The empty
+  // state of those tabs falls through to the existing "no items" copy.
+  const [filter, setFilter] = useState<ApprovalFilter>('pending');
+
   const wrappedMessages = useMemo(() => {
     if (items === null) return [];
     return items.map((it) => ({ item: it, message: approvalToMessage(it) }));
   }, [items]);
+
+  const counts = useMemo<ApprovalFilterCounts>(() => {
+    const pendingCount = items === null ? 0 : items.length;
+    return {
+      pending: pendingCount,
+      approved: 0,
+      rejected: 0,
+      all: pendingCount,
+    };
+  }, [items]);
+
+  // Visible list — only the pending tab has data right now. Other tabs
+  // render as empty without touching the network or fabricating rows.
+  const visibleMessages =
+    filter === 'pending' || filter === 'all' ? wrappedMessages : [];
 
   /**
    * R10-Task4: dispatch the row body by `item.kind`. The
@@ -181,7 +208,7 @@ export function ApprovalInboxView({
         </div>
       );
     }
-    if (items !== null && items.length === 0) {
+    if (visibleMessages.length === 0) {
       return (
         <p
           data-testid="approval-inbox-empty"
@@ -196,7 +223,7 @@ export function ApprovalInboxView({
         data-testid="approval-inbox-list"
         className="flex flex-col gap-1 py-2"
       >
-        {wrappedMessages.map(({ item, message }) => (
+        {visibleMessages.map(({ item, message }) => (
           <li
             key={item.id}
             data-testid="approval-inbox-row"
@@ -205,9 +232,12 @@ export function ApprovalInboxView({
           >
             <div
               data-testid="approval-inbox-row-kind"
-              className="px-4 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+              className="flex items-center gap-2 px-4 text-xs font-semibold uppercase tracking-wide text-fg-muted"
             >
-              {kindLabel(t, item.kind)}
+              <span data-testid="approval-inbox-row-kind-label">
+                {kindLabel(t, item.kind)}
+              </span>
+              <ApprovalStatusBadge decision="pending" compact />
             </div>
             {renderRowBody(item, message)}
           </li>
@@ -221,12 +251,23 @@ export function ApprovalInboxView({
       data-testid="approval-inbox-view"
       data-project-id={projectId}
       data-item-count={items === null ? 'null' : String(items.length)}
+      data-filter={filter}
       className={clsx(
-        'flex-1 min-h-0 overflow-y-auto text-sm text-fg',
+        'flex flex-col flex-1 min-h-0 text-sm text-fg',
         className,
       )}
     >
-      {body}
+      <ApprovalFilterBar
+        active={filter}
+        counts={counts}
+        onChange={setFilter}
+      />
+      <div
+        data-testid="approval-inbox-scroll"
+        className="flex-1 min-h-0 overflow-y-auto"
+      >
+        {body}
+      </div>
     </div>
   );
 }

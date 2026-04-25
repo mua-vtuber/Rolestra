@@ -20,7 +20,8 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../../components/primitives/button';
 import { useQueue } from '../../hooks/use-queue';
 import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
-import type { QueueItem, QueueItemStatus } from '../../../shared/queue-types';
+import type { QueueItem } from '../../../shared/queue-types';
+import { QueueStatusMark } from './QueueStatusMark';
 
 export interface QueuePanelProps {
   projectId: string;
@@ -38,23 +39,6 @@ function reorderLocal(
   if (moved === undefined) return items;
   copy.splice(toIdx, 0, moved);
   return copy;
-}
-
-function statusBadgeClass(status: QueueItemStatus): string {
-  switch (status) {
-    case 'in_progress':
-      return 'bg-brand text-logo-fg';
-    case 'done':
-      return 'bg-success text-logo-fg';
-    case 'failed':
-      return 'bg-danger text-logo-fg';
-    case 'cancelled':
-    case 'paused':
-      return 'bg-fg-muted text-logo-fg';
-    case 'pending':
-    default:
-      return 'bg-panel-bg text-fg border border-border-soft';
-  }
 }
 
 export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElement {
@@ -247,18 +231,6 @@ export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElem
               onDragOver={(e) => e.preventDefault()}
             >
               {displayItems.map((item, idx) => {
-                const statusLabel =
-                  item.status === 'pending'
-                    ? t('queue.status.pending')
-                    : item.status === 'in_progress'
-                      ? t('queue.status.inProgress')
-                      : item.status === 'done'
-                        ? t('queue.status.done')
-                        : item.status === 'failed'
-                          ? t('queue.status.failed')
-                          : item.status === 'cancelled'
-                            ? t('queue.status.cancelled')
-                            : t('queue.status.paused');
                 return (
                   <li
                     key={item.id}
@@ -280,14 +252,8 @@ export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElem
                       ⋮⋮
                     </span>
                     <span className="flex-1 text-sm truncate">{item.prompt}</span>
-                    <span
-                      data-testid="queue-panel-item-status"
-                      className={clsx(
-                        'text-[10px] px-1.5 py-0.5 rounded-panel',
-                        statusBadgeClass(item.status),
-                      )}
-                    >
-                      {statusLabel}
+                    <span data-testid="queue-panel-item-status">
+                      <QueueStatusMark status={item.status} />
                     </span>
                     <button
                       type="button"
