@@ -44,7 +44,10 @@ export class ApiProvider extends BaseProvider {
     super({
       ...init,
       type: 'api',
-      capabilities: ['streaming'],
+      // R11-Task9: 'summarize' 정식 추가 (Anthropic / OpenAI / Google /
+      // OpenRouter 등 모든 OpenAI-compatible 엔드포인트가 1-shot 요약을
+      // 지원하므로 capability snapshot 에 일관 노출).
+      capabilities: ['streaming', 'summarize'],
     });
     this.resolveApiKey = init.resolveApiKey;
   }

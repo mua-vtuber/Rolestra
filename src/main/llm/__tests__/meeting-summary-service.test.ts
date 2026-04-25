@@ -1,8 +1,9 @@
 /**
- * MeetingSummaryService — R10 Task 11.
+ * MeetingSummaryService — R10 Task 11 land, R11-Task9 capability filter
+ * 정식화 (gating literal `'streaming'` → `'summarize'`).
  *
  * Coverage:
- *   - happy path: ready provider with streaming capability returns a summary
+ *   - happy path: ready provider with summarize capability returns a summary
  *   - preferred provider id wins when ready + capable
  *   - falls back to the next ready provider when preferred is missing capability
  *   - returns {summary:null, providerId:null} when no ready provider exists
@@ -10,6 +11,8 @@
  *   - provider that throws → null result + warn log
  *   - output truncation when stream exceeds the cap
  *   - empty stream → null result
+ *   - R11-Task9: provider with only 'streaming' (no 'summarize') is skipped
+ *   - R11-Task9: not-ready provider with 'summarize' is skipped
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -26,7 +29,10 @@ interface FakeProviderOpts {
 }
 
 function makeProvider(opts: FakeProviderOpts): BaseProvider {
-  const caps = new Set<string>(opts.capabilities ?? ['streaming']);
+  // R11-Task9: default capability now matches the production providers —
+  // both 'streaming' and 'summarize'. Tests that need to exercise the
+  // capability filter override `capabilities` explicitly.
+  const caps = new Set<string>(opts.capabilities ?? ['streaming', 'summarize']);
   const ready = opts.ready ?? true;
   const provider = {
     id: opts.id,
@@ -145,5 +151,79 @@ describe('MeetingSummaryService', () => {
     expect(result.summary).not.toBeNull();
     // Bounded — never balloons to the full 5,000 chars.
     expect(result.summary!.length).toBeLessThanOrEqual(5_000);
+  });
+
+  // ── R11-Task9: 'summarize' capability filter coverage ──────────────
+
+  it('skips providers that have streaming but not summarize (R11-Task9)', async () => {
+    // streaming-only provider must be filtered out — proves the literal
+    // really swapped from 'streaming' to 'summarize'.
+    const streamingOnly = makeProvider({
+      id: 'streaming-only',
+      capabilities: ['streaming'],
+    });
+    const summarizer = makeProvider({
+      id: 'summarizer',
+      capabilities: ['streaming', 'summarize'],
+    });
+    const svc = new MeetingSummaryService({
+      providerRegistry: makeRegistry([streamingOnly, summarizer]),
+    });
+    const result = await svc.summarize('body');
+    expect(result.providerId).toBe('summarizer');
+  });
+
+  it('preferred provider with only streaming falls back to summarize-capable peer', async () => {
+    const preferredStreamingOnly = makeProvider({
+      id: 'pref',
+      capabilities: ['streaming'],
+    });
+    const summarizer = makeProvider({
+      id: 'sum',
+      capabilities: ['streaming', 'summarize'],
+    });
+    const svc = new MeetingSummaryService({
+      providerRegistry: makeRegistry([preferredStreamingOnly, summarizer]),
+    });
+    const result = await svc.summarize('body', { preferredProviderId: 'pref' });
+    expect(result.providerId).toBe('sum');
+  });
+
+  it('returns null when only streaming-capable providers exist', async () => {
+    const a = makeProvider({ id: 'a', capabilities: ['streaming'] });
+    const b = makeProvider({ id: 'b', capabilities: ['streaming'] });
+    const svc = new MeetingSummaryService({ providerRegistry: makeRegistry([a, b]) });
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const result = await svc.summarize('body');
+    expect(result).toEqual({ summary: null, providerId: null });
+    expect(warnSpy).toHaveBeenCalled();
+  });
+
+  it('skips a not-ready provider that DOES have summarize', async () => {
+    const offlineButCapable = makeProvider({
+      id: 'offline',
+      ready: false,
+      capabilities: ['streaming', 'summarize'],
+    });
+    const onlineSummarizer = makeProvider({ id: 'online' });
+    const svc = new MeetingSummaryService({
+      providerRegistry: makeRegistry([offlineButCapable, onlineSummarizer]),
+    });
+    const result = await svc.summarize('body');
+    expect(result.providerId).toBe('online');
+  });
+
+  it('preferred provider that is not-ready falls back even if summarize-capable', async () => {
+    const offlineSummarizer = makeProvider({
+      id: 'pref',
+      ready: false,
+      capabilities: ['streaming', 'summarize'],
+    });
+    const fallback = makeProvider({ id: 'fallback' });
+    const svc = new MeetingSummaryService({
+      providerRegistry: makeRegistry([offlineSummarizer, fallback]),
+    });
+    const result = await svc.summarize('body', { preferredProviderId: 'pref' });
+    expect(result.providerId).toBe('fallback');
   });
 });

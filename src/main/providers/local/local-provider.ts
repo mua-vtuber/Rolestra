@@ -19,7 +19,10 @@ export class LocalProvider extends BaseProvider {
     super({
       ...init,
       type: 'local',
-      capabilities: ['streaming'],
+      // R11-Task9: 'summarize' 정식 추가. Local Ollama / llama.cpp /vLLM
+      // 모두 OpenAI-compatible chat completions 로 1-shot 요약 가능 —
+      // 모델이 너무 작아 품질이 낮을 수는 있어도 capability 자체는 advertise.
+      capabilities: ['streaming', 'summarize'],
     });
   }
 

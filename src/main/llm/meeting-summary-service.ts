@@ -1,13 +1,13 @@
 /**
- * MeetingSummaryService — R10 Task 11.
+ * MeetingSummaryService — R10 Task 11 land, R11-Task9 capability 정식화.
  *
  * Best-effort LLM summary that the {@link MeetingOrchestrator} appends to
  * the `#회의록` message right after the deterministic minutes block. The
  * service picks the first ready provider whose capability set includes
- * `streaming` (the union of providers that can answer a free-form prompt
- * — the v3 capability shape does not yet have a dedicated `summarize`
- * flag, and gating on `streaming` matches the deferred D7 decision in the
- * R10 plan: "any provider that can chat can summarize").
+ * `'summarize'` — R11-Task5 가 ProviderCapability union 에 literal 을
+ * 추가했고, R11-Task9 가 6 provider config (Claude/Codex/Gemini/Anthropic
+ * API/OpenAI API/Local Ollama) 에 capability 를 명시하면서 R10 의 임시
+ * `'streaming'` fallback 우회를 제거했다.
  *
  * Failure modes are silent — every error path returns `{summary: null,
  * providerId: null}`. The caller's contract is "append paragraph if non-
@@ -35,11 +35,13 @@ export interface ProviderRegistryView {
 }
 
 /**
- * The capability we gate on. v3 lacks a dedicated `summarize` flag — any
- * provider that supports streaming can answer the summarise prompt below.
- * If a future capability literal is added, swap the check here.
+ * The capability we gate on. R11-Task9 promoted the literal from the R10
+ * temp `'streaming'` workaround to the dedicated `'summarize'` flag — every
+ * production provider config (api / cli / local) now advertises it
+ * explicitly so the previous "any chat-capable provider can summarise"
+ * fallback chain is no longer load-bearing.
  */
-const SUMMARIZE_CAPABILITY: ProviderCapability = 'streaming';
+const SUMMARIZE_CAPABILITY: ProviderCapability = 'summarize';
 
 /** Hard cap on collected summary characters — avoids runaway output. */
 const MAX_OUTPUT_CHARS = 4_000;

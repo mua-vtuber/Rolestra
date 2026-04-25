@@ -92,7 +92,11 @@ export function createProvider(options: CreateProviderOptions): BaseProvider {
     case 'cli': {
       const runtimeCliConfig = getRuntimeCliConfig(options.config);
 
-      const cliCapabilities: ProviderCapability[] = ['streaming'];
+      // R11-Task9: 'summarize' 정식 추가. Claude Code / Codex CLI / Gemini
+      // CLI 모두 stdin 으로 prompt 를 받아 1-shot 응답을 낼 수 있으므로
+      // capability snapshot 에 일관 노출. 실제 호출 시 sessionStrategy 가
+      // per-turn / persistent 어느 쪽이든 streamCompletion 이 동일하게 답한다.
+      const cliCapabilities: ProviderCapability[] = ['streaming', 'summarize'];
 
       return new CliProvider({
         id,
