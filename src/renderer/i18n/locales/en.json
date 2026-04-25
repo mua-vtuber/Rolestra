@@ -512,6 +512,44 @@
       "title": "Work done"
     }
   },
+  "onboarding": {
+    "actions": {
+      "next": "Next → Assign roles",
+      "prev": "← Back",
+      "rescan": "$ rescan"
+    },
+    "cardLabels": {
+      "alt": "Alt",
+      "bestFor": "Best for",
+      "detected": "Detected",
+      "selected": "Selected"
+    },
+    "description": "Detected installed CLIs / models. Selected ones will join the office and you'll assign roles next. You can add or remove staff later in Settings.",
+    "description_settingsCta": "Reopen the onboarding flow to inspect mockup fidelity in design-polish mode.",
+    "footer": {
+      "constraint": "{{count}} selected · {{min}} minimum required"
+    },
+    "heading": "Who do you want to work with?",
+    "settingsCta": "Restart onboarding",
+    "steps": {
+      "firstProject": "First project",
+      "office": "Office",
+      "permissions": "Permissions",
+      "roles": "Roles",
+      "staff": "Staff"
+    },
+    "summary": {
+      "alt": "Alt",
+      "detected": "Detected",
+      "selected": "Selected"
+    },
+    "topBar": {
+      "estTime": "~4 min left",
+      "skip": "Skip for now",
+      "stepUnit": "step",
+      "title": "Get started with Rolestra"
+    }
+  },
   "profile": {
     "editor": {
       "cancel": "Cancel",

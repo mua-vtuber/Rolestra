@@ -8,6 +8,7 @@ import { DevThemeSwitcher } from './components/shell/theme-switcher';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { MessengerPage } from './features/messenger/MessengerPage';
 import { DmListView } from './features/dms/DmListView';
+import { OnboardingPage } from './features/onboarding/OnboardingPage';
 import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { QueuePanel } from './features/projects/QueuePanel';
@@ -25,7 +26,12 @@ import type { Project } from '../shared/project-types';
  * settings 가 NotificationPrefsView 를 갖춘 실제 뷰로 올라왔다.
  * `AppView` 유니온 정의는 `stores/app-view-store.ts` 로 이동했다(R7-Task10).
  */
-const ROUTED_VIEWS: ReadonlyArray<AppView> = ['dashboard', 'messenger', 'settings'];
+const ROUTED_VIEWS: ReadonlyArray<AppView> = [
+  'dashboard',
+  'messenger',
+  'settings',
+  'onboarding',
+];
 
 const NAV_ITEMS: ReadonlyArray<NavRailItem> = [
   { id: 'dashboard', icon: 'dashboard', label: 'Dashboard' },
@@ -145,6 +151,13 @@ export function App() {
     },
     [setActive],
   );
+
+  // Onboarding 은 NavRail / ProjectRail / ShellTopBar 가 없는 pre-office
+  // shell — Shell wrapper 자체를 우회하고 OnboardingPage 만 fullscreen
+  // 으로 마운트한다. exit 시 dashboard 로 복귀.
+  if (view === 'onboarding') {
+    return <OnboardingPage onExit={() => setView('dashboard')} />;
+  }
 
   return (
     <Shell

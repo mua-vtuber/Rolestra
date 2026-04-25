@@ -512,6 +512,44 @@
       "title": "작업 완료"
     }
   },
+  "onboarding": {
+    "actions": {
+      "next": "다음 → 역할 부여",
+      "prev": "← 이전",
+      "rescan": "$ rescan"
+    },
+    "cardLabels": {
+      "alt": "대안",
+      "bestFor": "검사 매칭",
+      "detected": "감지됨",
+      "selected": "선택됨"
+    },
+    "description": "설치된 CLI / 모델을 감지했습니다. 체크된 모델이 사무실에 입사하고, 다음 단계에서 역할을 부여합니다. 언제든 설정에서 추가·해고할 수 있습니다.",
+    "description_settingsCta": "온보딩 흐름을 디자인 polish 모드로 다시 열어 시안 fidelity 를 점검할 수 있습니다.",
+    "footer": {
+      "constraint": "선택됨 {{count}}명 · 최소 {{min}}명 필요"
+    },
+    "heading": "누구와 함께 일하시겠어요?",
+    "settingsCta": "온보딩 다시 시작",
+    "steps": {
+      "firstProject": "첫 프로젝트",
+      "office": "사무실",
+      "permissions": "권한",
+      "roles": "역할",
+      "staff": "직원"
+    },
+    "summary": {
+      "alt": "예외처",
+      "detected": "감지됨",
+      "selected": "선택됨"
+    },
+    "topBar": {
+      "estTime": "약 4분 남음",
+      "skip": "나중에 하기",
+      "stepUnit": "단계",
+      "title": "Rolestra 시작하기"
+    }
+  },
   "profile": {
     "editor": {
       "cancel": "취소",

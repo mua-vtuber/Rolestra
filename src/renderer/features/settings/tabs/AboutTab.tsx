@@ -9,6 +9,9 @@
 import type { ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { Button } from '../../../components/primitives/button';
+import { useAppViewStore } from '../../../stores/app-view-store';
+
 interface ArenaPlatform {
   readonly platform: string;
   readonly version?: string;
@@ -23,6 +26,7 @@ function getArenaPlatform(): ArenaPlatform | null {
 export function AboutTab(): ReactElement {
   const { t } = useTranslation();
   const arena = getArenaPlatform();
+  const setView = useAppViewStore((s) => s.setView);
 
   return (
     <section
@@ -59,6 +63,21 @@ export function AboutTab(): ReactElement {
           </span>
         </Row>
       </dl>
+
+      <div className="pt-2 border-t border-border-soft">
+        <p className="text-xs text-fg-muted mb-2">
+          {t('onboarding.description_settingsCta')}
+        </p>
+        <Button
+          type="button"
+          tone="secondary"
+          size="sm"
+          data-testid="settings-about-onboarding-cta"
+          onClick={() => setView('onboarding')}
+        >
+          {t('onboarding.settingsCta')}
+        </Button>
+      </div>
     </section>
   );
 }
