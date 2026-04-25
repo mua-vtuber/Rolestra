@@ -94,12 +94,12 @@
     {
       "id": 9,
       "subject": "Task 9: Circuit Breaker persistence — 신규 migration 012 + hydrate/flush",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4
       ],
       "description": "**Goal:** R9 Known Concerns #2 종결. 신규 마이그레이션 012 `circuit_breaker_state (project_id, tripwire, counter, last_reset_at, last_updated_at)` PK (project_id, tripwire). R10 유일한 forward-only 마이그레이션 (D10). `CircuitBreakerStore` hydrate/flush(debounced 1s)/reset API. `CircuitBreaker` constructor 에 store DI + 부팅 시 hydrate + recordX 시 flush. 재시작 후 counter 유지. migration idempotent.\n\n**Files:** src/main/database/migrations/012-circuit-breaker-state.ts, src/main/database/migrations/index.ts, src/main/queue/{circuit-breaker-store,circuit-breaker}.ts, src/main/index.ts\n\n**Verify:** `npm run test -- circuit-breaker-store circuit-breaker migrations`\n\n```json:metadata\n{\"files\":[\"src/main/database/migrations/012-circuit-breaker-state.ts\",\"src/main/queue/circuit-breaker-store.ts\",\"src/main/queue/circuit-breaker.ts\"],\"verifyCommand\":\"npm run test -- circuit-breaker-store migrations\",\"acceptanceCriteria\":[\"부팅 시 hydrate → in-memory counters 초기화\",\"recordX → 1s debounce flush\",\"재시작 후 counter 유지\",\"migration 012 idempotent + down 테스트\",\"R9 Known Concerns #2 종결\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T16:17:00.000Z"
     },
     {
       "id": 10,
