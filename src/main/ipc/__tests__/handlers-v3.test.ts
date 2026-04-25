@@ -368,14 +368,14 @@ describe('message handlers', () => {
     append: ReturnType<typeof vi.fn>;
     listByChannel: ReturnType<typeof vi.fn>;
     listRecent: ReturnType<typeof vi.fn>;
-    search: ReturnType<typeof vi.fn>;
+    searchWithContext: ReturnType<typeof vi.fn>;
   };
   beforeEach(() => {
     svc = {
       append: vi.fn().mockReturnValue({ id: 'msg', content: 'x' }),
       listByChannel: vi.fn().mockReturnValue([]),
       listRecent: vi.fn().mockReturnValue([]),
-      search: vi.fn().mockReturnValue([]),
+      searchWithContext: vi.fn().mockReturnValue([]),
     };
     setMessageServiceAccessor(() => svc as never);
   });
@@ -410,7 +410,7 @@ describe('message handlers', () => {
       scope: { kind: 'channel', channelId: 'c' },
       limit: 5,
     });
-    expect(svc.search).toHaveBeenLastCalledWith('q', {
+    expect(svc.searchWithContext).toHaveBeenLastCalledWith('q', {
       channelId: 'c',
       limit: 5,
     });
@@ -419,7 +419,7 @@ describe('message handlers', () => {
       query: 'q',
       scope: { kind: 'project', projectId: 'p' },
     });
-    expect(svc.search).toHaveBeenLastCalledWith('q', {
+    expect(svc.searchWithContext).toHaveBeenLastCalledWith('q', {
       projectId: 'p',
       limit: undefined,
     });
