@@ -179,6 +179,7 @@ import {
   handleNotificationGetPrefs,
   handleNotificationUpdatePrefs,
   handleNotificationTest,
+  handleNotificationSetLocale,
 } from './handlers/notification-handler';
 import {
   handleQueueList,
@@ -546,6 +547,7 @@ export function registerIpcHandlers(): void {
   handle('notification:get-prefs', isDev, () => handleNotificationGetPrefs());
   handle('notification:update-prefs', isDev, (data) => handleNotificationUpdatePrefs(data));
   handle('notification:test', isDev, (data) => handleNotificationTest(data));
+  handle('notification:set-locale', isDev, (data) => handleNotificationSetLocale(data));
 
   // ── v3: Dashboard (R4) ──────────────────────────────────────────
   handle('dashboard:get-kpis', isDev, (data) => handleDashboardGetKpis(data));

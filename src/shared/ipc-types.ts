@@ -739,6 +739,16 @@ export type IpcChannelMap = {
     request: { kind: NotificationKind };
     response: { success: true };
   };
+  /**
+   * R10-Task12: switch the main-process notification label dictionary
+   * (`notification-labels.ts`) to the supplied locale. Renderer-side
+   * i18next is updated via `i18n.changeLanguage(...)` separately — this
+   * IPC keeps the OS notification copy + system message labels in sync.
+   */
+  'notification:set-locale': {
+    request: { locale: 'ko' | 'en' };
+    response: { locale: 'ko' | 'en' };
+  };
 
   // ── v3: Queue (CD-2) ────────────────────────────────────────────
   'queue:list': {

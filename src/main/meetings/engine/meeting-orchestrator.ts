@@ -65,6 +65,7 @@ import {
 import type { MeetingSession } from './meeting-session';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import { composeMinutes, type MinutesTranslator } from './meeting-minutes-composer';
+import { resolveNotificationLabel } from '../../notifications/notification-labels';
 
 const INTER_TURN_DELAY_MS = 2000;
 
@@ -476,8 +477,11 @@ export class MeetingOrchestrator {
           const trimmed = comment?.trim() ?? '';
           const body =
             trimmed.length > 0
-              ? `회의 합의 거절됨 — ${trimmed}`
-              : '회의 합의 거절됨';
+              ? resolveNotificationLabel(
+                  'meetingMinutes.rejectionWithComment',
+                  { comment: trimmed },
+                )
+              : resolveNotificationLabel('meetingMinutes.rejection');
           this.messageService.append({
             channelId: minutesChannelId,
             meetingId: this.session.meetingId,
@@ -677,7 +681,11 @@ export class MeetingOrchestrator {
         const result = await this.meetingSummaryService.summarize(body);
         if (result.summary !== null) {
           const provider = result.providerId ?? '?';
-          finalContent = `${body}\n\n---\n📝 LLM 요약 (${provider}): ${result.summary}`;
+          const prefix = resolveNotificationLabel(
+            'meetingMinutes.summaryPrefix',
+            { provider },
+          );
+          finalContent = `${body}\n\n---\n${prefix} ${result.summary}`;
         }
       } catch (err) {
         // Defensive — summarize() should never throw, but if it does we

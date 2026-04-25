@@ -37,6 +37,12 @@ export function LanguageTab(): ReactElement {
       await invoke('config:update-settings', {
         patch: { language: next },
       });
+      // R10-Task12: keep main-process notification labels in sync with the
+      // renderer i18n. ko/en is the supported subset today; other locales
+      // would silently fall through to the default on the main side.
+      if (next === 'ko' || next === 'en') {
+        await invoke('notification:set-locale', { locale: next });
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {

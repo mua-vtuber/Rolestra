@@ -385,6 +385,11 @@ export const notificationTestSchema = z.object({
 
 export const notificationGetPrefsSchema = z.undefined();
 
+/** R10-Task12: `notification:set-locale` payload validation. */
+export const notificationSetLocaleSchema = z.object({
+  locale: z.enum(['ko', 'en']),
+});
+
 export const arenaRootSetSchema = z.object({
   path: z.string().min(1).max(4096),
 });
@@ -484,6 +489,7 @@ export const v3ChannelSchemas = {
   'notification:get-prefs': notificationGetPrefsSchema,
   'notification:update-prefs': notificationUpdatePrefsSchema,
   'notification:test': notificationTestSchema,
+  'notification:set-locale': notificationSetLocaleSchema,
   // ── R10 신규 채널 ──────────────────────────────────────────────
   'dm:list': dmListSchema,
   'dm:create': dmCreateSchema,

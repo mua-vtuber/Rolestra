@@ -30,6 +30,7 @@
  */
 
 import type { Message } from '../../shared/message-types';
+import { resolveNotificationLabel } from '../notifications/notification-labels';
 import {
   APPROVAL_DECIDED_EVENT,
   type ApprovalDecidedPayload,
@@ -62,20 +63,22 @@ export interface ApprovalSystemMessageInjectorDeps {
   messageService: ApprovalSystemMessageSink;
 }
 
-/** 주입할 system 메시지의 접두 라벨. i18n 이 아닌 고정 라벨(Task 12 가 필요 시
- *  renderer 측 치환으로 교체 — main 쪽은 t() 가 없다). */
-const DECISION_LABELS: Readonly<
-  Record<'reject' | 'conditional', string>
-> = Object.freeze({
-  reject: '[승인 거절]',
-  conditional: '[조건부 승인]',
-});
+/** R10-Task12: locale-aware label resolution. Was a frozen Korean
+ *  dictionary in R7; now reads through `notification-labels.ts` so
+ *  `setNotificationLocale('en')` reaches this code path too. */
+function resolveDecisionPrefix(decision: 'reject' | 'conditional'): string {
+  return resolveNotificationLabel(
+    decision === 'reject'
+      ? 'approvalSystemMessage.rejectPrefix'
+      : 'approvalSystemMessage.conditionalPrefix',
+  );
+}
 
 function formatSystemMessage(
   decision: 'reject' | 'conditional',
   comment: string,
 ): string {
-  return `${DECISION_LABELS[decision]} ${comment}`;
+  return `${resolveDecisionPrefix(decision)} ${comment}`;
 }
 
 export class ApprovalSystemMessageInjector {
