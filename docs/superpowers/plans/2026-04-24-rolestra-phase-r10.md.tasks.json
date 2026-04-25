@@ -72,14 +72,14 @@
     {
       "id": 7,
       "subject": "Task 7: 6 테마 형태-레벨 분기 정식 wire — 디자인 fidelity sign-off",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         2,
         3,
         6
       ],
       "description": "**Goal:** 메모리 `rolestra-design-fidelity-gap.md` (R4 시점 피드백 '토큰 스왑만으로 공통 형태 + 색만 느낌') 해소. R3 형태 토큰 (panelClip / cardTitleStyle / miniBtnStyle / gaugeGlow / avatarShape) 를 R4~R10 신규 surface 에 실제 wire — MessengerView / ApprovalInbox / MemberProfilePopover / AutonomyConfirmDialog / QueuePanel / NotificationPrefsView / SettingsTabs / MessageSearchView / DmListView / CircuitBreakerApprovalRow. tactical 12분절 / retro ASCII / warm 라운드 패널 정식 분기. tokens.css 확장 + theme:check hardcoded color 0 + 12 스크린샷 증빙 (Windows/macOS native).\n\n**Files:** src/renderer/styles/tokens.css, src/renderer/components/primitives/{Card,Button}.tsx, src/renderer/features/dashboard/ProgressGauge.tsx, src/renderer/features/**/*.tsx (data-theme/data-mode CSS 만), docs/superpowers/specs/appendix-r10-evidence/ (12 캡처)\n\n**Verify:** `npm run theme:check && npm run test -- theme-shape-tokens`\n\n```json:metadata\n{\"files\":[\"src/renderer/styles/tokens.css\",\"src/renderer/components/primitives/Card.tsx\",\"src/renderer/components/primitives/Button.tsx\",\"src/renderer/features/dashboard/ProgressGauge.tsx\",\"docs/superpowers/specs/appendix-r10-evidence\"],\"verifyCommand\":\"npm run theme:check\",\"acceptanceCriteria\":[\"6 테마 모두 시각 차이 분명 (형태 토큰 적용)\",\"theme:check exit 0 (hardcoded color 0)\",\"12 스크린샷 증빙 (DONE_WITH_CONCERNS placeholder 허용)\",\"R4~R9 시각 회귀 0\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T19:25:00.000Z"
     },
     {
       "id": 8,
