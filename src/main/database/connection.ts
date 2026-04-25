@@ -58,9 +58,9 @@ function detectLegacyDatabase(): void {
 
   if (legacyPath !== null && existsSync(legacyPath)) {
     throw new Error(
-      `Legacy v2 DB detected at ${legacyPath}. Manual migration required for v3 ` +
-        `(see _legacy/migrations-v2/README.md). Move this file aside or choose a ` +
-        `fresh ArenaRoot before restarting.`,
+      `Legacy v2 DB detected at ${legacyPath}. v2 migration is not supported ` +
+        `in Rolestra v3. Move this file aside or choose a fresh ArenaRoot ` +
+        `before restarting.`,
     );
   }
 }

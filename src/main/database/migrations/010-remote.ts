@@ -1,9 +1,10 @@
 /**
  * Migration 010-remote: remote access grants + remote audit log (v2 port).
  *
- * Direct port of `_legacy/migrations-v2/003-remote-tables.ts`. The DDL is
- * copied verbatim (without IF NOT EXISTS guards, since v3 migrations are
- * single-shot per fresh DB and the migrator records applied IDs).
+ * Direct port of v2 migration `003-remote-tables` (archived prior to R11).
+ * The DDL is copied verbatim (without IF NOT EXISTS guards, since v3
+ * migrations are single-shot per fresh DB and the migrator records applied
+ * IDs).
  *
  * Per spec §5.2 010 + §12 Security:
  * - Neither `remote_access_grants` nor `remote_audit_log` carry FK references

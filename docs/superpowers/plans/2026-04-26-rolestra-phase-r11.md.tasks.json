@@ -11,7 +11,7 @@
     {
       "id": 1,
       "subject": "Task 1: _legacy/ 디렉토리 일괄 물리 삭제 (migrations-v2 + renderer-v1, 752KB)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** spec §10 R11 본 정의 첫 항목. `_legacy/migrations-v2/` (8 파일) + `_legacy/renderer-v1/` (8 디렉토리, 752KB) 단일 commit 삭제 (D1 — 일괄). src/ docs/ 의 `_legacy` 인용 0 검증. typecheck/build/test 회귀 0.\n\n**Files:** _legacy/ (전체 삭제)\n\n**Verify:** `npm run typecheck && npm run build && grep -r '_legacy' src/ docs/ | wc -l` (0 hit)\n\n```json:metadata\n{\"files\":[\"_legacy\"],\"verifyCommand\":\"npm run typecheck && grep -rln _legacy src docs\",\"acceptanceCriteria\":[\"_legacy/ 디렉토리 부재\",\"src/ 또는 docs/ 어디에도 _legacy 인용 0\",\"typecheck/build/test 회귀 0\",\"repo 크기 -752KB\"]}\n```",
       "lastUpdated": "2026-04-26T00:00:00.000Z"

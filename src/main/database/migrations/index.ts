@@ -2,7 +2,7 @@
  * v3 migration chain (Rolestra).
  *
  * Files 001~011 are populated in Phase R2 Tasks 1-3.
- * v2 migrations archived under `_legacy/migrations-v2/` (see README there).
+ * v2 migrations were archived prior to R11 and are no longer in tree.
  *
  * IMPORTANT: Never reorder or remove entries once added.
  * Migrations are forward-only and immutable once applied.

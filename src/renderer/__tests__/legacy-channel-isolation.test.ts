@@ -2,8 +2,8 @@
  * legacy-channel-isolation.test.ts — R3 Task 11 guard.
  *
  * Ensures the new v3 renderer (src/renderer/**) never references any v2 IPC
- * channel from `LEGACY_V2_CHANNELS` (src/main/ipc/router.ts:248). The legacy
- * renderer lives under `_legacy/renderer-v1/` which is outside this scan.
+ * channel from `LEGACY_V2_CHANNELS` (src/main/ipc/router.ts:248). The v1
+ * renderer was archived prior to R11 and is no longer in tree.
  *
  * If this test fails, either:
  *   (a) the new renderer accidentally called a legacy channel → replace with

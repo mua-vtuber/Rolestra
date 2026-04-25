@@ -2,8 +2,8 @@
  * Migration 008-memory: knowledge graph + FTS5 + enhancement (v2 port).
  *
  * Ports v2 memory schema (FTS5 + embedding hooks + reflection columns + evolution
- * tracking) verbatim from `_legacy/migrations-v2/001-initial-schema.ts`
- * (memory tables only) plus `_legacy/migrations-v2/004-memory-enhancement.ts`.
+ * tracking) verbatim from v2 `001-initial-schema` (memory tables only) plus
+ * v2 `004-memory-enhancement`. Both v2 migrations were archived prior to R11.
  *
  * Per spec §5.2 008 the memory subsystem is **독립 (independent)**: it must not
  * reference v3-side messages or conversations. v2 already kept `conversation_id`
