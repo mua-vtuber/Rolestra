@@ -36,6 +36,7 @@ import {
 import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 import { ApprovalService } from './approvals/approval-service';
+import { MeetingSummaryService } from './llm/meeting-summary-service';
 import { ApprovalSystemMessageInjector } from './approvals/approval-system-message-injector';
 import { setApprovalServiceAccessor } from './ipc/handlers/approval-handler';
 import { NotificationRepository } from './notifications/notification-repository';
@@ -407,6 +408,32 @@ app.whenReady().then(async () => {
     });
     autonomyGate.wire();
 
+    // R10-Task11: optional LLM summary service. Singleton — picks the
+    // first ready provider with the summarize capability at call time so
+    // a provider hot-swap (warm-up / unregister) is honoured per call.
+    const meetingSummaryService = new MeetingSummaryService({
+      providerRegistry,
+    });
+
+    // R10-Task11: re-arm consensus_decision approval expiry timers from
+    // the persisted approval_items rows (R7 D2 deferred). The original
+    // setTimeout was owned by the now-gone MeetingOrchestrator instance,
+    // so without rehydration a row created moments before a crash would
+    // sit `pending` forever. The helper expires aged-out rows
+    // immediately and reschedules the rest.
+    try {
+      const rehydrate = approvalService.rehydrateConsensusTimers();
+      console.info(
+        '[rolestra.approvals] consensus rehydrate',
+        rehydrate,
+      );
+    } catch (err) {
+      console.warn(
+        '[rolestra.approvals] consensus rehydrate failed',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
     // R6-Task1 + R7-Task2 + R7-Task11: StreamBridge — central Main →
     // Renderer v3 push hub. `connect({ notifications })` wires
     // NotificationService 'clicked' → `stream:notification-clicked` so
@@ -512,6 +539,7 @@ app.whenReady().then(async () => {
           approvalService,
           notificationService,
           circuitBreaker,
+          meetingSummaryService,
           // R9-Task7: autonomy-queue run loop. When the finalised meeting
           // belongs to a project in `queue` mode, complete the owning
           // queue item and advance to the next pending item. Lookups miss

@@ -1,5 +1,7 @@
 /**
- * `useDashboardKpis` — fetches the dashboard KPI snapshot on mount.
+ * `useDashboardKpis` — fetches the dashboard KPI snapshot on mount and
+ * keeps the `pendingApprovals` counter live by watching the approval
+ * stream events (R10 Task 11 — R7 deferred).
  *
  * Contract:
  * - On mount: calls `dashboard:get-kpis` exactly once, even under React 18/19
@@ -13,11 +15,22 @@
  *   refetch. On refetch error the stale `data` is preserved — the caller
  *   has a non-null snapshot already, and discarding it would flash empty
  *   widgets. `error` is still populated so the UI can show a retry banner.
+ * - Live `pendingApprovals`:
+ *     - `stream:approval-created` (status='pending') → `+1`
+ *     - `stream:approval-decided` (any decision)     → `-1` (clamped at 0)
+ *   Drift across long sessions is bounded — `refresh()` reseeds from the
+ *   authoritative snapshot. Other KPI fields (activeProjects /
+ *   activeMeetings / completedToday) are NOT stream-patched here — they
+ *   refresh on remount or explicit `refresh()`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { invoke } from '../ipc/invoke';
 import type { KpiSnapshot } from '../../shared/dashboard-types';
+import type {
+  StreamApprovalCreatedPayload,
+  StreamApprovalDecidedPayload,
+} from '../../shared/stream-events';
 
 export interface UseDashboardKpisResult {
   data: KpiSnapshot | null;
@@ -28,6 +41,12 @@ export interface UseDashboardKpisResult {
 
 function toError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error(String(reason));
+}
+
+function bumpPending(prev: KpiSnapshot | null, delta: number): KpiSnapshot | null {
+  if (prev === null) return prev;
+  const next = prev.pendingApprovals + delta;
+  return { ...prev, pendingApprovals: next < 0 ? 0 : next };
 }
 
 export function useDashboardKpis(): UseDashboardKpisResult {
@@ -80,6 +99,34 @@ export function useDashboardKpis(): UseDashboardKpisResult {
       mountedRef.current = false;
     };
   }, [runFetch]);
+
+  // R10-Task11: stream-driven pendingApprovals counter. Same subscription
+  // pattern usePendingApprovals uses — the bridge is absent in unit tests
+  // that don't stub `window.arena`, where we no-op.
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.arena : undefined;
+    const onStream = bridge?.onStream;
+    if (!onStream) return undefined;
+
+    const offCreated = onStream(
+      'stream:approval-created',
+      (_payload: StreamApprovalCreatedPayload) => {
+        if (!mountedRef.current) return;
+        setData((prev) => bumpPending(prev, +1));
+      },
+    );
+    const offDecided = onStream(
+      'stream:approval-decided',
+      (_payload: StreamApprovalDecidedPayload) => {
+        if (!mountedRef.current) return;
+        setData((prev) => bumpPending(prev, -1));
+      },
+    );
+    return () => {
+      offCreated();
+      offDecided();
+    };
+  }, []);
 
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);

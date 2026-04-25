@@ -102,6 +102,18 @@ export interface MeetingOrchestratorDeps {
   approvalService: ApprovalService;
   notificationService: NotificationService;
   circuitBreaker: CircuitBreaker;
+  /**
+   * R10-Task11: optional LLM summary appender. When provided, the
+   * orchestrator calls `summarize(body)` after composing the minutes and
+   * appends the result as a final paragraph. Failure is silent — the
+   * minutes message is posted regardless.
+   */
+  meetingSummaryService?: {
+    summarize(
+      content: string,
+      opts?: { preferredProviderId?: string | null; signal?: AbortSignal },
+    ): Promise<{ summary: string | null; providerId: string | null }>;
+  };
   /** Optional i18n translator threaded into `composeMinutes`. */
   t?: MinutesTranslator;
   /** Opt-out hook for tests — disables the inter-turn delay so loop
@@ -145,6 +157,9 @@ export class MeetingOrchestrator {
   private readonly approvalService: ApprovalService;
   private readonly notificationService: NotificationService;
   private readonly circuitBreaker: CircuitBreaker;
+  private readonly meetingSummaryService:
+    | MeetingOrchestratorDeps['meetingSummaryService']
+    | undefined;
   private readonly t?: MinutesTranslator;
   private readonly interTurnDelayMs: number;
   private readonly consensusDecisionTimeoutMs: number;
@@ -176,6 +191,7 @@ export class MeetingOrchestrator {
     this.approvalService = deps.approvalService;
     this.notificationService = deps.notificationService;
     this.circuitBreaker = deps.circuitBreaker;
+    this.meetingSummaryService = deps.meetingSummaryService;
     this.t = deps.t;
     this.interTurnDelayMs =
       deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
@@ -652,13 +668,34 @@ export class MeetingOrchestrator {
       t: this.t,
     });
 
+    // R10-Task11: best-effort LLM summary appended as a final paragraph.
+    // The summarize call is bounded internally (timeout + max chars) and
+    // never throws — a null result preserves the deterministic body.
+    let finalContent = body;
+    if (this.meetingSummaryService !== undefined) {
+      try {
+        const result = await this.meetingSummaryService.summarize(body);
+        if (result.summary !== null) {
+          const provider = result.providerId ?? '?';
+          finalContent = `${body}\n\n---\n📝 LLM 요약 (${provider}): ${result.summary}`;
+        }
+      } catch (err) {
+        // Defensive — summarize() should never throw, but if it does we
+        // log and fall back to the deterministic body.
+        console.warn(
+          '[MeetingOrchestrator] llm summary failed',
+          errorPayload(err),
+        );
+      }
+    }
+
     this.messageService.append({
       channelId: minutesChannelId,
       meetingId: this.session.meetingId,
       authorId: 'system',
       authorKind: 'system',
       role: 'system',
-      content: body,
+      content: finalContent,
       meta: null,
     });
   }
