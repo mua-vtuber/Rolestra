@@ -44,6 +44,7 @@ import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapt
 import { setNotificationServiceAccessor } from './ipc/handlers/notification-handler';
 import { setQueueServiceAccessor } from './ipc/handlers/queue-handler';
 import { CircuitBreaker } from './queue/circuit-breaker';
+import { CircuitBreakerStore } from './queue/circuit-breaker-store';
 import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
 import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
 import { QueueRepository } from './queue/queue-repository';
@@ -298,7 +299,15 @@ app.whenReady().then(async () => {
       );
     }
 
-    const circuitBreaker = new CircuitBreaker();
+    // R10-Task9: persist tripwire counters across restarts. The store
+    // is shared with the breaker via the constructor's `store` slot —
+    // every `record*` mutation queues a debounced UPSERT, every
+    // `resetCounter` writes immediately. `hydrate()` runs once now so
+    // the counters reflect the pre-restart state before any meeting /
+    // queue run can mutate them. Closes R9 Known Concern #2.
+    const circuitBreakerStore = new CircuitBreakerStore(db);
+    const circuitBreaker = new CircuitBreaker({ store: circuitBreakerStore });
+    circuitBreaker.hydrate();
 
     // R9-Task6: register the breaker so CLI spawn sites (CliProcessManager
     // deep inside CliProvider factory chain) and any future spawner can

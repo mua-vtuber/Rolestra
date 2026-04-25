@@ -20,6 +20,7 @@ import { migration as m008 } from './008-memory';
 import { migration as m009 } from './009-audit';
 import { migration as m010 } from './010-remote';
 import { migration as m011 } from './011-notifications';
+import { migration as m012 } from './012-circuit-breaker-state';
 
 /**
  * Ordered list of all v3 migrations.
@@ -37,4 +38,5 @@ export const migrations: Migration[] = [
   m009,
   m010,
   m011,
+  m012,
 ];
