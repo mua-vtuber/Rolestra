@@ -21,7 +21,34 @@ import { Button } from '../../components/primitives/button';
 import { useQueue } from '../../hooks/use-queue';
 import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import type { QueueItem } from '../../../shared/queue-types';
+import { QueueActiveSpotlight } from './QueueActiveSpotlight';
+import { QueueStatBar, type QueueStatBarCounts } from './QueueStatBar';
 import { QueueStatusMark } from './QueueStatusMark';
+
+function isFinishedToday(item: QueueItem): boolean {
+  if (item.finishedAt === null) return false;
+  const d = new Date(item.finishedAt);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+function aggregateCounts(items: ReadonlyArray<QueueItem>): QueueStatBarCounts {
+  let pending = 0;
+  let inProgress = 0;
+  let doneToday = 0;
+  let failed = 0;
+  for (const item of items) {
+    if (item.status === 'pending') pending += 1;
+    else if (item.status === 'in_progress') inProgress += 1;
+    else if (item.status === 'failed') failed += 1;
+    else if (item.status === 'done' && isFinishedToday(item)) doneToday += 1;
+  }
+  return { pending, inProgress, doneToday, failed };
+}
 
 export interface QueuePanelProps {
   projectId: string;
@@ -65,6 +92,9 @@ export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElem
   // Use `localItems` only during a drag; otherwise render the authoritative
   // `items` from the hook directly (so stream updates + refresh are visible).
   const displayItems = localItems ?? items;
+
+  const statCounts = aggregateCounts(items);
+  const activeItem = items.find((i) => i.status === 'in_progress') ?? null;
 
   const handleAdd = async (): Promise<void> => {
     const text = input.trim();
@@ -176,6 +206,8 @@ export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElem
 
       {!collapsed && (
         <div className="p-3 space-y-3">
+          <QueueStatBar counts={statCounts} />
+          <QueueActiveSpotlight item={activeItem} />
           <div>
             <textarea
               data-testid="queue-panel-input"

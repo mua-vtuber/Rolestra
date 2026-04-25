@@ -602,6 +602,9 @@
     }
   },
   "queue": {
+    "activeSpotlight": {
+      "now": "Current task"
+    },
     "panel": {
       "add": "Add",
       "addPlaceholder": "Enter tasks (one per line)",
@@ -616,6 +619,13 @@
     },
     "recovery": {
       "banner": "Recovered {{count}} in-progress items from the previous session. Verify before restarting."
+    },
+    "statBar": {
+      "aria": "Queue status summary",
+      "doneToday": "Done (today)",
+      "failed": "Failed",
+      "inProgress": "Active",
+      "pending": "Pending"
     },
     "status": {
       "cancelled": "Cancelled",
