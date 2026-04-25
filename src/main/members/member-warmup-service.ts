@@ -52,6 +52,20 @@ import type { MemberProfileService } from './member-profile-service';
 /** Default per-provider deadline in ms. R8-D3: 5 seconds. */
 export const DEFAULT_WARMUP_TIMEOUT_MS = 5_000;
 
+/**
+ * R10-Task10 narrow port: "is this provider currently disabled?". The
+ * service consults this before each retry fires and bails out the
+ * entire chain when the answer is `true`. Kept as a function rather
+ * than a registry handle so tests can inject `() => false` /
+ * `() => true` without standing up a fake registry.
+ *
+ * Returning `true` short-circuits ALL remaining retries for the given
+ * providerId AND clears the in-flight timer (no further `runProbe`
+ * calls for that provider until the next `warmAll`). Returning `false`
+ * (or omitting the option entirely) preserves the R9 behaviour.
+ */
+export type IsProviderDisabled = (providerId: string) => boolean;
+
 export interface WarmupOptions {
   /** Override the 5 s default deadline used for each probe attempt. */
   timeoutMs?: number;
@@ -61,6 +75,27 @@ export interface WarmupOptions {
    * (ms not s) to keep the suite fast.
    */
   retryDelaysMs?: readonly number[];
+}
+
+/**
+ * Constructor-time dependencies for {@link MemberWarmupService}. Accepts
+ * the original positional `MemberProfileService` argument for
+ * backward-compat with R8/R9 wiring (tests + main/index.ts), with the
+ * new R10-Task10 disabled-check supplied via this options bag.
+ */
+export interface MemberWarmupServiceOptions {
+  /**
+   * Predicate that decides whether a provider is currently disabled.
+   * When omitted, the warmup service behaves exactly like R9 — every
+   * scheduled retry fires regardless of provider state.
+   *
+   * The predicate is consulted at the moment a retry would FIRE (inside
+   * the `setTimeout` callback) — never on a poll loop. This matches
+   * "ask once, at the moment it matters" (plan R10-Task10): a provider
+   * disabled mid-window cancels its retry chain on the next tick of
+   * the timer it already scheduled, with no extra wakeups.
+   */
+  isProviderDisabled?: IsProviderDisabled;
 }
 
 /** Return value the service surfaces to callers (tests and main/index.ts). */
@@ -92,7 +127,20 @@ export class MemberWarmupService {
     ReturnType<typeof setTimeout>
   >();
 
-  constructor(private readonly svc: MemberProfileService) {}
+  /**
+   * R10-Task10 disabled-check predicate. `null` means "no check" — the
+   * service falls back to R9 behaviour. Frozen at construction so a
+   * mid-run swap cannot bend behaviour for a provider already in the
+   * retry chain.
+   */
+  private readonly isProviderDisabled: IsProviderDisabled | null;
+
+  constructor(
+    private readonly svc: MemberProfileService,
+    options: MemberWarmupServiceOptions = {},
+  ) {
+    this.isProviderDisabled = options.isProviderDisabled ?? null;
+  }
 
   /**
    * Probe every provider in `providerIds`. Resolves after every INITIAL
@@ -263,8 +311,29 @@ export class MemberWarmupService {
       // probe window is a pure no-op (timer already fired) and any
       // recursive scheduleRetry below gets a clean slot.
       this.pendingRetries.delete(providerId);
+
+      // R10-Task10 (R9 Known Concern #4): consult the disabled
+      // predicate at the moment the retry would fire. A provider that
+      // was disabled while we were sleeping (user toggled it off, or
+      // the registry marked it not-installed) must NOT trigger
+      // another reconnect — that would re-mark its runtime status as
+      // 'connecting' and surface a misleading "trying to reach you"
+      // banner. We bail out the entire chain instead.
+      if (this.isProviderDisabled?.(providerId) === true) {
+        return;
+      }
+
       void this.runProbe(providerId, timeoutMs).then((outcome) => {
         if (outcome.succeeded) return; // chain stops on first success
+        // Re-check disabled BEFORE scheduling the next retry. The
+        // probe itself can take seconds; a provider disabled during
+        // that window must not get another retry queued. This is
+        // belt-and-suspenders relative to the early bail above —
+        // either guard alone is enough; both together make sure the
+        // schedule is an unbroken chain of "active providers only".
+        if (this.isProviderDisabled?.(providerId) === true) {
+          return;
+        }
         this.scheduleRetry(providerId, attemptIndex + 1, timeoutMs, retryDelays);
       });
     }, delay);

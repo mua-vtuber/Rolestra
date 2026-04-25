@@ -33,11 +33,13 @@ import { runMigrations } from '../../database/migrator';
 import { migrations } from '../../database/migrations/index';
 import { MemberProfileRepository } from '../member-profile-repository';
 import {
+  MEMBER_STATUS_CHANGED_EVENT,
   MemberProfileService,
   ProviderNotFoundError,
   type MemberProviderLookup,
 } from '../member-profile-service';
 import { DEFAULT_AVATARS } from '../default-avatars';
+import type { StreamMemberStatusChangedPayload } from '../../../shared/stream-events';
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -660,6 +662,169 @@ describe('MemberProfileService', () => {
       clock.advance(24 * 60 * 60 * 1000); // 24 h
       expect(service.getWorkStatus('p1')).toBe('offline-manual');
       expect(service.getProfile('p1').statusOverride).toBe('offline-manual');
+    });
+  });
+
+  // ── R10-Task10: status-changed broadcast ────────────────────────────
+
+  describe('status-changed broadcast (R10-Task10)', () => {
+    /**
+     * Each subtest captures every event the service emits during the
+     * exercise so the assertion can run against the EXACT sequence —
+     * not a "contains-at-least" smoke check. Multiple emits per call
+     * (e.g. runProbe fires both 'connecting' and the terminal status)
+     * are expected; the tests pin the count.
+     */
+    function captureEvents(
+      service: MemberProfileService,
+    ): StreamMemberStatusChangedPayload[] {
+      const events: StreamMemberStatusChangedPayload[] = [];
+      service.on(MEMBER_STATUS_CHANGED_EVENT, (p) => events.push(p));
+      return events;
+    }
+
+    it('setStatus(offline-manual) emits cause="status" with full MemberView', () => {
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup({
+        p1: { displayName: 'Ada', persona: '' },
+      });
+      const service = new MemberProfileService(repo, providers);
+      const events = captureEvents(service);
+
+      service.setStatus('p1', 'offline-manual');
+
+      expect(events).toHaveLength(1);
+      expect(events[0].providerId).toBe('p1');
+      expect(events[0].cause).toBe('status');
+      expect(events[0].status).toBe('offline-manual');
+      // MemberView is fused with provider meta — covers the bridge's
+      // shape validation (member must be an object with displayName).
+      expect(events[0].member.displayName).toBe('Ada');
+      expect(events[0].member.workStatus).toBe('offline-manual');
+    });
+
+    it('updateProfile emits cause="profile" with the freshly-saved view', () => {
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup({
+        p1: { displayName: 'Ada', persona: '' },
+      });
+      const service = new MemberProfileService(repo, providers);
+      const events = captureEvents(service);
+
+      service.updateProfile('p1', { role: 'Engineer', personality: 'Direct' });
+
+      expect(events).toHaveLength(1);
+      expect(events[0].cause).toBe('profile');
+      expect(events[0].member.role).toBe('Engineer');
+      expect(events[0].member.personality).toBe('Direct');
+    });
+
+    it('reconnect emits TWO cause="warmup" events (connecting + terminal)', async () => {
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup(
+        { p1: { displayName: 'Ada', persona: '' } },
+        async () => undefined,
+      );
+      const service = new MemberProfileService(repo, providers);
+      const events = captureEvents(service);
+
+      await service.reconnect('p1');
+
+      // Two emits: pre-warmup ('connecting') + post-warmup ('online').
+      // Pinning the count guards against a future refactor that
+      // accidentally drops the in-flight tick — that would leave the
+      // renderer's spinner stuck on offline-connection.
+      expect(events).toHaveLength(2);
+      expect(events.every((e) => e.cause === 'warmup')).toBe(true);
+      expect(events[0].status).toBe('connecting');
+      expect(events[1].status).toBe('online');
+    });
+
+    it('reconnect failure terminal emit is offline-connection (not online)', async () => {
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup(
+        { p1: { displayName: 'Ada', persona: '' } },
+        async () => {
+          throw new Error('boom');
+        },
+      );
+      const service = new MemberProfileService(repo, providers);
+      const events = captureEvents(service);
+
+      await service.reconnect('p1');
+
+      expect(events).toHaveLength(2);
+      expect(events[1].status).toBe('offline-connection');
+    });
+
+    it('getWorkStatus auto-clear emits cause="status"', () => {
+      seedProvider(db, 'p1', 'Ada');
+      let now = 1_000_000;
+      const providers = makeProviderLookup({
+        p1: { displayName: 'Ada', persona: '' },
+      });
+      const service = new MemberProfileService(repo, providers, {
+        offlineManualTimeoutMs: 60_000,
+        now: () => now,
+      });
+
+      service.setStatus('p1', 'offline-manual');
+      // Drop the events from setStatus — we are testing the auto-clear
+      // path independently.
+      const events: StreamMemberStatusChangedPayload[] = [];
+      service.on(MEMBER_STATUS_CHANGED_EVENT, (p) => events.push(p));
+
+      now += 61_000; // past the 60s window
+      const status = service.getWorkStatus('p1');
+
+      expect(status).toBe('offline-connection');
+      expect(events).toHaveLength(1);
+      expect(events[0].cause).toBe('status');
+      expect(events[0].status).toBe('offline-connection');
+    });
+
+    it('isolates a throwing listener (does not break the caller)', () => {
+      seedProvider(db, 'p1', 'Ada');
+      const providers = makeProviderLookup({
+        p1: { displayName: 'Ada', persona: '' },
+      });
+      const service = new MemberProfileService(repo, providers);
+      service.on(MEMBER_STATUS_CHANGED_EVENT, () => {
+        throw new Error('listener exploded');
+      });
+      const warnSpy = vi
+        .spyOn(console, 'warn')
+        .mockImplementation(() => undefined);
+      try {
+        // Calling setStatus must not propagate the listener error.
+        expect(() => service.setStatus('p1', 'offline-manual')).not.toThrow();
+        // The warn call carries the stable rolestra marker.
+        expect(warnSpy).toHaveBeenCalledTimes(1);
+        const [marker] = warnSpy.mock.calls[0]!;
+        expect(marker).toBe('[rolestra.members] status-changed listener threw:');
+      } finally {
+        warnSpy.mockRestore();
+      }
+    });
+
+    it('skips emit when the provider lookup returns null (stale registry)', () => {
+      // Provider row exists in DB (FK happy) but the runtime lookup
+      // returns null — emulates a registry that has already unregistered
+      // the provider while the DB row is being torn down. The
+      // emitStatusChanged guard MUST bail; otherwise the bridge would
+      // see an undefined `member` and drop a malformed payload.
+      seedProvider(db, 'p1', 'Ada');
+      const lookup: MemberProviderLookup = {
+        // Lookup returns null — simulates a registry-mid-tear-down race.
+        get: () => null,
+        warmup: async () => undefined,
+      };
+      const service = new MemberProfileService(repo, lookup);
+      const events = captureEvents(service);
+
+      service.setStatus('p1', 'offline-manual');
+
+      expect(events).toHaveLength(0);
     });
   });
 
