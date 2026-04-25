@@ -6,9 +6,16 @@
  *   이전 채널의 messages는 바로 clear한다(UX: 채널 바꿨는데 옛 메시지가
  *   잠깐 깜빡이는 것을 막는다).
  * - 초기 실패 시 `messages=null` 유지(silent fallback 금지).
- * - `send(content, opts?)`은 낙관적 업데이트를 **하지 않는다**. `message:append`
- *   성공 응답의 실제 `Message` row를 로컬 state 끝에 append + 전체 refetch를
- *   트리거해 서버 truth를 다시 끌어온다(R10에서 낙관 업데이트 재검토).
+ * - **R10-Task8 — 낙관 업데이트.** `send()` 는 invoke 직전 임시 row 를 list
+ *   에 append 한다(`id: pending-<clientId>`, `meta.clientId` 포함). invoke
+ *   가 resolve 하면 임시 row 를 서버 row 로 swap. 실패 시 임시 row 를 제거
+ *   하고 `useThrowToBoundary` 로 ErrorBoundary 토스트에 surface. (이전 R5
+ *   계약은 invoke 후 전체 refetch 하는 silent-success 였음.)
+ * - **D8 ordering invariant** — `runFetch()` 또는 stream 이 invoke resolve
+ *   전에 canonical row 를 데려올 수 있다. 임시 row 를 server row 와 일치
+ *   시킬 키는 `meta.clientId` 이고, list 에 동일 `clientId` 를 가진 row 가
+ *   이미 존재하면 임시 row 만 drop 하고 swap 은 생략한다. 즉 client-id 기반
+ *   reconciliation 으로 double-insert 방지.
  * - `refresh()`는 현재 채널 기준 재조회.
  *
  * R4 `use-dashboard-kpis` 패턴과 동일한 mountedRef / didMountFetchRef 가드.
@@ -16,6 +23,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { useThrowToBoundary } from '../components/ErrorBoundary';
 import { invoke } from '../ipc/invoke';
 import type { Message } from '../../shared/message-types';
 
@@ -45,6 +53,20 @@ function toError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error(String(reason));
 }
 
+function makeClientId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `cid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+/** Reads `meta.clientId` if present (renderer-only metadata). */
+function readClientId(message: Message): string | null {
+  const meta = message.meta as { clientId?: unknown } | null;
+  if (meta && typeof meta.clientId === 'string') return meta.clientId;
+  return null;
+}
+
 export function useChannelMessages(
   channelId: string | null,
   opts?: UseChannelMessagesOptions,
@@ -55,6 +77,7 @@ export function useChannelMessages(
 
   const mountedRef = useRef(true);
   const fetchedForRef = useRef<string | null | undefined>(undefined);
+  const throwToBoundary = useThrowToBoundary();
 
   // opts 값은 렌더마다 새 객체로 올 수 있으므로 primitives만 의존성에 반영.
   const limit = opts?.limit;
@@ -73,7 +96,26 @@ export function useChannelMessages(
         if (beforeCreatedAt !== undefined) request.beforeCreatedAt = beforeCreatedAt;
         const { messages: list } = await invoke('message:list-by-channel', request);
         if (!mountedRef.current) return;
-        setMessages(list);
+        // D8: a refetch may collide with an in-flight optimistic send.
+        // We keep any pending row (id starting `pending-`) whose clientId
+        // is NOT yet represented in the canonical list — this is the
+        // "stream/refetch arrives before invoke resolves" case. If the
+        // canonical list already includes a server row carrying the same
+        // `meta.clientId`, the pending row is dropped to avoid duplication.
+        setMessages((prev) => {
+          if (prev === null) return list;
+          const serverClientIds = new Set<string>();
+          for (const m of list) {
+            const cid = readClientId(m);
+            if (cid !== null) serverClientIds.add(cid);
+          }
+          const stillPending = prev.filter((m) => {
+            if (!m.id.startsWith('pending-')) return false;
+            const cid = readClientId(m);
+            return cid !== null && !serverClientIds.has(cid);
+          });
+          return [...list, ...stillPending];
+        });
         setError(null);
       } catch (reason) {
         if (!mountedRef.current) return;
@@ -124,6 +166,31 @@ export function useChannelMessages(
       if (channelId === null) {
         throw new Error('cannot send: no active channel');
       }
+      const clientId = makeClientId();
+      const tempId = `pending-${clientId}`;
+      const now = Date.now();
+      const optimistic: Message = {
+        id: tempId,
+        channelId,
+        meetingId: input.meetingId ?? null,
+        // We don't have a synchronously-known userId; 'user' literal
+        // matches the established placeholder used throughout the
+        // dashboard / messenger fixtures (see message-types docstring).
+        authorId: 'user',
+        authorKind: 'user',
+        role: 'user',
+        content: input.content,
+        meta: {
+          clientId,
+          ...(input.mentions !== undefined ? { mentions: input.mentions } : {}),
+          status: 'pending',
+        },
+        createdAt: now,
+      };
+
+      // 1. Optimistic insert (D8: tempId 로 클라이언트 한정 식별).
+      setMessages((prev) => (prev === null ? [optimistic] : [...prev, optimistic]));
+
       const payload: {
         channelId: string;
         content: string;
@@ -132,12 +199,41 @@ export function useChannelMessages(
       } = { channelId, content: input.content };
       if (input.meetingId !== undefined) payload.meetingId = input.meetingId;
       if (input.mentions !== undefined) payload.mentions = input.mentions;
-      const { message } = await invoke('message:append', payload);
-      // 성공 시 서버 truth를 다시 가져와 순서/공백 없이 일관 렌더. 실패면 caller에 throw.
-      await runFetch(false);
-      return message;
+
+      try {
+        const { message } = await invoke('message:append', payload);
+        if (!mountedRef.current) return message;
+
+        // 2. Reconcile (D8): if a refetch / future stream already inserted
+        //    the canonical row by `id`, just drop the temp row. Otherwise
+        //    swap in-place. Matching by `meta.clientId` is best-effort —
+        //    the main process does NOT echo it back in R10, so the swap
+        //    falls back to "replace temp by tempId" which is always safe
+        //    because tempIds are unique per send().
+        setMessages((prev) => {
+          if (prev === null) return [message];
+          const canonicalAlreadyPresent = prev.some(
+            (m) => m.id === message.id,
+          );
+          if (canonicalAlreadyPresent) {
+            return prev.filter((m) => m.id !== tempId);
+          }
+          return prev.map((m) => (m.id === tempId ? message : m));
+        });
+        return message;
+      } catch (reason) {
+        // 3. Rollback: remove the pending row.
+        if (mountedRef.current) {
+          setMessages((prev) =>
+            prev === null ? prev : prev.filter((m) => m.id !== tempId),
+          );
+          setError(toError(reason));
+        }
+        throwToBoundary(reason);
+        throw reason;
+      }
     },
-    [channelId, runFetch],
+    [channelId, throwToBoundary],
   );
 
   // channelId=null은 idle. state에 이전 채널의 messages가 남아 있어도

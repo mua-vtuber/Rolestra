@@ -58,6 +58,7 @@ import {
   handlePermissionApprove,
   handlePermissionReject,
   handlePermissionListRules,
+  handlePermissionDryRunFlags,
 } from './handlers/permission-handler';
 import {
   handleWorkspacePickFolder,
@@ -147,6 +148,8 @@ import {
   handleChannelAddMembers,
   handleChannelRemoveMembers,
   handleChannelStartMeeting,
+  handleDmList,
+  handleDmCreate,
 } from './handlers/channel-handler';
 import {
   handleMessageAppend,
@@ -176,6 +179,7 @@ import {
   handleNotificationGetPrefs,
   handleNotificationUpdatePrefs,
   handleNotificationTest,
+  handleNotificationSetLocale,
 } from './handlers/notification-handler';
 import {
   handleQueueList,
@@ -414,6 +418,8 @@ export function registerIpcHandlers(): void {
   handle('permission:approve', isDev, (data) => handlePermissionApprove(data));
   handle('permission:reject', isDev, (data) => handlePermissionReject(data));
   handle('permission:list-rules', isDev, (data) => handlePermissionListRules(data));
+  // R10-Task5: PermissionFlagBuilder dry-run for Settings 보안 탭 preview.
+  handle('permission:dry-run-flags', isDev, (data) => handlePermissionDryRunFlags(data));
 
   // ── Workspace / Files ──────────────────────────────────────────────
   handle('workspace:pick-folder', isDev, () => handleWorkspacePickFolder());
@@ -509,6 +515,10 @@ export function registerIpcHandlers(): void {
   handle('channel:remove-members', isDev, (data) => handleChannelRemoveMembers(data));
   handle('channel:start-meeting', isDev, (data) => handleChannelStartMeeting(data));
 
+  // ── R10-Task3: DM (사용자↔AI 1:1) ───────────────────────────────
+  handle('dm:list', isDev, () => handleDmList());
+  handle('dm:create', isDev, (data) => handleDmCreate(data));
+
   // ── v3: Message ─────────────────────────────────────────────────
   handle('message:append', isDev, (data) => handleMessageAppend(data));
   handle('message:list-by-channel', isDev, (data) => handleMessageListByChannel(data));
@@ -537,6 +547,7 @@ export function registerIpcHandlers(): void {
   handle('notification:get-prefs', isDev, () => handleNotificationGetPrefs());
   handle('notification:update-prefs', isDev, (data) => handleNotificationUpdatePrefs(data));
   handle('notification:test', isDev, (data) => handleNotificationTest(data));
+  handle('notification:set-locale', isDev, (data) => handleNotificationSetLocale(data));
 
   // ── v3: Dashboard (R4) ──────────────────────────────────────────
   handle('dashboard:get-kpis', isDev, (data) => handleDashboardGetKpis(data));

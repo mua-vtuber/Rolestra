@@ -56,7 +56,7 @@ import type {
   StreamMeetingTurnSkippedPayload,
   StreamQueueProgressPayload,
   StreamQueueUpdatedPayload,
-  StreamMemberStatusPayload,
+  StreamMemberStatusChangedPayload,
   StreamNotificationPayload,
   StreamNotificationClickedPayload,
   StreamNotificationPrefsChangedPayload,
@@ -81,7 +81,7 @@ const UNKNOWN_TYPE_BUCKET = '__unknown__';
  */
 const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>([
   'stream:channel-message',
-  'stream:member-status',
+  'stream:member-status-changed',
   'stream:approval-created',
   'stream:approval-decided',
   'stream:project-updated',
@@ -121,6 +121,21 @@ export interface StreamBridgeServices {
    * no side-effect logic needs to run before it reaches the renderer.
    */
   notifications?: EventEmitter;
+  /**
+   * R10-Task10: MemberProfileService whose `'status-changed'` event
+   * feeds `stream:member-status-changed`. The service emits the full
+   * payload shape (providerId + member view + status + cause) so the
+   * bridge forwards verbatim — no payload adapter needed (mirrors the
+   * R8 D8 stub spec, now activated).
+   *
+   * D9 coexistence (plan R10): the existing R8 mutation-after-invalidation
+   * pattern (renderer surfaces calling `notifyChannelsChanged()` after
+   * `member:set-status` / `member:update-profile`) keeps working as a
+   * fallback when the bridge is offline. The stream is an ADDITIVE
+   * layer — see `use-member-status-stream.ts` for the renderer-side
+   * dual-path note.
+   */
+  members?: EventEmitter;
   /**
    * R9-Task5: ProjectService whose `'autonomy-changed'` event feeds
    * `stream:autonomy-mode-changed`. Fires on both user-initiated
@@ -299,6 +314,18 @@ export class StreamBridge {
       });
     }
 
+    if (services.members) {
+      services.members.on('status-changed', (payload: unknown) => {
+        // MemberProfileService emits the full StreamMemberStatusChangedPayload
+        // shape (Task 10), so we forward verbatim. Shape validation in
+        // emit() catches any drift from a future refactor.
+        this.emit({
+          type: 'stream:member-status-changed',
+          payload: payload as StreamMemberStatusChangedPayload,
+        });
+      });
+    }
+
     if (services.projects) {
       services.projects.on('autonomy-changed', (payload: unknown) => {
         // ProjectService emits `{projectId, mode, reason}` — shape already
@@ -373,8 +400,8 @@ export class StreamBridge {
     this.emit({ type: 'stream:queue-updated', payload });
   }
 
-  emitMemberStatus(payload: StreamMemberStatusPayload): void {
-    this.emit({ type: 'stream:member-status', payload });
+  emitMemberStatusChanged(payload: StreamMemberStatusChangedPayload): void {
+    this.emit({ type: 'stream:member-status-changed', payload });
   }
 
   emitNotification(payload: StreamNotificationPayload): void {
@@ -455,10 +482,12 @@ export class StreamBridge {
     switch (type) {
       case 'stream:channel-message':
         return this.isObject(payload.message);
-      case 'stream:member-status':
+      case 'stream:member-status-changed':
         return (
           typeof payload.providerId === 'string' &&
-          typeof payload.status === 'string'
+          typeof payload.status === 'string' &&
+          typeof payload.cause === 'string' &&
+          this.isObject(payload.member)
         );
       case 'stream:approval-created':
         return this.isObject(payload.item);

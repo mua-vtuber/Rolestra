@@ -46,8 +46,6 @@ export interface ApprovalBlockProps {
 
 const WARNING_BG = 'color-mix(in srgb, var(--color-warning) 10%, transparent)';
 const WARNING_BORDER = 'var(--color-warning)';
-const TACTICAL_CLIP =
-  'polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px)';
 
 type DialogKind = 'none' | 'reject' | 'conditional';
 
@@ -157,8 +155,8 @@ export function ApprovalBlock({
     backgroundColor: WARNING_BG,
     border: `1.5px solid ${WARNING_BORDER}`,
   };
-  if (themeKey === 'tactical') {
-    containerStyle.clipPath = TACTICAL_CLIP;
+  if (token.panelClip !== 'none') {
+    containerStyle.clipPath = token.panelClip;
   }
 
   const radiusClass =

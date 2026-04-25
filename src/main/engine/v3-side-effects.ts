@@ -289,10 +289,30 @@ function handleBreakerFired(
   ctx: SessionStateMachine['ctx'],
   deps: V3SideEffectDeps,
 ): void {
-  // (a) Autonomy downgrade — the primary safety action.
+  // R10-Task4: capture the autonomy mode BEFORE the downgrade so the
+  // approval row can record it as `previousMode`. The renderer's
+  // CircuitBreakerApprovalRow + ApprovalDecisionRouter use this value
+  // to restore the project to its prior mode when the user clicks
+  // "재개". Falls back to `null` when the project lookup fails — the
+  // resume button still works, but the restore step becomes a no-op.
+  let previousMode: 'manual' | 'auto_toggle' | 'queue' | null = null;
   if (ctx.projectId) {
     try {
-      deps.projects.setAutonomy(ctx.projectId, 'manual');
+      const project = deps.projects.get(ctx.projectId);
+      previousMode = project ? project.autonomyMode : null;
+    } catch (err) {
+      warn('projects.get (previousMode) failed', err);
+    }
+  }
+
+  // (a) Autonomy downgrade — the primary safety action. Tag the change
+  //     reason so the stream payload tells the renderer this was a
+  //     system-driven safety trip (vs. user-initiated toggle).
+  if (ctx.projectId) {
+    try {
+      deps.projects.setAutonomy(ctx.projectId, 'manual', {
+        reason: 'circuit_breaker',
+      });
     } catch (err) {
       warn('projects.setAutonomy(manual) failed', err);
     }
@@ -300,8 +320,10 @@ function handleBreakerFired(
 
   // (b) Approval row (audit receipt). `kind='circuit_breaker'` lets
   //     AutonomyGate + renderer ApprovalInbox filter the row without
-  //     mining the payload. Meta shape `{tripwire, detail}` matches
-  //     the plan wording for R9-Task6.
+  //     mining the payload. Meta shape `{tripwire, detail, previousMode}`
+  //     — `previousMode` is what
+  //     {@link ApprovalDecisionRouter} restores when the resume button
+  //     is approved.
   try {
     deps.approvals.create({
       kind: 'circuit_breaker',
@@ -313,6 +335,7 @@ function handleBreakerFired(
         source: 'circuit_breaker',
         tripwire: event.reason,
         detail: event.detail,
+        previousMode,
       },
     });
   } catch (err) {

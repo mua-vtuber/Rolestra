@@ -99,8 +99,8 @@ describe('StreamBridge — emit + validation', () => {
 
   it('drops events with missing required payload fields', () => {
     bridge.emit({
-      type: 'stream:member-status',
-      payload: { providerId: 'ai-1' }, // status missing
+      type: 'stream:member-status-changed',
+      payload: { providerId: 'ai-1' }, // status/member/cause missing
     } as never);
     expect(received).toHaveLength(0);
 
@@ -250,6 +250,52 @@ describe('StreamBridge — connect()', () => {
       (received[0] as Extract<StreamEvent, { type: 'stream:channel-message' }>)
         .payload.message.content,
     ).toBe('hi');
+  });
+
+  it('MemberProfileService.emit("status-changed") → stream:member-status-changed (R10-Task10)', () => {
+    const members = new EventEmitter();
+    bridge.connect({ members });
+
+    const member = {
+      providerId: 'ai-1',
+      role: 'Engineer',
+      personality: 'Direct',
+      expertise: 'SQLite',
+      avatarKind: 'default' as const,
+      avatarData: null,
+      statusOverride: null,
+      updatedAt: 1,
+      displayName: 'Ada',
+      persona: '',
+      workStatus: 'online' as const,
+    };
+
+    members.emit('status-changed', {
+      providerId: 'ai-1',
+      member,
+      status: 'online',
+      cause: 'warmup',
+    });
+
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('stream:member-status-changed');
+    const payload = (
+      received[0] as Extract<
+        StreamEvent,
+        { type: 'stream:member-status-changed' }
+      >
+    ).payload;
+    expect(payload.providerId).toBe('ai-1');
+    expect(payload.status).toBe('online');
+    expect(payload.cause).toBe('warmup');
+    expect(payload.member.displayName).toBe('Ada');
+  });
+
+  it('connect({members}) skips when no members emitter is provided (R10-Task10 backward-compat)', () => {
+    bridge.connect({}); // no members
+    // Bridge cannot drop something that was never emitted; this is a
+    // smoke test that the connect call accepts the empty bag.
+    expect(received).toHaveLength(0);
   });
 
   it('ApprovalService created/decided events → stream:approval-*', () => {

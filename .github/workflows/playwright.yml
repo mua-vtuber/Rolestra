@@ -1,0 +1,81 @@
+name: Playwright Electron E2E
+
+# R10-Task13: cross-OS Electron E2E matrix.
+#
+# Triggers manually via workflow_dispatch and on push to main. PR runs are
+# explicitly NOT enabled by default — Electron E2E on hosted runners burns
+# minutes (especially macOS); D5 deferred a "weekly cron" decision to R11.
+#
+# Matrix:
+#   - 3 OS  : ubuntu-latest, windows-latest, macos-latest
+#   - 7 spec: approval-flow, autonomy-queue-flow, external-project-flow,
+#             meeting-flow, member-profile-flow, messenger-flow,
+#             settings-tabs-flow
+#
+# search-flow / dm-flow specs were planned but not delivered in R10 (R10
+# Tasks 2/3 shipped the surfaces with vitest coverage instead). Adding
+# them in R11 only requires extending the spec list below.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  e2e:
+    name: ${{ matrix.spec }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        spec:
+          - approval-flow
+          - autonomy-queue-flow
+          - external-project-flow
+          - meeting-flow
+          - member-profile-flow
+          - messenger-flow
+          - settings-tabs-flow
+    env:
+      ROLESTRA_E2E: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild native modules for Electron
+        run: npm run rebuild:electron
+
+      - name: Install Playwright (Electron transport)
+        run: npx playwright install --with-deps
+
+      - name: Build renderer + main bundles
+        run: npm run build
+
+      # Linux needs a virtual framebuffer for Electron windows.
+      - name: Run E2E (Linux + xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum -- npx playwright test e2e/${{ matrix.spec }}.spec.ts --config e2e/playwright.config.ts
+
+      - name: Run E2E (macOS / Windows)
+        if: runner.os != 'Linux'
+        run: npx playwright test e2e/${{ matrix.spec }}.spec.ts --config e2e/playwright.config.ts
+
+      - name: Upload Playwright artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.os }}-${{ matrix.spec }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

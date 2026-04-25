@@ -121,4 +121,113 @@ describe('useDashboardKpis', () => {
     expect(result.current.data).toEqual(SNAPSHOT_B);
     expect(bridgeInvoke).toHaveBeenCalledTimes(2);
   });
+
+  // ── R10 Task 11 — stream-driven pendingApprovals counter ───────────
+  describe('pendingApprovals stream patching (R10-Task11)', () => {
+    interface StreamHandlers {
+      'stream:approval-created'?: Array<(p: unknown) => void>;
+      'stream:approval-decided'?: Array<(p: unknown) => void>;
+    }
+
+    function makeStreamingBridge(snapshot: KpiSnapshot) {
+      const handlers: StreamHandlers = {};
+      const onStream = vi.fn(
+        (channel: keyof StreamHandlers, cb: (p: unknown) => void) => {
+          (handlers[channel] ??= []).push(cb);
+          return () => {
+            const list = handlers[channel] ?? [];
+            const idx = list.indexOf(cb);
+            if (idx >= 0) list.splice(idx, 1);
+          };
+        },
+      );
+      const invoke = vi.fn().mockResolvedValue({ snapshot });
+      const fire = (
+        channel: keyof StreamHandlers,
+        payload: unknown,
+      ): void => {
+        for (const cb of handlers[channel] ?? []) cb(payload);
+      };
+      return { onStream, invoke, fire };
+    }
+
+    it('increments pendingApprovals on stream:approval-created', async () => {
+      const bridge = makeStreamingBridge(SNAPSHOT_A);
+      vi.stubGlobal('arena', {
+        platform: 'linux',
+        invoke: bridge.invoke,
+        onStream: bridge.onStream,
+      });
+
+      const { result } = renderHook(() => useDashboardKpis());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data?.pendingApprovals).toBe(0);
+
+      act(() => {
+        bridge.fire('stream:approval-created', {
+          item: { id: 'a-1', status: 'pending' },
+        });
+      });
+
+      expect(result.current.data?.pendingApprovals).toBe(1);
+    });
+
+    it('decrements pendingApprovals on stream:approval-decided', async () => {
+      const bridge = makeStreamingBridge({
+        ...SNAPSHOT_A,
+        pendingApprovals: 3,
+      });
+      vi.stubGlobal('arena', {
+        platform: 'linux',
+        invoke: bridge.invoke,
+        onStream: bridge.onStream,
+      });
+
+      const { result } = renderHook(() => useDashboardKpis());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data?.pendingApprovals).toBe(3);
+
+      act(() => {
+        bridge.fire('stream:approval-decided', {
+          item: { id: 'a-1', status: 'approved' },
+          decision: 'approve',
+          comment: null,
+        });
+      });
+
+      expect(result.current.data?.pendingApprovals).toBe(2);
+    });
+
+    it('clamps the counter at 0 — never negative even on extra decided events', async () => {
+      const bridge = makeStreamingBridge(SNAPSHOT_A);
+      vi.stubGlobal('arena', {
+        platform: 'linux',
+        invoke: bridge.invoke,
+        onStream: bridge.onStream,
+      });
+      const { result } = renderHook(() => useDashboardKpis());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      // Two extra decided events with no created — counter must not go
+      // negative.
+      act(() => {
+        bridge.fire('stream:approval-decided', { item: { id: 'a' } });
+        bridge.fire('stream:approval-decided', { item: { id: 'b' } });
+      });
+
+      expect(result.current.data?.pendingApprovals).toBe(0);
+    });
+
+    it('skips stream patching when window.arena.onStream is absent (legacy bridge)', async () => {
+      // Previous test suite shape (no onStream) — hook still works.
+      const bridgeInvoke = vi.fn().mockResolvedValue({ snapshot: SNAPSHOT_A });
+      vi.stubGlobal('arena', {
+        platform: 'linux',
+        invoke: bridgeInvoke,
+      });
+      const { result } = renderHook(() => useDashboardKpis());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.data).toEqual(SNAPSHOT_A);
+    });
+  });
 });

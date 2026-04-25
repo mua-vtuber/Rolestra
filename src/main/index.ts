@@ -36,6 +36,7 @@ import {
 import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 import { ApprovalService } from './approvals/approval-service';
+import { MeetingSummaryService } from './llm/meeting-summary-service';
 import { ApprovalSystemMessageInjector } from './approvals/approval-system-message-injector';
 import { setApprovalServiceAccessor } from './ipc/handlers/approval-handler';
 import { NotificationRepository } from './notifications/notification-repository';
@@ -44,12 +45,17 @@ import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapt
 import { setNotificationServiceAccessor } from './ipc/handlers/notification-handler';
 import { setQueueServiceAccessor } from './ipc/handlers/queue-handler';
 import { CircuitBreaker } from './queue/circuit-breaker';
+import { CircuitBreakerStore } from './queue/circuit-breaker-store';
 import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
 import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
 import { QueueRepository } from './queue/queue-repository';
 import { QueueService } from './queue/queue-service';
+import { createDefaultMeetingStarter } from './queue/default-meeting-starter';
 import { AutonomyGate } from './autonomy/autonomy-gate';
-import { setMeetingOrchestratorFactory } from './ipc/handlers/channel-handler';
+import {
+  setMeetingOrchestratorFactory,
+  type MeetingOrchestratorFactory,
+} from './ipc/handlers/channel-handler';
 import { MemberProfileRepository } from './members/member-profile-repository';
 import { MemberProfileService } from './members/member-profile-service';
 import { MemberWarmupService } from './members/member-warmup-service';
@@ -258,18 +264,16 @@ app.whenReady().then(async () => {
     });
     approvalSystemMessageInjector.wire();
 
-    // R7-Task8: ApprovalDecisionRouter — dispatches 'decided' events by
-    // `item.kind` to the owning service. Currently routes `mode_transition`
-    // → ProjectService.applyPermissionModeChange. R7-Task9 wires
-    // `consensus_decision` on the same router.
+    // R7-Task8 + R10-Task4: ApprovalDecisionRouter — dispatches 'decided'
+    // events by `item.kind` to the owning service. Routes:
+    //   - `mode_transition`  → ProjectService.applyPermissionModeChange
+    //   - `circuit_breaker`  → CircuitBreaker.resetCounter + setAutonomy
+    //                          (resume to the recorded previousMode).
+    // The circuit breaker dep is bound after construction (line below) so
+    // the legacy 2-arg deps shape stays optional for tests.
     const { ApprovalDecisionRouter } = await import(
       './approvals/approval-decision-router'
     );
-    const approvalDecisionRouter = new ApprovalDecisionRouter({
-      approvalService,
-      projectService,
-    });
-    approvalDecisionRouter.wire();
 
     // R6-Task4: MeetingOrchestrator support services.
     // NotificationService lands here (not its own handler block) because
@@ -296,7 +300,15 @@ app.whenReady().then(async () => {
       );
     }
 
-    const circuitBreaker = new CircuitBreaker();
+    // R10-Task9: persist tripwire counters across restarts. The store
+    // is shared with the breaker via the constructor's `store` slot —
+    // every `record*` mutation queues a debounced UPSERT, every
+    // `resetCounter` writes immediately. `hydrate()` runs once now so
+    // the counters reflect the pre-restart state before any meeting /
+    // queue run can mutate them. Closes R9 Known Concern #2.
+    const circuitBreakerStore = new CircuitBreakerStore(db);
+    const circuitBreaker = new CircuitBreaker({ store: circuitBreakerStore });
+    circuitBreaker.hydrate();
 
     // R9-Task6: register the breaker so CLI spawn sites (CliProcessManager
     // deep inside CliProvider factory chain) and any future spawner can
@@ -307,17 +319,61 @@ app.whenReady().then(async () => {
     setCircuitBreakerAccessor(() => circuitBreaker);
     setExecutionCircuitBreaker(circuitBreaker);
 
-    // R9-Task7: QueueService — autonomy-queue run loop owner. Construct
-    // before StreamBridge.connect so the bridge can subscribe to the
-    // service's `'changed'` event and fan out `stream:queue-updated`
-    // snapshots. The optional `meetingStarter` injection that spawns a
-    // meeting for each claimed item lands with Task 9 production wiring
-    // (needs the fully-built MeetingOrchestratorFactory reference); for
-    // now `startNext` still performs the atomic claim + snapshot emit so
-    // the onFinalized hook can observe the flip.
-    const queueService = new QueueService(new QueueRepository(db), {
+    // R10-Task4: ApprovalDecisionRouter wire — `circuit_breaker` resume
+    // routes to the breaker (resetCounter) + projectService (setAutonomy
+    // restore previousMode). Construction sits below the breaker so the
+    // dep is non-null in production; tests still construct without it.
+    const approvalDecisionRouter = new ApprovalDecisionRouter({
+      approvalService,
+      projectService,
       circuitBreaker,
     });
+    approvalDecisionRouter.wire();
+
+    // R9-Task7 + R10-Task4: QueueService — autonomy-queue run loop owner.
+    // Construct before StreamBridge.connect so the bridge can subscribe to
+    // the service's `'changed'` event and fan out `stream:queue-updated`
+    // snapshots. The `meetingStarter` is the production wiring that
+    // closes R9 Known Concern #1 — it spawns a meeting through the same
+    // orchestrator factory `channel:start-meeting` uses.
+    //
+    // Forward-reference dance: the orchestrator factory is registered
+    // below (after StreamBridge wiring), but QueueService and the factory
+    // reference each other (queue→factory for spawn, factory→queue for
+    // `onFinalized`). We bind via a holder so both can be constructed
+    // independently and the starter resolves the factory at call time.
+    const orchestratorFactoryHolder: {
+      current: MeetingOrchestratorFactory | null;
+    } = { current: null };
+
+    // Use a forward-declared queueService reference inside the starter so
+    // the lookup hands back the just-claimed row's `targetChannelId`.
+    let queueServiceRef: QueueService | null = null;
+
+    const meetingStarter = createDefaultMeetingStarter({
+      channelService,
+      meetingService,
+      projectService,
+      queueItemLookup: {
+        get: (id) => (queueServiceRef ? queueServiceRef.get(id) : null),
+      },
+      orchestratorFactory: {
+        createAndRun: (input) => {
+          if (!orchestratorFactoryHolder.current) {
+            throw new Error(
+              'queue meetingStarter: orchestrator factory not initialized',
+            );
+          }
+          return orchestratorFactoryHolder.current.createAndRun(input);
+        },
+      },
+    });
+
+    const queueService = new QueueService(new QueueRepository(db), {
+      circuitBreaker,
+      meetingStarter,
+    });
+    queueServiceRef = queueService;
     // R9-Task9: production wire for `queue:*` IPC. 7 queue handlers all
     // throw `'queue handler: service not initialized'` until this runs.
     setQueueServiceAccessor(() => queueService);
@@ -352,6 +408,32 @@ app.whenReady().then(async () => {
     });
     autonomyGate.wire();
 
+    // R10-Task11: optional LLM summary service. Singleton — picks the
+    // first ready provider with the summarize capability at call time so
+    // a provider hot-swap (warm-up / unregister) is honoured per call.
+    const meetingSummaryService = new MeetingSummaryService({
+      providerRegistry,
+    });
+
+    // R10-Task11: re-arm consensus_decision approval expiry timers from
+    // the persisted approval_items rows (R7 D2 deferred). The original
+    // setTimeout was owned by the now-gone MeetingOrchestrator instance,
+    // so without rehydration a row created moments before a crash would
+    // sit `pending` forever. The helper expires aged-out rows
+    // immediately and reschedules the rest.
+    try {
+      const rehydrate = approvalService.rehydrateConsensusTimers();
+      console.info(
+        '[rolestra.approvals] consensus rehydrate',
+        rehydrate,
+      );
+    } catch (err) {
+      console.warn(
+        '[rolestra.approvals] consensus rehydrate failed',
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+
     // R6-Task1 + R7-Task2 + R7-Task11: StreamBridge — central Main →
     // Renderer v3 push hub. `connect({ notifications })` wires
     // NotificationService 'clicked' → `stream:notification-clicked` so
@@ -361,6 +443,7 @@ app.whenReady().then(async () => {
       messages: messageService,
       approvals: approvalService,
       notifications: notificationService,
+      members: memberProfileService,
       // R9-Task5: project autonomy toggles + system downgrades become
       // `stream:autonomy-mode-changed` pushes without a dedicated emit
       // helper at each call site.
@@ -395,7 +478,12 @@ app.whenReady().then(async () => {
     // `channel:start-meeting` after MeetingService.start() has created
     // the DB row. The factory owns the session + turn-executor + per-
     // meeting side-effect wiring lifecycle (disposer on DONE/FAILED).
-    setMeetingOrchestratorFactory({
+    //
+    // R10-Task4: the same factory is also bound to
+    // `orchestratorFactoryHolder.current` so the queue's
+    // `meetingStarter` (constructed earlier) can invoke it without a
+    // direct import of the closure body.
+    const meetingOrchestratorFactory: MeetingOrchestratorFactory = {
       createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx }) => {
         const { MeetingSession } = await import(
           './meetings/engine/meeting-session'
@@ -451,6 +539,7 @@ app.whenReady().then(async () => {
           approvalService,
           notificationService,
           circuitBreaker,
+          meetingSummaryService,
           // R9-Task7: autonomy-queue run loop. When the finalised meeting
           // belongs to a project in `queue` mode, complete the owning
           // queue item and advance to the next pending item. Lookups miss
@@ -504,7 +593,14 @@ app.whenReady().then(async () => {
             unregisterOrchestrator(meeting.id);
           });
       },
-    });
+    };
+
+    setMeetingOrchestratorFactory(meetingOrchestratorFactory);
+    // R10-Task4: bind the factory holder so the queue meetingStarter can
+    // resolve `createAndRun` at call time. Setting this AFTER the IPC
+    // handler is registered keeps the production path identical to a
+    // manually-started meeting.
+    orchestratorFactoryHolder.current = meetingOrchestratorFactory;
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {

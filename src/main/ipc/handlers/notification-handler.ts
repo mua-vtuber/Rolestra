@@ -15,6 +15,10 @@
 
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { NotificationService } from '../../notifications/notification-service';
+import {
+  setNotificationLocale,
+  type NotificationLocale,
+} from '../../notifications/notification-labels';
 import type {
   NotificationKind,
   NotificationPrefs,
@@ -82,4 +86,18 @@ export function handleNotificationTest(
 ): IpcResponse<'notification:test'> {
   getService().test(data.kind);
   return { success: true };
+}
+
+/**
+ * notification:set-locale (R10-Task12) — switches the main-process label
+ * dictionary so subsequent OS notifications + system-message injections
+ * render in the chosen locale. Mirrors the `i18n.changeLanguage(...)`
+ * call the renderer makes in LanguageTab. Unknown locales fall through
+ * to the default — see `notification-labels.ts` setNotificationLocale.
+ */
+export function handleNotificationSetLocale(
+  data: IpcRequest<'notification:set-locale'>,
+): IpcResponse<'notification:set-locale'> {
+  setNotificationLocale(data.locale as NotificationLocale);
+  return { locale: data.locale };
 }

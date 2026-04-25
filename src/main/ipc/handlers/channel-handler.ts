@@ -20,6 +20,9 @@ import type { MeetingService } from '../../meetings/meeting-service';
 import type { Meeting } from '../../../shared/meeting-types';
 import type { Participant } from '../../../shared/engine-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
+import type { Channel } from '../../../shared/channel-types';
+import type { DmSummary } from '../../../shared/dm-types';
+import { providerRegistry } from '../../providers/registry';
 
 /**
  * Factory surface used by `channel:start-meeting` to kick off a
@@ -145,6 +148,55 @@ export function handleChannelRemoveMembers(
     svc.removeMember(data.id, providerId);
   }
   return { success: true };
+}
+
+/**
+ * `dm:list` — R10-Task3.
+ *
+ * 등록된 모든 provider 를 순회하며 DM 채널이 이미 있는지 확인한다.
+ * DM 은 `channel_members` 에 정확히 1명의 provider 만 있고 channel.kind='dm'
+ * + channel.project_id=NULL 이라 `listDms()` 한 번 호출 + `listMembers(channelId)`
+ * 교차로 매핑한다. 응답은 모든 provider 를 포함하므로 renderer 의 "새 DM 만들기"
+ * 모달이 이미 있는 provider 를 disabled 로 그대로 렌더할 수 있다.
+ */
+export function handleDmList(): IpcResponse<'dm:list'> {
+  const svc = getChannel();
+  const dms: Channel[] = svc.listDms();
+
+  // dmChannelByProviderId 인덱스 생성 — O(N) 한 번.
+  const channelByProvider = new Map<string, Channel>();
+  for (const channel of dms) {
+    const members = svc.listMembers(channel.id);
+    if (members.length === 0) continue; // 데이터 무결성 방어.
+    const providerId = members[0]!.providerId;
+    channelByProvider.set(providerId, channel);
+  }
+
+  const items: DmSummary[] = [];
+  for (const info of providerRegistry.listAll()) {
+    const channel = channelByProvider.get(info.id) ?? null;
+    items.push({
+      providerId: info.id,
+      providerName: info.displayName,
+      channel,
+      exists: channel !== null,
+    });
+  }
+  return { items };
+}
+
+/**
+ * `dm:create` — R10-Task3.
+ *
+ * `ChannelService.createDm` 는 `idx_dm_unique_per_provider` UNIQUE 위반 시
+ * `DuplicateDmError` throw. handler 는 이를 renderer 쪽 i18n 키
+ * `dm.alreadyExists` 로 매핑할 수 있도록 메시지를 그대로 propagate 한다.
+ */
+export function handleDmCreate(
+  data: IpcRequest<'dm:create'>,
+): IpcResponse<'dm:create'> {
+  const channel = getChannel().createDm(data.providerId);
+  return { channel };
 }
 
 /** channel:start-meeting */

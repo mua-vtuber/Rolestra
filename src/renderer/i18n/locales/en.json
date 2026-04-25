@@ -3,6 +3,22 @@
     "mainPlaceholder": "The dashboard will move in here during R4."
   },
   "approval": {
+    "circuitBreaker": {
+      "errors": {
+        "generic": "Failed to submit the resume request."
+      },
+      "previousMode": "Previous autonomy mode: {{mode}}",
+      "readout": "Threshold: {{threshold}} / Measured: {{measured}}",
+      "resume": "Resume",
+      "resuming": "Resuming…",
+      "title": {
+        "cumulative_cli_ms": "Circuit Breaker — cumulative CLI time",
+        "fallback": "Circuit Breaker tripped",
+        "files_per_turn": "Circuit Breaker — files per turn",
+        "queue_streak": "Circuit Breaker — queue streak",
+        "same_error": "Circuit Breaker — repeated error"
+      }
+    },
     "kind": {
       "circuit_breaker": "Circuit breaker",
       "cli_permission": "CLI permission",
@@ -138,6 +154,33 @@
       "title": "Active meetings"
     }
   },
+  "dm": {
+    "alreadyExists": "DM already exists",
+    "create": {
+      "body": "DMs are 1:1 between you and an AI. AIs that already have a DM are disabled.",
+      "close": "Close",
+      "existsBadge": "Already",
+      "loading": "Loading…",
+      "newBadge": "Create",
+      "title": "Start new DM"
+    },
+    "createError": "Failed to create DM: {{msg}}",
+    "empty": "No DMs",
+    "listTitle": "DM",
+    "loading": "Loading…",
+    "newDm": "New DM"
+  },
+  "error": {
+    "boundary": {
+      "description": "An unexpected error prevented this view from rendering. Try again or restart the app.",
+      "retry": "Try again",
+      "title": "Something went wrong"
+    },
+    "toast": {
+      "dismiss": "Dismiss",
+      "title": "Error"
+    }
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "Safety circuit tripped",
@@ -204,6 +247,25 @@
       "failure": "Connection failed",
       "starting": "Connecting",
       "success": "Connected"
+    }
+  },
+  "message": {
+    "search": {
+      "button": "🔍 Search",
+      "close": "Close",
+      "dmLabel": "DM",
+      "empty": "No results",
+      "error": "Search failed: {{msg}}",
+      "filter": {
+        "currentChannel": "Current channel: #{{name}}",
+        "currentProject": "Current project: {{name}}",
+        "noScope": "No active project"
+      },
+      "loading": "Searching…",
+      "open": "Open message search (Cmd/Ctrl+K)",
+      "placeholder": "Enter a query (FTS5 syntax supported)",
+      "shortcutHint": "Press Cmd/Ctrl+K to open",
+      "title": "Message search"
     }
   },
   "messenger": {
@@ -554,7 +616,73 @@
     }
   },
   "settings": {
+    "about": {
+      "appName": "App name",
+      "description": "Version and platform information.",
+      "designSignOff": "Design sign-off",
+      "platform": "Platform",
+      "title": "About",
+      "version": "Version"
+    },
+    "apiKeys": {
+      "delete": "Delete",
+      "description": "API keys stored in the OS keychain. Values are never displayed.",
+      "empty": "No saved keys.",
+      "loading": "Loading keys…",
+      "maskedValue": "••••••••",
+      "title": "API Keys"
+    },
+    "autonomyDefaults": {
+      "defaultRounds": "Default rounds",
+      "description": "Set default autonomy policy for new projects.",
+      "hardTokenLimit": "Hard token limit",
+      "loading": "Loading defaults…",
+      "softTokenLimit": "Soft token limit",
+      "title": "Autonomy defaults",
+      "unlimited": "Unlimited"
+    },
+    "cli": {
+      "description": "Manage registered CLI providers and run auto-detection.",
+      "detect": {
+        "empty": "No CLIs detected.",
+        "label": "Auto-detect",
+        "run": "Detect now",
+        "running": "Detecting…"
+      },
+      "empty": "No CLI providers registered.",
+      "loading": "Loading providers…",
+      "registered": {
+        "label": "Registered CLI providers"
+      },
+      "remove": "Remove",
+      "title": "CLI"
+    },
+    "common": {
+      "save": "Save"
+    },
     "description": "Adjust notifications, themes, and other preferences.",
+    "language": {
+      "description": "Switch UI and notification label language.",
+      "label": "Display language",
+      "locale": {
+        "en": "English",
+        "ko": "한국어"
+      },
+      "title": "Language"
+    },
+    "members": {
+      "description": "Project member roster. Click an avatar to edit a profile.",
+      "empty": "No members yet.",
+      "loading": "Loading members…",
+      "openProfile": "Open profile for {{name}}",
+      "status": {
+        "connecting": "Connecting",
+        "offline-connection": "Connection failed",
+        "offline-manual": "Away",
+        "online": "Online"
+      },
+      "title": "Members"
+    },
     "notifications": {
       "description": "Toggle OS notifications and sound per kind.",
       "display": "Display",
@@ -569,6 +697,76 @@
       "sound": "Sound",
       "test": "Test",
       "title": "Notifications"
+    },
+    "path": {
+      "arenaRoot": {
+        "label": "ArenaRoot path"
+      },
+      "change": "Change",
+      "changeHint": "Changing this requires an app restart.",
+      "description": "The on-disk working directory Rolestra uses.",
+      "loading": "Loading path…",
+      "restartBanner": "In-place path picker lands in R11 onboarding. R10 is read-only.",
+      "title": "Path"
+    },
+    "security": {
+      "dangerousOptIn": {
+        "description": "Enables auto-execution flags in some CLI modes. External / imported projects remain blocked regardless.",
+        "label": "Allow dangerous autonomy mode"
+      },
+      "description": "Review permission modes and auto-execution settings.",
+      "preview": {
+        "blocked": "Blocked: {{reason}}",
+        "kind": "Project kind",
+        "kindOption": {
+          "external": "External link",
+          "imported": "Imported",
+          "new": "New"
+        },
+        "label": "Flag preview",
+        "mode": "Permission mode",
+        "modeOption": {
+          "approval": "Approval",
+          "auto": "Auto",
+          "hybrid": "Hybrid"
+        },
+        "noFlags": "No additional flags.",
+        "provider": "Provider",
+        "providerOption": {
+          "claude_cli": "Claude CLI",
+          "codex_cli": "Codex CLI",
+          "gemini_cli": "Gemini CLI"
+        }
+      },
+      "title": "Security"
+    },
+    "tabs": {
+      "about": "About",
+      "apiKeys": "API Keys",
+      "autonomyDefaults": "Autonomy defaults",
+      "cli": "CLI",
+      "label": "Settings tabs",
+      "language": "Language",
+      "members": "Members",
+      "notifications": "Notifications",
+      "path": "Path",
+      "security": "Security",
+      "theme": "Theme"
+    },
+    "theme": {
+      "description": "Switches the colour and shape tokens for every screen.",
+      "key": {
+        "label": "Theme key",
+        "retro": "Retro",
+        "tactical": "Tactical",
+        "warm": "Warm"
+      },
+      "mode": {
+        "dark": "Dark",
+        "label": "Mode",
+        "light": "Light"
+      },
+      "title": "Theme"
     },
     "title": "Settings"
   },

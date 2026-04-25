@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
 import { useNotificationPrefs } from '../../hooks/use-notification-prefs';
+import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
 import type { NotificationKind } from '../../../shared/notification-types';
 
 export interface NotificationPrefsViewProps {
@@ -60,10 +61,13 @@ export function NotificationPrefsView({
 }: NotificationPrefsViewProps): ReactElement {
   const { t } = useTranslation();
   const { prefs, isLoading, error, setKind, test } = useNotificationPrefs();
+  const panelClip = usePanelClipStyle();
 
   return (
     <section
       data-testid="notification-prefs-view"
+      data-panel-clip={panelClip.rawClip}
+      style={panelClip.style}
       className={clsx(
         'border border-panel-border rounded-panel bg-panel-bg',
         className,

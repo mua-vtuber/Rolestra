@@ -78,6 +78,22 @@ interface NotificationDictionary {
     sameError: { title: string; body: string; bodyGeneric: string };
   };
   generalMeetingDone: { titled: string; untitled: string };
+  /**
+   * R10-Task12: main-process system message labels — extracted from
+   * fixed Korean strings in approval-system-message-injector and
+   * meeting-orchestrator so the locale switch reaches every surface
+   * without threading t() into the side-effect path.
+   */
+  approvalSystemMessage: {
+    rejectPrefix: string;
+    conditionalPrefix: string;
+  };
+  meetingMinutes: {
+    rejection: string;
+    rejectionWithComment: string;
+    /** LLM summary paragraph header — `provider` interpolation. */
+    summaryPrefix: string;
+  };
 }
 
 const KO: NotificationDictionary = {
@@ -137,6 +153,15 @@ const KO: NotificationDictionary = {
     titled: '회의 "{{title}}" 이(가) 완료되었습니다.',
     untitled: '회의가 완료되었습니다.',
   },
+  approvalSystemMessage: {
+    rejectPrefix: '[승인 거절]',
+    conditionalPrefix: '[조건부 승인]',
+  },
+  meetingMinutes: {
+    rejection: '회의 합의 거절됨',
+    rejectionWithComment: '회의 합의 거절됨 — {{comment}}',
+    summaryPrefix: '📝 LLM 요약 ({{provider}}):',
+  },
 };
 
 const EN: NotificationDictionary = {
@@ -195,6 +220,15 @@ const EN: NotificationDictionary = {
     titled: 'Meeting "{{title}}" has completed.',
     untitled: 'The meeting has completed.',
   },
+  approvalSystemMessage: {
+    rejectPrefix: '[Approval rejected]',
+    conditionalPrefix: '[Approval conditional]',
+  },
+  meetingMinutes: {
+    rejection: 'Consensus rejected',
+    rejectionWithComment: 'Consensus rejected — {{comment}}',
+    summaryPrefix: '📝 LLM summary ({{provider}}):',
+  },
 };
 
 const DICTIONARIES: Record<NotificationLocale, NotificationDictionary> = {
@@ -226,7 +260,12 @@ export type NotificationLabelKey =
   | 'circuitBreaker.title'
   | 'circuitBreaker.body'
   | 'generalMeetingDone.titled'
-  | 'generalMeetingDone.untitled';
+  | 'generalMeetingDone.untitled'
+  | 'approvalSystemMessage.rejectPrefix'
+  | 'approvalSystemMessage.conditionalPrefix'
+  | 'meetingMinutes.rejection'
+  | 'meetingMinutes.rejectionWithComment'
+  | 'meetingMinutes.summaryPrefix';
 
 /**
  * Resolves a notification label for the current locale. `key` is a

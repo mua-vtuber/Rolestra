@@ -71,8 +71,28 @@ export interface NotifierAdapter {
    * Returns true iff ANY renderer window is currently focused. Used by
    * the service to suppress OS toasts when the user is already looking
    * at the app (they would see the in-app update anyway).
+   *
+   * On macOS the service consults {@link isDockVisible} as well — see
+   * {@link NotificationService.isAppFocused} for the combined gate.
+   * Adapters should keep this method's semantics simple: report the raw
+   * "any visible + focused window" answer; the service decides whether
+   * the dock counts.
    */
   isAnyWindowFocused(): boolean;
+
+  /**
+   * R10-Task10 (R9 Known Concern #5): macOS dock visibility signal.
+   * Returns `true` when the app's dock icon is visible — the Electron
+   * shape `app.dock?.isVisible?.()`, defensively defaulted to `true`
+   * on platforms where `app.dock` is absent (Windows / Linux). The
+   * service uses this together with {@link isAnyWindowFocused} to
+   * decide whether the user is "actually paying attention".
+   *
+   * Optional so legacy / mock adapters that predate Task 10 still
+   * work — `undefined` is treated by the service as "always
+   * dock-visible" (the safe default for non-darwin platforms).
+   */
+  isDockVisible?(): boolean;
 
   /**
    * Fires an OS notification with the given title/body. The returned
@@ -148,10 +168,10 @@ export class NotificationService extends EventEmitter {
       return null;
     }
 
-    // (2) Focus gate. When a renderer window is already focused, skip —
+    // (2) Focus gate. When the app is already in the foreground, skip —
     //     the in-app UI is the primary surface. `force=true` (test button)
     //     bypasses this so the user can verify OS delivery.
-    if (!input.force && this.adapter.isAnyWindowFocused()) {
+    if (!input.force && this.isAppFocused()) {
       return null;
     }
 
@@ -214,6 +234,39 @@ export class NotificationService extends EventEmitter {
       body: resolveNotificationLabel('test.body'),
       force: true,
     });
+  }
+
+  /**
+   * Whether the app is currently in the foreground from the user's
+   * perspective — i.e. the OS toast would be redundant noise.
+   *
+   * Cross-platform default (Windows / Linux): a single signal is enough
+   * — if any visible BrowserWindow is focused, the user is looking.
+   * `adapter.isAnyWindowFocused()` already includes the visibility gate
+   * (see ElectronNotifierAdapter), so we trust it directly.
+   *
+   * macOS-specific gate (R10-Task10, R9 Known Concern #5): `darwin`
+   * apps frequently run in dock-only / accessory mode where `isFocused()`
+   * can return `true` even when the user has cmd-tabbed away. The
+   * combined gate ANDs together:
+   *   1. `adapter.isDockVisible?.() ?? true` — the dock icon is showing.
+   *      Defensive default of `true` keeps legacy adapters that never
+   *      implemented the method silent (they pre-date this gate).
+   *   2. `adapter.isAnyWindowFocused()` — at least one BrowserWindow is
+   *      focused AND visible.
+   *
+   * Both must hold for the gate to suppress. A dock-hidden app (kiosk
+   * mode, accessory background process) ALWAYS shows toasts even when
+   * a BrowserWindow reports focus — the user has no in-app surface to
+   * look at, so the OS toast is the only signal they will see.
+   */
+  private isAppFocused(): boolean {
+    if (process.platform === 'darwin') {
+      const dockVisible = this.adapter.isDockVisible?.() ?? true;
+      if (!dockVisible) return false;
+      return this.adapter.isAnyWindowFocused();
+    }
+    return this.adapter.isAnyWindowFocused();
   }
 
   /**

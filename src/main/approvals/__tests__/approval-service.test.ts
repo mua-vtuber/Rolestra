@@ -465,4 +465,82 @@ describe('ApprovalService', () => {
       }
     });
   });
+
+  // ── R10-Task11 — rehydrateConsensusTimers ────────────────────────────
+  describe('rehydrateConsensusTimers (R10-Task11)', () => {
+    const TTL = 24 * 60 * 60 * 1000;
+
+    afterEach(() => {
+      approvalService.disposeRehydratedConsensusTimers();
+      vi.useRealTimers();
+    });
+
+    it('rehydrates a fresh consensus_decision row when remaining TTL > 0', () => {
+      vi.useFakeTimers();
+      const created = approvalService.create({
+        kind: 'consensus_decision',
+        payload: { snapshotHash: 'h1', finalText: 't', votes: { yes: 1, no: 0, pending: 0 } },
+      });
+      const baseNow = created.createdAt;
+      const result = approvalService.rehydrateConsensusTimers({
+        ttlMs: TTL,
+        nowMs: baseNow + 1_000,
+      });
+      expect(result).toEqual({ rehydrated: 1, expired: 0 });
+
+      const stillPending = approvalService.get(created.id);
+      expect(stillPending?.status).toBe('pending');
+
+      // Advance past the deadline — the timer fires and expires the row.
+      vi.advanceTimersByTime(TTL);
+      const afterExpire = approvalService.get(created.id);
+      expect(afterExpire?.status).toBe('expired');
+    });
+
+    it('expires aged-out rows immediately', () => {
+      const created = approvalService.create({
+        kind: 'consensus_decision',
+        payload: null,
+      });
+      const result = approvalService.rehydrateConsensusTimers({
+        ttlMs: TTL,
+        nowMs: created.createdAt + TTL + 1,
+      });
+      expect(result).toEqual({ rehydrated: 0, expired: 1 });
+      expect(approvalService.get(created.id)?.status).toBe('expired');
+    });
+
+    it('skips non-consensus pending rows', () => {
+      approvalService.create({
+        kind: 'mode_transition',
+        payload: { from: 'manual', to: 'auto_toggle' },
+      });
+      const result = approvalService.rehydrateConsensusTimers({
+        ttlMs: TTL,
+        nowMs: Date.now(),
+      });
+      expect(result).toEqual({ rehydrated: 0, expired: 0 });
+    });
+
+    it('cancels the rehydrated timer when the user decides via decide()', () => {
+      vi.useFakeTimers();
+      const created = approvalService.create({
+        kind: 'consensus_decision',
+        payload: null,
+      });
+      approvalService.rehydrateConsensusTimers({
+        ttlMs: TTL,
+        nowMs: created.createdAt + 100,
+      });
+
+      // User approves the row well before the deadline.
+      approvalService.decide(created.id, 'approve');
+      expect(approvalService.get(created.id)?.status).toBe('approved');
+
+      // Even after blasting through the deadline, the row stays approved
+      // — the listener cancelled the timer the moment 'decided' fired.
+      vi.advanceTimersByTime(TTL + 10);
+      expect(approvalService.get(created.id)?.status).toBe('approved');
+    });
+  });
 });

@@ -45,6 +45,8 @@ import type {
   CircuitBreakerLimits,
   CircuitBreakerState,
 } from '../../shared/queue-types';
+import type { CircuitBreakerTripwire } from '../../shared/circuit-breaker-types';
+import type { CircuitBreakerStore } from './circuit-breaker-store';
 
 /**
  * Default limits per spec §8 CB-5. Exported so callers can compare
@@ -82,6 +84,61 @@ export interface CircuitBreakerEvents {
   fired: (event: CircuitBreakerFiredEvent) => void;
 }
 
+/**
+ * Sentinel projectId used when the breaker is not bound to any
+ * specific project (the production boot path constructs a single
+ * app-scoped breaker). Persistence rows under this key represent
+ * global tripwire state. Kept here, not in `circuit-breaker-types.ts`,
+ * because nothing outside this module needs it — it's an internal
+ * default for the optional persistence surface.
+ */
+export const CIRCUIT_BREAKER_GLOBAL_PROJECT_ID = '_global';
+
+/**
+ * Constructor options for {@link CircuitBreaker}. R10-Task9 added the
+ * optional persistence surface — when `store` is provided the breaker
+ * hydrates its counters at construction (via {@link CircuitBreaker.hydrate})
+ * and flushes after every counter mutation.
+ */
+export interface CircuitBreakerOptions {
+  /** Threshold limits — defaults to {@link DEFAULT_LIMITS}. */
+  limits?: CircuitBreakerLimits;
+  /**
+   * Persistence layer. Optional — when omitted the breaker is pure
+   * in-memory (R9 behaviour). When provided the breaker calls
+   * `store.flush()` on every counter mutation and `store.reset()` on
+   * `resetCounter`. Hydration is NOT automatic; the caller invokes
+   * {@link CircuitBreaker.hydrate} once at boot so test code can
+   * exercise the rest of the breaker without a synchronous DB read in
+   * the constructor.
+   */
+  store?: CircuitBreakerStore;
+  /**
+   * Project key for persistence rows. Defaults to
+   * {@link CIRCUIT_BREAKER_GLOBAL_PROJECT_ID} so the production boot
+   * path (single app-scoped breaker) gets a deterministic key without
+   * a hard-coded literal at the call site.
+   */
+  projectId?: string;
+}
+
+/**
+ * Discriminate the legacy 1-arg shape (`new CircuitBreaker(limits)`)
+ * from the R10 options literal. `CircuitBreakerLimits` always carries
+ * all four numeric fields; `CircuitBreakerOptions` never does.
+ */
+function isLimitsLiteral(
+  arg: CircuitBreakerLimits | CircuitBreakerOptions | undefined,
+): arg is CircuitBreakerLimits {
+  if (arg === undefined || arg === null) return false;
+  return (
+    typeof (arg as CircuitBreakerLimits).filesChangedPerTurn === 'number' &&
+    typeof (arg as CircuitBreakerLimits).cumulativeCliMs === 'number' &&
+    typeof (arg as CircuitBreakerLimits).consecutiveQueueRuns === 'number' &&
+    typeof (arg as CircuitBreakerLimits).sameErrorRepeats === 'number'
+  );
+}
+
 export class CircuitBreaker extends EventEmitter {
   private readonly limits: CircuitBreakerLimits;
   private readonly state: CircuitBreakerState = {
@@ -103,9 +160,86 @@ export class CircuitBreaker extends EventEmitter {
   private queueFired = false;
   private errorFired = false;
 
-  constructor(limits: CircuitBreakerLimits = DEFAULT_LIMITS) {
+  /**
+   * Per-tripwire `last_reset_at` mirror. `null` until the matching
+   * `reset*` gesture runs at least once. Persisted alongside the
+   * counter so a hydrated breaker re-emits the same flush payload on
+   * the next mutation without losing the original reset stamp.
+   */
+  private lastResetAt: Record<CircuitBreakerTripwire, number | null> = {
+    files_per_turn: null,
+    cumulative_cli_ms: null,
+    queue_streak: null,
+    same_error: null,
+  };
+
+  /** Optional persistence layer (R10-Task9). */
+  private readonly store: CircuitBreakerStore | undefined;
+
+  /** Project key for persistence rows (R10-Task9). */
+  private readonly projectId: string;
+
+  /**
+   * Backwards-compatible constructor. Accepts either:
+   *   - `new CircuitBreaker()`                       (defaults)
+   *   - `new CircuitBreaker(limits)`                 (R9 shape)
+   *   - `new CircuitBreaker({limits?, store?, projectId?})` (R10 shape)
+   *
+   * The discriminator is "object with no `filesChangedPerTurn` field"
+   * — the limits literal always carries that key.
+   */
+  constructor(arg?: CircuitBreakerLimits | CircuitBreakerOptions) {
     super();
-    this.limits = limits;
+    const options = isLimitsLiteral(arg)
+      ? { limits: arg }
+      : (arg ?? {});
+    this.limits = options.limits ?? DEFAULT_LIMITS;
+    this.store = options.store;
+    this.projectId = options.projectId ?? CIRCUIT_BREAKER_GLOBAL_PROJECT_ID;
+  }
+
+  /**
+   * Read every persisted row through {@link CircuitBreakerStore.hydrate}
+   * and seed the in-memory counters for the breaker's bound
+   * {@link projectId}. Safe to call multiple times — each invocation
+   * overwrites the in-memory state with the latest DB snapshot.
+   *
+   * No-op when no store was provided (the breaker is in pure-memory
+   * mode). Returns `false` in that case so a caller that wants to
+   * branch on "did we actually hydrate?" has a clean signal.
+   */
+  hydrate(): boolean {
+    if (!this.store) return false;
+    const map = this.store.hydrate();
+    const filesRow = map.get(`${this.projectId}:files_per_turn`);
+    const cliRow = map.get(`${this.projectId}:cumulative_cli_ms`);
+    const queueRow = map.get(`${this.projectId}:queue_streak`);
+    const errorRow = map.get(`${this.projectId}:same_error`);
+
+    if (filesRow) {
+      this.state.filesChangedThisTurn = filesRow.counter;
+      this.lastResetAt.files_per_turn = filesRow.lastResetAt;
+    }
+    if (cliRow) {
+      this.state.cumulativeCliMs = cliRow.counter;
+      this.lastResetAt.cumulative_cli_ms = cliRow.lastResetAt;
+    }
+    if (queueRow) {
+      this.state.consecutiveQueueRuns = queueRow.counter;
+      this.lastResetAt.queue_streak = queueRow.lastResetAt;
+    }
+    if (errorRow) {
+      // `same_error` semantics: counter persists, but the category
+      // is not stored (the schema deliberately matches the user's
+      // R10 brief — no category column). On hydrate we restore the
+      // count; the next `recordError(category)` reseeds the category
+      // with `count=1` if it differs from the implied "previous"
+      // run, which is the same conservative behaviour as the
+      // post-startup state in R9.
+      this.state.recentErrorCount = errorRow.counter;
+      this.lastResetAt.same_error = errorRow.lastResetAt;
+    }
+    return true;
   }
 
   // ── Files-per-turn ─────────────────────────────────────────────────
@@ -127,6 +261,7 @@ export class CircuitBreaker extends EventEmitter {
         count: this.state.filesChangedThisTurn,
       });
     }
+    this.flushTripwire('files_per_turn');
   }
 
   /**
@@ -138,6 +273,7 @@ export class CircuitBreaker extends EventEmitter {
   resetTurn(): void {
     this.state.filesChangedThisTurn = 0;
     this.filesFired = false;
+    this.flushTripwire('files_per_turn');
   }
 
   // ── Cumulative CLI time ────────────────────────────────────────────
@@ -160,6 +296,7 @@ export class CircuitBreaker extends EventEmitter {
         ms: this.state.cumulativeCliMs,
       });
     }
+    this.flushTripwire('cumulative_cli_ms');
   }
 
   // ── Consecutive queue runs ─────────────────────────────────────────
@@ -181,6 +318,7 @@ export class CircuitBreaker extends EventEmitter {
         count: this.state.consecutiveQueueRuns,
       });
     }
+    this.flushTripwire('queue_streak');
   }
 
   /**
@@ -198,6 +336,7 @@ export class CircuitBreaker extends EventEmitter {
     // (Callers who explicitly want a lifetime no-repeat can construct
     // a fresh CircuitBreaker instead.)
     this.cliFired = false;
+    this.flushTripwire('queue_streak');
   }
 
   // ── Same-error repeats ─────────────────────────────────────────────
@@ -230,6 +369,7 @@ export class CircuitBreaker extends EventEmitter {
         count: this.state.recentErrorCount,
       });
     }
+    this.flushTripwire('same_error');
   }
 
   /**
@@ -240,6 +380,65 @@ export class CircuitBreaker extends EventEmitter {
     this.state.recentErrorCategory = null;
     this.state.recentErrorCount = 0;
     this.errorFired = false;
+    this.flushTripwire('same_error');
+  }
+
+  // ── R10-Task4: tripwire-keyed reset (Circuit Breaker approval) ────
+
+  /**
+   * Reset a single tripwire by name. Used by
+   * {@link ApprovalDecisionRouter} when the user approves the
+   * `circuit_breaker` resume row — the breaker can then re-arm against
+   * the same tripwire without forcing a process restart.
+   *
+   * The mapping mirrors the four pre-existing reset gestures:
+   *   - `files_per_turn`     → {@link resetTurn} (turn boundary).
+   *   - `cumulative_cli_ms`  → drop the lifetime CLI total + latch.
+   *   - `queue_streak`       → {@link confirmContinue} (also clears the
+   *                            CLI latch, mirroring the spec §8 CB-5
+   *                            "user reviewed autonomy" gesture).
+   *   - `same_error`         → {@link clearError}.
+   *
+   * Calling with an unknown literal is a no-op (TypeScript's exhaustive
+   * check makes this dead code at compile time, but the runtime guard
+   * keeps a misrouted IPC payload from throwing).
+   */
+  resetCounter(tripwire: CircuitBreakerTripwire): void {
+    // Mutate in-memory state via the public reset gestures so latch
+    // semantics stay identical to R9 callers. Each branch below
+    // intentionally bypasses `flushTripwire()` (the inner reset would
+    // have queued a debounced write) and instead delegates to
+    // `store.reset()` for an IMMEDIATE write — the user's "I reviewed
+    // the streak" gesture must not be lost to a pending debounce
+    // timer (matches R10 brief: "reset performs an immediate write").
+    switch (tripwire) {
+      case 'files_per_turn':
+        this.state.filesChangedThisTurn = 0;
+        this.filesFired = false;
+        break;
+      case 'cumulative_cli_ms':
+        this.state.cumulativeCliMs = 0;
+        this.cliFired = false;
+        break;
+      case 'queue_streak':
+        this.state.consecutiveQueueRuns = 0;
+        this.queueFired = false;
+        // confirmContinue() also clears the CLI latch (spec §8 CB-5
+        // "user reviewed autonomy" gesture). Mirror that here so the
+        // tripwire-keyed reset stays equivalent.
+        this.cliFired = false;
+        break;
+      case 'same_error':
+        this.state.recentErrorCategory = null;
+        this.state.recentErrorCount = 0;
+        this.errorFired = false;
+        break;
+    }
+    if (this.store) {
+      const now = Date.now();
+      this.lastResetAt[tripwire] = now;
+      this.store.reset(this.projectId, tripwire);
+    }
   }
 
   // ── Introspection ─────────────────────────────────────────────────
@@ -262,6 +461,48 @@ export class CircuitBreaker extends EventEmitter {
   }
 
   // ── Private helpers ───────────────────────────────────────────────
+
+  /**
+   * Map a tripwire name to its current in-memory counter value. Used
+   * by {@link flushTripwire} to read the post-mutation snapshot
+   * without each `record*` site repeating the lookup.
+   */
+  private counterFor(tripwire: CircuitBreakerTripwire): number {
+    switch (tripwire) {
+      case 'files_per_turn':
+        return this.state.filesChangedThisTurn;
+      case 'cumulative_cli_ms':
+        return this.state.cumulativeCliMs;
+      case 'queue_streak':
+        return this.state.consecutiveQueueRuns;
+      case 'same_error':
+        return this.state.recentErrorCount;
+    }
+  }
+
+  /**
+   * Persist the post-mutation counter through the store's debounced
+   * UPSERT. No-op when no store was provided (R9 in-memory mode).
+   * Wrapped in try/catch so a transient SQL error inside the debounce
+   * timer cannot poison the autonomy hot path.
+   */
+  private flushTripwire(tripwire: CircuitBreakerTripwire): void {
+    if (!this.store) return;
+    try {
+      this.store.flush({
+        projectId: this.projectId,
+        tripwire,
+        counter: this.counterFor(tripwire),
+        lastResetAt: this.lastResetAt[tripwire],
+      });
+    } catch (err) {
+      const errMessage = err instanceof Error ? err.message : String(err);
+      console.warn('[rolestra.queue.circuit-breaker] store.flush threw:', {
+        tripwire,
+        message: errMessage,
+      });
+    }
+  }
 
   /**
    * Single emit site for `'fired'`. Wraps the emit in a try/catch so a

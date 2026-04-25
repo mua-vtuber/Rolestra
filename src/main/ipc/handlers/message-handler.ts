@@ -55,7 +55,7 @@ export function handleMessageListByChannel(
   return { messages };
 }
 
-/** message:search */
+/** message:search — R10-Task2: MessageSearchHit[] (snippet + channel/project name). */
 export function handleMessageSearch(
   data: IpcRequest<'message:search'>,
 ): IpcResponse<'message:search'> {
@@ -64,8 +64,8 @@ export function handleMessageSearch(
     data.scope.kind === 'channel'
       ? { channelId: data.scope.channelId, limit: data.limit }
       : { projectId: data.scope.projectId, limit: data.limit };
-  const results = svc.search(data.query, opts);
-  return { results };
+  const hits = svc.searchWithContext(data.query, opts);
+  return { hits };
 }
 
 /** message:list-recent — R4 dashboard RecentWidget. */
