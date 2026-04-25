@@ -1,5 +1,5 @@
 /**
- * PermissionFlagBuilder 매트릭스 입력/출력 타입 — R10-Task1.
+ * PermissionFlagBuilder 매트릭스 입력/출력 타입 — R10-Task1, R10-Task5 확장.
  *
  * spec §7.6 의 3 모드(auto/hybrid/approval) × 3 CLI(Claude/Codex/Gemini)
  * × 3 project kind(new/external/imported) 매트릭스를 단일 builder 로 통합한다.
@@ -9,14 +9,32 @@
  * 어떤 플래그로 돌아가나?" 섹션) + 내부 main-side 직접 호출 양쪽에서
  * 동일한 입력 스키마를 쓰도록 한다.
  */
-import type { ProviderType } from './provider-types';
-import type { PermissionMode } from './project-types';
+import type { PermissionMode, ProjectKind as ProjectKindAlias } from './project-types';
 
-export type ProjectKind = 'new' | 'external' | 'imported';
+/** Re-export so renderer/IPC consumers don't need a second import. */
+export type ProjectKind = ProjectKindAlias;
+
+/**
+ * Wire-level provider id used by `permission:dry-run-flags` zod schema.
+ * Mirrors `providerTypeSchema` in `ipc-schemas.ts` (R10-Task1) — extended
+ * here as a public type so renderer can build the request without
+ * re-deriving the union from zod. spec §7.6 의 builder 는 `*_cli` suffix
+ * 만 처리하며 `*_api` / `mock` 은 `blockedReason='unknown_provider_type'`
+ * 으로 차단된다.
+ */
+export type PermissionFlagProviderType =
+  | 'claude_api'
+  | 'claude_cli'
+  | 'codex_api'
+  | 'codex_cli'
+  | 'gemini_api'
+  | 'gemini_cli'
+  | 'openai_api'
+  | 'mock';
 
 /** CLI 플래그 빌더 입력. zod 에서 external + auto 는 reject(spec §7.3 CA-1). */
 export interface PermissionFlagInput {
-  providerType: ProviderType;
+  providerType: PermissionFlagProviderType;
   permissionMode: PermissionMode;
   projectKind: ProjectKind;
   /**
