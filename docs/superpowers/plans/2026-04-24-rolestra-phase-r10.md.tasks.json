@@ -41,22 +41,22 @@
     {
       "id": 4,
       "subject": "Task 4: Queue meetingStarter production 주입 + Circuit Breaker approval UI 정식 편입",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
       "description": "**Goal:** R9 Known Concerns #1 + #6 동시 종결. (i) `createDefaultMeetingStarter(deps)` helper → `queueService.setMeetingStarter` production 주입 — R9 에서 claim + stream 만 했던 것을 실제 meeting spawn 으로 완성. (ii) `CircuitBreakerApprovalRow` 전용 컴포넌트 — tripwire 시각 + 한계값 vs 측정값 readout + '재개' 버튼 → `approval:decide(approved)` + `circuitBreaker.resetCounter(tripwire)` + `projectService.setAutonomy(previousMode)`. `ApprovalDecisionRouter` 에 `kind='circuit_breaker'` 분기.\n\n**Files:** src/main/queue/queue-service.ts, src/main/queue/circuit-breaker.ts, src/main/approvals/approval-decision-router.ts, src/main/index.ts, src/renderer/features/approvals/{ApprovalInboxView,CircuitBreakerApprovalRow}.tsx\n\n**Verify:** `npm run test -- queue-service circuit-breaker approval-decision-router CircuitBreakerApprovalRow`\n\n```json:metadata\n{\"files\":[\"src/main/queue/queue-service.ts\",\"src/main/queue/circuit-breaker.ts\",\"src/main/approvals/approval-decision-router.ts\",\"src/renderer/features/approvals/CircuitBreakerApprovalRow.tsx\"],\"verifyCommand\":\"npm run test -- queue-service CircuitBreakerApprovalRow\",\"acceptanceCriteria\":[\"Queue 모드 meeting onFinal → 다음 항목 실제 meeting spawn\",\"ApprovalInbox 에서 circuit_breaker 전용 row\",\"재개 클릭 → autonomyMode 복귀 + counter reset\",\"R9 Known Concerns #1 + #6 종결\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T15:10:00.000Z"
     },
     {
       "id": 5,
       "subject": "Task 5: PermissionFlagBuilder — 3 모드 × 3 CLI × 3 project kind 매트릭스 통합",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
       "description": "**Goal:** spec §7.6.3 에 흩어진 CLI 플래그 build 를 단일 `PermissionFlagBuilder` 로 통합. input: `{providerKind, permissionMode, projectKind, dangerousAutoOptIn, consensusPath}` → output: `{args: string[]} | {rejected, reason}`. external+auto 는 입력 zod 에서 reject (CA-1/CA-3). Claude `acceptEdits/allowedTools/add-dir` / Codex `-a/--sandbox/-C` / Gemini `--approval-mode` 매트릭스. 기존 cli-runner 들이 builder 사용하도록 수정 (spawn arg snapshot 회귀 0). `permission:dry-run-flags` IPC handler (settings 보안 탭 미리보기).\n\n**Files:** src/main/permissions/permission-flag-builder.ts, src/main/permissions/__tests__/permission-flag-builder.test.ts, src/main/providers/cli/*cli-runner.ts (인라인 플래그 build → builder 호출), src/main/ipc/handlers/permission-handler.ts\n\n**Verify:** `npm run test -- permission-flag-builder cli-runner`\n\n```json:metadata\n{\"files\":[\"src/main/permissions/permission-flag-builder.ts\",\"src/main/providers/cli/claude-cli-runner.ts\",\"src/main/providers/cli/codex-cli-runner.ts\",\"src/main/providers/cli/gemini-cli-runner.ts\",\"src/main/ipc/handlers/permission-handler.ts\"],\"verifyCommand\":\"npm run test -- permission-flag-builder\",\"acceptanceCriteria\":[\"3×3×3 매트릭스 27 + dangerous 6 + rejection 6 = 39 cases green\",\"external+auto 입력 → rejected:true\",\"dangerousAutoOptIn=true → Claude --dangerously-skip-permissions\",\"cli-runner 회귀 0\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T15:10:00.000Z"
     },
     {
       "id": 6,
@@ -84,12 +84,12 @@
     {
       "id": 8,
       "subject": "Task 8: Optimistic UI + ErrorBoundary — 메시지/autonomy/queue 3 hook",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
       "description": "**Goal:** R5/R9 mutation 흐름 optimistic 승격. `use-channel-messages.send` / `use-autonomy-mode.confirm` / `use-queue.addLines` 가 invoke 전에 pending row 추가 → 성공 시 server-id swap, 실패 시 rollback + ErrorBoundary toast. React 19 ErrorBoundary 래퍼 신규 + App.tsx 최상위 wrap. scope 는 3 hook 으로 제한 (D8).\n\n**Files:** src/renderer/hooks/{use-channel-messages,use-autonomy-mode,use-queue}.ts, src/renderer/components/ErrorBoundary.tsx, src/renderer/App.tsx\n\n**Verify:** `npm run test -- use-channel-messages use-autonomy-mode use-queue ErrorBoundary`\n\n```json:metadata\n{\"files\":[\"src/renderer/hooks/use-channel-messages.ts\",\"src/renderer/hooks/use-autonomy-mode.ts\",\"src/renderer/hooks/use-queue.ts\",\"src/renderer/components/ErrorBoundary.tsx\",\"src/renderer/App.tsx\"],\"verifyCommand\":\"npm run test -- use-channel-messages ErrorBoundary\",\"acceptanceCriteria\":[\"3 hook 모두 optimistic + rollback\",\"ErrorBoundary unhandled error 가로챔\",\"race condition ordering invariant (D8)\",\"기존 R5/R9 회귀 0\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T15:10:00.000Z"
     },
     {
       "id": 9,
@@ -104,12 +104,12 @@
     {
       "id": 10,
       "subject": "Task 10: stream:member-status-changed broadcast + Warmup provider.disabled + macOS focus gate",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1
       ],
       "description": "**Goal:** R9 Known Concerns #3/#4/#5 + R8 D8 동시 종결. (a) `MemberProfileService.emit('status-changed')` R9 스텁 → StreamBridge.connect({members}) → `stream:member-status-changed` broadcast + renderer `use-member-status-stream` reducer. R8 mutation invalidation 패턴 유지 (D9 공존). (b) MemberWarmupService backoff 중 `provider.disabled=true` 체크 → cancelRetries. (c) NotificationService macOS focus gate 보정 (process.platform='darwin' 시 app.dock.isVisible() + BrowserWindow.getAllWindows().some(isFocused && isVisible) 조합).\n\n**Files:** src/main/members/{member-profile-service,member-warmup-service}.ts, src/main/streams/stream-bridge.ts, src/main/notifications/notification-service.ts, src/renderer/hooks/use-member-status-stream.ts\n\n**Verify:** `npm run test -- member-profile-service member-warmup-service notification-service use-member-status-stream`\n\n```json:metadata\n{\"files\":[\"src/main/members/member-profile-service.ts\",\"src/main/members/member-warmup-service.ts\",\"src/main/notifications/notification-service.ts\",\"src/renderer/hooks/use-member-status-stream.ts\"],\"verifyCommand\":\"npm run test -- member-profile-service member-warmup-service\",\"acceptanceCriteria\":[\"멤버 status 변경 → 모든 surface 즉시 동기\",\"warmup provider.disabled 시 retry 중단\",\"macOS focus gate 정확\",\"R9 Known Concerns #3/#4/#5 + R8 D8 종결\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T15:10:00.000Z"
     },
     {
       "id": 11,
