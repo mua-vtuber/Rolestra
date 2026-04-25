@@ -114,7 +114,7 @@
     {
       "id": 11,
       "subject": "Task 11: Consensus 24h timer rehydrate + Dashboard KPI stream + mode_transition conditional + LLM 요약",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         6,
         10
