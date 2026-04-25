@@ -3,6 +3,22 @@
     "mainPlaceholder": "The dashboard will move in here during R4."
   },
   "approval": {
+    "circuitBreaker": {
+      "errors": {
+        "generic": "Failed to submit the resume request."
+      },
+      "previousMode": "Previous autonomy mode: {{mode}}",
+      "readout": "Threshold: {{threshold}} / Measured: {{measured}}",
+      "resume": "Resume",
+      "resuming": "Resuming…",
+      "title": {
+        "cumulative_cli_ms": "Circuit Breaker — cumulative CLI time",
+        "fallback": "Circuit Breaker tripped",
+        "files_per_turn": "Circuit Breaker — files per turn",
+        "queue_streak": "Circuit Breaker — queue streak",
+        "same_error": "Circuit Breaker — repeated error"
+      }
+    },
     "kind": {
       "circuit_breaker": "Circuit breaker",
       "cli_permission": "CLI permission",

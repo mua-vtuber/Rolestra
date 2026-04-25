@@ -129,7 +129,13 @@ function makeMockDeps(minutesChannelId: string | null = 'minutes-1'): MockDeps {
     meetings: { updateState: vi.fn() } as never,
     approvals: { create: vi.fn() } as never,
     notifications: { show: vi.fn() } as never,
-    projects: { setAutonomy: vi.fn() } as never,
+    projects: {
+      setAutonomy: vi.fn(),
+      // R10-Task4: v3-side-effects now reads previousMode before downgrading
+      // for the circuit_breaker approval payload. Default to 'auto_toggle'
+      // so existing breaker tests can assert the captured value when desired.
+      get: vi.fn(() => ({ autonomyMode: 'auto_toggle' })),
+    } as never,
     channels: {
       listByProject: vi.fn().mockReturnValue(channelsList),
     } as never,
@@ -285,7 +291,14 @@ describe('v3-side-effects — circuit breaker', () => {
     };
     deps.breaker.emit(CIRCUIT_BREAKER_FIRED_EVENT, event);
 
-    expect(deps.projects.setAutonomy).toHaveBeenCalledWith('proj-1', 'manual');
+    // R10-Task4: setAutonomy is now tagged with `reason: 'circuit_breaker'`
+    // so the stream payload distinguishes a system-driven safety trip
+    // from a user-initiated toggle.
+    expect(deps.projects.setAutonomy).toHaveBeenCalledWith(
+      'proj-1',
+      'manual',
+      expect.objectContaining({ reason: 'circuit_breaker' }),
+    );
     // R9-Task6: kind flipped from 'failure_report' to 'circuit_breaker'
     // and payload meta carries `tripwire` (not `reason`) so renderer
     // filtering can narrow by kind alone.

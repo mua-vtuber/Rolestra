@@ -24,6 +24,11 @@ import {
   APPROVAL_DECIDED_EVENT,
   type ApprovalDecidedPayload,
 } from './approval-service';
+import type { AutonomyMode } from '../../shared/project-types';
+import {
+  CIRCUIT_BREAKER_TRIPWIRES,
+  type CircuitBreakerTripwire,
+} from '../../shared/circuit-breaker-types';
 
 /** ApprovalService 에서 필요한 surface 만 좁힌 view. */
 export interface ApprovalDecisionRouterSource {
@@ -37,14 +42,53 @@ export interface ApprovalDecisionRouterSource {
   ): this;
 }
 
-/** ProjectService.applyPermissionModeChange 만 필요 — 테스트용 fake 친화적. */
+/**
+ * ProjectService surface needed by the router.
+ *
+ * - `applyPermissionModeChange` for `mode_transition` (R7-Task8).
+ * - `setAutonomy` for `circuit_breaker` resume (R10-Task4) — restores the
+ *   project to the autonomy mode it held before the breaker downgrade.
+ */
 export interface ModeTransitionApplier {
   applyPermissionModeChange(approvalId: string): unknown;
+  setAutonomy?(
+    id: string,
+    mode: AutonomyMode,
+    opts?: { reason?: string },
+  ): unknown;
+}
+
+/**
+ * R10-Task4: circuit-breaker reset surface. The router calls
+ * `resetCounter(tripwire)` after the user approves a `circuit_breaker`
+ * resume row so the breaker re-arms against the same tripwire without
+ * forcing a process restart.
+ */
+export interface CircuitBreakerResetter {
+  resetCounter(tripwire: CircuitBreakerTripwire): void;
 }
 
 export interface ApprovalDecisionRouterDeps {
   approvalService: ApprovalDecisionRouterSource;
   projectService: ModeTransitionApplier;
+  /**
+   * Optional — when omitted the `circuit_breaker` branch becomes a no-op
+   * (legacy callers that only need mode_transition routing keep working).
+   */
+  circuitBreaker?: CircuitBreakerResetter;
+}
+
+/** Narrow runtime guard for the four tripwire literals. */
+function isCircuitBreakerTripwire(value: unknown): value is CircuitBreakerTripwire {
+  return (
+    typeof value === 'string' &&
+    (CIRCUIT_BREAKER_TRIPWIRES as readonly string[]).includes(value)
+  );
+}
+
+/** Narrow runtime guard for the AutonomyMode literals. */
+function isAutonomyMode(value: unknown): value is AutonomyMode {
+  return value === 'manual' || value === 'auto_toggle' || value === 'queue';
 }
 
 export class ApprovalDecisionRouter {
@@ -96,7 +140,85 @@ export class ApprovalDecisionRouter {
       return;
     }
 
+    if (item.kind === 'circuit_breaker') {
+      this.routeCircuitBreaker(item);
+      return;
+    }
+
     // consensus_decision 은 R7-Task9 에서 이 switch 에 붙는다.
     // review_outcome / failure_report 는 R8+ 에서 정의.
+  }
+
+  /**
+   * R10-Task4: Circuit Breaker resume routing.
+   *
+   * When the user approves a `kind='circuit_breaker'` row, two things
+   * happen — both wrapped in their own try/catch so a single failure
+   * (e.g. project deleted between fire and resume) cannot wedge the
+   * other side-effect:
+   *
+   *   1. Reset the tripwire counter so the breaker re-arms.
+   *   2. Restore the project to the autonomy mode it held before the
+   *      downgrade (recorded in the approval payload as `previousMode`).
+   *
+   * The payload `{tripwire, previousMode, projectId, ...}` shape is
+   * minted by `v3-side-effects.handleBreakerFired`. Missing/invalid
+   * fields short-circuit the corresponding step rather than throwing —
+   * the approval row is still marked decided by ApprovalService, and
+   * the renderer still sees the row removed from the inbox.
+   */
+  private routeCircuitBreaker(item: ApprovalDecidedPayload['item']): void {
+    const payload = item.payload;
+    const meta =
+      payload && typeof payload === 'object'
+        ? (payload as Record<string, unknown>)
+        : null;
+
+    // (1) Reset the tripwire counter.
+    if (this.deps.circuitBreaker && meta) {
+      const tripwire = meta.tripwire;
+      if (isCircuitBreakerTripwire(tripwire)) {
+        try {
+          this.deps.circuitBreaker.resetCounter(tripwire);
+        } catch (err) {
+          console.warn(
+            '[rolestra.approvals.router] circuitBreaker.resetCounter failed:',
+            {
+              approvalId: item.id,
+              tripwire,
+              name: err instanceof Error ? err.name : undefined,
+              message: err instanceof Error ? err.message : String(err),
+            },
+          );
+        }
+      }
+    }
+
+    // (2) Restore the previous autonomy mode.
+    const setAutonomy = this.deps.projectService.setAutonomy;
+    if (setAutonomy && item.projectId && meta) {
+      const previousMode = meta.previousMode;
+      if (isAutonomyMode(previousMode)) {
+        try {
+          setAutonomy.call(
+            this.deps.projectService,
+            item.projectId,
+            previousMode,
+            { reason: 'user' },
+          );
+        } catch (err) {
+          console.warn(
+            '[rolestra.approvals.router] setAutonomy(previousMode) failed:',
+            {
+              approvalId: item.id,
+              projectId: item.projectId,
+              previousMode,
+              name: err instanceof Error ? err.name : undefined,
+              message: err instanceof Error ? err.message : String(err),
+            },
+          );
+        }
+      }
+    }
   }
 }

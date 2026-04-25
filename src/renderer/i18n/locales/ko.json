@@ -3,6 +3,22 @@
     "mainPlaceholder": "R4에서 대시보드가 여기에 들어옵니다."
   },
   "approval": {
+    "circuitBreaker": {
+      "errors": {
+        "generic": "재개 요청 처리 중 오류가 발생했습니다."
+      },
+      "previousMode": "이전 자율 모드: {{mode}}",
+      "readout": "한계값: {{threshold}} / 측정값: {{measured}}",
+      "resume": "재개",
+      "resuming": "재개 중…",
+      "title": {
+        "cumulative_cli_ms": "Circuit Breaker — CLI 누적 시간 한계",
+        "fallback": "Circuit Breaker 발동",
+        "files_per_turn": "Circuit Breaker — 파일 변경 한계",
+        "queue_streak": "Circuit Breaker — 연속 큐 실행",
+        "same_error": "Circuit Breaker — 같은 오류 반복"
+      }
+    },
     "kind": {
       "circuit_breaker": "회로 차단기",
       "cli_permission": "CLI 권한 요청",

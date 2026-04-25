@@ -22,6 +22,7 @@ import { usePendingApprovals } from '../../hooks/use-pending-approvals';
 import type { ApprovalItem } from '../../../shared/approval-types';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 import { ApprovalBlock } from '../messenger/ApprovalBlock';
+import { CircuitBreakerApprovalRow } from './CircuitBreakerApprovalRow';
 
 export interface ApprovalInboxViewProps {
   projectId: string;
@@ -137,6 +138,23 @@ export function ApprovalInboxView({
     return items.map((it) => ({ item: it, message: approvalToMessage(it) }));
   }, [items]);
 
+  /**
+   * R10-Task4: dispatch the row body by `item.kind`. The
+   * `circuit_breaker` kind takes the dedicated resume row;
+   * everything else continues through `ApprovalBlock` (allow / reject
+   * / conditional). New kinds can extend this switch without touching
+   * the surrounding loading / empty / error scaffolding.
+   */
+  function renderRowBody(
+    item: ApprovalItem,
+    message: ChannelMessage,
+  ): ReactElement {
+    if (item.kind === 'circuit_breaker') {
+      return <CircuitBreakerApprovalRow item={item} />;
+    }
+    return <ApprovalBlock message={message} />;
+  }
+
   const body = (() => {
     if (items === null && loading) {
       return (
@@ -191,7 +209,7 @@ export function ApprovalInboxView({
             >
               {kindLabel(t, item.kind)}
             </div>
-            <ApprovalBlock message={message} />
+            {renderRowBody(item, message)}
           </li>
         ))}
       </ul>
