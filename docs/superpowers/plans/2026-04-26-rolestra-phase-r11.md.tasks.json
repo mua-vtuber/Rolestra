@@ -1,0 +1,140 @@
+{
+  "planPath": "docs/superpowers/plans/2026-04-26-rolestra-phase-r11.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: R11 브랜치 + spec §10 R11 체크리스트 확장 + plan + tasks.json + Decision Log",
+      "status": "completed",
+      "description": "**Goal:** `rolestra-phase-r11` 브랜치는 main tip(`dc4a763`)에서 이미 분기됨. spec §10 Phase R11 블록을 R3~R10 템플릿(체크박스 + 산출물 링크)으로 확장 — 16 구현 체크박스 + closeout 1개 + scope 경계. Decision Log 9건(D1~D9) 기록. tasks.json 17-slot skeleton.\n\n**Files:** docs/superpowers/plans/2026-04-26-rolestra-phase-r11.md, docs/superpowers/plans/2026-04-26-rolestra-phase-r11.md.tasks.json, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 Phase R11)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r11\n\n```json:metadata\n{\"files\":[\"docs/superpowers/plans/2026-04-26-rolestra-phase-r11.md\",\"docs/superpowers/plans/2026-04-26-rolestra-phase-r11.md.tasks.json\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r11 브랜치 활성\",\"Decision Log에 D1~D9 9건 기록\",\"§10 Phase R11 체크박스+산출물 템플릿 확장\",\"tasks.json 17-slot skeleton 존재\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: _legacy/ 디렉토리 일괄 물리 삭제 (migrations-v2 + renderer-v1, 752KB)",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** spec §10 R11 본 정의 첫 항목. `_legacy/migrations-v2/` (8 파일) + `_legacy/renderer-v1/` (8 디렉토리, 752KB) 단일 commit 삭제 (D1 — 일괄). src/ docs/ 의 `_legacy` 인용 0 검증. typecheck/build/test 회귀 0.\n\n**Files:** _legacy/ (전체 삭제)\n\n**Verify:** `npm run typecheck && npm run build && grep -r '_legacy' src/ docs/ | wc -l` (0 hit)\n\n```json:metadata\n{\"files\":[\"_legacy\"],\"verifyCommand\":\"npm run typecheck && grep -rln _legacy src docs\",\"acceptanceCriteria\":[\"_legacy/ 디렉토리 부재\",\"src/ 또는 docs/ 어디에도 _legacy 인용 0\",\"typecheck/build/test 회귀 0\",\"repo 크기 -752KB\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: v2 engine 6 파일 + 7 @ts-nocheck 파일 청소 (D1 단계 분리)",
+      "status": "pending",
+      "blockedBy": [1],
+      "description": "**Goal:** spec §10 R10 scope 경계 line 1327 R11 이연. v2 engine 5 파일 (`orchestrator/turn-executor/conversation/execution-coordinator/memory-coordinator`) + `engine/persona-builder.ts` 물리 삭제 + 대응 `__tests__/*.test.ts` 동시 삭제. 7 legacy `@ts-nocheck` (consensus-driver / consensus-handler / permission-handler / workspace-handler 외 3) 케이스 별 (a) 삭제 / (b) v3 재작성 + nocheck 제거. `grep -rln '@ts-nocheck' src/` 0 hit.\n\n**Files:** src/main/engine/{orchestrator,turn-executor,conversation,execution-coordinator,memory-coordinator,persona-builder}.ts (DELETE) + 동명 __tests__/*.test.ts + 7 @ts-nocheck 파일\n\n**Verify:** `grep -rln '@ts-nocheck' src/ | wc -l` == 0 && `npm run typecheck && npm run test`\n\n```json:metadata\n{\"files\":[\"src/main/engine/orchestrator.ts\",\"src/main/engine/turn-executor.ts\",\"src/main/engine/conversation.ts\",\"src/main/engine/execution-coordinator.ts\",\"src/main/engine/memory-coordinator.ts\",\"src/main/engine/persona-builder.ts\"],\"verifyCommand\":\"grep -rln @ts-nocheck src && npm run typecheck\",\"acceptanceCriteria\":[\"v2 engine 6 파일 부재\",\"@ts-nocheck 0 hit\",\"typecheck/lint/build/test 회귀 0\",\"v3 engine (consensus-machine/meeting-orchestrator/v3-side-effects) 정상 동작\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: Pre-existing 14 test file 실패 정리 (database-* / memory-* / recovery-* / remote-* / handlers-v3 ipc)",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** R10 Known Concern #8 종결. 14 v2 잔재 테스트를 (a) v3 재작성, (b) `it.skip` + reason, (c) 물리 삭제 셋 중 하나로 처리. `npm run test` exit 0 회복.\n\n**분류:**\n- database-* (4) — 마이그레이션 chain 재정합 또는 skip\n- memory-* (3) — Phase 3-a (FTS5) 기준 재작성\n- recovery-* (2) — v2 모델 → 삭제\n- remote-* (3) — Remote v3 재설계 시점까지 skip (R12+)\n- handlers-v3 ipc (2) — v3 명세 재정합\n\n**Files:** src/main/database/__tests__/database-*.test.ts, src/main/memory/__tests__/memory-*.test.ts, src/main/recovery/__tests__/recovery-*.test.ts, src/main/remote/__tests__/remote-*.test.ts, src/main/ipc/__tests__/handlers-v3-*.test.ts\n\n**Verify:** `npm run test` exit 0\n\n```json:metadata\n{\"files\":[\"src/main/database/__tests__\",\"src/main/memory/__tests__\",\"src/main/recovery/__tests__\",\"src/main/remote/__tests__\",\"src/main/ipc/__tests__\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"14 파일 모두 처리 (재작성/skip/삭제)\",\"npm run test exit 0 baseline 회복\",\"skip 처리 시 모든 skip reason comment + V4/R12+ 라벨\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: Playwright OS matrix 안정화 + search/dm spec + autonomy Step C 활성 + 12 스크린샷",
+      "status": "pending",
+      "blockedBy": [3],
+      "description": "**Goal:** R10 Known Concerns #1+#2+#3+#6 동시 종결. (a) `e2e/search-flow.spec.ts` + `e2e/dm-flow.spec.ts` 신규, (b) preload `__rolestraDevHooks` ROLESTRA_E2E=1 가드 노출 (tripFilesPerTurn / tripCumulativeCliMs / tripQueueStreak / tripSameError), (c) autonomy-queue Step C 활성 (Circuit Breaker downgrade 시나리오), (d) `.github/workflows/playwright.yml` workflow_dispatch 실 run + 27 cell green 캡처, (e) 12 스크린샷 (6 테마 × 2 surface) Windows + macOS native 캡처, appendix-r10-evidence/screenshots/ 갱신.\n\n**Files:** e2e/search-flow.spec.ts, e2e/dm-flow.spec.ts, e2e/autonomy-queue-flow.spec.ts, src/preload/index.ts, src/main/index.ts, .github/workflows/playwright.yml, docs/superpowers/specs/appendix-r10-evidence/screenshots/\n\n**Verify:** GitHub Actions workflow_dispatch run — 9 spec × 3 OS = 27 cell green\n\n```json:metadata\n{\"files\":[\"e2e/search-flow.spec.ts\",\"e2e/dm-flow.spec.ts\",\"e2e/autonomy-queue-flow.spec.ts\",\"src/preload/index.ts\",\".github/workflows/playwright.yml\"],\"verifyCommand\":\"npx playwright test\",\"acceptanceCriteria\":[\"9 spec × 3 OS = 27 matrix cell 모두 green\",\"search-flow + dm-flow spec 추가\",\"autonomy-queue Step C 실 실행\",\"__rolestraDevHooks ROLESTRA_E2E=1 가드\",\"12 스크린샷 Windows + macOS native\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: Shared types + 8 신규 IPC + zod + preload + provider-types capability 확장",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** R11 신규 도메인 (onboarding/llm cost/approval detail) IPC 경계 shared 확정. 8 신규 채널 (onboarding:get-state/set-state/complete + provider:detect + llm:cost-summary + execution:dry-run-preview + approval:detail-fetch + meeting:voting-history). ProviderCapability union 에 'summarize' 추가. zod round-trip 16+ cases.\n\n**Files:** src/shared/{onboarding-types,llm-cost-types,approval-detail-types,provider-types,ipc-types,ipc-schemas}.ts, src/preload/index.ts, src/shared/__tests__/ipc-schemas.test.ts\n\n**Verify:** `npm run test -- ipc-schemas`\n\n```json:metadata\n{\"files\":[\"src/shared/onboarding-types.ts\",\"src/shared/llm-cost-types.ts\",\"src/shared/approval-detail-types.ts\",\"src/shared/provider-types.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\"],\"verifyCommand\":\"npm run test -- ipc-schemas\",\"acceptanceCriteria\":[\"8 신규 IPC + 'summarize' capability\",\"zod round-trip 16+ cases green\",\"기존 R10 채널 회귀 0\",\"typecheck exit 0\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Onboarding 정식 wizard — step 3/4/5 + provider:detect + 영구화 + 자동 진입 (D3, migration 013)",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** design polish 라운드 2 A 라운드 (step 2 fixture) 위에 정식 5-step 완성. 마이그레이션 013 신규 (D3 — 단일 row CHECK id=1). step 3 (역할 부여 — displayName/role/personality/expertise) + step 4 (권한 — 3 모드 라디오) + step 5 (첫 프로젝트 — kind/slug). first-boot 자동 진입 (App.tsx view='onboarding'). Settings.AboutTab '온보딩 다시 시작' CTA 정식 wire (현재 testid 만). E2E spec onboarding-flow.\n\n**Files:** src/main/database/migrations/013-onboarding-state.ts, src/main/onboarding/{onboarding-service,onboarding-state-repository}.ts, src/main/ipc/handlers/{onboarding,provider}-handler.ts, src/main/index.ts, src/renderer/features/onboarding/{OnboardingPage,onboarding-data,use-onboarding-state}.ts, src/renderer/features/onboarding/steps/{Step3RoleAssignment,Step4Permissions,Step5FirstProject}.tsx, src/renderer/App.tsx, src/renderer/features/settings/tabs/AboutTab.tsx, e2e/onboarding-flow.spec.ts\n\n**Verify:** `npm run test -- onboarding-service Step3 Step4 Step5 OnboardingPage migrations` && first-boot 시뮬\n\n```json:metadata\n{\"files\":[\"src/main/database/migrations/013-onboarding-state.ts\",\"src/main/onboarding/onboarding-service.ts\",\"src/renderer/features/onboarding/OnboardingPage.tsx\",\"src/renderer/features/onboarding/steps/Step3RoleAssignment.tsx\",\"src/renderer/features/onboarding/steps/Step4Permissions.tsx\",\"src/renderer/features/onboarding/steps/Step5FirstProject.tsx\",\"src/renderer/App.tsx\",\"e2e/onboarding-flow.spec.ts\"],\"verifyCommand\":\"npm run test -- onboarding\",\"acceptanceCriteria\":[\"첫 부팅 시 view='onboarding' 자동 진입\",\"step 1~5 진행 + 영구화\",\"완료 후 Dashboard 전환 + 재시작 시 reentry 안 함\",\"AboutTab '온보딩 다시 시작' CTA 정식\",\"migration 013 idempotent\",\"E2E spec 1 추가\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Approvals 상세 패널 (design polish 라운드 2 B 이월) + dryRunPreview IPC + filter wiring",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** design polish 라운드 2 B (R11/R12 데이터 layer 의존 backlog 이월) 정식 land. (a) `ExecutionService.dryRunPreview` API (read-only) + `execution:dry-run-preview` IPC, (b) `approval:detail-fetch` 통합 IPC, (c) `meeting:voting-history` IPC, (d) `approval:list({status})` filter wiring (frontend hook 확장), (e) ApprovalDetailPanel + 5 카드 (DetailHeader/ImpactedFiles/DiffPreview/ConsensusContext/ActionBar), (f) ApprovalInboxView list+detail split layout, (g) ApprovalFilterBar onChange wiring. E2E spec approval-detail-flow.\n\n**Files:** src/main/execution/execution-service.ts, src/main/ipc/handlers/{execution,approval,meeting}-handler.ts, src/renderer/features/approvals/{ApprovalInboxView,ApprovalFilterBar,use-approval-detail}.ts, src/renderer/features/approvals/detail/{ApprovalDetailPanel,ApvDetailHeader,ApvImpactedFilesCard,ApvDiffPreviewCard,ApvConsensusContextCard,ApvActionBar}.tsx, e2e/approval-detail-flow.spec.ts\n\n**Verify:** `npm run test -- ApprovalDetailPanel use-approval-detail execution-service`\n\n```json:metadata\n{\"files\":[\"src/main/execution/execution-service.ts\",\"src/renderer/features/approvals/ApprovalInboxView.tsx\",\"src/renderer/features/approvals/detail/ApprovalDetailPanel.tsx\",\"src/renderer/features/approvals/detail/ApvImpactedFilesCard.tsx\",\"src/renderer/features/approvals/detail/ApvDiffPreviewCard.tsx\",\"src/renderer/features/approvals/detail/ApvConsensusContextCard.tsx\",\"e2e/approval-detail-flow.spec.ts\"],\"verifyCommand\":\"npm run test -- ApprovalDetailPanel\",\"acceptanceCriteria\":[\"ApprovalInbox list+detail split layout\",\"row 클릭 → detail panel 5 카드 표시\",\"ApprovalFilterBar onChange → status 별 fetch\",\"dryRunPreview read-only (atomic apply 안 함)\",\"E2E spec 1 추가\",\"design polish 라운드 1 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: LLM 비용 가시화 — migration 014 + LlmCostRepository + cost-summary IPC + AutonomyDefaultsTab 섹션 (D4, D5)",
+      "status": "pending",
+      "blockedBy": [5],
+      "description": "**Goal:** R10 D7 open question 첫 항목 종결 — meeting-summary-service token count audit + Settings 누적 비용. R11 두 번째 (마지막) forward-only 마이그레이션 014. append-only `llm_cost_audit_log` (id/meeting_id/provider_id/token_in/token_out/created_at). meeting-summary-service 호출 후 usage 객체 (Anthropic input_tokens/output_tokens / OpenAI prompt_tokens/completion_tokens) 추출 → Repository.append. AutonomyDefaultsTab 'LLM 사용량' 섹션 (provider 별 + 추정 USD = 사용자 입력 단가 × 토큰, default 0 — D5).\n\n**Files:** src/main/database/migrations/014-llm-cost-audit-log.ts, src/main/llm/{llm-cost-repository,meeting-summary-service}.ts, src/main/ipc/handlers/llm-handler.ts, src/main/index.ts, src/renderer/hooks/use-llm-cost-summary.ts, src/renderer/features/settings/tabs/AutonomyDefaultsTab.tsx\n\n**Verify:** `npm run test -- llm-cost-repository meeting-summary-service AutonomyDefaultsTab migrations`\n\n```json:metadata\n{\"files\":[\"src/main/database/migrations/014-llm-cost-audit-log.ts\",\"src/main/llm/llm-cost-repository.ts\",\"src/main/llm/meeting-summary-service.ts\",\"src/renderer/hooks/use-llm-cost-summary.ts\",\"src/renderer/features/settings/tabs/AutonomyDefaultsTab.tsx\"],\"verifyCommand\":\"npm run test -- llm-cost-repository\",\"acceptanceCriteria\":[\"meeting-summary-service 호출 후 llm_cost_audit_log row 추가\",\"AutonomyDefaultsTab LLM 사용량 누적 토큰 정확\",\"migration 014 idempotent\",\"R10 D7 첫 항목 종결\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: 'summarize' capability literal 정식 도입 + provider config 갱신 (R10 Known Concern #7)",
+      "status": "pending",
+      "blockedBy": [5, 8],
+      "description": "**Goal:** R10 Known Concern #7 종결. ProviderCapability union 에 'summarize' 추가 (Task 5) → meeting-summary-service 의 임시 'streaming' fallback 우회 제거 + 6 provider config (Claude/Codex/Gemini/Anthropic/OpenAI/Local Ollama) capability 명시.\n\n**Files:** src/main/providers/registry.ts, src/main/llm/meeting-summary-service.ts\n\n**Verify:** `npm run test -- meeting-summary-service registry`\n\n```json:metadata\n{\"files\":[\"src/main/providers/registry.ts\",\"src/main/llm/meeting-summary-service.ts\"],\"verifyCommand\":\"npm run test -- meeting-summary-service\",\"acceptanceCriteria\":[\"6 provider config capability 명시\",\"meeting-summary-service 'summarize' fallback chain\",\"'streaming' 임시 우회 코드 0\",\"R10 Task 11 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: mode_transition conditional advisory 자동 주입 (R10 Known Concern #4 종결, D7 in-memory)",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** R10 Known Concern #4 종결. ApprovalSystemMessageInjector filter 가 mode_transition (meetingId=null) 차단 → conditional comment 가 다음 회의 system message 로 자동 주입 안 됨. (a) injector filter 완화 (mode_transition 만 advisory slot 라우팅), (b) ProjectService.{setPendingAdvisory, consumePendingAdvisory} in-memory slot (D7 — 영구화 안 함), (c) MeetingOrchestrator.start() 시 advisory 소비 + slot 비움.\n\n**Files:** src/main/projects/project-service.ts, src/main/approvals/{approval-decision-router,approval-system-message-injector}.ts, src/main/meetings/engine/meeting-orchestrator.ts\n\n**Verify:** `npm run test -- project-service approval-system-message-injector meeting-orchestrator approval-decision-router`\n\n```json:metadata\n{\"files\":[\"src/main/projects/project-service.ts\",\"src/main/approvals/approval-decision-router.ts\",\"src/main/approvals/approval-system-message-injector.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- project-service\",\"acceptanceCriteria\":[\"ApprovalBlock conditional → 다음 회의 system message 자동 prepend\",\"advisory 소비 후 slot 비움 (이중 주입 방지)\",\"R10 Known Concern #4 종결\",\"기존 injector / orchestrator 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: i18n ko/en parity R11 + main-process 잔여 한국어 라벨 dictionary 이전 (R10 Known Concern #5, D9)",
+      "status": "pending",
+      "blockedBy": [6, 7, 8],
+      "description": "**Goal:** R11 신규 namespace populate (ko + en) + R10 Known Concern #5 D9 결정 적용. (a) onboarding.step3/4/5 + approval.detail + llm.cost ko+en, (b) D9 default 한국어 유지 + locale 분기 — `notification-labels.ts` dictionary 에 `approvalNotificationBridge.*` / `autonomyGate.trace.*` 항목 신설, ko=기존/en=영어 번역, (c) approval-notification-bridge / autonomy-gate inline 라벨 dictionary 사용. i18n:check exit 0 idempotent.\n\n**Files:** src/renderer/i18n/locales/{ko,en}.json, src/main/notifications/notification-labels.ts, src/main/approvals/approval-notification-bridge.ts, src/main/autonomy/autonomy-gate.ts, i18next-parser.config.js\n\n**Verify:** `npm run i18n:check && npm run test -- notification-labels`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"src/main/notifications/notification-labels.ts\",\"src/main/approvals/approval-notification-bridge.ts\",\"src/main/autonomy/autonomy-gate.ts\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"ko+en parity orphan 0\",\"main-process 한국어 inline 라벨 0\",\"LanguageTab 토글 → 모든 surface 일관 전환\",\"i18n:check idempotent 두 번째 실행 diff 0\",\"R10 Known Concern #5 D9 결정 반영\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: 패키징 정식 — electron-builder + Windows installer + macOS dmg + Linux AppImage + release workflow (D2)",
+      "status": "pending",
+      "blockedBy": [1, 2, 11],
+      "description": "**Goal:** spec §10 R11 본 정의 두 번째 — Windows 인스톨러 + macOS dmg + Linux AppImage. D2 (electron-builder 채택). electron-builder.yml + 3 icon asset + package scripts (4) + .github/workflows/release.yml (tag push trigger 시 3 OS matrix build + artifact upload + GitHub Release draft). macOS dmg unsigned + Gatekeeper 우회 안내 docs.\n\n**Files:** electron-builder.yml, package.json (scripts), assets/icon.{ico,icns,png}, .github/workflows/release.yml\n\n**Verify:** `npm run package:linux` 로컬 + workflow_dispatch dry-run\n\n```json:metadata\n{\"files\":[\"electron-builder.yml\",\".github/workflows/release.yml\",\"assets/icon.ico\",\"assets/icon.icns\",\"assets/icon.png\",\"package.json\"],\"verifyCommand\":\"npm run package\",\"acceptanceCriteria\":[\"npm run package:linux 로컬 성공 → AppImage 산출\",\"workflow_dispatch trigger → 3 OS artifact + GitHub Release draft\",\"electron-builder.yml + 3 icon + release.yml 등록\",\"macOS dmg unsigned + Gatekeeper 안내 docs\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: 사용자 문서 v3 전면 재작성 + ADR 통합 (D8 phase 별 묶음) + 디자인 폴더 정식",
+      "status": "pending",
+      "blockedBy": [4, 12],
+      "description": "**Goal:** spec §10 R11 본 정의 세 번째 — `docs/설계-문서.md` v3 교체. (a) 설계-문서 전면 재작성 (Electron + TS + React + Tailwind + Radix + Zustand + better-sqlite3 + i18next + Vitest + Playwright + electron-builder), (b) 기능-정의서 Rolestra v3 메타포 갱신, (c) 구현-현황 R1~R11 일괄 갱신, (d) `docs/아키텍처-결정-기록/` D8 phase 별 묶음 ADR 6 파일 (R1-R3 / R4-R6 / R7-R9 / R10 / R11 / cross-cutting), (e) `docs/디자인/` 신규 — `Rolestra_sample/` 이전 + 12 스크린샷 sign-off, (f) CLAUDE.md 핵심 문서 표 갱신.\n\n**Files:** docs/설계-문서.md, docs/기능-정의서.md, docs/구현-현황.md, docs/아키텍처-결정-기록/{R1-R3,R4-R6,R7-R9,R10,R11,cross-cutting}-decisions.md, docs/디자인/, CLAUDE.md\n\n**Verify:** 사용자 검토\n\n```json:metadata\n{\"files\":[\"docs/설계-문서.md\",\"docs/기능-정의서.md\",\"docs/구현-현황.md\",\"docs/아키텍처-결정-기록\",\"docs/디자인\",\"CLAUDE.md\"],\"verifyCommand\":\"echo docs review\",\"acceptanceCriteria\":[\"설계-문서.md v3 전면 재작성 (v2 잔재 0)\",\"기능-정의서 Rolestra v3 메타포 반영\",\"구현-현황 R1~R11 일괄 갱신\",\"ADR phase 별 묶음 6 파일\",\"docs/디자인/ 정식 sign-off 마크\",\"CLAUDE.md 문서 표 갱신\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 14,
+      "subject": "Task 14: CI macOS hosted runner 비용 monitoring (R10 D5 risk 종결)",
+      "status": "pending",
+      "blockedBy": [4],
+      "description": "**Goal:** R10 D5 risk — macOS GitHub Actions runner minutes 비용. (a) `.github/workflows/usage-report.yml` weekly cron (gh api billing/macos), (b) playwright.yml 의 PR trigger 시 Windows + Linux 만 (macOS 제외, [macos] label 또는 manual workflow_dispatch 시만), (c) weekly cron 으로 풀 매트릭스, (d) README badge.\n\n**Files:** .github/workflows/usage-report.yml, .github/workflows/playwright.yml (수정)\n\n**Verify:** workflow_dispatch test run\n\n```json:metadata\n{\"files\":[\".github/workflows/usage-report.yml\",\".github/workflows/playwright.yml\"],\"verifyCommand\":\"echo workflow file edit\",\"acceptanceCriteria\":[\"usage-report.yml weekly cron 가능\",\"playwright.yml macOS PR trigger 가 label 기반\",\"weekly cron 풀 매트릭스 검증\",\"R10 D5 risk 종결\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 15,
+      "subject": "Task 15: Optimistic UI 확장 — ApprovalBlock.decide + MemberProfile.edit (R10 D8)",
+      "status": "pending",
+      "blockedBy": [7],
+      "description": "**Goal:** R10 D8 결정 — Optimistic UI 추가는 R11 이후. (a) ApprovalBlock.decide invoke 직전 row status 임시 변경 → 성공 시 reconcile, 실패 시 rollback + ErrorBoundary toast, (b) MemberProfileEditModal 저장 시 row 즉시 갱신 + dialog 닫기 → 실패 시 dialog 재열림 + form state 복구.\n\n**Files:** src/renderer/features/messenger/ApprovalBlock.tsx, src/renderer/features/members/MemberProfileEditModal.tsx\n\n**Verify:** `npm run test -- ApprovalBlock MemberProfileEditModal`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/ApprovalBlock.tsx\",\"src/renderer/features/members/MemberProfileEditModal.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalBlock MemberProfileEditModal\",\"acceptanceCriteria\":[\"ApprovalBlock 결정 → 즉시 UI + 실패 rollback\",\"MemberProfile 편집 → dialog 닫고 row 갱신 + 실패 시 dialog 재열림\",\"ErrorBoundary toast 일관 동작\",\"R10 Optimistic 3 hook 회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    },
+    {
+      "id": 16,
+      "subject": "Task 16: R11 Closeout — 정식 게이트 + done-checklist + §10 R11 [x] + tasks 17/17 + release artifact 검증",
+      "status": "pending",
+      "blockedBy": [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15],
+      "description": "**Goal:** 모든 정식 게이트 녹색. typecheck/typecheck:web/lint/test/i18n:check/theme:check/build/package + migration 013/014 + Playwright OS matrix workflow_dispatch 9 spec × 3 OS = 27 cell green + release.yml workflow_dispatch dry-run 3 OS artifact 산출. `docs/superpowers/specs/r11-done-checklist.md` 작성 (17 산출물 + 게이트 결과표 + Known Concerns + Decision Log D1~D9 + V4/R12+ forward pointers). spec §10 R11 [ ] → [x]. tasks.json 17/17 completed.\n\n**Files:** docs/superpowers/specs/r11-done-checklist.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R11), tasks.json\n\n**Verify:** 정식 게이트 전체 녹색 + 사용자 sign-off\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/r11-done-checklist.md\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build && npm run package\",\"acceptanceCriteria\":[\"정식 게이트 전체 녹색 (OS matrix + 패키징 artifact 포함)\",\"r11-done-checklist.md 작성\",\"§10 R11 모든 [x]\",\"tasks.json 17/17 completed\",\"release artifact 3 OS 검증\"]}\n```",
+      "lastUpdated": "2026-04-26T00:00:00.000Z"
+    }
+  ]
+}
