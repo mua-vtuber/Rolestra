@@ -61,13 +61,13 @@
     {
       "id": 6,
       "subject": "Task 6: Settings UI 정식 10탭 재구성 (SettingsTabs + 10 tab 컴포넌트)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4,
         5
       ],
       "description": "**Goal:** R9 임시 SettingsView (NotificationPrefsView 단일 섹션) → spec §7.10.6 '10탭' 정식 재편. tabs: Members(R8 풀버전, D8 deferred) / Notifications(R9 이전) / AutonomyDefaults / ApiKeys(safeStorage) / Theme / Language(setNotificationLocale wire) / Path / Cli(provider CRUD) / Security(위험한 자율 모드 opt-in) / About. `Tabs.tsx` Radix 래퍼 + cva (panelClip / cardTitleStyle 자동 매핑). NavRail Settings 진입 시 `view='settings'` + URL hash deep-link. E2E spec `settings-tabs-flow.spec.ts`.\n\n**Files:** src/renderer/components/primitives/Tabs.tsx, src/renderer/features/settings/SettingsTabs.tsx, src/renderer/features/settings/tabs/{Members,Notifications,AutonomyDefaults,ApiKeys,Theme,Language,Path,Cli,Security,About}Tab.tsx, src/renderer/features/settings/SettingsView.tsx, src/renderer/components/shell/NavRail.tsx, e2e/settings-tabs-flow.spec.ts\n\n**Verify:** `npm run test -- SettingsTabs MembersTab NotificationsTab ThemeTab LanguageTab SecurityTab`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/settings/SettingsTabs.tsx\",\"src/renderer/features/settings/tabs/MembersTab.tsx\",\"src/renderer/features/settings/tabs/NotificationsTab.tsx\",\"src/renderer/features/settings/tabs/AutonomyDefaultsTab.tsx\",\"src/renderer/features/settings/tabs/ThemeTab.tsx\",\"src/renderer/features/settings/tabs/LanguageTab.tsx\",\"src/renderer/features/settings/tabs/SecurityTab.tsx\",\"e2e/settings-tabs-flow.spec.ts\"],\"verifyCommand\":\"npm run test -- SettingsTabs\",\"acceptanceCriteria\":[\"10 탭 모두 mount 정상\",\"ThemeTab/LanguageTab/SecurityTab 실 동작 (theme switch / locale / opt-in)\",\"R8 D8 (멤버 풀버전) + provider CRUD 종결\",\"E2E spec 1 추가\"]}\n```",
-      "lastUpdated": "2026-04-24T23:30:00.000Z"
+      "lastUpdated": "2026-04-25T18:00:00.000Z"
     },
     {
       "id": 7,
