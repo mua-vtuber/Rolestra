@@ -15,7 +15,7 @@
  * hex literal 금지.
  */
 import { clsx } from 'clsx';
-import { useMemo, useState, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePendingApprovals } from '../../hooks/use-pending-approvals';
@@ -29,6 +29,21 @@ import {
 } from './ApprovalFilterBar';
 import { ApprovalStatusBadge } from './ApprovalStatusBadge';
 import { CircuitBreakerApprovalRow } from './CircuitBreakerApprovalRow';
+import { ApprovalDetailPanel } from './detail/ApprovalDetailPanel';
+
+function statusToBadgeDecision(
+  status: ApprovalItem['status'],
+): 'pending' | 'approved' | 'rejected' {
+  if (status === 'approved') return 'approved';
+  if (
+    status === 'rejected' ||
+    status === 'expired' ||
+    status === 'superseded'
+  ) {
+    return 'rejected';
+  }
+  return 'pending';
+}
 
 export interface ApprovalInboxViewProps {
   projectId: string;
@@ -137,33 +152,58 @@ export function ApprovalInboxView({
   className,
 }: ApprovalInboxViewProps): ReactElement {
   const { t } = useTranslation();
-  const { items, loading, error } = usePendingApprovals(projectId);
 
-  // Filter state — only `pending` resolves to real data; the other tabs
-  // hold visual placeholders until R11 wires the historical query
-  // (approval list endpoint with decided=approved/rejected). The empty
-  // state of those tabs falls through to the existing "no items" copy.
+  // R11-Task7: filter state drives both the list fetch AND the detail
+  // panel selection — switching tabs clears the right-hand panel because
+  // a row visible under "rejected" is no longer pending and the
+  // ActionBar's gestures are disabled anyway.
   const [filter, setFilter] = useState<ApprovalFilter>('pending');
+  const [selectedApprovalId, setSelectedApprovalId] = useState<string | null>(
+    null,
+  );
+
+  const { items, loading, error } = usePendingApprovals(projectId, filter);
 
   const wrappedMessages = useMemo(() => {
     if (items === null) return [];
     return items.map((it) => ({ item: it, message: approvalToMessage(it) }));
   }, [items]);
 
+  // R11-Task7: counts now reflect the live `items` length under the
+  // active filter — pending was the only real number before, every
+  // other tab showed 0. The inactive tabs still display 0 because the
+  // backend `approval:list` is single-status; an aggregate IPC would be
+  // R12+ work and requires its own service-level count query.
   const counts = useMemo<ApprovalFilterCounts>(() => {
-    const pendingCount = items === null ? 0 : items.length;
-    return {
-      pending: pendingCount,
+    const activeCount = items === null ? 0 : items.length;
+    const base: ApprovalFilterCounts = {
+      pending: 0,
       approved: 0,
       rejected: 0,
-      all: pendingCount,
+      all: 0,
     };
-  }, [items]);
+    base[filter] = activeCount;
+    return base;
+  }, [items, filter]);
 
-  // Visible list — only the pending tab has data right now. Other tabs
-  // render as empty without touching the network or fabricating rows.
-  const visibleMessages =
-    filter === 'pending' || filter === 'all' ? wrappedMessages : [];
+  const handleFilterChange = useCallback((next: ApprovalFilter) => {
+    setFilter(next);
+    // Clear the detail panel — the previously-selected row may not be
+    // visible (or even fetched) under the new tab, so re-anchor on
+    // explicit user click.
+    setSelectedApprovalId(null);
+  }, []);
+
+  const handleRowSelect = useCallback((approvalId: string) => {
+    setSelectedApprovalId(approvalId);
+  }, []);
+
+  const handleDecided = useCallback(() => {
+    // The decision shifts the row out of the pending list (stream merge);
+    // dropping the detail selection prevents the panel from showing a
+    // stale "pending → approved" transition.
+    setSelectedApprovalId(null);
+  }, []);
 
   /**
    * R10-Task4: dispatch the row body by `item.kind`. The
@@ -208,7 +248,7 @@ export function ApprovalInboxView({
         </div>
       );
     }
-    if (visibleMessages.length === 0) {
+    if (wrappedMessages.length === 0) {
       return (
         <p
           data-testid="approval-inbox-empty"
@@ -223,25 +263,46 @@ export function ApprovalInboxView({
         data-testid="approval-inbox-list"
         className="flex flex-col gap-1 py-2"
       >
-        {visibleMessages.map(({ item, message }) => (
-          <li
-            key={item.id}
-            data-testid="approval-inbox-row"
-            data-approval-id={item.id}
-            data-kind={item.kind}
-          >
-            <div
-              data-testid="approval-inbox-row-kind"
-              className="flex items-center gap-2 px-4 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+        {wrappedMessages.map(({ item, message }) => {
+          const isSelected = item.id === selectedApprovalId;
+          return (
+            <li
+              key={item.id}
+              data-testid="approval-inbox-row"
+              data-approval-id={item.id}
+              data-kind={item.kind}
+              data-selected={isSelected ? 'true' : 'false'}
+              className={clsx(
+                isSelected ? 'bg-sunk' : null,
+                'cursor-pointer',
+              )}
+              onClick={() => handleRowSelect(item.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  handleRowSelect(item.id);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-pressed={isSelected}
             >
-              <span data-testid="approval-inbox-row-kind-label">
-                {kindLabel(t, item.kind)}
-              </span>
-              <ApprovalStatusBadge decision="pending" compact />
-            </div>
-            {renderRowBody(item, message)}
-          </li>
-        ))}
+              <div
+                data-testid="approval-inbox-row-kind"
+                className="flex items-center gap-2 px-4 text-xs font-semibold uppercase tracking-wide text-fg-muted"
+              >
+                <span data-testid="approval-inbox-row-kind-label">
+                  {kindLabel(t, item.kind)}
+                </span>
+                <ApprovalStatusBadge
+                  decision={statusToBadgeDecision(item.status)}
+                  compact
+                />
+              </div>
+              {renderRowBody(item, message)}
+            </li>
+          );
+        })}
       </ul>
     );
   })();
@@ -252,21 +313,36 @@ export function ApprovalInboxView({
       data-project-id={projectId}
       data-item-count={items === null ? 'null' : String(items.length)}
       data-filter={filter}
+      data-selected-id={selectedApprovalId ?? ''}
       className={clsx(
-        'flex flex-col flex-1 min-h-0 text-sm text-fg',
+        'flex flex-row flex-1 min-h-0 text-sm text-fg',
         className,
       )}
     >
-      <ApprovalFilterBar
-        active={filter}
-        counts={counts}
-        onChange={setFilter}
-      />
       <div
-        data-testid="approval-inbox-scroll"
-        className="flex-1 min-h-0 overflow-y-auto"
+        data-testid="approval-inbox-list-pane"
+        className="flex flex-col flex-1 min-w-0 min-h-0 border-r border-panel-border"
       >
-        {body}
+        <ApprovalFilterBar
+          active={filter}
+          counts={counts}
+          onChange={handleFilterChange}
+        />
+        <div
+          data-testid="approval-inbox-scroll"
+          className="flex-1 min-h-0 overflow-y-auto"
+        >
+          {body}
+        </div>
+      </div>
+      <div
+        data-testid="approval-inbox-detail-pane"
+        className="hidden md:flex flex-col w-[420px] min-h-0"
+      >
+        <ApprovalDetailPanel
+          approvalId={selectedApprovalId}
+          onDecided={handleDecided}
+        />
       </div>
     </div>
   );

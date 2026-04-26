@@ -1,15 +1,27 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { PatchSet, DiffEntry, ApplyResult } from '../../../../shared/execution-types';
+import type { ApprovalItem } from '../../../../shared/approval-types';
+import type {
+  ApprovalImpactedFile,
+  ApprovalDiffPreview,
+} from '../../../../shared/approval-detail-types';
 
 // Mock dependencies
 const mockApplyPatch = vi.fn<(ps: PatchSet) => Promise<ApplyResult>>();
 const mockGenerateDiff = vi.fn<(ps: PatchSet) => DiffEntry[]>();
+const mockDryRunPreview = vi.fn<
+  (a: ApprovalItem) => Promise<{
+    impactedFiles: ApprovalImpactedFile[];
+    diffPreviews: ApprovalDiffPreview[];
+  }>
+>();
 
 vi.mock('../../../execution/execution-service', () => ({
   ExecutionService: vi.fn().mockImplementation(function () {
     return {
       applyPatch: mockApplyPatch,
       generateDiff: mockGenerateDiff,
+      dryRunPreview: mockDryRunPreview,
     };
   }),
 }));
@@ -26,6 +38,8 @@ import {
   handleExecutionListPending,
   handleExecutionApprove,
   handleExecutionReject,
+  handleExecutionDryRunPreview,
+  setExecutionApprovalServiceAccessor,
 } from '../execution-handler';
 
 describe('execution-handler', () => {
@@ -166,6 +180,81 @@ describe('execution-handler', () => {
       // Since setExecutionWorkspaceRoot is called in beforeEach, this path is covered
       // by the nominal tests. We verify the guard message explicitly.
       vi.resetModules();
+    });
+  });
+
+  // ── R11-Task7: handleExecutionDryRunPreview ────────────────────────
+
+  describe('handleExecutionDryRunPreview (R11-Task7)', () => {
+    const sampleApproval: ApprovalItem = {
+      id: 'app-1',
+      kind: 'cli_permission',
+      projectId: null,
+      channelId: null,
+      meetingId: null,
+      requesterId: null,
+      payload: {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-1',
+        toolName: 'Edit',
+        target: '/tmp/x.txt',
+        description: 'edit',
+        participantId: 'p',
+        participantName: 'P',
+      },
+      status: 'pending',
+      decisionComment: null,
+      createdAt: 0,
+      decidedAt: null,
+    };
+
+    it('looks up approval and forwards to ExecutionService.dryRunPreview', async () => {
+      setExecutionApprovalServiceAccessor(
+        () =>
+          ({
+            get: (id: string) => (id === 'app-1' ? sampleApproval : null),
+          }) as never,
+      );
+      mockDryRunPreview.mockResolvedValueOnce({
+        impactedFiles: [
+          {
+            path: '/tmp/x.txt',
+            addedLines: 0,
+            removedLines: 0,
+            changeKind: 'modified',
+          },
+        ],
+        diffPreviews: [],
+      });
+
+      const result = await handleExecutionDryRunPreview({ approvalId: 'app-1' });
+      expect(mockDryRunPreview).toHaveBeenCalledWith(sampleApproval);
+      expect(result.impactedFiles).toHaveLength(1);
+      expect(result.diffPreviews).toEqual([]);
+    });
+
+    it('throws when approval not found', async () => {
+      setExecutionApprovalServiceAccessor(
+        () => ({ get: () => null }) as never,
+      );
+
+      await expect(
+        handleExecutionDryRunPreview({ approvalId: 'missing' }),
+      ).rejects.toThrow('approval not found: missing');
+    });
+
+    it('throws when approval accessor not initialized', async () => {
+      // Reset the module so the accessor is null again. Importing the
+      // module fresh ensures no leakage from prior tests.
+      vi.resetModules();
+      const fresh = await import('../execution-handler');
+      // Without calling setExecutionApprovalServiceAccessor, the accessor
+      // is null — invocation must throw.
+      // (The module-level executionService also is uninitialized, but the
+      // approval-accessor guard runs first.)
+      await expect(
+        fresh.handleExecutionDryRunPreview({ approvalId: 'any' }),
+      ).rejects.toThrow('approval service accessor not initialized');
     });
   });
 });

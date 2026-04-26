@@ -62,12 +62,17 @@ search/dm spec 으로 보강했다.
 `r11/` 하위에 R11-Task 별 산출물 캡처가 누적된다 (Task 16 Closeout
 시점 정리). Task 4 시점 신규 산출물:
 
-- `r11-task4-playwright-matrix.png` — workflow_dispatch run 결과 (27/27
-  green). 산출 시점: Task 16 closeout. 본 task 에서는 workflow 파일
-  매트릭스 등록까지 완료.
+- `r11-task4-playwright-matrix.png` — workflow_dispatch run 결과 (33/33
+  green, R11-Task7 의 `approval-detail-flow` 이 추가되어 9 → 11 spec
+  매트릭스로 확장). 산출 시점: Task 16 closeout. 본 task 에서는 workflow
+  파일 매트릭스 등록까지 완료.
 - `r11-task4-step-c-downgrade.png` — autonomy-queue Step C 가
   `__rolestraDevHooks.tripFilesPerTurn(21)` 으로 manual 전환되는 순간
   의 캡처. 본 spec 의 `testInfo.attach` 산출물에서 직접 추출 가능.
+- `r11-task7-approval-detail-panel.png` — split layout list+detail 정렬,
+  `apv-detail-cards` 5 카드 (Header / ImpactedFiles / DiffPreview /
+  ConsensusContext / ActionBar) 동시 가시. `e2e/approval-detail-flow.
+  spec.ts` 의 `testInfo.attach` 산출물에서 직접 추출 가능.
 
 ## 검증 매핑
 

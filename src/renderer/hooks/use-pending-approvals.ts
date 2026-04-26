@@ -34,6 +34,31 @@ export interface UsePendingApprovalsResult {
   refresh: () => Promise<void>;
 }
 
+/**
+ * R11-Task7: status filter parameter for the inbox split layout.
+ *
+ * The inbox currently fetches `status='pending'` only — design polish
+ * round 1 added the filter bar (visual) without wiring the data side
+ * because the historical query was R11 work. This task wires status
+ * through, but kept narrow:
+ *   - 'pending'  : default — same fetch as before, plus live stream merge.
+ *   - 'all'      : drop the WHERE — fetches every status, no live merge
+ *                  (the stream events are pending-list focused).
+ *   - 'approved' / 'rejected' : one-shot fetch, no live merge.
+ *
+ * Stream merge stays gated to 'pending' because (i) `approval:decide`
+ * removes from pending and adds to approved/rejected — observing the
+ * other tabs would require a `stream:approval-decided` ADD path that the
+ * R11 stream-bridge does not yet implement, (ii) the user actively
+ * working with a non-pending tab is reading history, not waiting on a
+ * mutation. Keeping merge to pending keeps the shape simple.
+ */
+export type PendingApprovalsStatusFilter =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'all';
+
 function toError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error(String(reason));
 }
@@ -77,6 +102,7 @@ function applyDecided(
 
 export function usePendingApprovals(
   projectId?: string | null,
+  statusFilter: PendingApprovalsStatusFilter = 'pending',
 ): UsePendingApprovalsResult {
   const [items, setItems] = useState<ApprovalItem[] | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -92,20 +118,32 @@ export function usePendingApprovals(
    * react-compiler rule "Cannot access refs during render" — the Symbol()
    * call on every render reads a ref and re-mints a new symbol per render
    * pass, which is banned under the strict rules of hooks.
+   *
+   * R11-Task7: the cache key now combines projectId + statusFilter so a
+   * status change re-fetches without mutating the projectId branch. We
+   * concatenate with a pipe — neither side may legitimately contain that
+   * literal so collisions are not a concern.
    */
-  const lastFetchedFilterRef = useRef<string | null | typeof UNSET>(UNSET);
+  const lastFetchedFilterRef = useRef<string | typeof UNSET>(UNSET);
   const mountedRef = useRef(true);
   const filterProjectId =
     typeof projectId === 'string' && projectId.length > 0 ? projectId : null;
+  const cacheKey = `${filterProjectId ?? ''}|${statusFilter}`;
 
   const runFetch = useCallback(
     async (isInitial: boolean): Promise<void> => {
       setLoading(true);
       if (!isInitial) setError(null);
       try {
-        const request: { status: 'pending'; projectId?: string } = {
-          status: 'pending',
-        };
+        // R11-Task7: 'all' drops the status WHERE so the row encompasses
+        // every persisted status (pending + approved + rejected + expired
+        // + superseded). Other literals pass through verbatim so the
+        // service-level WHERE narrows correctly.
+        const request: {
+          status?: 'pending' | 'approved' | 'rejected';
+          projectId?: string;
+        } = {};
+        if (statusFilter !== 'all') request.status = statusFilter;
         if (filterProjectId !== null) request.projectId = filterProjectId;
         const { items: list } = await invoke('approval:list', request);
         if (!mountedRef.current) return;
@@ -119,25 +157,32 @@ export function usePendingApprovals(
         if (mountedRef.current) setLoading(false);
       }
     },
-    [filterProjectId],
+    [filterProjectId, statusFilter],
   );
 
   useEffect(() => {
     mountedRef.current = true;
-    if (lastFetchedFilterRef.current !== filterProjectId) {
-      lastFetchedFilterRef.current = filterProjectId;
+    if (lastFetchedFilterRef.current !== cacheKey) {
+      lastFetchedFilterRef.current = cacheKey;
       void runFetch(true);
     }
     return () => {
       mountedRef.current = false;
     };
-  }, [runFetch, filterProjectId]);
+  }, [runFetch, cacheKey]);
 
   // R7-Task2: live stream merge. Subscribes unconditionally so the first
   // event after mount is captured even when the initial fetch is still
   // in flight. `arena.onStream` is absent in unit tests that do not stub
   // it — we no-op in that case so existing jsdom tests stay green.
+  //
+  // R11-Task7: the merge is only meaningful for the pending tab — see
+  // PendingApprovalsStatusFilter doc. Other tabs render historical data
+  // and a `created` event would only land for `pending` rows that the
+  // filter excludes anyway; gating the subscription up front keeps the
+  // tab-switch cost off the renderer.
   useEffect(() => {
+    if (statusFilter !== 'pending') return undefined;
     const bridge = typeof window !== 'undefined' ? window.arena : undefined;
     const onStream = bridge?.onStream;
     if (!onStream) return undefined;
@@ -172,7 +217,7 @@ export function usePendingApprovals(
       offCreated();
       offDecided();
     };
-  }, [filterProjectId]);
+  }, [filterProjectId, statusFilter]);
 
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);

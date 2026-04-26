@@ -19,6 +19,44 @@
         "same_error": "Circuit Breaker — 같은 오류 반복"
       }
     },
+    "detail": {
+      "actions": {
+        "approve": "허가",
+        "conditional": "조건부",
+        "errorGeneric": "결정 처리 중 오류가 발생했습니다.",
+        "reject": "거절"
+      },
+      "consensus": {
+        "empty": "아직 등록된 투표가 없습니다.",
+        "title": "회의 맥락",
+        "vote": {
+          "abstain": "기권",
+          "approve": "찬성",
+          "reject": "반대"
+        }
+      },
+      "diffPreview": {
+        "empty": "표시할 변경 미리보기가 없습니다.",
+        "overflowHint": "+{{extra}}건 더 있음",
+        "title": "변경 미리보기",
+        "truncatedHint": "(이어지는 내용 생략)"
+      },
+      "empty": "왼쪽 목록에서 결재 항목을 선택하세요.",
+      "error": "상세 정보를 불러오지 못했습니다.",
+      "header": {
+        "label": "결재 상세"
+      },
+      "impactedFiles": {
+        "empty": "영향 파일 정보가 없습니다.",
+        "kind": {
+          "added": "추가",
+          "deleted": "삭제",
+          "modified": "수정"
+        },
+        "title": "영향 파일"
+      },
+      "loading": "불러오는 중…"
+    },
     "filter": {
       "all": "전체",
       "allRetro": "[*] 전체",

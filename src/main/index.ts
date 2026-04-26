@@ -4,7 +4,10 @@ import { runMigrations } from './database/migrator';
 import { closeDatabase, initDatabaseRoot } from './database/connection';
 import { registerIpcHandlers } from './ipc/router';
 import { providerRegistry } from './providers/registry';
-import { setExecutionWebContents } from './ipc/handlers/execution-handler';
+import {
+  setExecutionWebContents,
+  setExecutionApprovalServiceAccessor,
+} from './ipc/handlers/execution-handler';
 import { setLoggerAccessor } from './ipc/handlers/log-handler';
 import { configureApplicationMenu } from './ui/app-menu';
 import { restoreProvidersFromDb } from './providers/provider-restore';
@@ -36,7 +39,11 @@ import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 import { ApprovalService } from './approvals/approval-service';
 import { MeetingSummaryService } from './llm/meeting-summary-service';
 import { ApprovalSystemMessageInjector } from './approvals/approval-system-message-injector';
-import { setApprovalServiceAccessor } from './ipc/handlers/approval-handler';
+import {
+  setApprovalServiceAccessor,
+  setApprovalDetailExecutionAccessor,
+  setApprovalDetailMeetingAccessor,
+} from './ipc/handlers/approval-handler';
 import { NotificationRepository } from './notifications/notification-repository';
 import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
@@ -54,6 +61,7 @@ import { CircuitBreaker } from './queue/circuit-breaker';
 import { CircuitBreakerStore } from './queue/circuit-breaker-store';
 import { setCircuitBreakerAccessor } from './queue/circuit-breaker-accessor';
 import { setExecutionCircuitBreaker } from './ipc/handlers/execution-handler';
+import { ExecutionService } from './execution/execution-service';
 import { QueueRepository } from './queue/queue-repository';
 import { QueueService } from './queue/queue-service';
 import { createDefaultMeetingStarter } from './queue/default-meeting-starter';
@@ -226,6 +234,22 @@ app.whenReady().then(async () => {
     // flow (request + apply via ApprovalDecisionRouter).
     const approvalService = new ApprovalService(new ApprovalRepository(db));
     setApprovalServiceAccessor(() => approvalService);
+
+    // R11-Task7: dedicated ExecutionService used only by the Approval
+    // detail panel's dryRunPreview projection. Decoupled from the
+    // workspace-bound singleton inside execution-handler because
+    // (i) the detail panel must work BEFORE the user opens a workspace,
+    // (ii) the projection is strictly read-only so an arena-root scoping
+    // is sufficient — no patches ever apply through this instance.
+    const detailPreviewExecutionService = new ExecutionService({
+      workspaceRoot: arenaRoot.getPath(),
+    });
+    setApprovalDetailExecutionAccessor(() => detailPreviewExecutionService);
+    setApprovalDetailMeetingAccessor(() => meetingService);
+    // execution:dry-run-preview itself routes approvalId → ApprovalItem via
+    // the approval service before delegating to dryRunPreview, so the
+    // execution-handler also needs a thin ApprovalService accessor.
+    setExecutionApprovalServiceAccessor(() => approvalService);
 
     const projectService = new ProjectService(projectRepo, arenaRoot, {
       onProjectCreated: (project) => {

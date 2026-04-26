@@ -307,44 +307,142 @@ describe('ApprovalInboxView — filter bar (Set 1 polish)', () => {
     expect(tabs[0].getAttribute('data-active')).toBe('true');
   });
 
-  it('pending count reflects fetched items; approved/rejected default to 0', async () => {
+  it('R11-Task7: pending count reflects fetched items; inactive tabs default to 0 (single-status fetch)', async () => {
     stubBridge([makeItem(), makeItem({ id: 'appr-2' })]);
     renderInbox();
     await waitFor(() => {
       expect(screen.getByTestId('approval-filter-bar')).toBeTruthy();
     });
     const counts = screen.getAllByTestId('approval-filter-count');
-    expect(counts[0].textContent).toBe('2'); // pending
+    // R11-Task7: each tab shows its own fetched items count under the
+    // active filter, others are 0 — the backend `approval:list` is
+    // single-status so we cannot show cross-tab aggregates without a
+    // separate count IPC (deferred to R12+).
+    expect(counts[0].textContent).toBe('2'); // pending (active)
     expect(counts[1].textContent).toBe('0'); // approved
     expect(counts[2].textContent).toBe('0'); // rejected
-    expect(counts[3].textContent).toBe('2'); // all
+    expect(counts[3].textContent).toBe('0'); // all (inactive)
   });
 
-  it('switching to the approved tab hides the pending list (placeholder until R11)', async () => {
-    stubBridge([makeItem()]);
+  it('R11-Task7: switching to the approved tab refetches with status=approved', async () => {
+    // Mock filters items by the request's status so the approved tab
+    // receives an empty result and renders the empty state.
+    const allItems = [makeItem({ id: 'appr-1', status: 'pending' })];
+    const listeners = new Map<string, Set<(p: unknown) => void>>();
+    const onStream = vi.fn((type: string, cb: (p: unknown) => void) => {
+      let bucket = listeners.get(type);
+      if (!bucket) {
+        bucket = new Set();
+        listeners.set(type, bucket);
+      }
+      bucket.add(cb);
+      return () => {
+        bucket?.delete(cb);
+      };
+    });
+    const invoke = vi.fn(async (channel: string, data: unknown) => {
+      if (channel === 'approval:list') {
+        const req = data as { status?: string };
+        const filtered =
+          req.status === undefined
+            ? allItems
+            : allItems.filter((it) => it.status === req.status);
+        return { items: filtered };
+      }
+      throw new Error(`no mock for ${channel}`);
+    });
+    vi.stubGlobal('arena', { platform: 'linux', invoke, onStream });
+
     renderInbox();
     await waitFor(() => {
       expect(screen.getByTestId('approval-inbox-list')).toBeTruthy();
     });
     fireEvent.click(screen.getAllByTestId('approval-filter-tab')[1]);
     await waitFor(() => {
-      expect(screen.queryByTestId('approval-inbox-list')).toBeNull();
+      expect(invoke).toHaveBeenCalledWith('approval:list', {
+        status: 'approved',
+        projectId: PROJECT_ID,
+      });
+    });
+    await waitFor(() => {
       expect(screen.getByTestId('approval-inbox-empty')).toBeTruthy();
     });
   });
 
-  it('renders a pending status badge on every pending row', async () => {
-    stubBridge([makeItem(), makeItem({ id: 'appr-2' })]);
+  it('R11-Task7: row badge reflects each row\'s persisted status', async () => {
+    stubBridge([
+      makeItem({ id: 'appr-pending', status: 'pending' }),
+      makeItem({ id: 'appr-approved', status: 'approved' }),
+    ]);
     renderInbox();
     await waitFor(() => {
       expect(screen.getAllByTestId('approval-inbox-row').length).toBe(2);
     });
-    const badges = screen.getAllByTestId('approval-status-badge');
-    expect(badges.length).toBeGreaterThanOrEqual(2);
-    for (const badge of badges) {
-      expect(badge.getAttribute('data-decision')).toBe('pending');
-      expect(badge.getAttribute('data-compact')).toBe('true');
-    }
+    const rows = screen.getAllByTestId('approval-inbox-row');
+    const badges = rows
+      .map((row) => row.querySelector('[data-testid="approval-status-badge"]'))
+      .filter((b): b is HTMLElement => b !== null);
+    expect(badges.length).toBe(2);
+    const decisions = badges.map((b) => b.getAttribute('data-decision'));
+    expect(decisions).toContain('pending');
+    expect(decisions).toContain('approved');
+  });
+});
+
+describe('ApprovalInboxView — R11-Task7 split layout', () => {
+  it('renders a detail pane alongside the list', async () => {
+    stubBridge([makeItem()]);
+    renderInbox();
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-inbox-list-pane')).toBeTruthy();
+      expect(screen.getByTestId('approval-inbox-detail-pane')).toBeTruthy();
+    });
+    // Empty selection initially — detail panel shows the zero-state.
+    expect(screen.getByTestId('approval-detail-panel')).toBeTruthy();
+    expect(screen.getByTestId('apv-detail-empty')).toBeTruthy();
+  });
+
+  it('clicking a row sets selection and triggers detail-fetch', async () => {
+    const detail = {
+      detail: {
+        approval: makeItem(),
+        impactedFiles: [],
+        diffPreviews: [],
+        consensusContext: null,
+      },
+    };
+    const listeners = new Map<string, Set<(p: unknown) => void>>();
+    const onStream = vi.fn((type: string, cb: (p: unknown) => void) => {
+      let bucket = listeners.get(type);
+      if (!bucket) {
+        bucket = new Set();
+        listeners.set(type, bucket);
+      }
+      bucket.add(cb);
+      return () => {
+        bucket?.delete(cb);
+      };
+    });
+    const invoke = vi.fn(async (channel: string) => {
+      if (channel === 'approval:list') return { items: [makeItem()] };
+      if (channel === 'approval:detail-fetch') return detail;
+      throw new Error(`no mock for ${channel}`);
+    });
+    vi.stubGlobal('arena', { platform: 'linux', invoke, onStream });
+
+    renderInbox();
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-inbox-row')).toBeTruthy();
+    });
+    fireEvent.click(screen.getByTestId('approval-inbox-row'));
+    await waitFor(() => {
+      expect(invoke).toHaveBeenCalledWith('approval:detail-fetch', {
+        approvalId: 'appr-1',
+      });
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('apv-detail-cards')).toBeTruthy();
+    });
   });
 });
 

@@ -10,6 +10,7 @@ import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { DiffEntry, PatchSet } from '../../../shared/execution-types';
 import { ExecutionService } from '../../execution/execution-service';
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
+import type { ApprovalService } from '../../approvals/approval-service';
 import { setAuditLogAccessor } from './audit-handler';
 
 /**
@@ -168,4 +169,44 @@ export function handleExecutionReject(
   // R11-Task2: v2 orchestrator notification path removed (see notes in
   // handleExecutionApprove).
   return { success: deleted };
+}
+
+// ── R11-Task7: dryRunPreview accessor wiring ──────────────────────────
+
+/**
+ * The `execution:dry-run-preview` channel needs an ApprovalService accessor
+ * to look up the row keyed by `approvalId`. The approval-handler already
+ * owns the canonical accessor (`setApprovalServiceAccessor`); we mirror the
+ * same callback here so wiring stays an optional op — boot-time wiring
+ * sets both sides; tests can stub one without the other.
+ */
+let approvalServiceAccessor: (() => ApprovalService) | null = null;
+
+export function setExecutionApprovalServiceAccessor(
+  fn: () => ApprovalService,
+): void {
+  approvalServiceAccessor = fn;
+}
+
+/**
+ * execution:dry-run-preview — read-only projection of an approval into
+ * impacted files + diff preview (R11-Task7). Resolves the `approvalId`
+ * via the ApprovalService accessor and forwards to
+ * `ExecutionService.dryRunPreview`. The handler returns `{impactedFiles,
+ * diffPreviews}` directly per the wire contract — never mutates state.
+ */
+export async function handleExecutionDryRunPreview(
+  data: IpcRequest<'execution:dry-run-preview'>,
+): Promise<IpcResponse<'execution:dry-run-preview'>> {
+  if (approvalServiceAccessor === null) {
+    throw new Error(
+      'execution handler: approval service accessor not initialized',
+    );
+  }
+  const approval = approvalServiceAccessor().get(data.approvalId);
+  if (approval === null) {
+    throw new Error(`approval not found: ${data.approvalId}`);
+  }
+  const preview = await getExecutionService().dryRunPreview(approval);
+  return preview;
 }

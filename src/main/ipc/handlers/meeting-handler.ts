@@ -16,6 +16,10 @@
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { MeetingService } from '../../meetings/meeting-service';
 import { getOrchestrator } from '../../meetings/engine/meeting-orchestrator-registry';
+import {
+  emptyConsensusContext,
+  extractConsensusContext,
+} from '../../meetings/voting-history';
 
 let meetingAccessor: (() => MeetingService) | null = null;
 
@@ -58,4 +62,21 @@ export function handleMeetingListActive(
   // `undefined` through lets the repo's default (10) kick in.
   const meetings = getService().listActive(data?.limit);
   return { meetings };
+}
+
+/**
+ * R11-Task7: meeting:voting-history — projects the meeting's SSM snapshot
+ * into the approvals-side `ApprovalConsensusContext`. Lookup miss returns
+ * an empty context (the panel can still render headers); a parse failure
+ * inside `extractConsensusContext` already collapses to the same empty
+ * shape so the handler stays single-path.
+ */
+export function handleMeetingVotingHistory(
+  data: IpcRequest<'meeting:voting-history'>,
+): IpcResponse<'meeting:voting-history'> {
+  const meeting = getService().get(data.meetingId);
+  if (meeting === null) {
+    return { context: emptyConsensusContext(data.meetingId) };
+  }
+  return { context: extractConsensusContext(meeting) };
 }

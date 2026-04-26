@@ -19,6 +19,44 @@
         "same_error": "Circuit Breaker — repeated error"
       }
     },
+    "detail": {
+      "actions": {
+        "approve": "Approve",
+        "conditional": "Conditional",
+        "errorGeneric": "Failed to record the decision.",
+        "reject": "Reject"
+      },
+      "consensus": {
+        "empty": "No votes recorded yet.",
+        "title": "Meeting context",
+        "vote": {
+          "abstain": "Abstain",
+          "approve": "Approve",
+          "reject": "Reject"
+        }
+      },
+      "diffPreview": {
+        "empty": "No preview available.",
+        "overflowHint": "+{{extra}} more",
+        "title": "Change preview",
+        "truncatedHint": "(content truncated)"
+      },
+      "empty": "Select an approval from the list to see details.",
+      "error": "Failed to load detail.",
+      "header": {
+        "label": "Approval detail"
+      },
+      "impactedFiles": {
+        "empty": "No impacted files.",
+        "kind": {
+          "added": "Added",
+          "deleted": "Deleted",
+          "modified": "Modified"
+        },
+        "title": "Impacted files"
+      },
+      "loading": "Loading…"
+    },
     "filter": {
       "all": "All",
       "allRetro": "[*] All",

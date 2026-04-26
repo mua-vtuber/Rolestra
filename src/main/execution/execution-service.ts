@@ -22,6 +22,11 @@ import type {
   DiffEntry,
 } from '../../shared/execution-types';
 import { DEFAULT_COMMAND_POLICY } from '../../shared/execution-types';
+import type { ApprovalItem } from '../../shared/approval-types';
+import type {
+  ApprovalImpactedFile,
+  ApprovalDiffPreview,
+} from '../../shared/approval-detail-types';
 import { AuditLog } from './audit-log';
 import { PatchApplier } from './patch-applier';
 import { CommandRunner } from './command-runner';
@@ -363,4 +368,121 @@ export class ExecutionService {
   getAuditLog(): AuditLog {
     return this.auditLog;
   }
+
+  /**
+   * R11-Task7: read-only projection of an approval into a forward-looking
+   * "impacted files + diff preview" snapshot. NEVER touches the filesystem
+   * for write — `existsSync` is the only fs call and it sits behind a
+   * try/catch so a missing file or permission denial cannot abort the
+   * preview.
+   *
+   * Why a method on ExecutionService rather than a free function:
+   *   The Approval detail panel anchors the user's "what does this approval
+   *   actually do" question on the same surface that ultimately enforces
+   *   the `applyPatch` boundary. Co-locating the preview keeps the read
+   *   side and the write side under one auditable owner.
+   *
+   * Coverage today:
+   *   - `cli_permission` payloads carrying a recognised file-write tool
+   *     name + a `target` path are projected to one row of impactedFiles
+   *     plus an optional diff "preview" (the human-readable description
+   *     that the CLI prompt would have shown). Line counts default to 0
+   *     because we have not actually run the tool — the preview is a
+   *     forward-looking intent, not a real diff.
+   *   - Every other approval kind (`mode_transition`, `consensus_decision`,
+   *     `circuit_breaker`, `review_outcome`, `failure_report`) returns
+   *     empty arrays. The detail panel renders a zero-state in that case
+   *     instead of guessing wrong.
+   *
+   * Why this is read-only:
+   *   No `applyPatch` / `runCommand` / `writeFile` invocation. The single
+   *   side-effect-shaped call is `existsSync` which is a stat probe; it
+   *   cannot mutate the filesystem and the catch block treats any error
+   *   (EACCES / ENOENT / EBUSY) as "unknown" and falls back to `'modified'`.
+   */
+  async dryRunPreview(approval: ApprovalItem): Promise<{
+    impactedFiles: ApprovalImpactedFile[];
+    diffPreviews: ApprovalDiffPreview[];
+  }> {
+    const empty = { impactedFiles: [], diffPreviews: [] } as {
+      impactedFiles: ApprovalImpactedFile[];
+      diffPreviews: ApprovalDiffPreview[];
+    };
+
+    if (approval.kind !== 'cli_permission') return empty;
+    const payload = approval.payload;
+    if (payload === null || typeof payload !== 'object') return empty;
+
+    const p = payload as Record<string, unknown>;
+    const toolName = typeof p.toolName === 'string' ? p.toolName : '';
+    const target = typeof p.target === 'string' ? p.target : '';
+    const description =
+      typeof p.description === 'string' ? p.description : '';
+
+    const baseKind = inferChangeKindFromTool(toolName);
+    if (baseKind === null || target.length === 0) return empty;
+
+    // Refine `modified` ↔ `added` by stat probe. Stays inside try/catch so
+    // the preview never throws on permission/IO errors — the detail panel
+    // must always render something.
+    let resolvedKind: ApprovalImpactedFile['changeKind'] = baseKind;
+    if (baseKind === 'modified') {
+      try {
+        if (!fs.existsSync(target)) resolvedKind = 'added';
+      } catch {
+        // keep 'modified' — conservative when stat fails
+      }
+    }
+
+    const impactedFiles: ApprovalImpactedFile[] = [
+      {
+        path: target,
+        addedLines: 0,
+        removedLines: 0,
+        changeKind: resolvedKind,
+      },
+    ];
+
+    const diffPreviews: ApprovalDiffPreview[] = [];
+    const trimmed = description.trim();
+    if (trimmed.length > 0) {
+      diffPreviews.push({
+        path: target,
+        preview: trimmed,
+        truncated: false,
+      });
+    }
+
+    return { impactedFiles, diffPreviews };
+  }
 }
+
+/**
+ * R11-Task7: tool-name → change-kind table.
+ *
+ * Returns `null` for any tool we do not recognise as a file-mutation
+ * primitive — the preview surfaces nothing rather than guessing wrong.
+ * Names mirror the literal `toolName` strings emitted by Claude Code +
+ * Codex CLI permission prompts; rename with care.
+ */
+function inferChangeKindFromTool(
+  toolName: string,
+): ApprovalImpactedFile['changeKind'] | null {
+  if (FILE_DELETE_TOOLS.has(toolName)) return 'deleted';
+  if (FILE_WRITE_TOOLS.has(toolName)) return 'modified';
+  return null;
+}
+
+const FILE_WRITE_TOOLS: ReadonlySet<string> = new Set([
+  'Edit',
+  'Write',
+  'MultiEdit',
+  'NotebookEdit',
+  'edit_file',
+  'write_file',
+]);
+
+const FILE_DELETE_TOOLS: ReadonlySet<string> = new Set([
+  'Delete',
+  'delete_file',
+]);

@@ -12,6 +12,7 @@ import type {
   CommandPolicy,
 } from '../../../shared/execution-types';
 import { DEFAULT_COMMAND_POLICY } from '../../../shared/execution-types';
+import type { ApprovalItem } from '../../../shared/approval-types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -739,6 +740,195 @@ describe('ExecutionService', () => {
       };
 
       await expect(service.applyPatch(patchSet)).rejects.toThrow('Path traversal blocked');
+    });
+  });
+
+  // ── R11-Task7: dryRunPreview ────────────────────────────────────
+
+  describe('dryRunPreview (R11-Task7)', () => {
+    function makeApproval(
+      kind: ApprovalItem['kind'],
+      payload: unknown,
+      overrides: Partial<ApprovalItem> = {},
+    ): ApprovalItem {
+      return {
+        id: 'app-1',
+        kind,
+        projectId: null,
+        channelId: null,
+        meetingId: null,
+        requesterId: null,
+        payload,
+        status: 'pending',
+        decisionComment: null,
+        createdAt: 0,
+        decidedAt: null,
+        ...overrides,
+      };
+    }
+
+    it('cli_permission Edit on existing file → modified + description preview', async () => {
+      const target = path.join(tmpDir, 'real.txt');
+      fs.writeFileSync(target, 'hello', 'utf-8');
+      const approval = makeApproval('cli_permission', {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-1',
+        toolName: 'Edit',
+        target,
+        description: '루트 정책 갱신',
+        participantId: 'p-claude',
+        participantName: 'Claude',
+      });
+
+      const result = await service.dryRunPreview(approval);
+      expect(result.impactedFiles).toEqual([
+        { path: target, addedLines: 0, removedLines: 0, changeKind: 'modified' },
+      ]);
+      expect(result.diffPreviews).toEqual([
+        { path: target, preview: '루트 정책 갱신', truncated: false },
+      ]);
+    });
+
+    it('cli_permission Write on missing file → added (no description = no preview)', async () => {
+      const target = path.join(tmpDir, 'new.txt');
+      const approval = makeApproval('cli_permission', {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-2',
+        toolName: 'Write',
+        target,
+        description: null,
+        participantId: 'p-codex',
+        participantName: 'Codex',
+      });
+
+      const result = await service.dryRunPreview(approval);
+      expect(result.impactedFiles[0]?.changeKind).toBe('added');
+      expect(result.diffPreviews).toHaveLength(0);
+    });
+
+    it('cli_permission Delete tool → deleted changeKind regardless of fs state', async () => {
+      const target = path.join(tmpDir, 'doomed.txt');
+      fs.writeFileSync(target, 'bye', 'utf-8');
+      const approval = makeApproval('cli_permission', {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-3',
+        toolName: 'Delete',
+        target,
+        description: '',
+        participantId: 'p-x',
+        participantName: 'X',
+      });
+
+      const result = await service.dryRunPreview(approval);
+      expect(result.impactedFiles).toHaveLength(1);
+      expect(result.impactedFiles[0]?.changeKind).toBe('deleted');
+    });
+
+    it('cli_permission unknown tool name (Bash) → empty arrays', async () => {
+      const approval = makeApproval('cli_permission', {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-4',
+        toolName: 'Bash',
+        target: 'rm -rf /tmp/foo',
+        description: '쉘 실행',
+        participantId: 'p',
+        participantName: 'P',
+      });
+
+      const result = await service.dryRunPreview(approval);
+      expect(result.impactedFiles).toEqual([]);
+      expect(result.diffPreviews).toEqual([]);
+    });
+
+    it('mode_transition / consensus_decision → empty arrays (no fs impact)', async () => {
+      const modeTransition = makeApproval('mode_transition', {
+        kind: 'mode_transition',
+        currentMode: 'hybrid',
+        targetMode: 'auto',
+      });
+      const consensus = makeApproval('consensus_decision', {
+        kind: 'consensus_decision',
+        snapshotHash: 'h',
+        finalText: 'final',
+        votes: { yes: 1, no: 0, pending: 0 },
+      });
+
+      const a = await service.dryRunPreview(modeTransition);
+      const b = await service.dryRunPreview(consensus);
+      expect(a).toEqual({ impactedFiles: [], diffPreviews: [] });
+      expect(b).toEqual({ impactedFiles: [], diffPreviews: [] });
+    });
+
+    it('cli_permission with empty target → empty arrays (defensive)', async () => {
+      const approval = makeApproval('cli_permission', {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-empty',
+        toolName: 'Edit',
+        target: '',
+        description: 'no path',
+        participantId: 'p',
+        participantName: 'P',
+      });
+      const result = await service.dryRunPreview(approval);
+      expect(result.impactedFiles).toEqual([]);
+      expect(result.diffPreviews).toEqual([]);
+    });
+
+    it('null payload → empty arrays (no projection)', async () => {
+      const approval = makeApproval('cli_permission', null);
+      const result = await service.dryRunPreview(approval);
+      expect(result.impactedFiles).toEqual([]);
+      expect(result.diffPreviews).toEqual([]);
+    });
+
+    it('does not write to filesystem (read-only invariant)', async () => {
+      const target = path.join(tmpDir, 'sentinel.txt');
+      fs.writeFileSync(target, 'before', 'utf-8');
+      const approval = makeApproval('cli_permission', {
+        kind: 'cli_permission',
+        cliRequestId: 'cli-ro',
+        toolName: 'Edit',
+        target,
+        description: 'should not write',
+        participantId: 'p',
+        participantName: 'P',
+      });
+      await service.dryRunPreview(approval);
+      // File content must be unchanged — preview never executes apply.
+      expect(fs.readFileSync(target, 'utf-8')).toBe('before');
+      // Audit log must not have grown — dryRunPreview is observation only.
+      const beforeCount = service.getAuditLog().size;
+      await service.dryRunPreview(approval);
+      expect(service.getAuditLog().size).toBe(beforeCount);
+    });
+
+    it('alternate write tool aliases (write_file / edit_file) → recognised', async () => {
+      const target = path.join(tmpDir, 'snake.txt');
+      fs.writeFileSync(target, '!', 'utf-8');
+      const r1 = await service.dryRunPreview(
+        makeApproval('cli_permission', {
+          kind: 'cli_permission',
+          cliRequestId: 'a',
+          toolName: 'edit_file',
+          target,
+          description: '',
+          participantId: 'p',
+          participantName: 'P',
+        }),
+      );
+      const r2 = await service.dryRunPreview(
+        makeApproval('cli_permission', {
+          kind: 'cli_permission',
+          cliRequestId: 'b',
+          toolName: 'write_file',
+          target,
+          description: '',
+          participantId: 'p',
+          participantName: 'P',
+        }),
+      );
+      expect(r1.impactedFiles[0]?.changeKind).toBe('modified');
+      expect(r2.impactedFiles[0]?.changeKind).toBe('modified');
     });
   });
 });

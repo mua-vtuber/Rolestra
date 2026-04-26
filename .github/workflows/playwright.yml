@@ -9,17 +9,19 @@ name: Playwright Electron E2E
 #
 # Matrix:
 #   - 3 OS   : ubuntu-latest, windows-latest, macos-latest
-#   - 10 spec: approval-flow, autonomy-queue-flow, dm-flow,
-#              external-project-flow, meeting-flow, member-profile-flow,
-#              messenger-flow, onboarding-flow, search-flow, settings-tabs-flow
+#   - 11 spec: approval-detail-flow, approval-flow, autonomy-queue-flow,
+#              dm-flow, external-project-flow, meeting-flow,
+#              member-profile-flow, messenger-flow, onboarding-flow,
+#              search-flow, settings-tabs-flow
 #
-# 10 × 3 = 30 cells. R11-Task4 added `search-flow` (R10 Known Concern #3)
+# 11 × 3 = 33 cells. R11-Task4 added `search-flow` (R10 Known Concern #3)
 # and `dm-flow` (Known Concern #3) and activated `autonomy-queue-flow`
 # Step C end-to-end via the `__rolestraDevHooks` preload bridge (Known
 # Concern #2). R11-Task6 adds `onboarding-flow` covering the first-boot
-# 5-step wizard + `onboarding:complete` reentry guard. The closeout in
-# Task 16 verifies all 30 cells green from a workflow_dispatch run +
-# signs off on the 12 native screenshots.
+# 5-step wizard + `onboarding:complete` reentry guard. R11-Task7 adds
+# `approval-detail-flow` covering the split-layout #승인-대기 inbox +
+# filter wiring. The closeout in Task 16 verifies all 33 cells green
+# from a workflow_dispatch run + signs off on the 12 native screenshots.
 
 on:
   workflow_dispatch:
@@ -36,6 +38,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         spec:
+          - approval-detail-flow
           - approval-flow
           - autonomy-queue-flow
           - dm-flow

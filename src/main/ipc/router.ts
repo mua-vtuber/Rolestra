@@ -31,6 +31,7 @@ import {
   handleExecutionListPending,
   handleExecutionApprove,
   handleExecutionReject,
+  handleExecutionDryRunPreview,
 } from './handlers/execution-handler';
 import { handlePermissionDryRunFlags } from './handlers/permission-handler';
 import {
@@ -119,6 +120,7 @@ import {
 import {
   handleMeetingAbort,
   handleMeetingListActive,
+  handleMeetingVotingHistory,
 } from './handlers/meeting-handler';
 import {
   handleMemberList,
@@ -133,6 +135,7 @@ import {
 import {
   handleApprovalList,
   handleApprovalDecide,
+  handleApprovalDetailFetch,
 } from './handlers/approval-handler';
 import {
   handleNotificationGetPrefs,
@@ -298,6 +301,10 @@ export function registerIpcHandlers(): void {
   handle('execution:list-pending', isDev, () => handleExecutionListPending());
   handle('execution:approve', isDev, (data) => handleExecutionApprove(data));
   handle('execution:reject', isDev, (data) => handleExecutionReject(data));
+  // R11-Task7: read-only approval projection — never mutates the FS.
+  handle('execution:dry-run-preview', isDev, (data) =>
+    handleExecutionDryRunPreview(data),
+  );
 
   // ── CLI Native Permission Requests ────────────────────────────────────
   // R7-Task4 removed — ApprovalService now owns the full CLI permission
@@ -399,6 +406,12 @@ export function registerIpcHandlers(): void {
   // ── v3: Meeting ─────────────────────────────────────────────────
   handle('meeting:abort', isDev, (data) => handleMeetingAbort(data));
   handle('meeting:list-active', isDev, (data) => handleMeetingListActive(data));
+  // R11-Task7: voting context for the Approval detail panel — read-only
+  // projection of meeting.state_snapshot_json. Empty context on miss so
+  // the panel can still render headers.
+  handle('meeting:voting-history', isDev, (data) =>
+    handleMeetingVotingHistory(data),
+  );
 
   // ── v3: Member Profile ──────────────────────────────────────────
   handle('member:list', isDev, () => handleMemberList());
@@ -413,6 +426,11 @@ export function registerIpcHandlers(): void {
   // ── v3: Approval Inbox ──────────────────────────────────────────
   handle('approval:list', isDev, (data) => handleApprovalList(data));
   handle('approval:decide', isDev, (data) => handleApprovalDecide(data));
+  // R11-Task7: detail panel — composes approval row + dryRunPreview +
+  // voting context into one round-trip.
+  handle('approval:detail-fetch', isDev, (data) =>
+    handleApprovalDetailFetch(data),
+  );
 
   // ── v3: Notification ────────────────────────────────────────────
   handle('notification:get-prefs', isDev, () => handleNotificationGetPrefs());
