@@ -50,8 +50,12 @@ describe('v3 migration 012-circuit-breaker-state — schema contract', () => {
         .prepare('SELECT id FROM migrations ORDER BY rowid')
         .all() as Array<{ id: string }>;
       expect(rows.map((r) => r.id)).toContain('012-circuit-breaker-state');
-      // 012 should be the LAST registered migration.
-      expect(rows[rows.length - 1]?.id).toBe('012-circuit-breaker-state');
+      // R11-Task6 added 013-onboarding-state above 012; the assertion
+      // moves from "012 is the last id" to "012 sits at index 11" so
+      // future migrations can append without churning this test.
+      expect(rows.findIndex((r) => r.id === '012-circuit-breaker-state')).toBe(
+        11,
+      );
     });
   });
 

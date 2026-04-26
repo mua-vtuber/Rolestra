@@ -514,7 +514,8 @@
   },
   "onboarding": {
     "actions": {
-      "next": "Next → Assign roles",
+      "finish": "Finish",
+      "next": "Next",
       "prev": "← Back",
       "rescan": "$ rescan"
     },
@@ -527,10 +528,67 @@
     "description": "Detected installed CLIs / models. Selected ones will join the office and you'll assign roles next. You can add or remove staff later in Settings.",
     "description_settingsCta": "Reopen the onboarding flow to inspect mockup fidelity in design-polish mode.",
     "footer": {
-      "constraint": "{{count}} selected · {{min}} minimum required"
+      "constraint": "{{count}} selected · {{min}} minimum required",
+      "constraint_one": "",
+      "constraint_other": "",
+      "step1": "Welcome — proceed when ready.",
+      "step3": "Assign a one-line role to each selected member.",
+      "step4": "Pick the default permission mode.",
+      "step5": "Enter the kind and slug of your first project."
     },
     "heading": "Who do you want to work with?",
     "settingsCta": "Restart onboarding",
+    "step1": {
+      "body": "Rolestra orchestrates multiple AI agents like staff in a single office. The next 5 steps walk you through staff selection, role assignment, permission mode, and your first project.",
+      "description": "Quick tour before you start the office.",
+      "heading": "Welcome to your Rolestra office"
+    },
+    "step3": {
+      "description": "Give each selected member a one-line role. You can refine the full profile later in Settings → Members.",
+      "heading": "Assign roles",
+      "placeholder": "e.g. Thoughtful senior engineer / Detail-oriented QA"
+    },
+    "step4": {
+      "description": "Choose the default permission mode for new projects. Each project can override this later.",
+      "heading": "Permission mode",
+      "modes": {
+        "approval": {
+          "description": "Approve every change — safest",
+          "label": "Approval"
+        },
+        "auto": {
+          "description": "AI runs without prompts — fastest",
+          "label": "Auto"
+        },
+        "hybrid": {
+          "description": "Approve only sensitive ops — recommended",
+          "label": "Hybrid"
+        }
+      },
+      "title": "Permission mode"
+    },
+    "step5": {
+      "description": "Create your first project to bring the office online. For external / imported, set the folder from the dashboard after finishing.",
+      "heading": "First project",
+      "kindLabel": "Project kind",
+      "kinds": {
+        "external": {
+          "description": "Link an existing folder via external link",
+          "label": "External"
+        },
+        "imported": {
+          "description": "Copy an existing folder into a new project",
+          "label": "Imported"
+        },
+        "new": {
+          "description": "Create a brand-new folder — recommended",
+          "label": "New"
+        }
+      },
+      "slugHint": "Path: projects/{{slug}}/",
+      "slugLabel": "Slug",
+      "slugPlaceholder": "e.g. my-first-arena"
+    },
     "steps": {
       "firstProject": "First project",
       "office": "Office",

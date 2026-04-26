@@ -180,6 +180,34 @@ export default {
     // detect them, but anchor the whole `error.*` namespace so future
     // categorized error keys (network, permission, …) populate cleanly.
     /^translation:error(\..+)?$/,
+    // R11-Task6 onboarding.* — the 5-step wizard composes a lot of keys
+    // dynamically. Each subtree gets its own anchor (mirrors the
+    // `meeting.state(\..+)?` pattern above) so the parser preserves
+    // them even though no static t() call references them directly.
+    //
+    //   - `onboarding.steps.${step.key}` (OBStepper)
+    //   - `onboarding.summary.${stat}` (OBSummaryStrip)
+    //   - `onboarding.step${currentStep}.heading|description`
+    //   - `onboarding.footer.step${currentStep}` + `footer.constraint`
+    //   - `onboarding.step4.modes.${mode}.{label,description}`
+    //   - `onboarding.step5.kinds.${option}.{label,description}`
+    //   - `onboarding.step1.heading` (template-string key)
+    //   - `onboarding.step3.heading` / `step5.heading` (template)
+    //   - `onboarding.actions.{next,prev,finish,rescan}` (kept for completeness)
+    /^translation:onboarding\.steps(\..+)?$/,
+    /^translation:onboarding\.summary(\..+)?$/,
+    /^translation:onboarding\.footer(\..+)?$/,
+    /^translation:onboarding\.step1(\..+)?$/,
+    /^translation:onboarding\.step3(\..+)?$/,
+    /^translation:onboarding\.step4(\..+)?$/,
+    /^translation:onboarding\.step5(\..+)?$/,
+    /^translation:onboarding\.actions(\..+)?$/,
+    /^translation:onboarding\.topBar(\..+)?$/,
+    /^translation:onboarding\.cardLabels(\..+)?$/,
+    /^translation:onboarding\.heading$/,
+    /^translation:onboarding\.description$/,
+    /^translation:onboarding\.description_settingsCta$/,
+    /^translation:onboarding\.settingsCta$/,
   ],
   failOnWarnings: false,
 };

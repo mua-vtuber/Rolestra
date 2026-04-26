@@ -8,16 +8,18 @@ name: Playwright Electron E2E
 # only) from a weekly macOS cron and lands a usage-report workflow.
 #
 # Matrix:
-#   - 3 OS  : ubuntu-latest, windows-latest, macos-latest
-#   - 9 spec: approval-flow, autonomy-queue-flow, dm-flow,
-#             external-project-flow, meeting-flow, member-profile-flow,
-#             messenger-flow, search-flow, settings-tabs-flow
+#   - 3 OS   : ubuntu-latest, windows-latest, macos-latest
+#   - 10 spec: approval-flow, autonomy-queue-flow, dm-flow,
+#              external-project-flow, meeting-flow, member-profile-flow,
+#              messenger-flow, onboarding-flow, search-flow, settings-tabs-flow
 #
-# 9 × 3 = 27 cells. R11-Task4 added `search-flow` (R10 Known Concern #3)
+# 10 × 3 = 30 cells. R11-Task4 added `search-flow` (R10 Known Concern #3)
 # and `dm-flow` (Known Concern #3) and activated `autonomy-queue-flow`
 # Step C end-to-end via the `__rolestraDevHooks` preload bridge (Known
-# Concern #2). The closeout in Task 16 verifies all 27 cells green from a
-# workflow_dispatch run + signs off on the 12 native screenshots.
+# Concern #2). R11-Task6 adds `onboarding-flow` covering the first-boot
+# 5-step wizard + `onboarding:complete` reentry guard. The closeout in
+# Task 16 verifies all 30 cells green from a workflow_dispatch run +
+# signs off on the 12 native screenshots.
 
 on:
   workflow_dispatch:
@@ -41,6 +43,7 @@ jobs:
           - meeting-flow
           - member-profile-flow
           - messenger-flow
+          - onboarding-flow
           - search-flow
           - settings-tabs-flow
     env:

@@ -18,7 +18,8 @@ import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
 import { useAppViewStore, type AppView } from './stores/app-view-store';
 import { useActiveChannelStore } from './stores/active-channel-store';
-import type { Project } from '../shared/project-types';
+import { invoke } from './ipc/invoke';
+import type { Project, ProjectKind } from '../shared/project-types';
 
 /**
  * 현재 마운트할 최상위 뷰. R5에서는 dashboard ↔ messenger 2개만 실제 페이지가
@@ -53,12 +54,39 @@ function toRailProject(project: Project): ProjectRailProject {
 
 export function App() {
   const { t } = useTranslation();
-  const { projects } = useProjects();
+  const { projects, createNew } = useProjects();
   const { activeProjectId, setActive } = useActiveProject();
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const view = useAppViewStore((s) => s.view);
   const setView = useAppViewStore((s) => s.setView);
+
+  // R11-Task6: first-boot auto-enter into the onboarding wizard. We
+  // probe `onboarding:get-state` once on mount; if the persisted row
+  // says `completed=false` we switch view='onboarding'. Subsequent
+  // boots (after `onboarding:complete`) skip this branch entirely so a
+  // returning user lands on the dashboard. The probe runs after the
+  // bridge is available — vitest jsdom env without preload simply
+  // resolves nothing and we stay on the default view.
+  useEffect(() => {
+    const arena = (window as unknown as { arena?: unknown }).arena;
+    if (!arena) return;
+    void (async () => {
+      try {
+        const { state } = await invoke('onboarding:get-state', undefined);
+        if (!state.completed) {
+          setView('onboarding');
+        }
+      } catch (reason) {
+        console.warn(
+          '[rolestra] onboarding:get-state failed',
+          reason instanceof Error ? reason.message : String(reason),
+        );
+      }
+    })();
+    // setView is stable from zustand; deliberately mounted-once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const activeChannelMap = useActiveChannelStore((s) => s.channelIdByProject);
   const setActiveChannelIdStore = useActiveChannelStore(
     (s) => s.setActiveChannelId,
@@ -152,11 +180,48 @@ export function App() {
     [setActive],
   );
 
+  // R11-Task6: step-5 finish hook — wires the wizard's first-project
+  // input into the live `project:create` flow. We delegate to
+  // `useProjects().createNew` so the project list refreshes and the
+  // active-project store can pick up the new id. Failure logs and
+  // continues — the dashboard still renders, the user can retry via
+  // `ProjectCreateModal`.
+  const handleOnboardingComplete = useCallback(
+    (input: { kind: ProjectKind; slug: string }): void => {
+      // Wizard only auto-creates for `kind='new'` because `external` /
+      // `imported` need a folder picker that the wizard does not host.
+      // For those kinds the user lands on the dashboard with the
+      // `ProjectCreateModal` ready — same UX as before R11-Task6.
+      if (input.kind !== 'new') return;
+      void (async () => {
+        try {
+          const project = await createNew({
+            kind: 'new',
+            name: input.slug,
+            permissionMode: 'hybrid',
+          });
+          void setActive(project.id);
+        } catch (reason) {
+          console.warn(
+            '[rolestra] onboarding first-project create failed',
+            reason instanceof Error ? reason.message : String(reason),
+          );
+        }
+      })();
+    },
+    [createNew, setActive],
+  );
+
   // Onboarding 은 NavRail / ProjectRail / ShellTopBar 가 없는 pre-office
   // shell — Shell wrapper 자체를 우회하고 OnboardingPage 만 fullscreen
   // 으로 마운트한다. exit 시 dashboard 로 복귀.
   if (view === 'onboarding') {
-    return <OnboardingPage onExit={() => setView('dashboard')} />;
+    return (
+      <OnboardingPage
+        onExit={() => setView('dashboard')}
+        onCompleteWithProject={handleOnboardingComplete}
+      />
+    );
   }
 
   return (

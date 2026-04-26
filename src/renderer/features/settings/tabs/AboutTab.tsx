@@ -6,10 +6,11 @@
  * a plain string — Task 7 (theme fidelity) flips this to a stamped
  * graphic once the 6-theme evidence pack lands.
  */
-import type { ReactElement } from 'react';
+import { useCallback, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../../components/primitives/button';
+import { invoke } from '../../../ipc/invoke';
 import { useAppViewStore } from '../../../stores/app-view-store';
 
 interface ArenaPlatform {
@@ -27,6 +28,29 @@ export function AboutTab(): ReactElement {
   const { t } = useTranslation();
   const arena = getArenaPlatform();
   const setView = useAppViewStore((s) => s.setView);
+
+  // R11-Task6: "Restart onboarding" CTA. The wizard reads
+  // `onboarding:get-state` on mount, so resetting the persisted row
+  // back to step 1 + empty selections is enough to make a fresh run
+  // appear. We deliberately do NOT also flip `completed=false` here —
+  // App.tsx's first-boot probe is mount-once, so a returning user that
+  // clicks this CTA enters via `setView('onboarding')`, not via the
+  // probe, and the wizard's `currentStep=1` reset is what they expect.
+  const handleRestart = useCallback((): void => {
+    void (async () => {
+      try {
+        await invoke('onboarding:set-state', {
+          partial: { currentStep: 1, selections: {} },
+        });
+      } catch (reason) {
+        console.warn(
+          '[rolestra] onboarding restart failed',
+          reason instanceof Error ? reason.message : String(reason),
+        );
+      }
+      setView('onboarding');
+    })();
+  }, [setView]);
 
   return (
     <section
@@ -73,7 +97,7 @@ export function AboutTab(): ReactElement {
           tone="secondary"
           size="sm"
           data-testid="settings-about-onboarding-cta"
-          onClick={() => setView('onboarding')}
+          onClick={handleRestart}
         >
           {t('onboarding.settingsCta')}
         </Button>

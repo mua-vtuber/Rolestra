@@ -42,6 +42,13 @@ import { NotificationService } from './notifications/notification-service';
 import { ElectronNotifierAdapter } from './notifications/electron-notifier-adapter';
 import { setNotificationServiceAccessor } from './ipc/handlers/notification-handler';
 import { setDevHooksAccessors } from './ipc/handlers/dev-hooks-handler';
+import {
+  setOnboardingServiceAccessor,
+  setProviderDetectionDeps,
+} from './ipc/handlers/onboarding-handler';
+import { OnboardingService } from './onboarding/onboarding-service';
+import { OnboardingStateRepository } from './onboarding/onboarding-state-repository';
+import { handleProviderDetectCli } from './ipc/handlers/cli-detect-handler';
 import { setQueueServiceAccessor } from './ipc/handlers/queue-handler';
 import { CircuitBreaker } from './queue/circuit-breaker';
 import { CircuitBreakerStore } from './queue/circuit-breaker-store';
@@ -399,6 +406,20 @@ app.whenReady().then(async () => {
       channelService,
     });
     autonomyGate.wire();
+
+    // R11-Task6: Onboarding service singleton + provider:detect deps.
+    // The wizard needs durable state (migration 013) so a window close
+    // mid-flow does not throw the user back to step 1. Detection deps
+    // bridge the registry + the existing CLI scanner so provider:detect
+    // never reaches into electron internals from the handler module.
+    const onboardingService = new OnboardingService(
+      new OnboardingStateRepository(db),
+    );
+    setOnboardingServiceAccessor(() => onboardingService);
+    setProviderDetectionDeps({
+      listProviders: () => providerRegistry.listAll(),
+      scanCli: () => handleProviderDetectCli(),
+    });
 
     // R11-Task4: dev hooks accessor wire (E2E only). The IPC channel
     // registration in `router.ts` is itself gated by ROLESTRA_E2E=1, so

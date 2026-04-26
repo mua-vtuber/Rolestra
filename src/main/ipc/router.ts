@@ -142,6 +142,12 @@ import {
 } from './handlers/notification-handler';
 import { handleDevTripCircuitBreaker } from './handlers/dev-hooks-handler';
 import {
+  handleOnboardingGetState,
+  handleOnboardingSetState,
+  handleOnboardingComplete,
+  handleProviderDetect,
+} from './handlers/onboarding-handler';
+import {
   handleQueueList,
   handleQueueAdd,
   handleQueueReorder,
@@ -425,6 +431,12 @@ export function registerIpcHandlers(): void {
   handle('queue:cancel', isDev, (data) => handleQueueCancel(data));
   handle('queue:pause', isDev, (data) => handleQueuePause(data));
   handle('queue:resume', isDev, (data) => handleQueueResume(data));
+
+  // ── R11-Task6: Onboarding wizard + provider auto-detection ──────
+  handle('onboarding:get-state', isDev, () => handleOnboardingGetState());
+  handle('onboarding:set-state', isDev, (data) => handleOnboardingSetState(data));
+  handle('onboarding:complete', isDev, () => handleOnboardingComplete());
+  handle('provider:detect', isDev, () => handleProviderDetect());
 
   // ── R11-Task4: dev hooks (E2E only) ─────────────────────────────
   // Gated on ROLESTRA_E2E=1 so production builds never expose the trip
