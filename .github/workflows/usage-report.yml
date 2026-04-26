@@ -1,0 +1,176 @@
+name: Weekly CI Usage Report
+
+# R11-Task14: weekly snapshot of the Playwright OS matrix runner usage.
+#
+# Closes R10 D5 risk: macOS hosted runners are billed at 10× the Linux
+# rate, and R11-Task4 grew the matrix from 21 cells (R10 Task 13) to
+# 33 cells (R11 Task 4 + 6 + 7). The PR-time gate in playwright.yml
+# already excludes macOS unless the `macos` label is set, but the team
+# still needs visibility into how much budget the matrix burns each
+# week (full sweep on schedule + closeout workflow_dispatch). This
+# workflow runs every Sunday and either creates or comments on a
+# titled tracking issue with a per-OS breakdown.
+#
+# Output channels:
+#   - GitHub Actions step summary (always — visible in run UI).
+#   - Repo issue titled "Weekly CI usage report" (upserted — comment
+#     when an open issue with that exact title exists, otherwise create).
+#
+# The aggregation walks `playwright.yml` workflow runs over the trailing
+# 7 days. Each cell becomes a job whose name embeds the OS via the
+# matrix expression `${{ matrix.spec }} on ${{ matrix.os }}`; we read
+# the OS off the job name, sum wall-clock minutes from started_at /
+# completed_at, then apply the GitHub billing multiplier (Linux ×1,
+# Windows ×2, macOS ×10) for a billed-minutes total.
+#
+# Manual trigger via workflow_dispatch is supported for ad-hoc audits.
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Sunday 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  actions: read
+
+jobs:
+  report:
+    name: Aggregate Playwright matrix usage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Aggregate matrix runner minutes (trailing 7 days)
+        id: aggregate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          SINCE=$(date -u -d '7 days ago' '+%Y-%m-%dT%H:%M:%SZ')
+          UNTIL=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
+          REPORT="$RUNNER_TEMP/report.md"
+
+          # Workflow run IDs created in the trailing 7 days. The `created`
+          # qualifier accepts a single-sided range; quoting is critical so
+          # the `>` is not parsed as a redirect.
+          mapfile -t run_ids < <(gh api --paginate \
+            -X GET "/repos/${REPO}/actions/workflows/playwright.yml/runs" \
+            -f "created=>${SINCE}" \
+            -f "per_page=100" \
+            --jq '.workflow_runs[].id')
+
+          ubuntu_jobs=0
+          windows_jobs=0
+          macos_jobs=0
+          ubuntu_minutes=0
+          windows_minutes=0
+          macos_minutes=0
+
+          for run_id in "${run_ids[@]}"; do
+            [ -z "${run_id}" ] && continue
+            jobs_csv=$(gh api --paginate \
+              -X GET "/repos/${REPO}/actions/runs/${run_id}/jobs" \
+              --jq '.jobs[]
+                    | select(.conclusion != null
+                             and .started_at != null
+                             and .completed_at != null)
+                    | "\(.name)\t\(.started_at)\t\(.completed_at)"' \
+              || true)
+            while IFS=$'\t' read -r name started completed; do
+              [ -z "${name}" ] && continue
+              # Job names follow `${{ matrix.spec }} on ${{ matrix.os }}`.
+              case "${name}" in
+                *"on ubuntu-latest")  os=ubuntu ;;
+                *"on windows-latest") os=windows ;;
+                *"on macos-latest")   os=macos ;;
+                *) continue ;;
+              esac
+
+              start_epoch=$(date -u -d "${started}" '+%s')
+              end_epoch=$(date -u -d "${completed}" '+%s')
+              # Round wall-clock seconds up to the next whole minute.
+              minutes=$(( (end_epoch - start_epoch + 59) / 60 ))
+              if [ "${minutes}" -lt 0 ]; then
+                minutes=0
+              fi
+
+              case "${os}" in
+                ubuntu)
+                  ubuntu_jobs=$(( ubuntu_jobs + 1 ))
+                  ubuntu_minutes=$(( ubuntu_minutes + minutes ))
+                  ;;
+                windows)
+                  windows_jobs=$(( windows_jobs + 1 ))
+                  windows_minutes=$(( windows_minutes + minutes ))
+                  ;;
+                macos)
+                  macos_jobs=$(( macos_jobs + 1 ))
+                  macos_minutes=$(( macos_minutes + minutes ))
+                  ;;
+              esac
+            done <<< "${jobs_csv}"
+          done
+
+          # Billing multipliers documented at:
+          # https://docs.github.com/billing/managing-billing-for-github-actions/about-billing-for-github-actions#minute-multipliers
+          ubuntu_billed=${ubuntu_minutes}
+          windows_billed=$(( windows_minutes * 2 ))
+          macos_billed=$(( macos_minutes * 10 ))
+          total_billed=$(( ubuntu_billed + windows_billed + macos_billed ))
+          total_runs=${#run_ids[@]}
+
+          {
+            echo "## Playwright OS matrix usage — week ending $(date -u '+%Y-%m-%d')"
+            echo ""
+            echo "Window: \`${SINCE}\` → \`${UNTIL}\`. Workflow: \`playwright.yml\`. Runs scanned: ${total_runs}."
+            echo ""
+            echo "| OS | jobs | wall-clock min | billed min |"
+            echo "|---|---:|---:|---:|"
+            echo "| ubuntu-latest  | ${ubuntu_jobs}  | ${ubuntu_minutes}  | ${ubuntu_billed} (×1) |"
+            echo "| windows-latest | ${windows_jobs} | ${windows_minutes} | ${windows_billed} (×2) |"
+            echo "| macos-latest   | ${macos_jobs}   | ${macos_minutes}   | ${macos_billed} (×10) |"
+            echo "| **total**      |                  |                    | **${total_billed}** |"
+            echo ""
+            echo "Multipliers: <https://docs.github.com/billing/managing-billing-for-github-actions/about-billing-for-github-actions#minute-multipliers>."
+            echo ""
+            echo "_R11-Task14: macOS PR-time runs are gated behind the \`macos\` label. Schedule + workflow_dispatch trigger the full sweep._"
+          } | tee -a "$GITHUB_STEP_SUMMARY" > "${REPORT}"
+
+          {
+            echo "report-path=${REPORT}"
+            echo "total-billed=${total_billed}"
+            echo "macos-jobs=${macos_jobs}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upsert weekly tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          REPORT_PATH: ${{ steps.aggregate.outputs.report-path }}
+        run: |
+          set -euo pipefail
+
+          TITLE="Weekly CI usage report"
+          # Open issues whose title equals TITLE exactly. Search returns
+          # partial matches so we filter again with jq.
+          existing=$(gh issue list \
+            --repo "${REPO}" \
+            --state open \
+            --search "in:title \"${TITLE}\"" \
+            --json number,title \
+            --jq '.[] | select(.title == "'"${TITLE}"'") | .number' \
+            | head -n1)
+
+          body=$(cat "${REPORT_PATH}")
+
+          if [ -n "${existing:-}" ]; then
+            gh issue comment "${existing}" --repo "${REPO}" --body "${body}"
+          else
+            gh issue create \
+              --repo "${REPO}" \
+              --title "${TITLE}" \
+              --body "${body}"
+          fi

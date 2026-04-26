@@ -1,11 +1,18 @@
 name: Playwright Electron E2E
 
-# R10-Task13 + R11-Task4: cross-OS Electron E2E matrix.
+# R10-Task13 + R11-Task4 + R11-Task14: cross-OS Electron E2E matrix.
 #
-# Triggers manually via workflow_dispatch and on push to main. PR runs are
-# explicitly NOT enabled by default — Electron E2E on hosted runners burns
-# minutes (especially macOS); R11-Task14 splits PR triggers (Win + Linux
-# only) from a weekly macOS cron and lands a usage-report workflow.
+# Trigger split (R11-Task14, closes R10 D5 risk):
+#   - pull_request : ubuntu + windows only (PR-time gate). macOS skipped
+#                    unless the PR carries the `macos` label.
+#   - push:main    : ubuntu + windows only (post-merge sanity).
+#   - schedule     : weekly Monday 06:00 UTC, full 3-OS matrix.
+#   - workflow_dispatch : full 3-OS matrix on demand (closeout signoff).
+#
+# macOS hosted runners are billed at 10× the Linux rate, so the cell is
+# gated behind the conditions above. The job-level `if` walks each matrix
+# cell and skips the macos-latest entry when none of the gating triggers
+# applied.
 #
 # Matrix:
 #   - 3 OS   : ubuntu-latest, windows-latest, macos-latest
@@ -14,24 +21,40 @@ name: Playwright Electron E2E
 #              member-profile-flow, messenger-flow, onboarding-flow,
 #              search-flow, settings-tabs-flow
 #
-# 11 × 3 = 33 cells. R11-Task4 added `search-flow` (R10 Known Concern #3)
-# and `dm-flow` (Known Concern #3) and activated `autonomy-queue-flow`
-# Step C end-to-end via the `__rolestraDevHooks` preload bridge (Known
-# Concern #2). R11-Task6 adds `onboarding-flow` covering the first-boot
-# 5-step wizard + `onboarding:complete` reentry guard. R11-Task7 adds
+# 11 × 3 = 33 cells when fully expanded; PR/push runs evaluate to 22.
+# R11-Task4 added `search-flow` (R10 Known Concern #3) and `dm-flow`
+# (Known Concern #3) and activated `autonomy-queue-flow` Step C
+# end-to-end via the `__rolestraDevHooks` preload bridge (Known Concern
+# #2). R11-Task6 adds `onboarding-flow` covering the first-boot 5-step
+# wizard + `onboarding:complete` reentry guard. R11-Task7 adds
 # `approval-detail-flow` covering the split-layout #승인-대기 inbox +
 # filter wiring. The closeout in Task 16 verifies all 33 cells green
 # from a workflow_dispatch run + signs off on the 12 native screenshots.
 
 on:
-  workflow_dispatch:
+  pull_request:
   push:
     branches: [main]
+  schedule:
+    # Monday 06:00 UTC — full matrix sweep so macOS regressions surface
+    # within a week even if every PR opted out of the `macos` label.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 jobs:
   e2e:
     name: ${{ matrix.spec }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # macOS gate (R11-Task14): only run macOS cells when explicitly
+    # requested. The expression evaluates per-cell so ubuntu/windows
+    # always run; macos-latest only runs on schedule, workflow_dispatch,
+    # or a PR carrying the `macos` label.
+    if: >-
+      ${{ matrix.os != 'macos-latest'
+          || github.event_name == 'workflow_dispatch'
+          || github.event_name == 'schedule'
+          || (github.event_name == 'pull_request'
+              && contains(github.event.pull_request.labels.*.name, 'macos')) }}
     timeout-minutes: 20
     strategy:
       fail-fast: false
