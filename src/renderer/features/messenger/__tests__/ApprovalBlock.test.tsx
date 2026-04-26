@@ -55,12 +55,22 @@ interface InvokeCall {
 }
 const invokeCalls: InvokeCall[] = [];
 let invokeReject: Error | null = null;
+let invokeGate: Promise<void> | null = null;
 
 vi.mock('../../../ipc/invoke', () => ({
   invoke: async (channel: string, data: unknown) => {
     invokeCalls.push({ channel, data });
+    if (invokeGate) await invokeGate;
     if (invokeReject) throw invokeReject;
     return { success: true };
+  },
+}));
+
+// ── throwToBoundary spy — R11-Task15 토스트 발사 검증 ───────────────
+const throwToBoundaryCalls: unknown[] = [];
+vi.mock('../../../components/ErrorBoundary', () => ({
+  useThrowToBoundary: () => (err: unknown) => {
+    throwToBoundaryCalls.push(err);
   },
 }));
 
@@ -296,6 +306,148 @@ describe('ApprovalBlock — approval:decide IPC wire (R7-Task5)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('approval-block-error')).toBeTruthy();
     });
+  });
+});
+
+describe('ApprovalBlock — R11-Task15 optimistic decide path', () => {
+  beforeEach(() => {
+    invokeGate = null;
+    throwToBoundaryCalls.length = 0;
+  });
+
+  it('allow click immediately surfaces data-decision-preview="approve"', async () => {
+    // Hold the IPC open so we can observe the in-flight optimistic state.
+    let release: () => void = () => undefined;
+    invokeGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    renderWithTheme('warm', <ApprovalBlock message={makeApprovalMessage()} />);
+    fireEvent.click(screen.getByTestId('approval-block-allow'));
+
+    // Optimistic state must show up synchronously after the click.
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('approval-block')
+          .getAttribute('data-decision-preview'),
+      ).toBe('approve');
+    });
+
+    // All gesture buttons disabled while optimistic in flight.
+    expect(
+      (screen.getByTestId('approval-block-allow') as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByTestId('approval-block-conditional') as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('approval-block-deny') as HTMLButtonElement).disabled,
+    ).toBe(true);
+
+    // Settle the IPC so the test cleanup does not leak the pending promise.
+    release();
+    await waitFor(() => {
+      expect(invokeCalls.length).toBe(1);
+    });
+  });
+
+  it('allow success keeps decisionPreview latched until the row unmounts', async () => {
+    renderWithTheme('warm', <ApprovalBlock message={makeApprovalMessage()} />);
+    fireEvent.click(screen.getByTestId('approval-block-allow'));
+    await waitFor(() => {
+      expect(invokeCalls.length).toBe(1);
+    });
+    // Server confirmed the decision — the inbox stream removes the row at
+    // its own pace; until then the preview must stay 'approve' so the
+    // user sees the result.
+    expect(
+      screen
+        .getByTestId('approval-block')
+        .getAttribute('data-decision-preview'),
+    ).toBe('approve');
+    expect(screen.queryByTestId('approval-block-error')).toBeNull();
+  });
+
+  it('allow failure rolls back decisionPreview and shows optimisticRollback hint', async () => {
+    const err = new Error('boom');
+    err.name = 'ApprovalNotFoundError';
+    invokeReject = err;
+
+    renderWithTheme('warm', <ApprovalBlock message={makeApprovalMessage()} />);
+    fireEvent.click(screen.getByTestId('approval-block-allow'));
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-block-error')).toBeTruthy();
+    });
+
+    // Preview cleared on rollback so the user can re-attempt.
+    expect(
+      screen
+        .getByTestId('approval-block')
+        .getAttribute('data-decision-preview'),
+    ).toBe('');
+
+    // Buttons re-enabled after rollback so the user can try again.
+    expect(
+      (screen.getByTestId('approval-block-allow') as HTMLButtonElement).disabled,
+    ).toBe(false);
+    expect(
+      (screen.getByTestId('approval-block-deny') as HTMLButtonElement).disabled,
+    ).toBe(false);
+
+    // Inline message uses the optimistic rollback i18n key (not the
+    // legacy mapErrorToI18nKey wiring).
+    expect(screen.getByTestId('approval-block-error').textContent).toBe(
+      '결정을 적용하지 못해 승인 블록을 이전 상태로 되돌렸습니다.',
+    );
+  });
+
+  it('allow failure publishes the underlying Error to the boundary bus', async () => {
+    const err = new Error('boundary-bus-message');
+    err.name = 'AlreadyDecidedError';
+    invokeReject = err;
+
+    renderWithTheme('warm', <ApprovalBlock message={makeApprovalMessage()} />);
+    fireEvent.click(screen.getByTestId('approval-block-allow'));
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-block-error')).toBeTruthy();
+    });
+
+    // throwToBoundary forwards the underlying Error so the boundary
+    // publishes the toast — confirms the optimistic rollback uses the
+    // R10 D8 toast escalation path (matches use-channel-messages.send /
+    // use-autonomy-mode.confirm wiring).
+    expect(throwToBoundaryCalls).toContain(err);
+  });
+
+  it('allow failure → retry click clears prior error and enters optimistic again', async () => {
+    const err = new Error('first-attempt');
+    err.name = 'AlreadyDecidedError';
+    invokeReject = err;
+
+    renderWithTheme('warm', <ApprovalBlock message={makeApprovalMessage()} />);
+    fireEvent.click(screen.getByTestId('approval-block-allow'));
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-block-error')).toBeTruthy();
+    });
+
+    // Retry: clear the reject and click again.
+    invokeReject = null;
+    fireEvent.click(screen.getByTestId('approval-block-allow'));
+    await waitFor(() => {
+      expect(invokeCalls.length).toBe(2);
+    });
+
+    // After successful retry the preview is back at 'approve' and the
+    // inline error banner is cleared.
+    expect(
+      screen
+        .getByTestId('approval-block')
+        .getAttribute('data-decision-preview'),
+    ).toBe('approve');
+    expect(screen.queryByTestId('approval-block-error')).toBeNull();
   });
 });
 

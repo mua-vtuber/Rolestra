@@ -157,12 +157,12 @@
     {
       "id": 15,
       "subject": "Task 15: Optimistic UI 확장 — ApprovalBlock.decide + MemberProfile.edit (R10 D8)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         7
       ],
       "description": "**Goal:** R10 D8 결정 — Optimistic UI 추가는 R11 이후. (a) ApprovalBlock.decide invoke 직전 row status 임시 변경 → 성공 시 reconcile, 실패 시 rollback + ErrorBoundary toast, (b) MemberProfileEditModal 저장 시 row 즉시 갱신 + dialog 닫기 → 실패 시 dialog 재열림 + form state 복구.\n\n**Files:** src/renderer/features/messenger/ApprovalBlock.tsx, src/renderer/features/members/MemberProfileEditModal.tsx\n\n**Verify:** `npm run test -- ApprovalBlock MemberProfileEditModal`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/ApprovalBlock.tsx\",\"src/renderer/features/members/MemberProfileEditModal.tsx\"],\"verifyCommand\":\"npm run test -- ApprovalBlock MemberProfileEditModal\",\"acceptanceCriteria\":[\"ApprovalBlock 결정 → 즉시 UI + 실패 rollback\",\"MemberProfile 편집 → dialog 닫고 row 갱신 + 실패 시 dialog 재열림\",\"ErrorBoundary toast 일관 동작\",\"R10 Optimistic 3 hook 회귀 0\"]}\n```",
-      "lastUpdated": "2026-04-26T00:00:00.000Z"
+      "lastUpdated": "2026-04-27T00:00:00.000Z"
     },
     {
       "id": 16,

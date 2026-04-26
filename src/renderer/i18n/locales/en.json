@@ -407,7 +407,8 @@
       "errors": {
         "alreadyDecided": "This approval has already been decided.",
         "generic": "Failed to submit the approval decision.",
-        "notFound": "Approval request not found."
+        "notFound": "Approval request not found.",
+        "optimisticRollback": "Could not apply the decision; reverted the approval block."
       },
       "inbox": {
         "empty": "No pending approvals.",
@@ -725,6 +726,7 @@
         "role": "Role / title"
       },
       "loading": "Loading profile…",
+      "optimisticRollback": "Save failed; reopened the editor with your edits preserved.",
       "save": "Save",
       "saveError": "Save failed: {{message}}",
       "saving": "Saving…",

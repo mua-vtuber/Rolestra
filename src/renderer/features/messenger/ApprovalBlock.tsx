@@ -1,6 +1,7 @@
 /**
  * ApprovalBlock — 채널 스레드에 렌더되는 승인 요청 블록 (R5-Task7 최초 도입,
- * R7-Task5 에서 `approval:decide` IPC 전면 wire).
+ * R7-Task5 에서 `approval:decide` IPC 전면 wire, R11-Task15 에서 허가 path
+ * 에 Optimistic UI + ErrorBoundary toast 통합).
  *
  * prep §2.3.3 3-way 구조 + D4(한국어 라벨) 적용.
  * - warm    : radius 8 + warning-tint bg + 1.5px warning border + '⚠ 승인 요청'
@@ -13,8 +14,17 @@
  *
  * R7-Task5 이후 decision 처리:
  *   - 허가(approve) → 즉시 invoke('approval:decide', { id, decision: 'approve' })
+ *                     R11-Task15: optimistic — 클릭 즉시 row 의
+ *                     `data-decision-preview` 가 'approve' 로 전환되고 모든
+ *                     버튼이 비활성된다. 서버 응답이 성공이면 그대로 유지
+ *                     (ApprovalInbox 의 `stream:approval-decided` 가 row 를
+ *                     unmount). 실패면 preview 를 비우고 `optimisticRollback`
+ *                     메시지를 inline 으로 출력 + ErrorBoundary toast 발사
+ *                     (R10 D8 — 3 hook 패턴 재사용, throw 는 안 함).
  *   - 거절(reject)   → RejectDialog 를 열어 comment(선택) 입력 후 submit
  *   - 조건부(conditional) → ConditionalDialog (comment 필수) 후 submit
+ *     (Optimistic 은 Allow path 에 한정 — Dialog 들이 자체 IPC 를 fire 하므로
+ *      본 컴포넌트의 reducer 로 흐름이 들어오지 않는다. R11-Task15 scope 결정.)
  *
  * approval id 는 `message.meta.approvalRef` 에서 읽는다 — 누락 시 모든 버튼
  * 비활성(안전한 fallback). 실제 발사 시점에 approvalRef 가 있는 메시지만
@@ -33,6 +43,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
+import { useThrowToBoundary } from '../../components/ErrorBoundary';
 import { invoke } from '../../ipc/invoke';
 import { useTheme } from '../../theme/use-theme';
 import { ConditionalDialog } from '../approvals/ConditionalDialog';
@@ -49,39 +60,45 @@ const WARNING_BORDER = 'var(--color-warning)';
 
 type DialogKind = 'none' | 'reject' | 'conditional';
 
+/** Allow-path optimistic decision preview surfaced via `data-decision-preview`. */
+type DecisionPreview = 'approve' | null;
+
 interface AllowState {
   submitting: boolean;
+  /**
+   * R11-Task15: filled the moment the허가 click fires so the row visibly
+   * transitions to "approved" before the IPC resolves. Cleared back to null
+   * on rollback; preserved on success so the parent's
+   * `stream:approval-decided` listener can remove the row at its own pace.
+   */
+  decisionPreview: DecisionPreview;
   error: string | null;
 }
 type AllowAction =
   | { type: 'start' }
-  | { type: 'error'; message: string }
+  | { type: 'success' }
+  | { type: 'rollback'; message: string }
   | { type: 'reset' };
-const ALLOW_INITIAL: AllowState = { submitting: false, error: null };
-function allowReducer(_state: AllowState, action: AllowAction): AllowState {
+const ALLOW_INITIAL: AllowState = {
+  submitting: false,
+  decisionPreview: null,
+  error: null,
+};
+function allowReducer(state: AllowState, action: AllowAction): AllowState {
   switch (action.type) {
     case 'start':
-      return { submitting: true, error: null };
-    case 'error':
-      return { submitting: false, error: action.message };
+      return { submitting: true, decisionPreview: 'approve', error: null };
+    case 'success':
+      // Server confirmed; keep preview so the buttons stay locked until the
+      // inbox stream removes this row. Drop the in-flight flag so the
+      // component would still re-enable interactions if the row somehow
+      // survives (e.g. a future inbox refactor).
+      return { ...state, submitting: false };
+    case 'rollback':
+      return { submitting: false, decisionPreview: null, error: action.message };
     case 'reset':
       return ALLOW_INITIAL;
   }
-}
-
-function mapErrorToI18nKey(err: unknown): string {
-  if (err && typeof err === 'object') {
-    const e = err as { name?: unknown };
-    if (typeof e.name === 'string') {
-      if (e.name === 'ApprovalNotFoundError') {
-        return 'messenger.approval.errors.notFound';
-      }
-      if (e.name === 'AlreadyDecidedError') {
-        return 'messenger.approval.errors.alreadyDecided';
-      }
-    }
-  }
-  return 'messenger.approval.errors.generic';
 }
 
 export function ApprovalBlock({
@@ -90,6 +107,7 @@ export function ApprovalBlock({
 }: ApprovalBlockProps): ReactElement {
   const { t } = useTranslation();
   const { themeKey, token } = useTheme();
+  const throwToBoundary = useThrowToBoundary();
 
   const approvalRef = message.meta?.approvalRef;
   const approvalId =
@@ -98,7 +116,7 @@ export function ApprovalBlock({
       : null;
 
   const [dialog, setDialog] = useState<DialogKind>('none');
-  const [{ submitting, error }, dispatch] = useReducer(
+  const [{ submitting, decisionPreview, error }, dispatch] = useReducer(
     allowReducer,
     ALLOW_INITIAL,
   );
@@ -109,6 +127,10 @@ export function ApprovalBlock({
     'data-message-id': message.id,
     'data-approval-body-style': token.approvalBodyStyle,
     'data-approval-id': approvalId ?? '',
+    // R11-Task15: surfaces the optimistic decision preview to E2E + unit
+    // tests. Cleared back to '' on rollback; sticks at 'approve' once the
+    // 허가 click fires until the parent stream removes the row.
+    'data-decision-preview': decisionPreview ?? '',
   } as const;
 
   const labelText =
@@ -118,18 +140,30 @@ export function ApprovalBlock({
 
   const handleAllow = useCallback(async (): Promise<void> => {
     if (approvalId === null || submitting) return;
+    // R11-Task15: optimistic — flip the row immediately so the user sees
+    // the허가 gesture applied before the IPC round-trip. On success keep
+    // the preview (parent stream removes the row); on failure rollback to
+    // the pre-click state and surface a toast via the boundary bus.
     dispatch({ type: 'start' });
     try {
       await invoke('approval:decide', {
         id: approvalId,
         decision: 'approve',
       });
-      dispatch({ type: 'reset' });
+      dispatch({ type: 'success' });
     } catch (reason) {
-      const key = mapErrorToI18nKey(reason);
-      dispatch({ type: 'error', message: t(key) });
+      dispatch({
+        type: 'rollback',
+        message: t('messenger.approval.errors.optimisticRollback'),
+      });
+      // Toast-only — matches the R10 D8 patterns
+      // (use-channel-messages.send / use-autonomy-mode.confirm /
+      // use-queue.addLines): the rollback above already restored local
+      // UI, the boundary surfaces the underlying error message globally
+      // without unmounting the messenger thread.
+      throwToBoundary(reason);
     }
-  }, [approvalId, submitting, t]);
+  }, [approvalId, submitting, t, throwToBoundary]);
 
   const handleOpenReject = useCallback((): void => {
     if (approvalId === null || submitting) return;

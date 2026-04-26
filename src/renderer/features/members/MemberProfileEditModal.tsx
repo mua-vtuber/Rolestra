@@ -8,13 +8,20 @@
  *   - expertise   (text input, comma-separated tags)
  *   - avatar      (AvatarPicker — 8 default + custom upload)
  *
- * Save flow:
+ * Save flow (R11-Task15 optimistic):
  *   1. Build a patch with only the changed fields (omits unchanged so we
  *      don't gratuitously bump `updated_at` for a no-op).
- *   2. Call `useUpdateMemberProfile.mutate(providerId, patch)`.
- *   3. On success: call `onClose()`. The surrounding surfaces (PeopleWidget,
- *      MemberRow) refetch on next mount (D8 invalidation policy).
- *   4. On failure: keep the modal open + show error banner.
+ *   2. Close the dialog immediately so the user perceives the save as
+ *      applied (R10 D8 — Optimistic UI extension). The seed-cleanup
+ *      effect is suppressed during the in-flight window so the draft
+ *      survives a reopen-on-failure.
+ *   3. Call `useUpdateMemberProfile.mutate(providerId, patch)` in the
+ *      background.
+ *   4. On success: invoke the seed-cleanup explicitly so the next open
+ *      re-fetches a fresh profile (D8 invalidation policy).
+ *   5. On failure: re-open the dialog (reopen carries the preserved
+ *      draft + the saveError banner) AND surface a toast via the
+ *      boundary bus.
  *
  * Cancel: ESC / outside-click / cancel button → close without IPC. The Dialog
  * blocks dismissal while save is in flight (matches RejectDialog pattern).
@@ -35,6 +42,7 @@ import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
+import { useThrowToBoundary } from '../../components/ErrorBoundary';
 import { AvatarPicker } from '../../components/members/AvatarPicker';
 import {
   useMemberProfile,
@@ -118,6 +126,7 @@ export function MemberProfileEditModal({
   customAvatarSrc,
 }: MemberProfileEditModalProps): ReactElement {
   const { t } = useTranslation();
+  const throwToBoundary = useThrowToBoundary();
 
   // Disable the IPC fetch when the modal is closed so we don't fire on every
   // parent render that just toggles `open`.
@@ -128,6 +137,12 @@ export function MemberProfileEditModal({
 
   const [draft, setDraft] = useState<DraftState>(EMPTY_DRAFT);
   const [original, setOriginal] = useState<DraftState>(EMPTY_DRAFT);
+
+  // R11-Task15: latch raised between optimistic close and the mutation
+  // settling. Used by the seed effect to suppress the close-cleanup
+  // branch (which would otherwise wipe `draft` + `original` and force a
+  // re-seed if the dialog reopens after a save failure).
+  const isSavingOptimisticRef = useRef<boolean>(false);
 
   // Seed draft when the profile fetch resolves (or when opening with a fresh
   // providerId). Skips if the user has already started editing — but R8
@@ -140,6 +155,10 @@ export function MemberProfileEditModal({
   const seededForKeyRef = useRef<string>('');
   useEffect(() => {
     if (!open) {
+      // R11-Task15: skip cleanup while an optimistic save is in flight.
+      // The mutation may resolve as failure → reopen, in which case we
+      // need the draft preserved so the user keeps their input.
+      if (isSavingOptimisticRef.current) return;
       if (seededForKeyRef.current === '') return;
       seededForKeyRef.current = '';
       setDraft(EMPTY_DRAFT);
@@ -162,11 +181,31 @@ export function MemberProfileEditModal({
       onOpenChange(false);
       return;
     }
+    // R11-Task15: optimistic — close immediately, run the mutation in the
+    // background, reopen on failure with draft/saveError preserved.
+    isSavingOptimisticRef.current = true;
+    onOpenChange(false);
     try {
       await mutate(providerId, patch);
-      onOpenChange(false);
-    } catch {
-      // saveError is set by the hook — surfaced via render below.
+      // Success: tear the latch down then drop the seed cache so the
+      // next open re-fetches (D8 invalidation policy). The effect would
+      // have done this on close, but we suppressed it for the in-flight
+      // window — emulate it explicitly here.
+      isSavingOptimisticRef.current = false;
+      seededForKeyRef.current = '';
+      setDraft(EMPTY_DRAFT);
+      setOriginal(EMPTY_DRAFT);
+      reset();
+    } catch (reason) {
+      // Failure: drop the latch BEFORE reopening so the open=true effect
+      // run sees the same `seededForKeyRef.current === providerId` and
+      // skips re-seeding (which would clobber the draft the user wants
+      // to fix). saveError is already populated by the hook and renders
+      // inside the dialog body. The boundary toast is non-blocking — it
+      // mirrors the inline banner in the global toast strip.
+      isSavingOptimisticRef.current = false;
+      onOpenChange(true);
+      throwToBoundary(reason);
     }
   }
 
@@ -302,9 +341,17 @@ export function MemberProfileEditModal({
               <div
                 role="alert"
                 data-testid="profile-editor-save-error"
-                className="text-sm text-danger border border-danger rounded-panel px-3 py-2 bg-sunk"
+                className="text-sm text-danger border border-danger rounded-panel px-3 py-2 bg-sunk flex flex-col gap-1"
               >
-                {t('profile.editor.saveError', { message: saveError.message })}
+                <p>
+                  {t('profile.editor.saveError', { message: saveError.message })}
+                </p>
+                <p
+                  data-testid="profile-editor-rollback-hint"
+                  className="text-xs text-fg-muted"
+                >
+                  {t('profile.editor.optimisticRollback')}
+                </p>
               </div>
             )}
           </div>

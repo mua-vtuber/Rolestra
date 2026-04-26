@@ -5,6 +5,7 @@
  * (R8-Task4).
  */
 
+import { useState } from 'react';
 import {
   cleanup,
   fireEvent,
@@ -59,6 +60,16 @@ vi.mock('../../../ipc/invoke', () => ({
   },
 }));
 
+// R11-Task15: spy throwToBoundary so we can assert the boundary toast bus
+// receives the underlying error on save failure (matches the R10 D8
+// pattern used by use-channel-messages.send / use-autonomy-mode.confirm).
+const throwToBoundaryCalls: unknown[] = [];
+vi.mock('../../../components/ErrorBoundary', () => ({
+  useThrowToBoundary: () => (err: unknown) => {
+    throwToBoundaryCalls.push(err);
+  },
+}));
+
 import { MemberProfileEditModal } from '../MemberProfileEditModal';
 
 beforeEach(() => {
@@ -66,6 +77,7 @@ beforeEach(() => {
   invokeResponses.clear();
   invokeReject = null;
   invokeRejectChannels = null;
+  throwToBoundaryCalls.length = 0;
   invokeResponses.set('member:get-profile', {
     profile: {
       providerId: 'p1',
@@ -199,7 +211,91 @@ describe('MemberProfileEditModal — save flow', () => {
     expect(updateCalls.length).toBe(0);
   });
 
-  it('keeps the modal open and shows error banner when save rejects', async () => {
+  it('R11-Task15: save failure closes optimistically then reopens with banner', async () => {
+    invokeReject = new Error('SQLITE_CONSTRAINT_FOREIGNKEY');
+    invokeRejectChannels = ['member:update-profile'];
+    const onOpenChange = vi.fn();
+
+    render(
+      <MemberProfileEditModal
+        open
+        onOpenChange={onOpenChange}
+        providerId="p1"
+        displayName="Claude"
+      />,
+    );
+    const role = (await screen.findByTestId(
+      'profile-editor-role',
+    )) as HTMLInputElement;
+    fireEvent.change(role, { target: { value: 'Architect' } });
+    fireEvent.click(screen.getByTestId('profile-editor-save'));
+
+    // Optimistic close fires synchronously off the click — onOpenChange
+    // sees `false` before the await on mutate even resumes.
+    expect(onOpenChange.mock.calls[0]).toEqual([false]);
+
+    await waitFor(() => {
+      expect(onOpenChange.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    // Reopen on failure restores the dialog so the user can fix the
+    // input and retry.
+    expect(onOpenChange.mock.calls[1]).toEqual([true]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-editor-save-error')).toBeTruthy();
+    });
+  });
+});
+
+describe('MemberProfileEditModal — R11-Task15 optimistic save extension', () => {
+  it('success path: dialog closes immediately and tears down draft cache', async () => {
+    invokeResponses.set('member:update-profile', {
+      profile: {
+        providerId: 'p1',
+        role: 'Staff Engineer',
+        personality: 'Direct and pragmatic',
+        expertise: 'TypeScript, React',
+        avatarKind: 'default',
+        avatarData: 'blue-dev',
+        statusOverride: null,
+        updatedAt: 1_700_000_000_001,
+      },
+    });
+    const onOpenChange = vi.fn();
+
+    render(
+      <MemberProfileEditModal
+        open
+        onOpenChange={onOpenChange}
+        providerId="p1"
+        displayName="Claude"
+      />,
+    );
+    const role = (await screen.findByTestId(
+      'profile-editor-role',
+    )) as HTMLInputElement;
+    fireEvent.change(role, { target: { value: 'Staff Engineer' } });
+    fireEvent.click(screen.getByTestId('profile-editor-save'));
+
+    // First call is the optimistic close.
+    expect(onOpenChange.mock.calls[0]).toEqual([false]);
+
+    await waitFor(() => {
+      expect(
+        invokeCalls.some((c) => c.channel === 'member:update-profile'),
+      ).toBe(true);
+    });
+
+    // Settle the success path; no reopen call should follow.
+    await Promise.resolve();
+    await Promise.resolve();
+    const reopenCalls = onOpenChange.mock.calls.filter(
+      ([open]) => open === true,
+    );
+    expect(reopenCalls.length).toBe(0);
+  });
+
+  it('failure path: shows the optimisticRollback hint inside the saveError banner', async () => {
     invokeReject = new Error('SQLITE_CONSTRAINT_FOREIGNKEY');
     invokeRejectChannels = ['member:update-profile'];
     const onOpenChange = vi.fn();
@@ -221,7 +317,104 @@ describe('MemberProfileEditModal — save flow', () => {
     await waitFor(() => {
       expect(screen.getByTestId('profile-editor-save-error')).toBeTruthy();
     });
-    expect(onOpenChange).not.toHaveBeenCalled();
+
+    const hint = screen.getByTestId('profile-editor-rollback-hint');
+    expect(hint.textContent).toBe(
+      '저장에 실패해 편집기를 다시 열었습니다. 입력값은 그대로 유지됩니다.',
+    );
+  });
+
+  it('failure path: forwards the underlying Error to throwToBoundary (toast bus)', async () => {
+    const err = new Error('PROVIDER_OFFLINE');
+    invokeReject = err;
+    invokeRejectChannels = ['member:update-profile'];
+
+    render(
+      <MemberProfileEditModal
+        open
+        onOpenChange={() => {}}
+        providerId="p1"
+        displayName="Claude"
+      />,
+    );
+    const role = (await screen.findByTestId(
+      'profile-editor-role',
+    )) as HTMLInputElement;
+    fireEvent.change(role, { target: { value: 'Architect' } });
+    fireEvent.click(screen.getByTestId('profile-editor-save'));
+
+    await waitFor(() => {
+      expect(throwToBoundaryCalls).toContain(err);
+    });
+  });
+
+  it('failure path: draft survives reopen so the user can edit and retry', async () => {
+    invokeReject = new Error('FAIL_ONCE');
+    invokeRejectChannels = ['member:update-profile'];
+
+    // A real parent owns `open` as state and feeds it back through
+    // `onOpenChange`. This mirrors the production wiring (PeopleWidget
+    // / MemberRow) — without it the controlled-prop replay races the
+    // seed-cleanup effect and the draft gets reseeded.
+    function HarnessHost(): React.ReactElement {
+      const [open, setOpen] = useState(true);
+      return (
+        <MemberProfileEditModal
+          open={open}
+          onOpenChange={setOpen}
+          providerId="p1"
+          displayName="Claude"
+        />
+      );
+    }
+    render(<HarnessHost />);
+    const role = (await screen.findByTestId(
+      'profile-editor-role',
+    )) as HTMLInputElement;
+    fireEvent.change(role, { target: { value: 'Architect' } });
+
+    fireEvent.click(screen.getByTestId('profile-editor-save'));
+
+    // Wait for the failure round-trip: dialog must reopen with the
+    // saveError banner mounted again.
+    await waitFor(() => {
+      expect(screen.getByTestId('profile-editor-save-error')).toBeTruthy();
+    });
+
+    // Draft preserved across the close/reopen — value is still the user's
+    // edit, NOT the seeded "Senior Engineer".
+    const reopenedRole = (await screen.findByTestId(
+      'profile-editor-role',
+    )) as HTMLInputElement;
+    expect(reopenedRole.value).toBe('Architect');
+
+    // Banner still mounted with both lines (saveError + rollback hint).
+    expect(screen.getByTestId('profile-editor-rollback-hint')).toBeTruthy();
+  });
+
+  it('no-op save (no field changed): close fires once and no reopen / no IPC', async () => {
+    const onOpenChange = vi.fn();
+    render(
+      <MemberProfileEditModal
+        open
+        onOpenChange={onOpenChange}
+        providerId="p1"
+        displayName="Claude"
+      />,
+    );
+    await screen.findByTestId('profile-editor-role');
+
+    fireEvent.click(screen.getByTestId('profile-editor-save'));
+
+    await waitFor(() => {
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+    });
+    expect(onOpenChange.mock.calls[0]).toEqual([false]);
+
+    expect(
+      invokeCalls.some((c) => c.channel === 'member:update-profile'),
+    ).toBe(false);
+    expect(throwToBoundaryCalls.length).toBe(0);
   });
 });
 

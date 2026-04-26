@@ -407,7 +407,8 @@
       "errors": {
         "alreadyDecided": "이미 결정된 승인 요청입니다.",
         "generic": "승인 결정 처리 중 오류가 발생했습니다.",
-        "notFound": "승인 요청을 찾을 수 없습니다."
+        "notFound": "승인 요청을 찾을 수 없습니다.",
+        "optimisticRollback": "결정을 적용하지 못해 승인 블록을 이전 상태로 되돌렸습니다."
       },
       "inbox": {
         "empty": "대기 중인 승인 요청이 없습니다.",
@@ -724,6 +725,7 @@
         "role": "역할 / 직함"
       },
       "loading": "프로필 불러오는 중…",
+      "optimisticRollback": "저장에 실패해 편집기를 다시 열었습니다. 입력값은 그대로 유지됩니다.",
       "save": "저장",
       "saveError": "저장 실패: {{message}}",
       "saving": "저장 중…",
