@@ -23,6 +23,7 @@
 
 import type { ApprovalItem } from '../../shared/approval-types';
 import { APPROVAL_CREATED_EVENT } from './approval-service';
+import { resolveNotificationLabel } from '../notifications/notification-labels';
 
 /** NotificationService 중 bridge 가 필요한 최소 surface. */
 export interface ApprovalNotificationSink {
@@ -58,67 +59,68 @@ export interface ApprovalNotificationBridgeDeps {
 
 const DEFAULT_DEDUPE_WINDOW_MS = 5_000;
 
-/** Approval kind 별 title/body 라벨(한국어 고정, R7 scope). */
-const KIND_LABELS: Readonly<Record<ApprovalItem['kind'], { title: string; body: (item: ApprovalItem) => string }>> =
-  Object.freeze({
-    cli_permission: {
-      title: 'CLI 권한 요청',
-      body: (item) => summariseCliPermission(item),
-    },
-    mode_transition: {
-      title: '권한 모드 변경 요청',
-      body: (item) => summariseModeTransition(item),
-    },
-    consensus_decision: {
-      title: '합의 결과 승인 요청',
-      body: (item) => summariseConsensus(item),
-    },
-    review_outcome: {
-      title: '리뷰 결과 승인',
-      body: () => '리뷰 결과를 확인해 주세요.',
-    },
-    failure_report: {
-      title: '실패 리포트',
-      body: () => '자동 실행 실패가 보고되었습니다.',
-    },
-    // R9-Task6: `circuit_breaker` is emitted by v3-side-effects when an
-    // autonomy tripwire fires. The primary user-facing notification is
-    // the dedicated `handleBreakerFired` path (richer per-tripwire
-    // copy), but ApprovalService 'created' still fires here — R7-Task11
-    // wiring must not leave the bridge in the "missing kind" failure
-    // branch, so we provide a calm fallback label.
-    circuit_breaker: {
-      title: '자율 모드 다운그레이드',
-      body: () => '자동 실행이 중단되어 자율 모드가 manual로 변경되었습니다.',
-    },
-  });
+/**
+ * Approval kind 별 title/body 라벨. R11-Task11 (D9) 이후 모든 fixed
+ * string 은 main-process `notification-labels` dictionary 에서 해석되며,
+ * 본 파일은 payload-derived summary 만 직접 합성한다. 비어있는 summary
+ * 는 dictionary fallback (`approvalNotificationBridge.<kind>.body`) 로
+ * 떨어져 ko/en 양쪽이 일관되게 렌더된다.
+ */
+const KIND_BODY_BUILDERS: Readonly<
+  Record<ApprovalItem['kind'], (item: ApprovalItem) => string | null>
+> = Object.freeze({
+  cli_permission: (item) => summariseCliPermission(item),
+  mode_transition: (item) => summariseModeTransition(item),
+  consensus_decision: (item) => summariseConsensus(item),
+  review_outcome: () => null,
+  failure_report: () => null,
+  // R9-Task6: `circuit_breaker` is emitted by v3-side-effects when an
+  // autonomy tripwire fires. The primary user-facing notification is
+  // the dedicated `handleBreakerFired` path (richer per-tripwire
+  // copy), but ApprovalService 'created' still fires here — R7-Task11
+  // wiring must not leave the bridge in the "missing kind" failure
+  // branch, so we fall back to the dictionary entry (D9 — locale aware).
+  circuit_breaker: () => null,
+});
 
-function summariseCliPermission(item: ApprovalItem): string {
+function summariseCliPermission(item: ApprovalItem): string | null {
   const p = item.payload as
     | { participantName?: string; toolName?: string; target?: string }
     | null;
-  if (!p) return '승인 대기';
+  if (!p) return null;
   const who = typeof p.participantName === 'string' ? p.participantName : '';
   const tool = typeof p.toolName === 'string' ? p.toolName : '';
   const target = typeof p.target === 'string' ? p.target : '';
   const parts = [who, tool && target ? `${tool} (${target})` : tool || target]
     .filter((s) => s.length > 0);
-  return parts.length > 0 ? parts.join(' — ') : '승인 대기';
+  return parts.length > 0 ? parts.join(' — ') : null;
 }
 
-function summariseModeTransition(item: ApprovalItem): string {
+function summariseModeTransition(item: ApprovalItem): string | null {
   const p = item.payload as
     | { currentMode?: string; targetMode?: string }
     | null;
-  if (!p) return '권한 모드 변경 대기';
+  if (!p) return null;
   return `${p.currentMode ?? '?'} → ${p.targetMode ?? '?'}`;
 }
 
-function summariseConsensus(item: ApprovalItem): string {
+function summariseConsensus(item: ApprovalItem): string | null {
   const p = item.payload as { finalText?: string } | null;
   const text = typeof p?.finalText === 'string' ? p.finalText.trim() : '';
-  if (text.length === 0) return '합의 결과 승인 대기';
+  if (text.length === 0) return null;
   return text.length > 80 ? `${text.slice(0, 80)}…` : text;
+}
+
+/** Compose the dotted dictionary key for an approval kind label leaf. */
+function bridgeKey(
+  kind: ApprovalItem['kind'],
+  leaf: 'title' | 'body',
+):
+  | `approvalNotificationBridge.${ApprovalItem['kind']}.title`
+  | `approvalNotificationBridge.${ApprovalItem['kind']}.body` {
+  return `approvalNotificationBridge.${kind}.${leaf}` as
+    | `approvalNotificationBridge.${ApprovalItem['kind']}.title`
+    | `approvalNotificationBridge.${ApprovalItem['kind']}.body`;
 }
 
 export class ApprovalNotificationBridge {
@@ -161,12 +163,15 @@ export class ApprovalNotificationBridge {
       }
     }
 
-    const labels = KIND_LABELS[item.kind];
+    const summary = KIND_BODY_BUILDERS[item.kind](item);
+    const title = resolveNotificationLabel(bridgeKey(item.kind, 'title'));
+    const body =
+      summary ?? resolveNotificationLabel(bridgeKey(item.kind, 'body'));
     try {
       this.deps.notificationService.show({
         kind: 'approval_pending',
-        title: labels.title,
-        body: labels.body(item),
+        title,
+        body,
         channelId: item.channelId,
       });
     } catch (err) {

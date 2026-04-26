@@ -179,3 +179,124 @@ describe('notification-labels dictionary parity (ko ↔ en)', () => {
     }
   });
 });
+
+// ── R11-Task11 (D9): main-process locale 이전 ─────────────────────
+
+describe('approvalNotificationBridge labels (R11-Task11)', () => {
+  it('resolves the 6 approval kinds × title+body in ko', () => {
+    const kinds = [
+      'cli_permission',
+      'mode_transition',
+      'consensus_decision',
+      'review_outcome',
+      'failure_report',
+      'circuit_breaker',
+    ] as const;
+    for (const kind of kinds) {
+      const title = resolveNotificationLabel(
+        `approvalNotificationBridge.${kind}.title` as Parameters<
+          typeof resolveNotificationLabel
+        >[0],
+      );
+      const body = resolveNotificationLabel(
+        `approvalNotificationBridge.${kind}.body` as Parameters<
+          typeof resolveNotificationLabel
+        >[0],
+      );
+      expect(title.length).toBeGreaterThan(0);
+      expect(body.length).toBeGreaterThan(0);
+      expect(title).not.toContain('approvalNotificationBridge');
+      expect(body).not.toContain('approvalNotificationBridge');
+    }
+  });
+
+  it('switches the 6 approval kinds to en after setNotificationLocale("en")', () => {
+    setNotificationLocale('en');
+    expect(
+      resolveNotificationLabel('approvalNotificationBridge.cli_permission.title'),
+    ).toBe('CLI permission request');
+    expect(
+      resolveNotificationLabel(
+        'approvalNotificationBridge.mode_transition.title',
+      ),
+    ).toBe('Permission mode change request');
+    expect(
+      resolveNotificationLabel(
+        'approvalNotificationBridge.consensus_decision.title',
+      ),
+    ).toBe('Consensus approval request');
+    expect(
+      resolveNotificationLabel('approvalNotificationBridge.review_outcome.title'),
+    ).toBe('Review outcome approval');
+    expect(
+      resolveNotificationLabel('approvalNotificationBridge.failure_report.title'),
+    ).toBe('Failure report');
+    expect(
+      resolveNotificationLabel('approvalNotificationBridge.circuit_breaker.title'),
+    ).toBe('Autonomy downgrade');
+  });
+});
+
+describe('autonomyGate labels (R11-Task11)', () => {
+  it('resolves the 5 approval-kind labels in ko', () => {
+    expect(
+      resolveNotificationLabel('autonomyGate.label.mode_transition'),
+    ).toBe('모드 전환');
+    expect(
+      resolveNotificationLabel('autonomyGate.label.consensus_decision'),
+    ).toBe('합의 결과');
+    expect(
+      resolveNotificationLabel('autonomyGate.label.review_outcome'),
+    ).toBe('리뷰 결과');
+    expect(
+      resolveNotificationLabel('autonomyGate.label.cli_permission'),
+    ).toBe('CLI 권한');
+    expect(
+      resolveNotificationLabel('autonomyGate.label.failure_report'),
+    ).toBe('실패 리포트');
+  });
+
+  it('switches the 5 approval-kind labels to en', () => {
+    setNotificationLocale('en');
+    expect(
+      resolveNotificationLabel('autonomyGate.label.mode_transition'),
+    ).toBe('Mode transition');
+    expect(
+      resolveNotificationLabel('autonomyGate.label.consensus_decision'),
+    ).toBe('Consensus result');
+    expect(resolveNotificationLabel('autonomyGate.label.review_outcome')).toBe(
+      'Review outcome',
+    );
+    expect(resolveNotificationLabel('autonomyGate.label.cli_permission')).toBe(
+      'CLI permission',
+    );
+    expect(resolveNotificationLabel('autonomyGate.label.failure_report')).toBe(
+      'Failure report',
+    );
+  });
+
+  it('trace + notify templates interpolate {{label}} in both locales', () => {
+    expect(
+      resolveNotificationLabel('autonomyGate.trace.autoAccepted', {
+        label: '모드 전환',
+      }),
+    ).toBe('자율 모드: 모드 전환 자동 수락');
+    expect(
+      resolveNotificationLabel('autonomyGate.trace.downgraded', {
+        label: 'CLI 권한',
+      }),
+    ).toBe('자율 모드: CLI 권한 실패 감지 → manual로 강제 전환');
+
+    setNotificationLocale('en');
+    expect(
+      resolveNotificationLabel('autonomyGate.trace.autoAccepted', {
+        label: 'Mode transition',
+      }),
+    ).toBe('Autonomy: Mode transition auto-accepted');
+    expect(
+      resolveNotificationLabel('autonomyGate.notify.errorBody', {
+        label: 'Mode transition',
+      }),
+    ).toBe('Reverted to manual after Mode transition failure');
+  });
+});

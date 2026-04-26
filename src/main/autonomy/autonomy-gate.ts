@@ -46,6 +46,7 @@
 import type { ApprovalItem } from '../../shared/approval-types';
 import type { AutonomyMode } from '../../shared/project-types';
 import { APPROVAL_CREATED_EVENT } from '../approvals/approval-service';
+import { resolveNotificationLabel } from '../notifications/notification-labels';
 
 /**
  * Narrow structural view the gate needs from each service. Tests pass
@@ -122,10 +123,31 @@ const NOT_ACCEPTED_OUTCOMES: ReadonlySet<string> = new Set([
   'aborted',
 ]);
 
+/**
+ * Approval-kind labels routed through the dictionary.
+ *
+ * `evaluateDecision` returns one of these (plus `unknown` for forward
+ * compatibility). The runtime then resolves the locale-aware copy via
+ * `notification-labels` so a user toggling Settings → 언어 reaches every
+ * trace + OS notification body.
+ */
+type GateLabelKind =
+  | 'mode_transition'
+  | 'consensus_decision'
+  | 'review_outcome'
+  | 'cli_permission'
+  | 'failure_report'
+  | 'unknown';
+
 /** Result of the policy evaluation — either accept with a label or downgrade. */
 type GateDecision =
-  | { kind: 'accept'; label: string }
-  | { kind: 'downgrade'; label: string };
+  | { kind: 'accept'; label: GateLabelKind; rawKind: string }
+  | { kind: 'downgrade'; label: GateLabelKind; rawKind: string };
+
+function resolveLabel(label: GateLabelKind, rawKind: string): string {
+  if (label === 'unknown') return rawKind;
+  return resolveNotificationLabel(`autonomyGate.label.${label}`);
+}
 
 export class AutonomyGate {
   private readonly listener: (item: ApprovalItem) => void;
@@ -162,10 +184,11 @@ export class AutonomyGate {
     if (project.autonomyMode === 'manual') return; // manual = leave as-is.
 
     const decision = evaluateDecision(item);
+    const label = resolveLabel(decision.label, decision.rawKind);
     if (decision.kind === 'accept') {
-      this.runAcceptPath(item, decision.label, projectId);
+      this.runAcceptPath(item, label, projectId);
     } else {
-      this.runDowngradePath(item, decision.label, projectId);
+      this.runDowngradePath(item, label, projectId);
     }
   }
 
@@ -190,14 +213,16 @@ export class AutonomyGate {
     this.postMinutesTrace(
       projectId,
       item.meetingId ?? null,
-      `자율 모드: ${label} 자동 수락`,
+      resolveNotificationLabel('autonomyGate.trace.autoAccepted', { label }),
     );
 
     try {
       this.deps.notificationService.show({
         kind: 'work_done',
-        title: '자동 수락',
-        body: `${label} 승인이 자동 처리되었습니다`,
+        title: resolveNotificationLabel('autonomyGate.notify.autoAcceptTitle'),
+        body: resolveNotificationLabel('autonomyGate.notify.autoAcceptBody', {
+          label,
+        }),
         channelId: item.channelId,
       });
     } catch (err) {
@@ -227,14 +252,16 @@ export class AutonomyGate {
     this.postMinutesTrace(
       projectId,
       item.meetingId ?? null,
-      `자율 모드: ${label} 실패 감지 → manual로 강제 전환`,
+      resolveNotificationLabel('autonomyGate.trace.downgraded', { label }),
     );
 
     try {
       this.deps.notificationService.show({
         kind: 'error',
-        title: '자율 모드 해제',
-        body: `${label} 실패로 manual 모드로 전환되었습니다`,
+        title: resolveNotificationLabel('autonomyGate.notify.errorTitle'),
+        body: resolveNotificationLabel('autonomyGate.notify.errorBody', {
+          label,
+        }),
         channelId: item.channelId,
       });
     } catch (err) {
@@ -318,12 +345,20 @@ export function evaluateDecision(item: ApprovalItem): GateDecision {
         | null;
       const target = typeof payload?.targetMode === 'string' ? payload.targetMode : '';
       if (target === 'auto' || target === 'hybrid') {
-        return { kind: 'accept', label: '모드 전환' };
+        return {
+          kind: 'accept',
+          label: 'mode_transition',
+          rawKind: item.kind,
+        };
       }
       // target='approval' — defensively downgrade. The user is moving
       // INTO stricter approval mode, so silently flipping autonomy back
       // to manual at the same time matches the "safer side" rule.
-      return { kind: 'downgrade', label: '모드 전환' };
+      return {
+        kind: 'downgrade',
+        label: 'mode_transition',
+        rawKind: item.kind,
+      };
     }
     case 'consensus_decision': {
       const payload = item.payload as { outcome?: string } | null;
@@ -331,25 +366,53 @@ export function evaluateDecision(item: ApprovalItem): GateDecision {
         typeof payload?.outcome === 'string' &&
         NOT_ACCEPTED_OUTCOMES.has(payload.outcome)
       ) {
-        return { kind: 'downgrade', label: '합의 결과' };
+        return {
+          kind: 'downgrade',
+          label: 'consensus_decision',
+          rawKind: item.kind,
+        };
       }
-      return { kind: 'accept', label: '합의 결과' };
+      return {
+        kind: 'accept',
+        label: 'consensus_decision',
+        rawKind: item.kind,
+      };
     }
     case 'review_outcome': {
       const payload = item.payload as { outcome?: string } | null;
       if (payload?.outcome === 'accepted') {
-        return { kind: 'accept', label: '리뷰 결과' };
+        return {
+          kind: 'accept',
+          label: 'review_outcome',
+          rawKind: item.kind,
+        };
       }
-      return { kind: 'downgrade', label: '리뷰 결과' };
+      return {
+        kind: 'downgrade',
+        label: 'review_outcome',
+        rawKind: item.kind,
+      };
     }
     case 'cli_permission':
-      return { kind: 'downgrade', label: 'CLI 권한' };
+      return {
+        kind: 'downgrade',
+        label: 'cli_permission',
+        rawKind: item.kind,
+      };
     case 'failure_report':
-      return { kind: 'downgrade', label: '실패 리포트' };
+      return {
+        kind: 'downgrade',
+        label: 'failure_report',
+        rawKind: item.kind,
+      };
     default:
       // Future kinds default to the safe side — downgrade and make the
       // user look at it. If a new kind should auto-accept, add it here
       // explicitly rather than widening this fallthrough.
-      return { kind: 'downgrade', label: String(item.kind) };
+      return {
+        kind: 'downgrade',
+        label: 'unknown',
+        rawKind: String(item.kind),
+      };
   }
 }

@@ -89,6 +89,32 @@
       "rejectPrefix": "[Approval rejected]"
     }
   },
+  "approvalNotificationBridge": {
+    "circuit_breaker": {
+      "body": "Automated execution stopped — autonomy reverted to manual.",
+      "title": "Autonomy downgrade"
+    },
+    "cli_permission": {
+      "body": "Awaiting approval",
+      "title": "CLI permission request"
+    },
+    "consensus_decision": {
+      "body": "Awaiting consensus approval",
+      "title": "Consensus approval request"
+    },
+    "failure_report": {
+      "body": "An automated run failed.",
+      "title": "Failure report"
+    },
+    "mode_transition": {
+      "body": "Awaiting permission mode change",
+      "title": "Permission mode change request"
+    },
+    "review_outcome": {
+      "body": "Please review the outcome.",
+      "title": "Review outcome approval"
+    }
+  },
   "autonomy": {
     "confirm": {
       "ack": "I have reviewed the Circuit Breaker defaults above and confirm the switch to autonomous mode.",
@@ -116,6 +142,25 @@
       "autoAccepted": "Auto-accepted by autonomy: {{kind}}",
       "downgraded": "Autonomy → manual (reason: {{reason}})",
       "queueNextStarted": "Starting next queue item: {{prompt}}"
+    }
+  },
+  "autonomyGate": {
+    "label": {
+      "cli_permission": "CLI permission",
+      "consensus_decision": "Consensus result",
+      "failure_report": "Failure report",
+      "mode_transition": "Mode transition",
+      "review_outcome": "Review outcome"
+    },
+    "notify": {
+      "autoAcceptBody": "{{label}} approval was processed automatically",
+      "autoAcceptTitle": "Auto-accepted",
+      "errorBody": "Reverted to manual after {{label}} failure",
+      "errorTitle": "Autonomy disabled"
+    },
+    "trace": {
+      "autoAccepted": "Autonomy: {{label}} auto-accepted",
+      "downgraded": "Autonomy: {{label}} failure detected → forced to manual"
     }
   },
   "circuitBreaker": {

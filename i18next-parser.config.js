@@ -214,6 +214,14 @@ export default {
     // full subtree so parser passes between R11 and R12 do not prune
     // header / message variants that don't have a 1:1 static call.
     /^translation:llm\.cost(\..+)?$/,
+    // R11-Task11 (D9) — main-process dictionary mirror keys for the
+    // approval-notification-bridge + autonomy-gate. The renderer never
+    // calls t() against these directly (the main bundle resolves them
+    // via `notification-labels.ts`), but mirroring them in the catalog
+    // keeps the LanguageTab toggle visibly synced + lets QA confirm
+    // ko/en parity by reading the JSON.
+    /^translation:approvalNotificationBridge(\..+)?$/,
+    /^translation:autonomyGate(\..+)?$/,
   ],
   failOnWarnings: false,
 };

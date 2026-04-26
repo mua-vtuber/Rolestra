@@ -100,6 +100,58 @@ interface NotificationDictionary {
     /** LLM summary paragraph header — `provider` interpolation. */
     summaryPrefix: string;
   };
+  /**
+   * R11-Task11 (D9): main-process labels for the
+   * {@link ApprovalNotificationBridge}. Each `kind` carries a fixed
+   * title (no interpolation) plus a body fallback used when the
+   * payload-derived summary string is empty (the bridge composes a
+   * richer body from the approval payload itself; the dictionary
+   * supplies the safe default it falls back to).
+   *
+   * The `kind` set mirrors `ApprovalItem['kind']` exactly so a future
+   * union extension forces a compile-time addition here.
+   */
+  approvalNotificationBridge: {
+    cli_permission: { title: string; body: string };
+    mode_transition: { title: string; body: string };
+    consensus_decision: { title: string; body: string };
+    review_outcome: { title: string; body: string };
+    failure_report: { title: string; body: string };
+    circuit_breaker: { title: string; body: string };
+  };
+  /**
+   * R11-Task11 (D9): main-process labels for the {@link AutonomyGate}
+   * `#회의록` trace lines and OS notification copy. The previously-
+   * inline Korean strings move here so the en parity flips when the
+   * user toggles `notification:set-locale` in Settings.
+   *
+   * Layout:
+   *   - `label.<kind>` is the human-readable approval-kind label that
+   *     interpolates into the trace + notification bodies.
+   *   - `trace.{autoAccepted,downgraded}` are the `#회의록` system
+   *     message templates (`{{label}}` interpolation).
+   *   - `notify.{autoAccept,error}` are the OS notification title/
+   *     body templates (`{{label}}` interpolation on the body).
+   */
+  autonomyGate: {
+    label: {
+      mode_transition: string;
+      consensus_decision: string;
+      review_outcome: string;
+      cli_permission: string;
+      failure_report: string;
+    };
+    trace: {
+      autoAccepted: string;
+      downgraded: string;
+    };
+    notify: {
+      autoAcceptTitle: string;
+      autoAcceptBody: string;
+      errorTitle: string;
+      errorBody: string;
+    };
+  };
 }
 
 const KO: NotificationDictionary = {
@@ -169,6 +221,36 @@ const KO: NotificationDictionary = {
     rejectionWithComment: '회의 합의 거절됨 — {{comment}}',
     summaryPrefix: '📝 LLM 요약 ({{provider}}):',
   },
+  approvalNotificationBridge: {
+    cli_permission: { title: 'CLI 권한 요청', body: '승인 대기' },
+    mode_transition: { title: '권한 모드 변경 요청', body: '권한 모드 변경 대기' },
+    consensus_decision: { title: '합의 결과 승인 요청', body: '합의 결과 승인 대기' },
+    review_outcome: { title: '리뷰 결과 승인', body: '리뷰 결과를 확인해 주세요.' },
+    failure_report: { title: '실패 리포트', body: '자동 실행 실패가 보고되었습니다.' },
+    circuit_breaker: {
+      title: '자율 모드 다운그레이드',
+      body: '자동 실행이 중단되어 자율 모드가 manual로 변경되었습니다.',
+    },
+  },
+  autonomyGate: {
+    label: {
+      mode_transition: '모드 전환',
+      consensus_decision: '합의 결과',
+      review_outcome: '리뷰 결과',
+      cli_permission: 'CLI 권한',
+      failure_report: '실패 리포트',
+    },
+    trace: {
+      autoAccepted: '자율 모드: {{label}} 자동 수락',
+      downgraded: '자율 모드: {{label}} 실패 감지 → manual로 강제 전환',
+    },
+    notify: {
+      autoAcceptTitle: '자동 수락',
+      autoAcceptBody: '{{label}} 승인이 자동 처리되었습니다',
+      errorTitle: '자율 모드 해제',
+      errorBody: '{{label}} 실패로 manual 모드로 전환되었습니다',
+    },
+  },
 };
 
 const EN: NotificationDictionary = {
@@ -237,6 +319,36 @@ const EN: NotificationDictionary = {
     rejectionWithComment: 'Consensus rejected — {{comment}}',
     summaryPrefix: '📝 LLM summary ({{provider}}):',
   },
+  approvalNotificationBridge: {
+    cli_permission: { title: 'CLI permission request', body: 'Awaiting approval' },
+    mode_transition: { title: 'Permission mode change request', body: 'Awaiting permission mode change' },
+    consensus_decision: { title: 'Consensus approval request', body: 'Awaiting consensus approval' },
+    review_outcome: { title: 'Review outcome approval', body: 'Please review the outcome.' },
+    failure_report: { title: 'Failure report', body: 'An automated run failed.' },
+    circuit_breaker: {
+      title: 'Autonomy downgrade',
+      body: 'Automated execution stopped — autonomy reverted to manual.',
+    },
+  },
+  autonomyGate: {
+    label: {
+      mode_transition: 'Mode transition',
+      consensus_decision: 'Consensus result',
+      review_outcome: 'Review outcome',
+      cli_permission: 'CLI permission',
+      failure_report: 'Failure report',
+    },
+    trace: {
+      autoAccepted: 'Autonomy: {{label}} auto-accepted',
+      downgraded: 'Autonomy: {{label}} failure detected → forced to manual',
+    },
+    notify: {
+      autoAcceptTitle: 'Auto-accepted',
+      autoAcceptBody: '{{label}} approval was processed automatically',
+      errorTitle: 'Autonomy disabled',
+      errorBody: 'Reverted to manual after {{label}} failure',
+    },
+  },
 };
 
 const DICTIONARIES: Record<NotificationLocale, NotificationDictionary> = {
@@ -274,7 +386,32 @@ export type NotificationLabelKey =
   | 'approvalSystemMessage.modeTransitionAdvisoryPrefix'
   | 'meetingMinutes.rejection'
   | 'meetingMinutes.rejectionWithComment'
-  | 'meetingMinutes.summaryPrefix';
+  | 'meetingMinutes.summaryPrefix'
+  // R11-Task11 (D9): approval-notification-bridge labels.
+  | 'approvalNotificationBridge.cli_permission.title'
+  | 'approvalNotificationBridge.cli_permission.body'
+  | 'approvalNotificationBridge.mode_transition.title'
+  | 'approvalNotificationBridge.mode_transition.body'
+  | 'approvalNotificationBridge.consensus_decision.title'
+  | 'approvalNotificationBridge.consensus_decision.body'
+  | 'approvalNotificationBridge.review_outcome.title'
+  | 'approvalNotificationBridge.review_outcome.body'
+  | 'approvalNotificationBridge.failure_report.title'
+  | 'approvalNotificationBridge.failure_report.body'
+  | 'approvalNotificationBridge.circuit_breaker.title'
+  | 'approvalNotificationBridge.circuit_breaker.body'
+  // R11-Task11 (D9): autonomy-gate labels.
+  | 'autonomyGate.label.mode_transition'
+  | 'autonomyGate.label.consensus_decision'
+  | 'autonomyGate.label.review_outcome'
+  | 'autonomyGate.label.cli_permission'
+  | 'autonomyGate.label.failure_report'
+  | 'autonomyGate.trace.autoAccepted'
+  | 'autonomyGate.trace.downgraded'
+  | 'autonomyGate.notify.autoAcceptTitle'
+  | 'autonomyGate.notify.autoAcceptBody'
+  | 'autonomyGate.notify.errorTitle'
+  | 'autonomyGate.notify.errorBody';
 
 /**
  * Resolves a notification label for the current locale. `key` is a
