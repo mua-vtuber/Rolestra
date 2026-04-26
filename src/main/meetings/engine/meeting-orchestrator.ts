@@ -112,7 +112,15 @@ export interface MeetingOrchestratorDeps {
   meetingSummaryService?: {
     summarize(
       content: string,
-      opts?: { preferredProviderId?: string | null; signal?: AbortSignal },
+      opts?: {
+        preferredProviderId?: string | null;
+        signal?: AbortSignal;
+        /**
+         * R11-Task8: meeting context forwarded so the summary service
+         * can correlate cost-audit rows with this meeting.
+         */
+        meetingId?: string | null;
+      },
     ): Promise<{ summary: string | null; providerId: string | null }>;
   };
   /** Optional i18n translator threaded into `composeMinutes`. */
@@ -725,7 +733,9 @@ export class MeetingOrchestrator {
     let finalContent = body;
     if (this.meetingSummaryService !== undefined) {
       try {
-        const result = await this.meetingSummaryService.summarize(body);
+        const result = await this.meetingSummaryService.summarize(body, {
+          meetingId: this.session.meetingId,
+        });
         if (result.summary !== null) {
           const provider = result.providerId ?? '?';
           const prefix = resolveNotificationLabel(

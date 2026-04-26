@@ -104,6 +104,15 @@ export interface SettingsConfig {
   consensusFolderPath: string;
   /** Custom path for ArenaRoot directory. Empty string = platform default (~/Documents/arena). */
   arenaRoot: string;
+  /**
+   * R11-Task8 (D5): per-provider USD unit price for the LLM 사용량 카드.
+   * Keys are `providerId` (registry id), values are USD per 1,000,000
+   * tokens — the unit every major provider publishes their pricing in.
+   * The default empty record makes `estimatedUsd` null in the Settings
+   * card so untouched installs surface "단가 미설정" instead of $0.
+   * Updates flow through `config:update-settings` like any other key.
+   */
+  llmCostUsdPerMillionTokens: Record<string, number>;
 }
 
 /** Default settings values. */
@@ -123,6 +132,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
   conversationTask: DEFAULT_CONVERSATION_TASK_SETTINGS,
   consensusFolderPath: '',
   arenaRoot: '',
+  llmCostUsdPerMillionTokens: {},
 };
 
 // ── Secrets Layer ──────────────────────────────────────────────────

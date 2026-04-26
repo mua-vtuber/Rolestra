@@ -38,6 +38,9 @@ import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
 import { ApprovalService } from './approvals/approval-service';
 import { MeetingSummaryService } from './llm/meeting-summary-service';
+import { LlmCostRepository } from './llm/llm-cost-repository';
+import { LlmCostService } from './llm/llm-cost-service';
+import { setLlmCostServiceAccessor } from './ipc/handlers/llm-handler';
 import { ApprovalSystemMessageInjector } from './approvals/approval-system-message-injector';
 import {
   setApprovalServiceAccessor,
@@ -459,11 +462,28 @@ app.whenReady().then(async () => {
       circuitBreaker: () => circuitBreaker,
     });
 
+    // R11-Task8: LLM 비용 audit log. Repository owns the append-only
+    // SQL; LlmCostService folds the user-supplied per-provider unit
+    // price (D5) into the response. The repository is wired into
+    // MeetingSummaryService below so every successful summary call
+    // logs its token usage. The service feeds the `llm:cost-summary`
+    // IPC consumed by the AutonomyDefaultsTab "LLM 사용량" card.
+    const llmCostRepository = new LlmCostRepository(getDatabase());
+    const llmCostService = new LlmCostService({
+      repository: llmCostRepository,
+      getPriceMap: () =>
+        getConfigService().getSettings().llmCostUsdPerMillionTokens,
+    });
+    setLlmCostServiceAccessor(() => llmCostService);
+
     // R10-Task11: optional LLM summary service. Singleton — picks the
     // first ready provider with the summarize capability at call time so
     // a provider hot-swap (warm-up / unregister) is honoured per call.
+    // R11-Task8: cost audit sink wired so every summary appends one
+    // row to `llm_cost_audit_log`.
     const meetingSummaryService = new MeetingSummaryService({
       providerRegistry,
+      costAuditSink: llmCostRepository,
     });
 
     // R10-Task11: re-arm consensus_decision approval expiry timers from

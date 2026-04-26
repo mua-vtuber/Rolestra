@@ -236,6 +236,29 @@
       "title": "Error"
     }
   },
+  "llm": {
+    "cost": {
+      "description": "Cumulative tokens per LLM provider over the last {{days}} days.",
+      "empty": "No LLM calls in the last {{days}} days.",
+      "error": "Failed to load usage.",
+      "estimatedUsdMissing": "Unit price unset",
+      "loading": "Loading usage…",
+      "periodLabel": "Last {{days}} days",
+      "priceLabel": "Unit price (USD / 1M tokens)",
+      "priceSave": "Save",
+      "refresh": "Refresh",
+      "tableHeader": {
+        "estimatedUsd": "Estimated cost",
+        "price": "Price (USD/1M)",
+        "provider": "Provider",
+        "tokenIn": "Input tokens",
+        "tokenOut": "Output tokens",
+        "totalTokens": "Total"
+      },
+      "title": "LLM usage",
+      "totalTokens": "Total tokens: {{value}}"
+    }
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "Safety circuit tripped",

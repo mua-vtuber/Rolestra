@@ -15,6 +15,7 @@
 import {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -24,6 +25,8 @@ import { useTranslation } from 'react-i18next';
 import { invoke } from '../../../ipc/invoke';
 import { Button } from '../../../components/primitives/button';
 import type { SettingsConfig } from '../../../../shared/config-types';
+import { useLlmCostSummary } from '../../../hooks/use-llm-cost-summary';
+import type { LlmCostSummary } from '../../../../shared/llm-cost-types';
 
 type RoundsValue = number | 'unlimited';
 
@@ -132,9 +135,211 @@ export function AutonomyDefaultsTab(): ReactElement {
               void update('hardTokenLimit', next);
             }}
           />
+          <LlmCostSection
+            priceMap={settings.llmCostUsdPerMillionTokens}
+            disabled={savingKey === 'llmCostUsdPerMillionTokens'}
+            onCommitPrice={async (providerId, nextPrice) => {
+              await update('llmCostUsdPerMillionTokens', {
+                ...settings.llmCostUsdPerMillionTokens,
+                [providerId]: nextPrice,
+              });
+            }}
+          />
         </div>
       )}
     </section>
+  );
+}
+
+/** R11-Task8: rolling-window LLM 사용량 카드 + per-provider 단가 입력. */
+const LLM_COST_PERIOD_DAYS = 30;
+
+interface LlmCostSectionProps {
+  priceMap: Record<string, number>;
+  disabled: boolean;
+  onCommitPrice: (providerId: string, nextPrice: number) => Promise<void>;
+}
+
+function LlmCostSection({
+  priceMap,
+  disabled,
+  onCommitPrice,
+}: LlmCostSectionProps): ReactElement {
+  const { t } = useTranslation();
+  const { summary, loading, error, refetch } =
+    useLlmCostSummary(LLM_COST_PERIOD_DAYS);
+
+  const rows = useMemo(() => {
+    if (!summary) return [] as LlmCostSummary['byProvider'];
+    return summary.byProvider;
+  }, [summary]);
+
+  return (
+    <section
+      data-testid="settings-autonomy-llm-cost-section"
+      className="mt-4 pt-4 border-t border-border-soft space-y-2"
+    >
+      <header className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-display font-semibold">
+          {t('llm.cost.title')}
+        </h3>
+        <span className="text-xs text-fg-muted">
+          {t('llm.cost.periodLabel', { days: LLM_COST_PERIOD_DAYS })}
+        </span>
+      </header>
+      <p className="text-xs text-fg-muted">
+        {t('llm.cost.description', { days: LLM_COST_PERIOD_DAYS })}
+      </p>
+
+      {error !== null && (
+        <div
+          role="alert"
+          data-testid="settings-autonomy-llm-cost-error"
+          className="text-xs text-danger border border-danger rounded-panel px-2 py-1 bg-sunk"
+        >
+          {t('llm.cost.error')} — {error.message}
+        </div>
+      )}
+
+      {loading ? (
+        <p
+          data-testid="settings-autonomy-llm-cost-loading"
+          className="text-xs text-fg-muted italic"
+        >
+          {t('llm.cost.loading')}
+        </p>
+      ) : rows.length === 0 ? (
+        <p
+          data-testid="settings-autonomy-llm-cost-empty"
+          className="text-xs text-fg-muted italic"
+        >
+          {t('llm.cost.empty', { days: LLM_COST_PERIOD_DAYS })}
+        </p>
+      ) : (
+        <table
+          data-testid="settings-autonomy-llm-cost-table"
+          className="w-full text-xs border-collapse"
+        >
+          <thead className="text-fg-muted">
+            <tr>
+              <th className="text-left py-1 font-normal">
+                {t('llm.cost.tableHeader.provider')}
+              </th>
+              <th className="text-right py-1 font-normal">
+                {t('llm.cost.tableHeader.tokenIn')}
+              </th>
+              <th className="text-right py-1 font-normal">
+                {t('llm.cost.tableHeader.tokenOut')}
+              </th>
+              <th className="text-right py-1 font-normal">
+                {t('llm.cost.tableHeader.totalTokens')}
+              </th>
+              <th className="text-right py-1 font-normal">
+                {t('llm.cost.tableHeader.price')}
+              </th>
+              <th className="text-right py-1 font-normal">
+                {t('llm.cost.tableHeader.estimatedUsd')}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <LlmCostRow
+                key={row.providerId}
+                providerId={row.providerId}
+                tokenIn={row.tokenIn}
+                tokenOut={row.tokenOut}
+                estimatedUsd={row.estimatedUsd}
+                price={priceMap[row.providerId] ?? 0}
+                disabled={disabled}
+                onCommitPrice={async (next) => {
+                  await onCommitPrice(row.providerId, next);
+                  await refetch();
+                }}
+              />
+            ))}
+          </tbody>
+          {summary && (
+            <tfoot>
+              <tr className="border-t border-border-soft text-fg">
+                <td colSpan={6} className="text-right py-1">
+                  {t('llm.cost.totalTokens', {
+                    value: summary.totalTokens.toLocaleString(),
+                  })}
+                </td>
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      )}
+    </section>
+  );
+}
+
+interface LlmCostRowProps {
+  providerId: string;
+  tokenIn: number;
+  tokenOut: number;
+  estimatedUsd: number | null;
+  price: number;
+  disabled: boolean;
+  onCommitPrice: (next: number) => Promise<void>;
+}
+
+function LlmCostRow({
+  providerId,
+  tokenIn,
+  tokenOut,
+  estimatedUsd,
+  price,
+  disabled,
+  onCommitPrice,
+}: LlmCostRowProps): ReactElement {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState<string>(price > 0 ? String(price) : '');
+  const [lastSyncedPrice, setLastSyncedPrice] = useState<number>(price);
+  if (price !== lastSyncedPrice) {
+    setLastSyncedPrice(price);
+    setDraft(price > 0 ? String(price) : '');
+  }
+  const total = tokenIn + tokenOut;
+  return (
+    <tr data-testid={`settings-autonomy-llm-cost-row-${providerId}`}>
+      <td className="py-1 text-left text-fg">{providerId}</td>
+      <td className="py-1 text-right tabular-nums">{tokenIn.toLocaleString()}</td>
+      <td className="py-1 text-right tabular-nums">{tokenOut.toLocaleString()}</td>
+      <td className="py-1 text-right tabular-nums">{total.toLocaleString()}</td>
+      <td className="py-1 text-right">
+        <input
+          type="number"
+          min={0}
+          step={0.01}
+          aria-label={t('llm.cost.priceLabel')}
+          data-testid={`settings-autonomy-llm-cost-price-${providerId}`}
+          value={draft}
+          disabled={disabled}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={() => {
+            const n = Number.parseFloat(draft);
+            if (Number.isFinite(n) && n >= 0 && n !== price) {
+              void onCommitPrice(n);
+            } else {
+              setDraft(price > 0 ? String(price) : '');
+            }
+          }}
+          className="w-20 bg-elev text-fg border border-border-soft rounded-panel px-1.5 py-0.5 text-right tabular-nums"
+        />
+      </td>
+      <td className="py-1 text-right tabular-nums">
+        {estimatedUsd === null ? (
+          <span className="text-fg-muted italic">
+            {t('llm.cost.estimatedUsdMissing')}
+          </span>
+        ) : (
+          `$ ${estimatedUsd.toFixed(4)}`
+        )}
+      </td>
+    </tr>
   );
 }
 

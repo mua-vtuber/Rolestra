@@ -16,7 +16,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { MeetingSummaryService } from '../meeting-summary-service';
+import {
+  MeetingSummaryService,
+  type LlmCostAuditSink,
+} from '../meeting-summary-service';
 import type { BaseProvider } from '../../providers/provider-interface';
 import type { ProviderInfo } from '../../../shared/provider-types';
 
@@ -26,6 +29,10 @@ interface FakeProviderOpts {
   capabilities?: string[];
   stream?: AsyncGenerator<string>;
   streamThrows?: Error;
+  /** R11-Task8: usage value returned from consumeLastTokenUsage(). */
+  usage?: { inputTokens: number; outputTokens: number } | null;
+  /** R11-Task8: throw from consumeLastTokenUsage(). */
+  usageThrows?: Error;
 }
 
 function makeProvider(opts: FakeProviderOpts): BaseProvider {
@@ -45,6 +52,10 @@ function makeProvider(opts: FakeProviderOpts): BaseProvider {
       } else {
         yield 'mocked summary line';
       }
+    },
+    consumeLastTokenUsage: () => {
+      if (opts.usageThrows) throw opts.usageThrows;
+      return opts.usage ?? null;
     },
   };
   return provider as unknown as BaseProvider;
@@ -225,5 +236,159 @@ describe('MeetingSummaryService', () => {
     });
     const result = await svc.summarize('body', { preferredProviderId: 'pref' });
     expect(result.providerId).toBe('fallback');
+  });
+
+  // ── R11-Task8: cost audit sink integration ─────────────────────────
+
+  describe('cost audit sink (R11-Task8)', () => {
+    function fakeSink(): {
+      append: ReturnType<typeof vi.fn>;
+    } & LlmCostAuditSink {
+      const append = vi.fn(
+        (_input: {
+          meetingId: string | null;
+          providerId: string;
+          tokenIn: number;
+          tokenOut: number;
+        }) => undefined,
+      );
+      return { append };
+    }
+
+    it('appends one row with the meetingId + provider tokens on success', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usage: { inputTokens: 1000, outputTokens: 250 },
+      });
+      const sink = fakeSink();
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      const result = await svc.summarize('body', { meetingId: 'meeting-1' });
+      expect(result.providerId).toBe('p');
+      expect(sink.append).toHaveBeenCalledTimes(1);
+      expect(sink.append).toHaveBeenCalledWith({
+        meetingId: 'meeting-1',
+        providerId: 'p',
+        tokenIn: 1000,
+        tokenOut: 250,
+      });
+    });
+
+    it('passes meetingId=null when the caller omits it (smoke / classifier)', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usage: { inputTokens: 5, outputTokens: 5 },
+      });
+      const sink = fakeSink();
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      await svc.summarize('body');
+      expect(sink.append).toHaveBeenCalledWith(
+        expect.objectContaining({ meetingId: null }),
+      );
+    });
+
+    it('skips the append when consumeLastTokenUsage returns null (no usage reported)', async () => {
+      const provider = makeProvider({ id: 'p', usage: null });
+      const sink = fakeSink();
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      await svc.summarize('body');
+      expect(sink.append).not.toHaveBeenCalled();
+    });
+
+    it('skips the append when both token counts are zero', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+      const sink = fakeSink();
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      await svc.summarize('body');
+      expect(sink.append).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when the sink itself throws (best-effort)', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      });
+      const sink: LlmCostAuditSink = {
+        append: () => {
+          throw new Error('disk full');
+        },
+      };
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      const result = await svc.summarize('body', { meetingId: 'm-1' });
+      expect(result.providerId).toBe('p');
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[meeting-summary] cost audit append failed',
+        expect.objectContaining({ providerId: 'p' }),
+      );
+    });
+
+    it('does not throw when consumeLastTokenUsage itself throws', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usageThrows: new Error('usage broken'),
+      });
+      const sink = fakeSink();
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      const result = await svc.summarize('body');
+      expect(result.providerId).toBe('p');
+      expect(sink.append).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(
+        '[meeting-summary] consumeLastTokenUsage threw',
+        expect.objectContaining({ providerId: 'p' }),
+      );
+    });
+
+    it('skips the append entirely when no sink is wired (back-compat)', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usage: { inputTokens: 10, outputTokens: 10 },
+      });
+      const consumeSpy = vi.spyOn(provider, 'consumeLastTokenUsage');
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+      });
+      const result = await svc.summarize('body');
+      expect(result.providerId).toBe('p');
+      // The optional sink branch returns early before consuming usage
+      // so a provider whose summary worked still has its usage available
+      // for whatever the caller wants to do with it.
+      expect(consumeSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not append when summary content is empty (no provider call at all)', async () => {
+      const provider = makeProvider({
+        id: 'p',
+        usage: { inputTokens: 10, outputTokens: 10 },
+      });
+      const sink = fakeSink();
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        costAuditSink: sink,
+      });
+      await svc.summarize('   ');
+      expect(sink.append).not.toHaveBeenCalled();
+    });
   });
 });

@@ -236,6 +236,29 @@
       "title": "오류"
     }
   },
+  "llm": {
+    "cost": {
+      "description": "최근 {{days}}일간 LLM provider별 누적 토큰입니다.",
+      "empty": "최근 {{days}}일간 LLM 호출 기록이 없습니다.",
+      "error": "사용량을 불러오지 못했습니다.",
+      "estimatedUsdMissing": "단가 미설정",
+      "loading": "사용량을 불러오는 중…",
+      "periodLabel": "최근 {{days}}일",
+      "priceLabel": "단가 (USD / 1M 토큰)",
+      "priceSave": "저장",
+      "refresh": "새로고침",
+      "tableHeader": {
+        "estimatedUsd": "추정 비용",
+        "price": "단가 (USD/1M)",
+        "provider": "Provider",
+        "tokenIn": "입력 토큰",
+        "tokenOut": "출력 토큰",
+        "totalTokens": "합계"
+      },
+      "title": "LLM 사용량",
+      "totalTokens": "총 누적 토큰: {{value}}"
+    }
+  },
   "meeting": {
     "error": {
       "circuitBreaker": "자동 안전 장치 발동",

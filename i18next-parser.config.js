@@ -208,6 +208,12 @@ export default {
     /^translation:onboarding\.description$/,
     /^translation:onboarding\.description_settingsCta$/,
     /^translation:onboarding\.settingsCta$/,
+    // R11-Task8 llm.cost.* — the AutonomyDefaultsTab Settings section
+    // composes some keys via `t(\`llm.cost.tableHeader.${col}\`)` and
+    // template-string interpolation for unit-price inputs. Anchor the
+    // full subtree so parser passes between R11 and R12 do not prune
+    // header / message variants that don't have a 1:1 static call.
+    /^translation:llm\.cost(\..+)?$/,
   ],
   failOnWarnings: false,
 };

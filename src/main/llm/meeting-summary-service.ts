@@ -26,6 +26,21 @@ import type {
 } from '../../shared/provider-types';
 
 /**
+ * R11-Task8: minimum-viable surface of {@link LlmCostRepository} that the
+ * summary service depends on. Defined as an interface (rather than the
+ * concrete class) so tests can pass a vi.fn-backed fake without
+ * needing a SQLite handle.
+ */
+export interface LlmCostAuditSink {
+  append(input: {
+    meetingId: string | null;
+    providerId: string;
+    tokenIn: number;
+    tokenOut: number;
+  }): unknown;
+}
+
+/**
  * Minimal registry surface — accepting just the two methods we use lets
  * the tests pass a fake without dragging in BaseProvider's full lifecycle.
  */
@@ -79,6 +94,13 @@ export interface MeetingSummaryServiceDeps {
   providerRegistry: ProviderRegistryView;
   /** Optional override of the default timeout (tests). */
   timeoutMs?: number;
+  /**
+   * R11-Task8: optional audit log sink. When provided, every successful
+   * summarize call appends one row carrying the provider's reported
+   * usage. Omitting it is a no-op so tests + smoke probes that don't
+   * care about cost tracking keep working unchanged.
+   */
+  costAuditSink?: LlmCostAuditSink;
 }
 
 export class MeetingSummaryService {
@@ -98,7 +120,16 @@ export class MeetingSummaryService {
    */
   async summarize(
     content: string,
-    opts: { preferredProviderId?: string | null; signal?: AbortSignal } = {},
+    opts: {
+      preferredProviderId?: string | null;
+      signal?: AbortSignal;
+      /**
+       * R11-Task8: meeting context for the audit row. The orchestrator
+       * passes its own `meeting.id` so the audit log keeps a back-link;
+       * non-meeting callers (smoke / classifier) leave this null.
+       */
+      meetingId?: string | null;
+    } = {},
   ): Promise<MeetingSummaryResult> {
     if (!content || content.trim().length === 0) {
       return { summary: null, providerId: null };
@@ -138,6 +169,7 @@ export class MeetingSummaryService {
       if (summary.length === 0) {
         return { summary: null, providerId: null };
       }
+      this.recordUsage(provider, opts.meetingId ?? null);
       return { summary, providerId: provider.id };
     } catch (err) {
       console.warn('[meeting-summary] provider call failed', {
@@ -149,6 +181,54 @@ export class MeetingSummaryService {
     } finally {
       clearTimeout(timer);
       if (opts.signal) opts.signal.removeEventListener('abort', onParentAbort);
+    }
+  }
+
+  /**
+   * R11-Task8: append one audit row for the call we just made. The
+   * provider's BaseProvider already records usage on the underlying
+   * SSE stream (`api-provider.ts`) — we consume it (so the next call
+   * starts clean) and only persist non-zero counts. A provider that
+   * doesn't report usage (CLI providers, local stubs, malformed SSE)
+   * leaves the audit log untouched rather than poisoning aggregates
+   * with false zeros.
+   *
+   * The whole call is best-effort: a sink throw must not bubble up
+   * through the summary path. Worst case we lose one row of usage —
+   * the audit log is not load-bearing for the meeting flow.
+   */
+  private recordUsage(
+    provider: BaseProvider,
+    meetingId: string | null,
+  ): void {
+    const sink = this.deps.costAuditSink;
+    if (sink === undefined) return;
+    let usage: { inputTokens: number; outputTokens: number } | null = null;
+    try {
+      usage = provider.consumeLastTokenUsage();
+    } catch (err) {
+      console.warn('[meeting-summary] consumeLastTokenUsage threw', {
+        providerId: provider.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    if (usage === null) return;
+    const tokenIn = Math.max(0, usage.inputTokens | 0);
+    const tokenOut = Math.max(0, usage.outputTokens | 0);
+    if (tokenIn === 0 && tokenOut === 0) return;
+    try {
+      sink.append({
+        meetingId,
+        providerId: provider.id,
+        tokenIn,
+        tokenOut,
+      });
+    } catch (err) {
+      console.warn('[meeting-summary] cost audit append failed', {
+        providerId: provider.id,
+        message: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

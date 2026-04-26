@@ -160,6 +160,7 @@ import {
   handleQueueResume,
 } from './handlers/queue-handler';
 import { handleDashboardGetKpis } from './handlers/dashboard-handler';
+import { handleLlmCostSummary } from './handlers/llm-handler';
 
 /** Envelope shape sent by preload's typedInvoke. */
 interface IpcEnvelope<C extends IpcChannel> {
@@ -455,6 +456,9 @@ export function registerIpcHandlers(): void {
   handle('onboarding:set-state', isDev, (data) => handleOnboardingSetState(data));
   handle('onboarding:complete', isDev, () => handleOnboardingComplete());
   handle('provider:detect', isDev, () => handleProviderDetect());
+
+  // ── R11-Task8: LLM 누적 비용 요약 (Settings 카드) ────────────────
+  handle('llm:cost-summary', isDev, (data) => handleLlmCostSummary(data));
 
   // ── R11-Task4: dev hooks (E2E only) ─────────────────────────────
   // Gated on ROLESTRA_E2E=1 so production builds never expose the trip
