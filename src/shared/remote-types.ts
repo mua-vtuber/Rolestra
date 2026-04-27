@@ -21,8 +21,15 @@ export interface RemoteAccessPolicy {
   directAccessReadOnly: boolean;
   directAccessSessionTimeoutMin: number;
   directAccessAllowedIPs: string[];
-  /** Bind address for direct mode. Default: '127.0.0.1'. */
+  /** Bind address for direct mode. Default: {@link DEFAULT_REMOTE_BIND_ADDRESS}. */
   bindAddress?: string;
+  /**
+   * F4-Task8: maximum HTTP request body size in bytes for the inline
+   * remote server. Default: {@link DEFAULT_REMOTE_MAX_BODY_BYTES}.
+   * Operators with stricter footprints can lower this; users with
+   * larger payloads (e.g. attached transcripts) can raise it.
+   */
+  maxBodyBytes?: number;
 
   // ── Permission flags ───────────────────────────────────────────
   allowFileModification: boolean;
@@ -31,14 +38,43 @@ export interface RemoteAccessPolicy {
   allowedEndpoints: string[];
 }
 
+/**
+ * F4-Task8: default direct-mode HTTPS port. Surfacing the literal as
+ * a named constant lets callers reference the same default everywhere
+ * and makes a future port-collision auto-retry trivial to implement.
+ */
+export const DEFAULT_REMOTE_DIRECT_PORT = 8443;
+
+/**
+ * F4-Task8: default request body size cap (1 MB). The inline remote
+ * server destroys requests that exceed this size before reading the
+ * body into memory, so the value also bounds the per-request RSS
+ * spike under hostile traffic.
+ */
+export const DEFAULT_REMOTE_MAX_BODY_BYTES = 1_048_576;
+
+/**
+ * Default bind address for direct mode. Loopback by default — Tailscale
+ * mode replaces it with the daemon-assigned 100.x.y.z IP at server
+ * start, and an admin can override via `RemoteAccessPolicy.bindAddress`.
+ *
+ * F4-Task4: previously 4 sites (remote-server.ts:82, remote-manager.ts:167,
+ * tests, etc.) hardcoded `'127.0.0.1'`. The literal now lives here so
+ * future overrides (e.g. `'0.0.0.0'` for headless deployments) flip a
+ * single token.
+ */
+export const DEFAULT_REMOTE_BIND_ADDRESS = '127.0.0.1';
+
 /** Default remote access policy (everything disabled). */
 export const DEFAULT_REMOTE_POLICY: RemoteAccessPolicy = {
   mode: 'disabled',
   enabled: false,
-  directAccessPort: 8443,
+  directAccessPort: DEFAULT_REMOTE_DIRECT_PORT,
   directAccessReadOnly: true,
   directAccessSessionTimeoutMin: 30,
   directAccessAllowedIPs: [],
+  bindAddress: DEFAULT_REMOTE_BIND_ADDRESS,
+  maxBodyBytes: DEFAULT_REMOTE_MAX_BODY_BYTES,
   allowFileModification: false,
   allowCommandExecution: false,
   allowedEndpoints: [

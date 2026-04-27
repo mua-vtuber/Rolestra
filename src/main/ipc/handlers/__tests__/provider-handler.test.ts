@@ -65,6 +65,10 @@ vi.mock('../../../providers/model-registry', () => ({
 vi.mock('../../../config/instance', () => ({
   getConfigService: vi.fn(() => ({
     getSecret: vi.fn((key: string) => (key === 'valid-key' ? 'sk-secret' : null)),
+    // F4-Task1: provider-handler reads `ollamaEndpoint` from settings to
+    // resolve the local-provider catalog default. Empty string keeps the
+    // resolver on the env → fallback path so the tests stay env-agnostic.
+    getSettings: vi.fn(() => ({ ollamaEndpoint: '' })),
   })),
 }));
 
@@ -137,11 +141,23 @@ describe('provider-handler', () => {
   });
 
   describe('handleProviderListModels', () => {
+    // F4-Task1: when `settings.ollamaEndpoint` is empty and `OLLAMA_HOST`
+    // is unset (the default test env in vitest), the resolver returns
+    // `OLLAMA_ENDPOINT_FALLBACK` (`http://localhost:11434`). Each call
+    // through provider-handler now forwards that resolved string as the
+    // 4th positional arg.
+    const expectedDefaultLocalEndpoint = 'http://localhost:11434';
+
     it('happy path — returns models for a provider type', async () => {
       const result = await handleProviderListModels({ type: 'api' as never, key: 'openai' });
 
       expect(result.models).toEqual(['model-a', 'model-b']);
-      expect(mockGetModelsForProvider).toHaveBeenCalledWith('api', 'openai', undefined);
+      expect(mockGetModelsForProvider).toHaveBeenCalledWith(
+        'api',
+        'openai',
+        undefined,
+        expectedDefaultLocalEndpoint,
+      );
     });
 
     it('with apiKeyRef — resolves key and passes to getModelsForProvider', async () => {
@@ -156,6 +172,7 @@ describe('provider-handler', () => {
         'api',
         'https://api.openai.com/v1',
         'sk-secret',
+        expectedDefaultLocalEndpoint,
       );
     });
 
@@ -171,6 +188,7 @@ describe('provider-handler', () => {
         'api',
         'https://api.openai.com/v1',
         undefined,
+        expectedDefaultLocalEndpoint,
       );
     });
   });

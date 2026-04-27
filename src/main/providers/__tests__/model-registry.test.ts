@@ -223,6 +223,56 @@ describe('model-registry', () => {
         getModelsForProvider('local', 'http://localhost:11434'),
       ).rejects.toBeInstanceOf(ModelRegistryParseError);
     });
+
+    // ── F4-Task1/T2: defaultLocalEndpoint resolution ─────────────────
+
+    it('defaultLocalEndpoint kicks in when key is empty', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(
+        JSON.stringify({ models: [{ name: 'qwen2' }] }),
+        { status: 200 },
+      ));
+
+      await getModelsForProvider(
+        'local',
+        '',
+        undefined,
+        'http://injected-default:9999',
+      );
+
+      const url = fetchSpy.mock.calls[0][0];
+      expect(typeof url).toBe('string');
+      expect(url).toContain('http://injected-default:9999');
+    });
+
+    it('caller-supplied key wins over defaultLocalEndpoint', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(
+        JSON.stringify({ models: [{ name: 'qwen2' }] }),
+        { status: 200 },
+      ));
+
+      await getModelsForProvider(
+        'local',
+        'http://specific-host:11434',
+        undefined,
+        'http://injected-default:9999',
+      );
+
+      const url = fetchSpy.mock.calls[0][0];
+      expect(url).toContain('http://specific-host:11434');
+      expect(url).not.toContain('injected-default');
+    });
+
+    it('falls back to literal localhost:11434 when neither key nor default is set', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(
+        JSON.stringify({ models: [] }),
+        { status: 200 },
+      ));
+
+      await getModelsForProvider('local', '');
+
+      const url = fetchSpy.mock.calls[0][0];
+      expect(url).toContain('http://localhost:11434');
+    });
   });
 
   describe('Embedding models', () => {

@@ -964,6 +964,15 @@
       "changeHint": "Changing this requires an app restart.",
       "description": "The on-disk working directory Rolestra uses.",
       "loading": "Loading path…",
+      "ollamaEndpoint": {
+        "description": "Used for the local LLM catalog probe and as the default baseUrl for new local providers. Empty inherits OLLAMA_HOST, then falls back to http://localhost:11434.",
+        "fallbackHint": "Precedence: this setting -> OLLAMA_HOST env var -> http://localhost:11434.",
+        "label": "Ollama HTTP endpoint",
+        "placeholder": "http://localhost:11434",
+        "save": "Save",
+        "saved": "Saved",
+        "saving": "Saving…"
+      },
       "restartBanner": "In-place path picker lands in R11 onboarding. R10 is read-only.",
       "title": "Path"
     },

@@ -74,6 +74,33 @@ describe('ArenaRootService', () => {
     expect(svc.getPath()).toBe(tmpRoot);
   });
 
+  // ── F4-Task6: documentsPath injection ──────────────────────────────
+
+  it('honours an injected documentsPath when computing the platform default', () => {
+    const config = createConfigStub({ arenaRoot: '' });
+    const customDocs = path.join(tmpRoot, 'CustomDocs');
+    const svc = new ArenaRootService(config, customDocs);
+
+    expect(svc.getPath()).toBe(path.join(customDocs, 'arena'));
+  });
+
+  it('getDefaultArenaRoot() with documentsPath joins the OS-localized base', () => {
+    expect(getDefaultArenaRoot('/home/user/Localized')).toBe(
+      path.join('/home/user/Localized', 'arena'),
+    );
+  });
+
+  it('getDefaultArenaRoot() without documentsPath retains the legacy ~/Documents fallback', () => {
+    expect(getDefaultArenaRoot()).toBe(path.join(os.homedir(), 'Documents', 'arena'));
+  });
+
+  it('configured arenaRoot wins over documentsPath default', () => {
+    const config = createConfigStub({ arenaRoot: tmpRoot });
+    const svc = new ArenaRootService(config, '/elsewhere/Documents');
+
+    expect(svc.getPath()).toBe(tmpRoot);
+  });
+
   // ── ensure() ───────────────────────────────────────────────────────
 
   it('ensure() creates all 6 canonical subdirectories', async () => {

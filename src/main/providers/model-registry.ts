@@ -11,6 +11,7 @@
  * UX — user has not chosen to fetch live yet).
  */
 import type { ProviderType } from '../../shared/provider-types';
+import { OLLAMA_ENDPOINT_FALLBACK } from './ollama-endpoint-resolver';
 
 /** Anthropic API version header. */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -43,18 +44,31 @@ const CLI_MODELS: Record<string, string[]> = {
 };
 
 /**
+ * F4-Task8: canonical API endpoint URLs surfaced as named constants so
+ * (i) the static-catalog keys reference a single source of truth and
+ * (ii) self-hosted / proxy deployments can spot the canonical URLs at
+ * a glance. Self-hosters do *not* override these constants — they pass
+ * a custom URL via `ApiProviderConfig.endpoint`, which routes through
+ * the live-fetch path (any non-canonical URL skips the static catalog
+ * and requires an API key for model listing).
+ */
+export const OPENAI_API_ENDPOINT = 'https://api.openai.com/v1';
+export const ANTHROPIC_API_ENDPOINT = 'https://api.anthropic.com/v1';
+export const GOOGLE_GENAI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta';
+
+/**
  * Static catalog returned when no API key is configured. Once the user
  * provides a key, live fetch takes over; failures throw rather than
  * silently substituting these entries.
  */
 const API_MODELS_STATIC_CATALOG: Record<string, string[]> = {
-  'https://api.openai.com/v1': ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
-  'https://api.anthropic.com/v1': [
+  [OPENAI_API_ENDPOINT]: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
+  [ANTHROPIC_API_ENDPOINT]: [
     'claude-sonnet-4-5-20250929',
     'claude-opus-4-20250514',
     'claude-haiku-4-5-20251001',
   ],
-  'https://generativelanguage.googleapis.com/v1beta': [
+  [GOOGLE_GENAI_API_ENDPOINT]: [
     'gemini-2.5-pro',
     'gemini-2.5-flash',
   ],
@@ -306,6 +320,12 @@ async function fetchOllamaModels(baseUrl: string): Promise<string[]> {
  *                  for an API endpoint, returns the static catalog as a
  *                  known-stale list. When provided, attempts live fetch
  *                  and propagates ModelRegistry* errors on failure.
+ * @param defaultLocalEndpoint - Caller-resolved fallback for `type==='local'`
+ *                  when `key` is empty. Production callers should pass the
+ *                  result of {@link resolveOllamaEndpoint} from
+ *                  `ollama-endpoint-resolver.ts` so settings → env →
+ *                  literal precedence is respected. Tests omit it to use
+ *                  the literal default.
  * @returns Array of model identifiers.
  *
  * @throws ModelRegistryAuthError / ModelRegistryNetworkError /
@@ -317,6 +337,7 @@ export async function getModelsForProvider(
   type: ProviderType,
   key: string,
   apiKey?: string,
+  defaultLocalEndpoint?: string,
 ): Promise<string[]> {
   if (type === 'cli') {
     return CLI_MODELS[normalizeCommand(key)] ?? [];
@@ -333,7 +354,7 @@ export async function getModelsForProvider(
     return API_MODELS_STATIC_CATALOG[key] ?? [];
   }
   if (type === 'local') {
-    return fetchOllamaModels(key || 'http://localhost:11434');
+    return fetchOllamaModels(resolveLocalEndpoint(key, defaultLocalEndpoint));
   }
   return [];
 }
@@ -351,6 +372,7 @@ export async function getEmbeddingModelsForProvider(
   type: ProviderType,
   key: string,
   apiKey?: string,
+  defaultLocalEndpoint?: string,
 ): Promise<string[]> {
   if (type === 'api') {
     if (!apiKey) return [];
@@ -362,10 +384,30 @@ export async function getEmbeddingModelsForProvider(
     return live.filter((m) => isEmbeddingModelId(m));
   }
   if (type === 'local') {
-    const models = await fetchOllamaModels(key || 'http://localhost:11434');
+    const models = await fetchOllamaModels(resolveLocalEndpoint(key, defaultLocalEndpoint));
     return models.filter((m) => isEmbeddingModelId(m));
   }
   return [];
+}
+
+/**
+ * Resolve the local provider endpoint for a catalog probe. The
+ * caller-supplied `key` (typically `LocalProviderConfig.baseUrl`)
+ * wins; if absent, the caller-supplied `defaultLocalEndpoint`
+ * (resolved via {@link resolveOllamaEndpoint}) takes over. The
+ * literal `OLLAMA_ENDPOINT_FALLBACK` is the last resort for callers
+ * that do not pass a default — production paths always supply one,
+ * so this branch fires only in tests.
+ */
+function resolveLocalEndpoint(
+  key: string,
+  defaultEndpoint: string | undefined,
+): string {
+  const trimmedKey = key.trim();
+  if (trimmedKey.length > 0) return trimmedKey;
+  const trimmedDefault = defaultEndpoint?.trim() ?? '';
+  if (trimmedDefault.length > 0) return trimmedDefault;
+  return OLLAMA_ENDPOINT_FALLBACK;
 }
 
 export { isEmbeddingModelId };

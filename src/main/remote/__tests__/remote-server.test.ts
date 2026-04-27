@@ -508,7 +508,11 @@ describe('RemoteServer', () => {
       path: '/remote/ping',
     });
 
-    expect(res.headers['access-control-allow-origin']).toBe(`https://127.0.0.1:${actualPort}`);
+    // F4-Task3: CORS origin now mirrors the server's actual scheme +
+    // host + port. The test server runs without TLS (no `tls` config),
+    // so the scheme is `http://` and the host is the default
+    // `127.0.0.1` bind address.
+    expect(res.headers['access-control-allow-origin']).toBe(`http://127.0.0.1:${actualPort}`);
   });
 
   it('audit logs requests', async () => {
@@ -548,6 +552,51 @@ describe('RemoteServer', () => {
     });
 
     expect(res.status).toBe(403);
+  });
+
+  // ── F4-Task8: maxBodyBytes is per-server configurable ───────────────
+
+  it('destroys oversized request bodies under the configured maxBodyBytes cap', async () => {
+    if (!canBindLocalhost) return;
+    if (server.isRunning()) await server.stop();
+    const handlers = new RemoteHandlers(db, 'direct');
+    server = new RemoteServer({
+      port: actualPort,
+      host: '127.0.0.1',
+      auth,
+      sessions,
+      audit: { log: () => {} },
+      handlers,
+      maxBodyBytes: 32, // very low cap so we can assert with a small payload
+    });
+    await server.start();
+
+    const oversizedBody = { query: 'x'.repeat(2048) };
+
+    // The server invokes `req.destroy()` mid-stream once the chunk
+    // accumulator passes the cap, so the client observes a socket
+    // hang-up rather than a structured 4xx response. The assertion
+    // therefore covers both shapes — either the error propagates
+    // (ECONNRESET / socket hang up) or the request finishes with a
+    // 4xx/5xx after the empty-body fallback hits route validation.
+    let outcome: 'error' | { status: number };
+    try {
+      const res = await fetchJson({
+        port: actualPort,
+        method: 'POST',
+        path: '/remote/memory/search',
+        body: oversizedBody,
+      });
+      outcome = { status: res.status };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      expect(message).toMatch(/socket hang up|ECONNRESET|EPIPE|aborted/);
+      outcome = 'error';
+    }
+
+    if (outcome !== 'error') {
+      expect([400, 500]).toContain(outcome.status);
+    }
   });
 });
 

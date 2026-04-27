@@ -12,6 +12,10 @@ import type { RemoteAuth } from './remote-auth';
 import type { RemoteSessionTracker } from './remote-session';
 import type { RemoteHandlers } from './remote-handlers';
 import type { RemotePermissionSet } from '../../shared/remote-types';
+import {
+  DEFAULT_REMOTE_BIND_ADDRESS,
+  DEFAULT_REMOTE_MAX_BODY_BYTES,
+} from '../../shared/remote-types';
 import { getRemoteWebClientHtml } from './remote-web-client';
 
 /** Minimal interface for audit logging — matches RemoteAuditLogger. */
@@ -63,6 +67,12 @@ export interface RemoteServerConfig {
   handlers: RemoteHandlers;
   /** When provided, the server uses HTTPS instead of HTTP. */
   tls?: { cert: string; key: string };
+  /**
+   * F4-Task8: per-server override of the request body size cap.
+   * Defaults to {@link DEFAULT_REMOTE_MAX_BODY_BYTES}. Sourced from
+   * `RemoteAccessPolicy.maxBodyBytes` in production.
+   */
+  maxBodyBytes?: number;
 }
 
 export class RemoteServer {
@@ -76,15 +86,17 @@ export class RemoteServer {
   private readonly handlers: RemoteHandlers;
   private readonly routes: Route[];
   private readonly tls?: { cert: string; key: string };
+  private readonly maxBodyBytes: number;
 
   constructor(config: RemoteServerConfig) {
     this.port = config.port;
-    this.host = config.host ?? '127.0.0.1';
+    this.host = config.host ?? DEFAULT_REMOTE_BIND_ADDRESS;
     this.auth = config.auth;
     this.sessions = config.sessions;
     this.audit = config.audit;
     this.handlers = config.handlers;
     this.tls = config.tls;
+    this.maxBodyBytes = config.maxBodyBytes ?? DEFAULT_REMOTE_MAX_BODY_BYTES;
 
     this.routes = this.buildRoutes();
   }
@@ -169,8 +181,13 @@ export class RemoteServer {
     req: IncomingMessage,
     res: ServerResponse,
   ): Promise<void> {
-    // CORS headers on every response
-    setCorsHeaders(res, this.port);
+    const proto = this.tls ? 'https' : 'http';
+
+    // CORS headers on every response. F4-Task3: the allowed origin must
+    // match the actual scheme + host the server is bound to so Tailscale
+    // / LAN bindings (100.x.y.z, 192.168.x.x) are not silently blocked
+    // for the very web client we ship at `/`.
+    setCorsHeaders(res, proto, this.host, this.port);
 
     // Handle preflight
     if (req.method === 'OPTIONS') {
@@ -179,8 +196,13 @@ export class RemoteServer {
       return;
     }
 
-    const proto = this.tls ? 'https' : 'http';
-    const url = new URL(req.url ?? '/', `${proto}://${req.headers.host ?? 'localhost'}`);
+    // F4-Task5: resolve URL against the bound host so a missing
+    // `req.headers.host` does not silently route through `localhost`.
+    // Tailscale callers may omit the Host header for the bare-IP form
+    // — falling back to the literal `localhost` would mis-route those
+    // requests through a string the server never bound to.
+    const hostHeader = req.headers.host ?? `${this.host}:${this.port}`;
+    const url = new URL(req.url ?? '/', `${proto}://${hostHeader}`);
     const pathname = url.pathname;
     const method = (req.method ?? 'GET').toUpperCase();
 
@@ -193,7 +215,7 @@ export class RemoteServer {
     // Parse body for POST/PUT
     let body: Record<string, unknown> = {};
     if (method === 'POST' || method === 'PUT') {
-      body = await parseJsonBody(req);
+      body = await parseJsonBody(req, this.maxBodyBytes);
     }
 
     // Match route
@@ -427,31 +449,47 @@ export function sendError(
 /**
  * Sets CORS headers on a response.
  *
- * Restricts origin to the server's own HTTPS endpoint to prevent
- * cross-origin attacks. Only allows methods that have actual route definitions.
- * Authentication is handled via Bearer tokens, not cookies.
+ * Restricts origin to the server's own bound endpoint to prevent
+ * cross-origin attacks. Only allows methods that have actual route
+ * definitions. Authentication is handled via Bearer tokens, not cookies.
+ *
+ * F4-Task3: origin is built from the actual scheme + host the server
+ * is listening on (loopback / LAN / Tailscale 100.x.y.z) instead of a
+ * hardcoded `https://127.0.0.1:<port>`. The hardcoded form silently
+ * blocked the same web client we serve from `/` whenever Tailscale or
+ * any non-loopback bind was active.
  */
-function setCorsHeaders(res: ServerResponse, port: number): void {
-  res.setHeader('Access-Control-Allow-Origin', `https://127.0.0.1:${port}`);
+function setCorsHeaders(
+  res: ServerResponse,
+  proto: 'http' | 'https',
+  host: string,
+  port: number,
+): void {
+  res.setHeader('Access-Control-Allow-Origin', `${proto}://${host}:${port}`);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
 
 /**
- * Parses the request body as JSON.
+ * Parses the request body as JSON, capped at `maxBodyBytes`.
  * Returns an empty object if the body is empty or invalid.
+ *
+ * F4-Task8: the previous implementation hardcoded a 1 MB limit at
+ * module scope. The limit is now per-server so an operator can raise
+ * it (large transcripts) or lower it (hardened deploys) via
+ * {@link RemoteAccessPolicy.maxBodyBytes}.
  */
-/** Maximum request body size (1 MB). */
-const MAX_BODY_SIZE = 1_048_576;
-
-function parseJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+function parseJsonBody(
+  req: IncomingMessage,
+  maxBodyBytes: number,
+): Promise<Record<string, unknown>> {
   return new Promise((resolve) => {
     const chunks: Buffer[] = [];
     let totalSize = 0;
 
     req.on('data', (chunk: Buffer) => {
       totalSize += chunk.length;
-      if (totalSize > MAX_BODY_SIZE) {
+      if (totalSize > maxBodyBytes) {
         req.destroy();
         resolve({});
         return;

@@ -105,6 +105,16 @@ export interface SettingsConfig {
   /** Custom path for ArenaRoot directory. Empty string = platform default (~/Documents/arena). */
   arenaRoot: string;
   /**
+   * F4-Task1: user-configurable Ollama HTTP endpoint for the local
+   * provider catalog probe + warmup. Empty string defers to the
+   * `OLLAMA_HOST` env var, then to `http://localhost:11434`. See
+   * `src/main/providers/ollama-endpoint-resolver.ts` for the priority
+   * chain (settings → env → fallback). The empty default avoids a
+   * silent override of an existing per-provider `LocalProviderConfig.baseUrl`
+   * — only the catalog probe + new-provider default reads this key.
+   */
+  ollamaEndpoint: string;
+  /**
    * R11-Task8 (D5): per-provider USD unit price for the LLM 사용량 카드.
    * Keys are `providerId` (registry id), values are USD per 1,000,000
    * tokens — the unit every major provider publishes their pricing in.
@@ -132,6 +142,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
   conversationTask: DEFAULT_CONVERSATION_TASK_SETTINGS,
   consensusFolderPath: '',
   arenaRoot: '',
+  ollamaEndpoint: '',
   llmCostUsdPerMillionTokens: {},
 };
 

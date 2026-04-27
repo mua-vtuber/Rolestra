@@ -12,6 +12,11 @@
  * explaining the restart requirement — clicking it does NOT mutate
  * state today (R10 limitation). The plan defers the real picker until
  * Task 14 / R11 onboarding.
+ *
+ * F4-Task1: a second section now exposes the user-configurable Ollama
+ * HTTP endpoint that the local provider catalog probe uses when no
+ * per-provider `baseUrl` is set. Empty input = inherit from the
+ * `OLLAMA_HOST` env var, falling back to `http://localhost:11434`.
  */
 import {
   useEffect,
@@ -30,6 +35,12 @@ export function PathTab(): ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [showRestartHint, setShowRestartHint] = useState<boolean>(false);
 
+  // F4-Task1: Ollama endpoint draft + persisted state.
+  const [ollamaEndpoint, setOllamaEndpoint] = useState<string | null>(null);
+  const [ollamaDraft, setOllamaDraft] = useState<string>('');
+  const [ollamaSaving, setOllamaSaving] = useState<boolean>(false);
+  const [ollamaSavedAt, setOllamaSavedAt] = useState<number | null>(null);
+
   const didMountFetchRef = useRef(false);
   useEffect(() => {
     if (didMountFetchRef.current) return;
@@ -37,8 +48,15 @@ export function PathTab(): ReactElement {
     let cancelled = false;
     void (async () => {
       try {
-        const { path } = await invoke('arena-root:get', undefined);
-        if (!cancelled) setArenaRoot(path);
+        const [{ path }, { settings }] = await Promise.all([
+          invoke('arena-root:get', undefined),
+          invoke('config:get-settings', undefined),
+        ]);
+        if (!cancelled) {
+          setArenaRoot(path);
+          setOllamaEndpoint(settings.ollamaEndpoint);
+          setOllamaDraft(settings.ollamaEndpoint);
+        }
       } catch (reason) {
         if (!cancelled) {
           setError(reason instanceof Error ? reason.message : String(reason));
@@ -50,10 +68,31 @@ export function PathTab(): ReactElement {
     };
   }, []);
 
+  const handleOllamaSave = async (): Promise<void> => {
+    setOllamaSaving(true);
+    setError(null);
+    try {
+      const trimmed = ollamaDraft.trim();
+      const { settings } = await invoke('config:update-settings', {
+        patch: { ollamaEndpoint: trimmed },
+      });
+      setOllamaEndpoint(settings.ollamaEndpoint);
+      setOllamaDraft(settings.ollamaEndpoint);
+      setOllamaSavedAt(Date.now());
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setOllamaSaving(false);
+    }
+  };
+
+  const ollamaDirty =
+    ollamaEndpoint !== null && ollamaDraft.trim() !== ollamaEndpoint.trim();
+
   return (
     <section
       data-testid="settings-tab-path"
-      className="space-y-4 max-w-2xl"
+      className="space-y-6 max-w-2xl"
     >
       <header>
         <h2 className="text-sm font-display font-semibold">
@@ -110,6 +149,53 @@ export function PathTab(): ReactElement {
           {t('settings.path.restartBanner')}
         </div>
       )}
+
+      <div className="space-y-2 pt-4 border-t border-border-soft">
+        <label
+          htmlFor="settings-path-ollama-endpoint"
+          className="text-xs text-fg-muted"
+        >
+          {t('settings.path.ollamaEndpoint.label')}
+        </label>
+        <p className="text-xs text-fg-muted">
+          {t('settings.path.ollamaEndpoint.description')}
+        </p>
+        <input
+          id="settings-path-ollama-endpoint"
+          data-testid="settings-path-ollama-endpoint-input"
+          type="url"
+          value={ollamaDraft}
+          placeholder={t('settings.path.ollamaEndpoint.placeholder')}
+          disabled={ollamaEndpoint === null}
+          onChange={(e) => setOllamaDraft(e.target.value)}
+          className="w-full font-mono text-xs px-2 py-1.5 border border-border-soft rounded-panel bg-elev focus:outline-none focus:border-accent"
+        />
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            tone="primary"
+            size="sm"
+            data-testid="settings-path-ollama-endpoint-save"
+            disabled={!ollamaDirty || ollamaSaving}
+            onClick={() => void handleOllamaSave()}
+          >
+            {ollamaSaving
+              ? t('settings.path.ollamaEndpoint.saving')
+              : t('settings.path.ollamaEndpoint.save')}
+          </Button>
+          {ollamaSavedAt !== null && !ollamaDirty && (
+            <span
+              data-testid="settings-path-ollama-endpoint-saved"
+              className="text-xs text-success"
+            >
+              {t('settings.path.ollamaEndpoint.saved')}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-fg-muted">
+          {t('settings.path.ollamaEndpoint.fallbackHint')}
+        </p>
+      </div>
     </section>
   );
 }

@@ -15,7 +15,7 @@ import type {
   RemotePermissionSet,
   RemoteSession,
 } from '../../shared/remote-types';
-import { DEFAULT_REMOTE_POLICY } from '../../shared/remote-types';
+import { DEFAULT_REMOTE_POLICY, DEFAULT_REMOTE_BIND_ADDRESS } from '../../shared/remote-types';
 import { RemoteAuth } from './remote-auth';
 import { RemoteSessionTracker } from './remote-session';
 import { RemoteAuditLogger } from './remote-audit';
@@ -164,7 +164,7 @@ export class RemoteManagerImpl implements RemoteInterfaceManager {
       host = tailscaleIp;
       port = this.policy.directAccessPort;
     } else {
-      host = this.policy.bindAddress ?? '127.0.0.1';
+      host = this.policy.bindAddress ?? DEFAULT_REMOTE_BIND_ADDRESS;
       port = this.policy.directAccessPort;
     }
 
@@ -183,6 +183,7 @@ export class RemoteManagerImpl implements RemoteInterfaceManager {
       audit: auditAdapter,
       handlers: this.handlers,
       tls,
+      maxBodyBytes: this.policy.maxBodyBytes,
     });
 
     await this.server.start();

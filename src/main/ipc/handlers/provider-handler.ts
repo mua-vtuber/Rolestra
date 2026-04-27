@@ -10,6 +10,7 @@ import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import { providerRegistry } from '../../providers/registry';
 import { createProvider } from '../../providers/factory';
 import { getEmbeddingModelsForProvider, getModelsForProvider } from '../../providers/model-registry';
+import { resolveOllamaEndpoint } from '../../providers/ollama-endpoint-resolver';
 import { getConfigService } from '../../config/instance';
 import { saveProvider, removeProvider } from '../../providers/provider-repository';
 
@@ -72,6 +73,9 @@ export async function handleProviderRemove(
 /**
  * provider:list-models — return models for a provider type + key.
  * For API providers, resolves apiKeyRef to the actual key for live model fetching.
+ * For Local providers, resolves the fallback endpoint via settings → env → literal
+ * (F4-Task1) so a user's Ollama running on a non-default port is discoverable
+ * without manually entering the URL on every probe.
  */
 export async function handleProviderListModels(
   data: IpcRequest<'provider:list-models'>,
@@ -80,11 +84,14 @@ export async function handleProviderListModels(
   if (data.apiKeyRef) {
     apiKey = getConfigService().getSecret(data.apiKeyRef) ?? undefined;
   }
-  return { models: await getModelsForProvider(data.type, data.key, apiKey) };
+  const defaultLocalEndpoint = resolveOllamaEndpoint(getConfigService().getSettings());
+  return { models: await getModelsForProvider(data.type, data.key, apiKey, defaultLocalEndpoint) };
 }
 
 /**
  * provider:list-embedding-models — return embedding-capable models for a provider.
+ * Local providers honour the same Ollama endpoint resolver chain as
+ * {@link handleProviderListModels}.
  */
 export async function handleProviderListEmbeddingModels(
   data: IpcRequest<'provider:list-embedding-models'>,
@@ -93,7 +100,8 @@ export async function handleProviderListEmbeddingModels(
   if (data.apiKeyRef) {
     apiKey = getConfigService().getSecret(data.apiKeyRef) ?? undefined;
   }
-  return { models: await getEmbeddingModelsForProvider(data.type, data.key, apiKey) };
+  const defaultLocalEndpoint = resolveOllamaEndpoint(getConfigService().getSettings());
+  return { models: await getEmbeddingModelsForProvider(data.type, data.key, apiKey, defaultLocalEndpoint) };
 }
 
 /**

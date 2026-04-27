@@ -66,9 +66,20 @@ export interface ArenaRootConfigAccessor {
   updateSettings(patch: { arenaRoot?: string }): void;
 }
 
-/** Returns the platform-default ArenaRoot location: `~/Documents/arena`. */
-export function getDefaultArenaRoot(): string {
-  return path.join(os.homedir(), 'Documents', 'arena');
+/**
+ * Returns the platform-default ArenaRoot location: `<documents>/arena`.
+ *
+ * F4-Task6: `documentsPath` is now caller-injected so production code
+ * can pass `app.getPath('documents')` (Electron's OS-localized resolver
+ * — handles 한국어 Windows `내 문서`, 日本語 `ドキュメント`, OneDrive
+ * redirects, …) instead of the hardcoded English `'Documents'` literal.
+ * Tests / non-Electron contexts may omit it to reuse the legacy
+ * `os.homedir()/Documents` fallback, which still beats no path at all
+ * but is acknowledged as imperfect on non-English systems.
+ */
+export function getDefaultArenaRoot(documentsPath?: string): string {
+  const base = documentsPath ?? path.join(os.homedir(), 'Documents');
+  return path.join(base, 'arena');
 }
 
 /**
@@ -94,14 +105,24 @@ export const ARENA_ROOT_ENV_OVERRIDE = 'ROLESTRA_ARENA_ROOT';
 export class ArenaRootService extends EventEmitter {
   private currentPath: string;
 
-  constructor(private readonly config: ArenaRootConfigAccessor | ConfigServiceImpl) {
+  /**
+   * @param config - settings accessor (full ConfigService or test stub).
+   * @param documentsPath - F4-Task6 optional OS-localized Documents
+   *   directory used to compute the platform default. Production wiring
+   *   in `main/index.ts` passes `app.getPath('documents')`; tests may
+   *   omit it (the constructor falls back to `~/Documents`).
+   */
+  constructor(
+    private readonly config: ArenaRootConfigAccessor | ConfigServiceImpl,
+    documentsPath?: string,
+  ) {
     super();
     // Resolution order (dev/test first → user settings → platform default):
     //   1. `ROLESTRA_ARENA_ROOT` env var — set by the E2E harness. Never
     //      persisted to settings so the next non-test launch restores the
     //      user's real root.
     //   2. `settings.arenaRoot` — the user-chosen path from ConfigService.
-    //   3. `getDefaultArenaRoot()` — `~/Documents/arena`.
+    //   3. `getDefaultArenaRoot(documentsPath)` — `<documents>/arena`.
     const envOverride = process.env[ARENA_ROOT_ENV_OVERRIDE] ?? '';
     const configured = (config.getSettings() as { arenaRoot?: string }).arenaRoot ?? '';
     if (envOverride.length > 0) {
@@ -109,7 +130,7 @@ export class ArenaRootService extends EventEmitter {
     } else if (configured.length > 0) {
       this.currentPath = configured;
     } else {
-      this.currentPath = getDefaultArenaRoot();
+      this.currentPath = getDefaultArenaRoot(documentsPath);
     }
   }
 

@@ -123,8 +123,19 @@ app.whenReady().then(async () => {
   try {
     // Initialize ArenaRoot before anything that touches the DB or logs.
     // ConfigService is required because the root path is read from settings.
+    // F4-Task6: pass Electron's OS-localized Documents path so the
+    // platform default respects 한국어/日本語 Windows folder names and
+    // OneDrive redirects. `app.getPath('documents')` is safe here —
+    // we are inside `app.whenReady()`.
     const config = getConfigService();
-    const arenaRoot = new ArenaRootService(config);
+    const documentsPath = (() => {
+      try {
+        return app.getPath('documents');
+      } catch {
+        return undefined;
+      }
+    })();
+    const arenaRoot = new ArenaRootService(config, documentsPath);
     await arenaRoot.ensure();
     initDatabaseRoot(arenaRoot);
 

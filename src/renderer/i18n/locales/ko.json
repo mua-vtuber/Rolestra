@@ -962,6 +962,15 @@
       "changeHint": "변경 시 앱 재시작이 필요합니다.",
       "description": "Rolestra 가 사용하는 작업 폴더 경로입니다.",
       "loading": "경로를 불러오는 중…",
+      "ollamaEndpoint": {
+        "description": "로컬 LLM 카탈로그 조회 및 신규 로컬 provider 의 기본 baseUrl 로 사용됩니다. 비워두면 OLLAMA_HOST 환경변수, 그것도 없으면 http://localhost:11434 가 사용됩니다.",
+        "fallbackHint": "우선순위: 이 설정 → OLLAMA_HOST 환경변수 → http://localhost:11434.",
+        "label": "Ollama HTTP 엔드포인트",
+        "placeholder": "http://localhost:11434",
+        "save": "저장",
+        "saved": "저장되었습니다",
+        "saving": "저장 중…"
+      },
       "restartBanner": "경로 변경은 R11 온보딩에서 정식 지원됩니다. 현재는 표시 전용입니다.",
       "title": "경로"
     },

@@ -16,16 +16,38 @@ import { WORKSPACE_SUBDIRS } from '../../shared/file-types';
 /** Relative path from project root to the arena workspace. */
 const ARENA_WORKSPACE_REL = path.join('.arena', 'workspace');
 
-/** System directories that must never be used as workspace roots. */
-const BLOCKED_SYSTEM_DIRS: ReadonlySet<string> = new Set(
-  process.platform === 'win32'
-    ? [
-        'C:\\Windows',
-        'C:\\Program Files',
-        'C:\\Program Files (x86)',
-      ].map(p => p.toLowerCase())
-    : ['/', '/etc', '/usr', '/var', '/bin', '/sbin', '/lib', '/proc', '/sys'],
-);
+/**
+ * Compute the set of system directories that must never be used as
+ * workspace roots, normalised to lowercase on Windows so the
+ * case-insensitive lookup against `resolved.toLowerCase()` matches.
+ *
+ * F4-Task7: previously the Windows list hardcoded `'C:\\Windows'`,
+ * `'C:\\Program Files'`, and `'C:\\Program Files (x86)'`. That broke
+ * for installs on non-C: drives, custom-named Windows directories, and
+ * relocated `%ProgramFiles%`. The dynamic form reads the same env vars
+ * that Windows itself uses (`%SystemRoot%`, `%ProgramFiles%`,
+ * `%ProgramFiles(x86)%`) so the guard tracks the actual install layout.
+ * If an env var is unset (stripped shell env) the corresponding entry
+ * is omitted — the POSIX list and the surviving Windows entries still
+ * cover the most common attack paths.
+ */
+function computeBlockedSystemDirs(): ReadonlySet<string> {
+  if (process.platform === 'win32') {
+    const candidates = [
+      process.env.SystemRoot,
+      process.env.ProgramFiles,
+      process.env['ProgramFiles(x86)'],
+    ];
+    const entries = candidates
+      .map((c) => (typeof c === 'string' ? c.trim() : ''))
+      .filter((c) => c.length > 0)
+      .map((c) => c.toLowerCase());
+    return new Set(entries);
+  }
+  return new Set(['/', '/etc', '/usr', '/var', '/bin', '/sbin', '/lib', '/proc', '/sys']);
+}
+
+const BLOCKED_SYSTEM_DIRS: ReadonlySet<string> = computeBlockedSystemDirs();
 
 export class WorkspaceService {
   private projectFolder: string | null = null;
