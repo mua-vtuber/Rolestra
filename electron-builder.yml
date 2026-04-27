@@ -1,0 +1,68 @@
+appId: io.rolestra.app
+productName: Rolestra
+copyright: Copyright © 2026 Rolestra contributors
+
+directories:
+  output: dist/electron
+  buildResources: assets
+
+files:
+  - "out/**/*"
+  - "package.json"
+  - "!**/{.eslintrc,.eslintignore,.editorconfig,.prettierrc,.npmrc,.gitignore,.gitattributes}"
+  - "!**/{tsconfig.json,tsconfig.*.json,vitest.config.ts,electron.vite.config.ts,playwright.config.ts}"
+  - "!**/{node_modules,test,tests,__tests__,e2e,docs,tools,output}/**"
+  - "!**/*.{md,map,ts,tsx}"
+
+asar: true
+asarUnpack:
+  - "**/*.node"
+
+npmRebuild: true
+electronCompile: false
+
+artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: assets/icon.ico
+  artifactName: "${productName}-${version}-windows-${arch}.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Rolestra
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  category: public.app-category.productivity
+  icon: assets/icon.icns
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  artifactName: "${productName}-${version}-macos-${arch}.${ext}"
+
+dmg:
+  writeUpdateInfo: false
+
+linux:
+  target:
+    - target: AppImage
+      arch:
+        - x64
+  icon: assets/icon.png
+  category: Development
+  artifactName: "${productName}-${version}-linux-${arch}.${ext}"
+
+publish: null

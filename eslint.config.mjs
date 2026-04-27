@@ -169,4 +169,12 @@ export default tseslint.config(
       '@typescript-eslint/no-require-imports': 'off',
     },
   },
+
+  // ── Build / asset / smoke tooling ──
+  {
+    files: ['tools/**/*.{ts,mjs,js,cjs}'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
 );

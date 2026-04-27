@@ -1,0 +1,119 @@
+name: Release packaging
+
+# R11-Task12: 3-OS package matrix triggered by tag push or manual dispatch.
+#
+# Trigger:
+#   - push tag matching `v*` (e.g. v0.1.0, v0.2.0-rc.1)
+#   - workflow_dispatch (dry-run, no Release draft is published)
+#
+# Each cell builds the Electron bundle (electron-vite) and runs
+# `electron-builder --<os>` to produce one of:
+#   - Windows : NSIS installer (.exe), x64
+#   - macOS   : DMG (.dmg), arm64 + x64 universal — unsigned (R12+ signing)
+#   - Linux   : AppImage (.AppImage), x64
+#
+# Tag-push runs upload the artefacts AND attach them to a GitHub Release
+# draft created from the tag. Manual workflow_dispatch runs only upload
+# the artefacts (so the dry-run path can be exercised without minting a
+# Release).
+#
+# macOS DMG is shipped unsigned. Gatekeeper bypass guidance lives in
+# docs/디자인/패키징.md (Task 13). Code signing + notarization are deferred
+# to R12+ alongside auto-update (electron-updater).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: ${{ matrix.os }} package
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux
+            artifact_glob: 'dist/electron/*.AppImage'
+          - os: windows-latest
+            target: win
+            artifact_glob: 'dist/electron/*.exe'
+          - os: macos-latest
+            target: mac
+            artifact_glob: 'dist/electron/*.dmg'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # better-sqlite3 must be rebuilt against the bundled Electron
+      # ABI so the packaged app loads it natively on each target OS.
+      - name: Rebuild native modules for Electron
+        run: npm run rebuild:electron
+
+      - name: Build renderer + main bundles
+        run: npm run build
+
+      - name: Package (${{ matrix.target }})
+        env:
+          # Skip electron-builder's auto-publish — Release attachment
+          # happens in the dedicated job step below.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --${{ matrix.target }} --publish never
+
+      - name: Upload artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: rolestra-${{ matrix.target }}
+          path: ${{ matrix.artifact_glob }}
+          if-no-files-found: error
+          retention-days: 14
+
+  release-draft:
+    name: Attach artefacts to Release draft
+    needs: package
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Publish GitHub Release draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF##refs/tags/}"
+          # Create the draft if it doesn't exist; ignore the "already exists" path.
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" \
+              --draft \
+              --title "Rolestra $tag" \
+              --notes "Automated draft for $tag. macOS DMG is unsigned — see docs/디자인/패키징.md for Gatekeeper bypass."
+          fi
+          # Attach every artefact under dist-artifacts/.
+          shopt -s globstar nullglob
+          for f in dist-artifacts/**/*; do
+            if [[ -f "$f" ]]; then
+              gh release upload "$tag" "$f" --clobber
+            fi
+          done
