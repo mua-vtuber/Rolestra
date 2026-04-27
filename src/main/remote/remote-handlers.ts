@@ -40,6 +40,28 @@ interface MemorySearchRow {
   rank: number;
 }
 
+/** Single memory search hit — id, content, normalized BM25 score in [0,1]. */
+export interface MemorySearchHit {
+  id: string;
+  content: string;
+  score: number;
+}
+
+/**
+ * Discriminated response from {@link RemoteHandlers.handleMemorySearch}.
+ * Callers must check `ok` before reading either branch — empty query
+ * and FTS DB faults both surface as `ok: false` so the caller can show
+ * a specific error message instead of conflating "no results" with
+ * "search broken".
+ */
+export type MemorySearchResponse =
+  | { ok: true; rows: MemorySearchHit[] }
+  | {
+      ok: false;
+      code: 'EMPTY_QUERY' | 'INVALID_QUERY' | 'FTS_DB_ERROR';
+      message: string;
+    };
+
 export class RemoteHandlers {
   private readonly db: Database.Database;
   private mode: RemoteAccessMode;
@@ -126,18 +148,26 @@ export class RemoteHandlers {
    *
    * Returns matching nodes with their BM25 relevance scores,
    * normalized to [0, 1] range.
+   *
+   * Failure surfaces:
+   * - Empty / whitespace-only query → `{ ok: false, code: 'EMPTY_QUERY' }`
+   * - Query escapes to nothing usable → `{ ok: false, code: 'INVALID_QUERY' }`
+   * - DB / FTS error → `{ ok: false, code: 'FTS_DB_ERROR' }` with the
+   *   underlying message so the caller can show "search is currently
+   *   unavailable" instead of "no results", which is misleading.
    */
-  handleMemorySearch(
-    query: string,
-    limit = 20,
-  ): Array<{ id: string; content: string; score: number }> {
-    if (!query || query.trim().length === 0) {
-      return [];
+  handleMemorySearch(query: string, limit = 20): MemorySearchResponse {
+    if (typeof query !== 'string' || query.trim().length === 0) {
+      return { ok: false, code: 'EMPTY_QUERY', message: 'query must be a non-empty string' };
     }
 
     const safeQuery = this.escapeFtsQuery(query);
     if (!safeQuery) {
-      return [];
+      return {
+        ok: false,
+        code: 'INVALID_QUERY',
+        message: 'query did not contain any searchable tokens',
+      };
     }
 
     let rows: MemorySearchRow[];
@@ -153,12 +183,13 @@ export class RemoteHandlers {
            LIMIT ?`,
         )
         .all(safeQuery, limit) as MemorySearchRow[];
-    } catch {
-      return [];
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, code: 'FTS_DB_ERROR', message };
     }
 
     if (rows.length === 0) {
-      return [];
+      return { ok: true, rows: [] };
     }
 
     // Normalize FTS5 ranks to [0, 1]. FTS5 rank values are negative
@@ -168,14 +199,17 @@ export class RemoteHandlers {
     const maxRank = Math.max(...ranks);
     const rankRange = maxRank - minRank;
 
-    return rows.map((row) => ({
-      id: row.id,
-      content: row.content,
-      score:
-        rankRange !== 0
-          ? (maxRank - row.rank) / rankRange
-          : 1.0,
-    }));
+    return {
+      ok: true,
+      rows: rows.map((row) => ({
+        id: row.id,
+        content: row.content,
+        score:
+          rankRange !== 0
+            ? (maxRank - row.rank) / rankRange
+            : 1.0,
+      })),
+    };
   }
 
   /**

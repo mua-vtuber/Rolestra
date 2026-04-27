@@ -158,6 +158,32 @@ export interface SecretsRegistry {
   providers: Record<string, SecretRef>;
 }
 
+// ── Startup Diagnostics ────────────────────────────────────────────
+
+/** Why the on-disk settings file could not be read as a SettingsConfig. */
+export type SettingsCorruptionReason =
+  | 'read-error'
+  | 'invalid-json'
+  | 'non-object';
+
+/**
+ * Diagnostic emitted when the on-disk settings file is unreadable or
+ * malformed. Surfaced to the renderer via
+ * `config:take-startup-diagnostics` so a recovery prompt can show
+ * the user where their original file was backed up.
+ */
+export interface SettingsCorruptionInfo {
+  reason: SettingsCorruptionReason;
+  /** Absolute path of the timestamped backup, or null if backup failed. */
+  backupPath: string | null;
+  /** Original file path that was corrupt. */
+  filePath: string;
+  /** Underlying error message. */
+  detail: string;
+  /** Unix epoch ms. */
+  timestamp: number;
+}
+
 // ── Runtime Overrides Layer ────────────────────────────────────────
 
 /** Ephemeral in-memory overrides. Lost on app restart. */

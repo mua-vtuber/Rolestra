@@ -122,8 +122,70 @@ export function getRemoteWebClientHtml(): string {
     }
     const res = await fetch(path, opts);
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Request failed');
+    if (!res.ok) {
+      // F2-Task3: structured failure shape from /remote/memory/search
+      // is { ok: false, code, message }. Surface the code so the user
+      // can distinguish "service down" from "bad input" instead of a
+      // generic 500 message.
+      if (data && data.ok === false) {
+        const codeText = data.code ? '[' + data.code + '] ' : '';
+        throw new Error(codeText + (data.message || data.error || 'Request failed'));
+      }
+      throw new Error(data && data.error ? data.error : 'Request failed');
+    }
     return data;
+  }
+
+  // F2-Task6: lightweight runtime shape guards. Server is trusted but
+  // contract drift between releases would otherwise turn into a silent
+  // empty list — throw with the offending field name so the user (or
+  // logs) sees the mismatch.
+  function expectArray(value, name) {
+    if (!Array.isArray(value)) {
+      throw new Error('Server response: "' + name + '" is not an array');
+    }
+    return value;
+  }
+  function expectObject(value, name) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+      throw new Error('Server response: "' + name + '" is not an object');
+    }
+    return value;
+  }
+  function expectString(value, name) {
+    if (typeof value !== 'string') {
+      throw new Error('Server response: "' + name + '" is not a string');
+    }
+    return value;
+  }
+  function expectNumber(value, name) {
+    if (typeof value !== 'number' || !isFinite(value)) {
+      throw new Error('Server response: "' + name + '" is not a finite number');
+    }
+    return value;
+  }
+  function validateConversation(c, prefix) {
+    expectObject(c, prefix);
+    expectString(c.id, prefix + '.id');
+    expectString(c.mode, prefix + '.mode');
+    if (c.title !== null && c.title !== undefined && typeof c.title !== 'string') {
+      throw new Error('Server response: "' + prefix + '.title" must be string or null');
+    }
+    return c;
+  }
+  function validateMessage(m, prefix) {
+    expectObject(m, prefix);
+    expectString(m.id, prefix + '.id');
+    expectString(m.content, prefix + '.content');
+    expectString(m.role, prefix + '.role');
+    return m;
+  }
+  function validateMemHit(r, prefix) {
+    expectObject(r, prefix);
+    expectString(r.id, prefix + '.id');
+    expectString(r.content, prefix + '.content');
+    expectNumber(r.score, prefix + '.score');
+    return r;
   }
 
   function render() {
@@ -209,7 +271,7 @@ export function getRemoteWebClientHtml(): string {
     }
 
     if (view === 'detail' && currentConv) {
-      const msgs = (currentConv.messages || []).map(m => \`
+      const msgs = (currentConv.messages || []).map((m, i) => validateMessage(m, 'messages[' + i + ']')).map(m => \`
         <div class="msg msg-\${m.role === 'user' ? 'user' : 'assistant'}">
           <div class="msg-role">\${esc(m.participantId || m.role)}</div>
           <div class="msg-content">\${esc(m.content)}</div>
@@ -249,7 +311,8 @@ export function getRemoteWebClientHtml(): string {
     loading = true; render();
     try {
       const data = await api('GET', '/remote/conversations');
-      conversations = data.conversations || [];
+      const list = expectArray(data.conversations, 'conversations');
+      conversations = list.map((c, i) => validateConversation(c, 'conversations[' + i + ']'));
     } catch (e) {
       error = e.message;
     }
@@ -260,6 +323,9 @@ export function getRemoteWebClientHtml(): string {
     view = 'detail'; currentConv = { ...conv, messages: [] }; loading = true; render();
     try {
       const data = await api('POST', '/remote/conversation', { conversationId: conv.id });
+      validateConversation(data, 'conversation');
+      const messages = expectArray(data.messages, 'conversation.messages');
+      messages.forEach((m, i) => validateMessage(m, 'messages[' + i + ']'));
       currentConv = data;
     } catch (e) {
       error = e.message;
@@ -272,7 +338,8 @@ export function getRemoteWebClientHtml(): string {
     loading = true; memResults = []; render();
     try {
       const data = await api('POST', '/remote/memory/search', { query: query.trim(), limit: 20 });
-      memResults = data.results || [];
+      const results = expectArray(data.results, 'results');
+      memResults = results.map((r, i) => validateMemHit(r, 'results[' + i + ']'));
     } catch (e) {
       error = e.message;
     }

@@ -35,6 +35,24 @@ interface Route {
   handler: (body: Record<string, unknown>) => unknown;
 }
 
+/**
+ * Route-level error that the dispatch loop converts into a structured
+ * HTTP response (status + JSON body). Use this when a handler needs to
+ * surface a domain-specific error code to the client (e.g.
+ * `FTS_DB_ERROR`) rather than the generic 500.
+ */
+export class RemoteRouteError extends Error {
+  readonly status: number;
+  readonly body: { ok: false; code: string; message: string };
+
+  constructor(status: number, body: { ok: false; code: string; message: string }) {
+    super(body.message);
+    this.name = 'RemoteRouteError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 /** Configuration for the remote server. */
 export interface RemoteServerConfig {
   port: number;
@@ -285,6 +303,15 @@ export class RemoteServer {
         denialReason: internalMessage,
       });
 
+      if (err instanceof RemoteRouteError) {
+        // Domain-specific failure — surface the structured payload so
+        // the client can distinguish "service down" from "bad input"
+        // from a generic 500. The body is constructed inside the
+        // handler so we do not leak raw exception text here.
+        sendJson(res, err.status, err.body);
+        return;
+      }
+
       // Do not expose internal error details to remote clients
       sendError(res, 500, 'Internal server error');
     }
@@ -334,8 +361,17 @@ export class RemoteServer {
             throw new Error('query must be a non-empty string');
           }
           const limit = typeof body.limit === 'number' ? body.limit : undefined;
-          const results = this.handlers.handleMemorySearch(query, limit);
-          return { results };
+          const response = this.handlers.handleMemorySearch(query, limit);
+          if (!response.ok) {
+            const payload = {
+              ok: false as const,
+              code: response.code,
+              message: response.message,
+            };
+            const status = response.code === 'FTS_DB_ERROR' ? 503 : 400;
+            throw new RemoteRouteError(status, payload);
+          }
+          return { ok: true, results: response.rows };
         },
       },
     ];

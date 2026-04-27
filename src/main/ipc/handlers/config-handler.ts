@@ -4,7 +4,10 @@
  * Bridges renderer config requests to ConfigServiceImpl.
  */
 
-import type { SettingsConfig } from '../../../shared/config-types';
+import type {
+  SettingsConfig,
+  SettingsCorruptionInfo,
+} from '../../../shared/config-types';
 import { getConfigService } from '../../config/instance';
 import { reconfigureMemoryFacade } from '../../memory/instance';
 
@@ -43,4 +46,18 @@ export function handleConfigDeleteSecret(data: { key: string }): { success: true
 
 export function handleConfigListSecretKeys(): { keys: string[] } {
   return { keys: getConfigService().listSecretKeys() };
+}
+
+/**
+ * Returns and clears the most recent settings-file corruption event.
+ * The renderer should call this once at startup; if a non-null event
+ * comes back it presents a recovery dialog (showing the backup path)
+ * to the user.
+ */
+export function handleConfigTakeStartupDiagnostics(): {
+  settingsCorruption: SettingsCorruptionInfo | null;
+} {
+  return {
+    settingsCorruption: getConfigService().takeSettingsCorruption(),
+  };
 }

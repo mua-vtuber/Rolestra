@@ -10,7 +10,7 @@
  */
 
 import type { SettingsConfig, RuntimeOverrides } from '../../shared/config-types';
-import { SettingsStore } from './settings-store';
+import { SettingsStore, type SettingsCorruptionEvent } from './settings-store';
 import { SecretStore, type SafeStorageAdapter } from './secret-store';
 
 /** Options for constructing ConfigServiceImpl. */
@@ -53,6 +53,23 @@ export class ConfigServiceImpl {
   /** Deep-merges a partial update into the persisted settings. */
   updateSettings(patch: Partial<SettingsConfig>): void {
     this.settingsStore.updateSettings(patch);
+  }
+
+  /**
+   * Returns and clears the most recent settings-file corruption event.
+   * The startup orchestrator calls this once per session to surface a
+   * recovery prompt to the user.
+   */
+  takeSettingsCorruption(): SettingsCorruptionEvent | null {
+    return this.settingsStore.takeCorruptionEvent();
+  }
+
+  /**
+   * Returns the most recent settings-file corruption event without
+   * clearing it. Use for diagnostics / read-only checks.
+   */
+  peekSettingsCorruption(): SettingsCorruptionEvent | null {
+    return this.settingsStore.peekCorruptionEvent();
   }
 
   // ── Secrets Layer ────────────────────────────────────────────────

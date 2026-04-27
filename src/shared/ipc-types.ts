@@ -13,7 +13,7 @@ import type { ProviderConfig, ProviderInfo, ProviderType } from './provider-type
 import type { AuditEntry, DiffEntry } from './execution-types';
 import type { StructuredLogEntry } from './log-types';
 import type { MemoryTopic, MemorySearchResult, KnowledgeNode, ExtractionResult, AssembledContext } from './memory-types';
-import type { SettingsConfig } from './config-types';
+import type { SettingsConfig, SettingsCorruptionInfo } from './config-types';
 import type { ConversationSnapshot, StateRecoveryData } from './recovery-types';
 import type { RemoteAccessPolicy, RemoteAccessGrant, RemotePermissionSet, RemoteSession, TailscaleStatus } from './remote-types';
 import type {
@@ -344,6 +344,10 @@ export type IpcChannelMap = {
   'config:list-secret-keys': {
     request: undefined;
     response: { keys: string[] };
+  };
+  'config:take-startup-diagnostics': {
+    request: undefined;
+    response: { settingsCorruption: SettingsCorruptionInfo | null };
   };
 
   // ── Recovery ──────────────────────────────────────────────────────

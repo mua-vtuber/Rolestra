@@ -118,17 +118,29 @@ describe('SettingsStore', () => {
 
   // ── Corrupt File ────────────────────────────────────────────────
 
-  it('handles corrupt JSON file by falling back to defaults', () => {
+  it('corrupt JSON — defaults applied, corrupt file backed up, event recorded', () => {
     const filePath = path.join(tmpDir, 'settings.json');
-    fs.writeFileSync(filePath, '{not valid json!!!', 'utf-8');
+    const corruptBytes = '{not valid json!!!';
+    fs.writeFileSync(filePath, corruptBytes, 'utf-8');
 
     const store = new SettingsStore(tmpDir);
     const settings = store.getSettings();
 
     expect(settings).toEqual(DEFAULT_SETTINGS);
+
+    const event = store.takeCorruptionEvent();
+    expect(event).not.toBeNull();
+    expect(event?.reason).toBe('invalid-json');
+    expect(event?.filePath).toBe(filePath);
+    expect(event?.backupPath).not.toBeNull();
+    expect(event?.detail.length).toBeGreaterThan(0);
+    expect(event?.timestamp).toBeGreaterThan(0);
+
+    expect(fs.existsSync(event!.backupPath!)).toBe(true);
+    expect(fs.readFileSync(event!.backupPath!, 'utf-8')).toBe(corruptBytes);
   });
 
-  it('handles non-object JSON (array) by falling back to defaults', () => {
+  it('non-object JSON (array) — defaults applied + non-object event', () => {
     const filePath = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(filePath, '[1, 2, 3]', 'utf-8');
 
@@ -136,9 +148,12 @@ describe('SettingsStore', () => {
     const settings = store.getSettings();
 
     expect(settings).toEqual(DEFAULT_SETTINGS);
+    const event = store.takeCorruptionEvent();
+    expect(event?.reason).toBe('non-object');
+    expect(event?.backupPath).not.toBeNull();
   });
 
-  it('handles non-object JSON (string) by falling back to defaults', () => {
+  it('non-object JSON (string) — defaults applied + non-object event', () => {
     const filePath = path.join(tmpDir, 'settings.json');
     fs.writeFileSync(filePath, '"just a string"', 'utf-8');
 
@@ -146,6 +161,38 @@ describe('SettingsStore', () => {
     const settings = store.getSettings();
 
     expect(settings).toEqual(DEFAULT_SETTINGS);
+    const event = store.takeCorruptionEvent();
+    expect(event?.reason).toBe('non-object');
+  });
+
+  it('missing file — no corruption event (legitimate fresh install)', () => {
+    const store = new SettingsStore(tmpDir);
+    void store.getSettings();
+    expect(store.takeCorruptionEvent()).toBeNull();
+  });
+
+  it('takeCorruptionEvent — clears the event after first read', () => {
+    const filePath = path.join(tmpDir, 'settings.json');
+    fs.writeFileSync(filePath, '{not valid', 'utf-8');
+
+    const store = new SettingsStore(tmpDir);
+    void store.getSettings();
+
+    expect(store.takeCorruptionEvent()).not.toBeNull();
+    expect(store.takeCorruptionEvent()).toBeNull();
+  });
+
+  it('peekCorruptionEvent — does not clear the event', () => {
+    const filePath = path.join(tmpDir, 'settings.json');
+    fs.writeFileSync(filePath, '{not valid', 'utf-8');
+
+    const store = new SettingsStore(tmpDir);
+    void store.getSettings();
+
+    expect(store.peekCorruptionEvent()).not.toBeNull();
+    expect(store.peekCorruptionEvent()).not.toBeNull();
+    expect(store.takeCorruptionEvent()).not.toBeNull();
+    expect(store.peekCorruptionEvent()).toBeNull();
   });
 
   // ── Partial Update / Merge ──────────────────────────────────────

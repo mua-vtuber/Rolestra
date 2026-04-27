@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { getModelsForProvider } from '../model-registry';
+import {
+  getEmbeddingModelsForProvider,
+  getModelsForProvider,
+  ModelRegistryAuthError,
+  ModelRegistryNetworkError,
+  ModelRegistryParseError,
+} from '../model-registry';
 
 describe('model-registry', () => {
   describe('CLI models', () => {
@@ -100,21 +106,65 @@ describe('model-registry', () => {
       expect(models).toContain('anthropic/claude-3.5-sonnet');
     });
 
-    it('network failure — falls back to hardcoded API_MODELS', async () => {
+    it('network failure — throws ModelRegistryNetworkError', async () => {
       fetchSpy.mockRejectedValueOnce(new Error('Network error'));
 
-      const models = await getModelsForProvider('api', 'https://api.openai.com/v1', 'sk-test');
-      expect(models.length).toBeGreaterThan(0);
+      await expect(
+        getModelsForProvider('api', 'https://api.openai.com/v1', 'sk-test'),
+      ).rejects.toBeInstanceOf(ModelRegistryNetworkError);
     });
 
-    it('401 auth error — falls back to hardcoded models', async () => {
+    it('non-2xx (HTTP 500) — throws ModelRegistryNetworkError with status', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Internal Server Error', { status: 500 }));
+
+      await expect(
+        getModelsForProvider('api', 'https://api.openai.com/v1', 'sk-test'),
+      ).rejects.toMatchObject({
+        name: 'ModelRegistryNetworkError',
+        status: 500,
+      });
+    });
+
+    it('401 auth error — throws ModelRegistryAuthError', async () => {
       fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
 
-      const models = await getModelsForProvider('api', 'https://api.openai.com/v1', 'bad-key');
-      expect(models.length).toBeGreaterThan(0);
+      await expect(
+        getModelsForProvider('api', 'https://api.openai.com/v1', 'bad-key'),
+      ).rejects.toMatchObject({
+        name: 'ModelRegistryAuthError',
+        status: 401,
+      });
     });
 
-    it('no apiKey provided — falls back to hardcoded models', async () => {
+    it('403 auth error — throws ModelRegistryAuthError', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Forbidden', { status: 403 }));
+
+      await expect(
+        getModelsForProvider('api', 'https://api.openai.com/v1', 'sk-test'),
+      ).rejects.toBeInstanceOf(ModelRegistryAuthError);
+    });
+
+    it('malformed JSON — throws ModelRegistryParseError', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('not-json{', { status: 200 }));
+
+      await expect(
+        getModelsForProvider('api', 'https://api.openai.com/v1', 'sk-test'),
+      ).rejects.toBeInstanceOf(ModelRegistryParseError);
+    });
+
+    it('Google 401 — throws ModelRegistryAuthError', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+      await expect(
+        getModelsForProvider(
+          'api',
+          'https://generativelanguage.googleapis.com/v1beta',
+          'bad-key',
+        ),
+      ).rejects.toBeInstanceOf(ModelRegistryAuthError);
+    });
+
+    it('no apiKey provided — returns static catalog (no fetch)', async () => {
       const models = await getModelsForProvider('api', 'https://api.openai.com/v1');
       expect(models.length).toBeGreaterThan(0);
       expect(fetchSpy).not.toHaveBeenCalled();
@@ -123,6 +173,120 @@ describe('model-registry', () => {
     it('unknown endpoint with no apiKey — returns empty array', async () => {
       const models = await getModelsForProvider('api', 'https://custom-api.example.com/v1');
       expect(models).toEqual([]);
+    });
+  });
+
+  describe('Local (Ollama) models', () => {
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch');
+    });
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    it('reachable — returns model name list', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(
+        JSON.stringify({ models: [{ name: 'llama3' }, { name: 'mistral' }] }),
+        { status: 200 },
+      ));
+
+      const models = await getModelsForProvider('local', 'http://localhost:11434');
+      expect(models).toEqual(['llama3', 'mistral']);
+    });
+
+    it('unreachable — throws ModelRegistryNetworkError', async () => {
+      fetchSpy.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+      await expect(
+        getModelsForProvider('local', 'http://localhost:11434'),
+      ).rejects.toBeInstanceOf(ModelRegistryNetworkError);
+    });
+
+    it('non-2xx — throws ModelRegistryNetworkError', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Bad Gateway', { status: 502 }));
+
+      await expect(
+        getModelsForProvider('local', 'http://localhost:11434'),
+      ).rejects.toMatchObject({
+        name: 'ModelRegistryNetworkError',
+        status: 502,
+      });
+    });
+
+    it('malformed JSON — throws ModelRegistryParseError', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('not-json{', { status: 200 }));
+
+      await expect(
+        getModelsForProvider('local', 'http://localhost:11434'),
+      ).rejects.toBeInstanceOf(ModelRegistryParseError);
+    });
+  });
+
+  describe('Embedding models', () => {
+    let fetchSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch');
+    });
+
+    afterEach(() => {
+      fetchSpy.mockRestore();
+    });
+
+    it('OpenAI — filters embedding-capable model IDs', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          data: [
+            { id: 'gpt-4o' },
+            { id: 'text-embedding-3-small' },
+            { id: 'text-embedding-3-large' },
+          ],
+        }),
+        { status: 200 },
+      ));
+
+      const models = await getEmbeddingModelsForProvider(
+        'api',
+        'https://api.openai.com/v1',
+        'sk-test',
+      );
+      expect(models).toEqual(['text-embedding-3-small', 'text-embedding-3-large']);
+    });
+
+    it('no apiKey — returns empty array (no static catalog for embeddings)', async () => {
+      const models = await getEmbeddingModelsForProvider('api', 'https://api.openai.com/v1');
+      expect(models).toEqual([]);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('auth failure — throws ModelRegistryAuthError', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response('Unauthorized', { status: 401 }));
+
+      await expect(
+        getEmbeddingModelsForProvider(
+          'api',
+          'https://api.openai.com/v1',
+          'bad-key',
+        ),
+      ).rejects.toBeInstanceOf(ModelRegistryAuthError);
+    });
+
+    it('local Ollama — filters to embedding-capable names', async () => {
+      fetchSpy.mockResolvedValueOnce(new Response(
+        JSON.stringify({
+          models: [
+            { name: 'llama3' },
+            { name: 'nomic-embed-text' },
+          ],
+        }),
+        { status: 200 },
+      ));
+
+      const models = await getEmbeddingModelsForProvider('local', 'http://localhost:11434');
+      expect(models).toEqual(['nomic-embed-text']);
     });
   });
 });

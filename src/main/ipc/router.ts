@@ -51,6 +51,7 @@ import {
   handleConfigSetSecret,
   handleConfigDeleteSecret,
   handleConfigListSecretKeys,
+  handleConfigTakeStartupDiagnostics,
 } from './handlers/config-handler';
 import {
   handleRecoveryList,
@@ -342,6 +343,7 @@ export function registerIpcHandlers(): void {
   handle('config:set-secret', isDev, (data) => handleConfigSetSecret(data));
   handle('config:delete-secret', isDev, (data) => handleConfigDeleteSecret(data));
   handle('config:list-secret-keys', isDev, () => handleConfigListSecretKeys());
+  handle('config:take-startup-diagnostics', isDev, () => handleConfigTakeStartupDiagnostics());
 
   // ── Recovery ───────────────────────────────────────────────────────
   handle('recovery:list', isDev, () => handleRecoveryList());

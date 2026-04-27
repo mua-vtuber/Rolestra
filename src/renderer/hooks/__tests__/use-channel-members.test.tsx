@@ -3,7 +3,7 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { useChannelMembers } from '../use-channel-members';
+import { ChannelNotFoundError, useChannelMembers } from '../use-channel-members';
 import type { Channel } from '../../../shared/channel-types';
 import type { MemberView } from '../../../shared/member-profile-types';
 
@@ -84,7 +84,7 @@ describe('useChannelMembers', () => {
     expect(invoke).toHaveBeenCalledWith('member:list', undefined);
   });
 
-  it('channelId that does not match any channel returns empty list', async () => {
+  it('channelId that does not match any channel surfaces ChannelNotFoundError', async () => {
     const invoke = vi.fn().mockResolvedValue({ members: [makeMember('alice')] });
     vi.stubGlobal('arena', { platform: 'linux', invoke });
 
@@ -93,7 +93,9 @@ describe('useChannelMembers', () => {
     );
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.members).toEqual([]);
+    expect(result.current.members).toBeNull();
+    expect(result.current.error).toBeInstanceOf(ChannelNotFoundError);
+    expect((result.current.error as ChannelNotFoundError).channelId).toBe('c-ghost');
   });
 
   it('member:list error propagates through', async () => {

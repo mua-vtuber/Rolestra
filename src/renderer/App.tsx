@@ -19,6 +19,7 @@ import { useProjects } from './hooks/use-projects';
 import { useAppViewStore, type AppView } from './stores/app-view-store';
 import { useActiveChannelStore } from './stores/active-channel-store';
 import { invoke } from './ipc/invoke';
+import { notifyError } from './components/ErrorBoundary';
 import type {
   PermissionMode,
   Project,
@@ -89,6 +90,38 @@ export function App() {
       }
     })();
     // setView is stable from zustand; deliberately mounted-once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // F2-Task2: surface a corrupt settings.json once on startup. Main
+  // already wrote a timestamped backup and applied defaults so the app
+  // boots; here we just tell the user where their original landed.
+  useEffect(() => {
+    const arena = (window as unknown as { arena?: unknown }).arena;
+    if (!arena) return;
+    void (async () => {
+      try {
+        const { settingsCorruption } = await invoke(
+          'config:take-startup-diagnostics',
+          undefined,
+        );
+        if (settingsCorruption === null) return;
+        const reasonKey = settingsCorruption.reason === 'invalid-json'
+          ? 'app.startupDiagnostics.settingsCorruption.invalidJson'
+          : settingsCorruption.reason === 'non-object'
+            ? 'app.startupDiagnostics.settingsCorruption.nonObject'
+            : 'app.startupDiagnostics.settingsCorruption.readError';
+        const backupPath = settingsCorruption.backupPath
+          ?? t('app.startupDiagnostics.settingsCorruption.noBackup');
+        notifyError(t(reasonKey, { backupPath }));
+      } catch (reason) {
+        console.warn(
+          '[rolestra] config:take-startup-diagnostics failed',
+          reason instanceof Error ? reason.message : String(reason),
+        );
+      }
+    })();
+    // mounted-once: t is stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const activeChannelMap = useActiveChannelStore((s) => s.channelIdByProject);

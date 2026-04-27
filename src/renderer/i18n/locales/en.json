@@ -1,6 +1,14 @@
 {
   "app": {
-    "mainPlaceholder": "The dashboard will move in here during R4."
+    "mainPlaceholder": "The dashboard will move in here during R4.",
+    "startupDiagnostics": {
+      "settingsCorruption": {
+        "invalidJson": "The settings file (settings.json) is corrupt and defaults were applied. The original was backed up to: {{backupPath}}",
+        "noBackup": "(backup failed — the original file is left in place untouched)",
+        "nonObject": "The settings file (settings.json) had an unexpected shape and defaults were applied. Backup: {{backupPath}}",
+        "readError": "The settings file (settings.json) could not be read and defaults were applied. Backup: {{backupPath}}"
+      }
+    }
   },
   "approval": {
     "circuitBreaker": {
@@ -301,7 +309,8 @@
         "totalTokens": "Total"
       },
       "title": "LLM usage",
-      "totalTokens": "Total tokens: {{value}}"
+      "totalTokens": "Total tokens: {{value}}",
+      "unavailable": "Usage data is unavailable. Please try again shortly."
     }
   },
   "meeting": {

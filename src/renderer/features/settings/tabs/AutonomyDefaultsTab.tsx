@@ -15,7 +15,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type ReactElement,
@@ -169,10 +168,14 @@ function LlmCostSection({
   const { summary, loading, error, refetch } =
     useLlmCostSummary(LLM_COST_PERIOD_DAYS);
 
-  const rows = useMemo(() => {
-    if (!summary) return [] as LlmCostSummary['byProvider'];
-    return summary.byProvider;
-  }, [summary]);
+  // F2-Task5: a missing summary while not loading and not in an error
+  // state used to fall through to the "empty" branch, which conflated
+  // "the period had zero usage" with "summary failed to load". The
+  // loading-cost hook only ever leaves us in that state on an
+  // unexpected internal failure (e.g. IPC contract drift), so promote
+  // it to a user-visible error rather than silently rendering empty.
+  const summaryUnavailable = !loading && error === null && summary === null;
+  const rows: LlmCostSummary['byProvider'] = summary?.byProvider ?? [];
 
   return (
     <section
@@ -191,7 +194,7 @@ function LlmCostSection({
         {t('llm.cost.description', { days: LLM_COST_PERIOD_DAYS })}
       </p>
 
-      {error !== null && (
+      {error !== null ? (
         <div
           role="alert"
           data-testid="settings-autonomy-llm-cost-error"
@@ -199,9 +202,15 @@ function LlmCostSection({
         >
           {t('llm.cost.error')} — {error.message}
         </div>
-      )}
-
-      {loading ? (
+      ) : summaryUnavailable ? (
+        <div
+          role="alert"
+          data-testid="settings-autonomy-llm-cost-error"
+          className="text-xs text-danger border border-danger rounded-panel px-2 py-1 bg-sunk"
+        >
+          {t('llm.cost.unavailable')}
+        </div>
+      ) : loading ? (
         <p
           data-testid="settings-autonomy-llm-cost-loading"
           className="text-xs text-fg-muted italic"

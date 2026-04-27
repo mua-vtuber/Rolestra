@@ -328,9 +328,9 @@ describe('RemoteHandlers', () => {
     expect(result?.messages).toHaveLength(2);
   });
 
-  it('handleMemorySearch returns empty for no matches', () => {
+  it('handleMemorySearch returns ok:true with empty rows when no matches', () => {
     const result = handlers.handleMemorySearch('nonexistent query');
-    expect(result).toEqual([]);
+    expect(result).toEqual({ ok: true, rows: [] });
   });
 
   it('handleMemorySearch finds matching nodes via FTS5', () => {
@@ -338,16 +338,39 @@ describe('RemoteHandlers', () => {
     seedKnowledgeNode(db, 'kn-2', 'React is a UI library built by Meta', 'programming');
 
     const result = handlers.handleMemorySearch('TypeScript');
-    expect(result.length).toBeGreaterThanOrEqual(1);
-    expect(result[0].id).toBe('kn-1');
-    expect(result[0].content).toContain('TypeScript');
-    expect(typeof result[0].score).toBe('number');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok=true');
+    expect(result.rows.length).toBeGreaterThanOrEqual(1);
+    expect(result.rows[0].id).toBe('kn-1');
+    expect(result.rows[0].content).toContain('TypeScript');
+    expect(typeof result.rows[0].score).toBe('number');
   });
 
-  it('handleMemorySearch returns empty for empty query', () => {
+  it('handleMemorySearch returns EMPTY_QUERY for empty query', () => {
     seedKnowledgeNode(db, 'kn-1', 'Some content', 'topic');
     const result = handlers.handleMemorySearch('');
-    expect(result).toEqual([]);
+    expect(result).toEqual({
+      ok: false,
+      code: 'EMPTY_QUERY',
+      message: expect.any(String),
+    });
+  });
+
+  it('handleMemorySearch returns EMPTY_QUERY for whitespace-only query', () => {
+    const result = handlers.handleMemorySearch('   \t\n  ');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected ok=false');
+    expect(result.code).toBe('EMPTY_QUERY');
+  });
+
+  it('handleMemorySearch returns FTS_DB_ERROR when the FTS table is missing', () => {
+    // Drop the FTS index so the prepare/exec path raises an SQL error.
+    db.exec('DROP TABLE knowledge_fts');
+    const result = handlers.handleMemorySearch('anything');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('expected ok=false');
+    expect(result.code).toBe('FTS_DB_ERROR');
+    expect(result.message.length).toBeGreaterThan(0);
   });
 });
 

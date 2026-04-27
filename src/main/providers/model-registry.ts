@@ -1,11 +1,15 @@
 /**
  * Model registry for CLI, API, and Local providers.
  *
- * CLI and API fallback lists are hardcoded. API providers attempt
- * real-time model listing when an API key is provided; on failure
- * they fall back to the static list.
+ * CLI lists are hardcoded (CLIs ship with a fixed alias set). API
+ * endpoints attempt real-time model listing when a key is provided;
+ * fetch / auth / parse failures surface as specific Error subclasses
+ * (ModelRegistryAuthError / ModelRegistryNetworkError /
+ * ModelRegistryParseError) so callers can distinguish "wrong key" from
+ * "service down" from "stale catalog". When no API key is supplied,
+ * the static catalog is returned as a known-stale catalog (legitimate
+ * UX — user has not chosen to fetch live yet).
  */
-
 import type { ProviderType } from '../../shared/provider-types';
 
 /** Anthropic API version header. */
@@ -38,8 +42,12 @@ const CLI_MODELS: Record<string, string[]> = {
   ],
 };
 
-/** Fallback models per API endpoint URL (used when live fetch fails). */
-const API_MODELS_FALLBACK: Record<string, string[]> = {
+/**
+ * Static catalog returned when no API key is configured. Once the user
+ * provides a key, live fetch takes over; failures throw rather than
+ * silently substituting these entries.
+ */
+const API_MODELS_STATIC_CATALOG: Record<string, string[]> = {
   'https://api.openai.com/v1': ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
   'https://api.anthropic.com/v1': [
     'claude-sonnet-4-5-20250929',
@@ -51,6 +59,71 @@ const API_MODELS_FALLBACK: Record<string, string[]> = {
     'gemini-2.5-flash',
   ],
 };
+
+/**
+ * Authentication failure (HTTP 401/403). Distinct from a network
+ * outage — the caller should prompt the user to verify the API key.
+ */
+export class ModelRegistryAuthError extends Error {
+  readonly endpoint: string;
+  readonly status: number;
+
+  constructor(endpoint: string, status: number) {
+    super(
+      `Model registry authentication failed for ${endpoint} (HTTP ${status}). ` +
+      `Verify the API key is correct and has model:list permission.`,
+    );
+    this.name = 'ModelRegistryAuthError';
+    this.endpoint = endpoint;
+    this.status = status;
+  }
+}
+
+/**
+ * Network failure (DNS, connection, timeout, non-2xx response other
+ * than auth). Distinct from a parse error — the caller should surface
+ * "service unreachable" rather than "bad response".
+ */
+export class ModelRegistryNetworkError extends Error {
+  readonly endpoint: string;
+  readonly status?: number;
+
+  constructor(endpoint: string, options: { status?: number; cause?: unknown }) {
+    const reason = options.status !== undefined
+      ? `HTTP ${options.status}`
+      : options.cause instanceof Error
+        ? options.cause.message
+        : String(options.cause ?? 'unknown network failure');
+    super(`Model registry network failure for ${endpoint}: ${reason}`);
+    this.name = 'ModelRegistryNetworkError';
+    this.endpoint = endpoint;
+    this.status = options.status;
+    if (options.cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = options.cause;
+    }
+  }
+}
+
+/**
+ * Response parse failure (malformed JSON, missing expected shape).
+ * Distinct from a network error — the caller should surface "bad
+ * response from upstream" rather than retry.
+ */
+export class ModelRegistryParseError extends Error {
+  readonly endpoint: string;
+
+  constructor(endpoint: string, cause?: unknown) {
+    const reason = cause instanceof Error
+      ? cause.message
+      : String(cause ?? 'invalid JSON');
+    super(`Model registry parse failure for ${endpoint}: ${reason}`);
+    this.name = 'ModelRegistryParseError';
+    this.endpoint = endpoint;
+    if (cause !== undefined) {
+      (this as Error & { cause?: unknown }).cause = cause;
+    }
+  }
+}
 
 /**
  * Normalize a CLI command path to its base key.
@@ -91,40 +164,76 @@ function filterGoogleModelsByMethod(models: GoogleModelInfo[], method: string): 
 }
 
 /**
- * Fetch models from an API endpoint using the provider's models API.
- * Returns null on failure (caller should use fallback).
+ * Issue a fetch and convert auth / network / parse failures into the
+ * specific Error subclasses. The caller receives a parsed JSON body
+ * on success; any other outcome throws.
  */
-async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[] | null> {
+async function fetchJson<T>(
+  endpoint: string,
+  url: string,
+  init: RequestInit,
+  signal: AbortSignal,
+): Promise<T> {
+  let res: Response;
+  try {
+    res = await fetch(url, { ...init, signal });
+  } catch (cause) {
+    throw new ModelRegistryNetworkError(endpoint, { cause });
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    throw new ModelRegistryAuthError(endpoint, res.status);
+  }
+  if (!res.ok) {
+    throw new ModelRegistryNetworkError(endpoint, { status: res.status });
+  }
+
+  try {
+    return (await res.json()) as T;
+  } catch (cause) {
+    throw new ModelRegistryParseError(endpoint, cause);
+  }
+}
+
+/**
+ * Fetch models from an API endpoint using the provider's models API.
+ *
+ * @throws ModelRegistryAuthError on HTTP 401/403
+ * @throws ModelRegistryNetworkError on connection failure / non-2xx / abort
+ * @throws ModelRegistryParseError on malformed JSON
+ */
+async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    let res: Response;
-
+    let body: unknown;
     if (isAnthropicEndpoint(endpoint)) {
-      res = await fetch(`${endpoint}/models`, {
-        headers: {
-          'x-api-key': apiKey,
-          'anthropic-version': ANTHROPIC_API_VERSION,
+      body = await fetchJson<unknown>(
+        endpoint,
+        `${endpoint}/models`,
+        {
+          headers: {
+            'x-api-key': apiKey,
+            'anthropic-version': ANTHROPIC_API_VERSION,
+          },
         },
-        signal: controller.signal,
-      });
+        controller.signal,
+      );
     } else if (isGoogleEndpoint(endpoint)) {
-      res = await fetch(`${endpoint}/models?key=${encodeURIComponent(apiKey)}`, {
-        signal: controller.signal,
-      });
+      body = await fetchJson<unknown>(
+        endpoint,
+        `${endpoint}/models?key=${encodeURIComponent(apiKey)}`,
+        {},
+        controller.signal,
+      );
     } else {
-      res = await fetch(`${endpoint}/models`, {
-        headers: { 'Authorization': `Bearer ${apiKey}` },
-        signal: controller.signal,
-      });
+      body = await fetchJson<unknown>(
+        endpoint,
+        `${endpoint}/models`,
+        { headers: { 'Authorization': `Bearer ${apiKey}` } },
+        controller.signal,
+      );
     }
-
-    if (res.status === 401 || res.status === 403) {
-      return [];
-    }
-    if (!res.ok) return null;
-
-    const body = await res.json();
 
     if (isGoogleEndpoint(endpoint)) {
       const models = (body as { models?: { name: string }[] }).models ?? [];
@@ -133,8 +242,6 @@ async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[
 
     const data = (body as { data?: { id: string }[] }).data ?? [];
     return data.map((m) => m.id);
-  } catch {
-    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -142,23 +249,22 @@ async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[
 
 /**
  * Fetch Google models with supportedGenerationMethods metadata.
- * Returns null on failure; empty array on auth failure.
+ *
+ * @throws ModelRegistryAuthError on HTTP 401/403
+ * @throws ModelRegistryNetworkError on connection failure / non-2xx / abort
+ * @throws ModelRegistryParseError on malformed JSON
  */
-async function fetchGoogleModelsDetailed(endpoint: string, apiKey: string): Promise<GoogleModelInfo[] | null> {
+async function fetchGoogleModelsDetailed(endpoint: string, apiKey: string): Promise<GoogleModelInfo[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5000);
   try {
-    const res = await fetch(`${endpoint}/models?key=${encodeURIComponent(apiKey)}`, {
-      signal: controller.signal,
-    });
-    if (res.status === 401 || res.status === 403) {
-      return [];
-    }
-    if (!res.ok) return null;
-    const body = (await res.json()) as { models?: GoogleModelInfo[] };
+    const body = await fetchJson<{ models?: GoogleModelInfo[] }>(
+      endpoint,
+      `${endpoint}/models?key=${encodeURIComponent(apiKey)}`,
+      {},
+      controller.signal,
+    );
     return body.models ?? [];
-  } catch {
-    return null;
   } finally {
     clearTimeout(timeout);
   }
@@ -166,19 +272,26 @@ async function fetchGoogleModelsDetailed(endpoint: string, apiKey: string): Prom
 
 /**
  * Fetch installed Ollama models by querying its local API.
- * Returns an empty array if Ollama is unreachable.
+ *
+ * @throws ModelRegistryNetworkError when Ollama is unreachable / non-2xx / abort
+ * @throws ModelRegistryParseError on malformed JSON
+ *
+ * Note: Ollama runs locally and does not authenticate, so 401/403 are
+ * not expected; if they occur fetchJson still raises an auth error and
+ * the caller will see a clear message.
  */
 async function fetchOllamaModels(baseUrl: string): Promise<string[]> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 3000);
   try {
     const url = baseUrl.replace(/\/+$/, '') + '/api/tags';
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) return [];
-    const body = (await res.json()) as { models?: { name: string }[] };
+    const body = await fetchJson<{ models?: { name: string }[] }>(
+      baseUrl,
+      url,
+      {},
+      controller.signal,
+    );
     return (body.models ?? []).map((m) => m.name);
-  } catch {
-    return [];
   } finally {
     clearTimeout(timeout);
   }
@@ -189,8 +302,16 @@ async function fetchOllamaModels(baseUrl: string): Promise<string[]> {
  *
  * @param type    - Provider type ('cli', 'api', 'local')
  * @param key     - For CLI: command path. For API: endpoint URL. For Local: base URL.
- * @param apiKey  - Resolved API key (only for 'api' type). If omitted, returns empty array.
+ * @param apiKey  - Resolved API key (only for 'api' type). When omitted
+ *                  for an API endpoint, returns the static catalog as a
+ *                  known-stale list. When provided, attempts live fetch
+ *                  and propagates ModelRegistry* errors on failure.
  * @returns Array of model identifiers.
+ *
+ * @throws ModelRegistryAuthError / ModelRegistryNetworkError /
+ *         ModelRegistryParseError when an apiKey is provided and the
+ *         live fetch fails. Local provider failures throw the same
+ *         error types.
  */
 export async function getModelsForProvider(
   type: ProviderType,
@@ -204,20 +325,12 @@ export async function getModelsForProvider(
     if (apiKey) {
       if (isGoogleEndpoint(key)) {
         const detailed = await fetchGoogleModelsDetailed(key, apiKey);
-        if (detailed !== null && detailed.length > 0) {
-          const filtered = filterGoogleModelsByMethod(detailed, 'generateContent');
-          if (filtered.length > 0) return filtered;
-          return [];
-        }
-      } else {
-        const live = await fetchApiModels(key, apiKey);
-        if (live !== null && live.length > 0) {
-          return live.filter((m) => !isEmbeddingModelId(m));
-        }
+        return filterGoogleModelsByMethod(detailed, 'generateContent');
       }
+      const live = await fetchApiModels(key, apiKey);
+      return live.filter((m) => !isEmbeddingModelId(m));
     }
-    // Fallback to hardcoded (no key, auth failure, or empty response)
-    return API_MODELS_FALLBACK[key] ?? [];
+    return API_MODELS_STATIC_CATALOG[key] ?? [];
   }
   if (type === 'local') {
     return fetchOllamaModels(key || 'http://localhost:11434');
@@ -230,6 +343,9 @@ export async function getModelsForProvider(
  *
  * Only returns models that are likely to support embedding APIs.
  * For Google, filters by supportedGenerationMethods=embedContent.
+ *
+ * @throws ModelRegistry* errors on live fetch failure (same contract
+ *         as getModelsForProvider).
  */
 export async function getEmbeddingModelsForProvider(
   type: ProviderType,
@@ -240,16 +356,10 @@ export async function getEmbeddingModelsForProvider(
     if (!apiKey) return [];
     if (isGoogleEndpoint(key)) {
       const detailed = await fetchGoogleModelsDetailed(key, apiKey);
-      if (detailed !== null && detailed.length > 0) {
-        return filterGoogleModelsByMethod(detailed, 'embedContent');
-      }
-      return [];
+      return filterGoogleModelsByMethod(detailed, 'embedContent');
     }
     const live = await fetchApiModels(key, apiKey);
-    if (live !== null && live.length > 0) {
-      return live.filter((m) => isEmbeddingModelId(m));
-    }
-    return [];
+    return live.filter((m) => isEmbeddingModelId(m));
   }
   if (type === 'local') {
     const models = await fetchOllamaModels(key || 'http://localhost:11434');

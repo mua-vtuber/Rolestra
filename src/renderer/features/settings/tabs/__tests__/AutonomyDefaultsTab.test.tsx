@@ -126,6 +126,22 @@ describe('AutonomyDefaultsTab — LLM cost section (R11-Task8)', () => {
     ).toBeTruthy();
   });
 
+  it('surfaces the error block (not empty) when llm:cost-summary rejects', async () => {
+    installArena({
+      'config:get-settings': () =>
+        Promise.resolve({ settings: { ...DEFAULT_SETTINGS } }),
+      'llm:cost-summary': () =>
+        Promise.reject(new Error('cost-summary down')),
+    });
+    render(<AutonomyDefaultsTab />);
+    expect(
+      await screen.findByTestId('settings-autonomy-llm-cost-error'),
+    ).toBeTruthy();
+    expect(
+      screen.queryByTestId('settings-autonomy-llm-cost-empty'),
+    ).toBeNull();
+  });
+
   it('committing a unit price calls config:update-settings with the merged price map', async () => {
     const settings = {
       ...DEFAULT_SETTINGS,
