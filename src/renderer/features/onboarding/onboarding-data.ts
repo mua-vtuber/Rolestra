@@ -1,15 +1,17 @@
 /**
- * Onboarding fixtures — hardcoded sample data matching docs/Rolestra_sample/06.
+ * Onboarding 정적 메타 — wizard step 정의 + Step2 staff card view-model 인터페이스.
  *
- * Per `2026-04-19-theme-alignment-checklist.md` we explicitly DROP the
- * `STAFF_CANDIDATES[].color` visual hint from the source mockup — selection
- * mark color comes from theme tokens (selected=brand, detected=success)
- * instead. Card chrome (panelClip / corner brackets / border radius) flows
- * through the existing 10 form-level discriminators; no new tokens needed.
+ * F1 (mock/fallback cleanup) 이전에는 본 파일이 `STAFF_CANDIDATES` 6 provider
+ * 하드코딩 fixture 를 export 해 Step2 staff-grid 를 비-IPC 로 렌더했다. 이는
+ * 사용자 ABSOLUTE PROHIBITIONS (mock data on production code path) 위반이라
+ * 모듈에서 fixture 를 모두 제거했다. Step2 는 이제 `provider:detect` 결과만
+ * 사용하며 (`OnboardingPage` + `useOnboardingState`), 본 파일은 view-model 형
+ * 인터페이스 + 5 step 정의만 보관한다.
  *
- * Real provider detection wires up in R12+; until then this module exports
- * static constants so the Onboarding screens can render at design-polish
- * fidelity without an IPC dependency.
+ * `StaffCandidate` 인터페이스는 OBStaffCard / OBSummaryStrip 두 컴포넌트가
+ * 공유하는 정규화된 카드 데이터 모양이다. OnboardingPage 가
+ * `provider:detect` snapshot + i18n provider 사전 (`onboarding.providers.<id>`)
+ * 을 합성해 매 렌더마다 빌드한다.
  */
 
 export type OBStepStatus = 'pending' | 'current' | 'completed';
@@ -21,6 +23,15 @@ export interface OBStep {
   status: OBStepStatus;
 }
 
+/**
+ * Step2 staff-grid 의 카드 한 장에 필요한 view-model.
+ *
+ * `id` 는 ProviderDetectionSnapshot.providerId (registry 내 provider id 또는
+ * CLI command name). `name` / `vendor` / `tagline` / `bestFor` / `price` /
+ * `initial` 은 i18n 사전 lookup 결과 (알려지지 않은 id 는 unknown fallback).
+ * `detected` 는 snapshot.available, `selected` 는 사용자가 wizard 에서 토글한
+ * 누적 선택 (`OnboardingState.selections.staff`).
+ */
 export interface StaffCandidate {
   id: string;
   name: string;
@@ -35,7 +46,7 @@ export interface StaffCandidate {
   initial: string;
   /** True if Rolestra detected this CLI/runtime locally. */
   detected: boolean;
-  /** Initial selection state (user can toggle in OnboardingPage state). */
+  /** True if the user has the card selected in the wizard. */
   selected: boolean;
 }
 
@@ -45,75 +56,6 @@ export const ONBOARDING_STEPS: ReadonlyArray<OBStep> = [
   { id: 3, key: 'roles', status: 'pending' },
   { id: 4, key: 'permissions', status: 'pending' },
   { id: 5, key: 'firstProject', status: 'pending' },
-];
-
-export const STAFF_CANDIDATES: ReadonlyArray<StaffCandidate> = [
-  {
-    id: 'claude',
-    name: 'Claude Code',
-    vendor: 'Anthropic',
-    tagline: '사려 깊은 시니어 · 설명 장인',
-    bestFor: '리팩토링, 아키텍처 리뷰, 문서화',
-    price: '$20/mo · Pro',
-    initial: 'C',
-    detected: true,
-    selected: true,
-  },
-  {
-    id: 'gemini',
-    name: 'Gemini CLI',
-    vendor: 'Google',
-    tagline: '멀티모달 · 빠른 반응',
-    bestFor: 'UX 탐색, 이미지 분석, 긴 컨텍스트',
-    price: '$20/mo',
-    initial: 'G',
-    detected: true,
-    selected: true,
-  },
-  {
-    id: 'codex',
-    name: 'Codex',
-    vendor: 'OpenAI',
-    tagline: '꼼꼼한 엔지니어 · 테스트 좋아함',
-    bestFor: '백엔드, 알고리즘, 성능 최적화',
-    price: '$20/mo · Plus',
-    initial: 'O',
-    detected: true,
-    selected: true,
-  },
-  {
-    id: 'copilot',
-    name: 'Copilot CLI',
-    vendor: 'GitHub',
-    tagline: 'VS Code와 잘 맞음',
-    bestFor: '자동 완성, 간단한 리팩토링',
-    price: '$10/mo',
-    initial: 'H',
-    detected: false,
-    selected: false,
-  },
-  {
-    id: 'local',
-    name: 'Local (Ollama)',
-    vendor: '내 컴퓨터',
-    tagline: '느리지만 성실한 인턴',
-    bestFor: '문서 요약, 오프라인 작업',
-    price: '무료',
-    initial: 'L',
-    detected: true,
-    selected: true,
-  },
-  {
-    id: 'grok',
-    name: 'Grok CLI',
-    vendor: 'xAI',
-    tagline: '실시간 정보 · 장난기',
-    bestFor: '리서치, 트렌드 추적',
-    price: '$30/mo · Premium+',
-    initial: 'X',
-    detected: false,
-    selected: false,
-  },
 ];
 
 export type DetectionState = 'selected' | 'detected' | 'alt';

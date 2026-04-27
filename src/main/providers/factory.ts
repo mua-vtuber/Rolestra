@@ -21,6 +21,30 @@ function getCommandKey(command: string): string {
   return basename(command).toLowerCase().replace(/\.(cmd|exe|bat)$/i, '');
 }
 
+/**
+ * F1 (cleanup): provider id 단일 진실원. cli-detect-handler 가 반환하는
+ * `command` (이미 'claude' 같은 normalized form 이지만 path 가 섞여 들어올
+ * 가능성에 견고하게) 을 stable provider id 로 정규화한다. onboarding-handler
+ * 의 `handleProviderDetect` 와 `handleOnboardingApplyStaffSelection` 둘 다
+ * 본 함수 결과를 providerId 로 사용해 wizard / registry / DB / messenger
+ * 사이드바가 같은 id 공간을 공유한다.
+ */
+export function normalizeCliCommand(command: string): string {
+  return getCommandKey(command);
+}
+
+/**
+ * F1 (cleanup): CLI provider 가 등록되지 않은 시점에 wizard 가 사용자에게
+ * "이 카드는 summarize 가능" 처럼 미리보기 capability 를 보여줘야 할 때
+ * 사용하는 well-known 기본 capability snapshot. createProvider 내부의 cli
+ * 분기와 1:1 동기화되어 있어야 한다 — 아래 리터럴을 추가/수정할 때 line
+ * 99 의 cliCapabilities 도 같이 갱신할 것 (또는 본 상수를 spread 해 사용).
+ */
+export const CLI_DEFAULT_CAPABILITIES: ReadonlyArray<ProviderCapability> = [
+  'streaming',
+  'summarize',
+];
+
 function getRuntimeCliConfig(config: Extract<ProviderConfig, { type: 'cli' }>): CliRuntimeConfig {
   const commandKey = getCommandKey(config.command);
   const command = config.command;
@@ -96,7 +120,7 @@ export function createProvider(options: CreateProviderOptions): BaseProvider {
       // CLI 모두 stdin 으로 prompt 를 받아 1-shot 응답을 낼 수 있으므로
       // capability snapshot 에 일관 노출. 실제 호출 시 sessionStrategy 가
       // per-turn / persistent 어느 쪽이든 streamCompletion 이 동일하게 답한다.
-      const cliCapabilities: ProviderCapability[] = ['streaming', 'summarize'];
+      const cliCapabilities: ProviderCapability[] = [...CLI_DEFAULT_CAPABILITIES];
 
       return new CliProvider({
         id,

@@ -74,6 +74,35 @@ describe('R11 IPC — onboarding:set-state schema', () => {
     expect(r.success).toBe(false);
   });
 
+  it('accepts roles with an empty-string value (mid-edit state)', () => {
+    // Step3RoleAssignment keeps an empty entry for a selected provider
+    // while the user is mid-edit; the schema must not reject the patch
+    // or the controlled input will not honour backspace.
+    const r = onboardingSetStateSchema.safeParse({
+      partial: {
+        selections: {
+          roles: { claude: '' },
+        },
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts firstProject with empty slug (mid-edit state)', () => {
+    // Step5FirstProject keeps the slug input controlled even while the
+    // user is mid-edit; the schema must not reject the patch or the
+    // controlled input will not honour backspace and IME composition
+    // breaks for non-ASCII (e.g. Hangul) input.
+    const r = onboardingSetStateSchema.safeParse({
+      partial: {
+        selections: {
+          firstProject: { slug: '', kind: 'new' },
+        },
+      },
+    });
+    expect(r.success).toBe(true);
+  });
+
   it('rejects unknown permission mode', () => {
     const r = onboardingSetStateSchema.safeParse({
       partial: {

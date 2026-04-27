@@ -634,12 +634,22 @@
     },
     "description": "Detected installed CLIs / models. Selected ones will join the office and you'll assign roles next. You can add or remove staff later in Settings.",
     "description_settingsCta": "Reopen the onboarding flow to inspect mockup fidelity in design-polish mode.",
+    "empty": {
+      "action": "Open Settings",
+      "body": "Add a CLI manually in Settings → CLI, then rescan.",
+      "loading": "Detecting CLIs…",
+      "rescan": "Rescan",
+      "title": "No CLIs detected"
+    },
     "footer": {
       "constraint": "{{count}} selected · {{min}} minimum required",
       "constraint_one": "",
       "constraint_other": "",
       "step1": "Welcome — proceed when ready.",
       "step3": "Assign a one-line role to each selected member.",
+      "step3Pending": "{{count}} member(s) still missing a role — fill them all to continue.",
+      "step3Pending_one": "",
+      "step3Pending_other": "",
       "step4": "Pick the default permission mode.",
       "step5": "Enter the kind and slug of your first project."
     },

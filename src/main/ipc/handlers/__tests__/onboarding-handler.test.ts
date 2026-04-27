@@ -22,7 +22,9 @@ import {
   handleOnboardingGetState,
   handleOnboardingSetState,
   handleOnboardingComplete,
+  handleOnboardingApplyStaffSelection,
   handleProviderDetect,
+  setApplyStaffSelectionDeps,
   setOnboardingServiceAccessor,
   setProviderDetectionDeps,
 } from '../onboarding-handler';
@@ -60,6 +62,7 @@ function buildService(): ServiceMock {
 afterEach(() => {
   setOnboardingServiceAccessor(null);
   setProviderDetectionDeps(null);
+  setApplyStaffSelectionDeps(null);
 });
 
 describe('onboarding-handler — state channels', () => {
@@ -224,5 +227,140 @@ describe('onboarding-handler — provider:detect', () => {
     await expect(handleProviderDetect()).rejects.toThrow(
       /detection deps not initialized/,
     );
+  });
+});
+
+describe('onboarding-handler — apply-staff-selection (F1)', () => {
+  function makeProviderInfo(
+    overrides: Partial<ProviderInfo>,
+  ): ProviderInfo {
+    return {
+      id: 'fixture',
+      type: 'cli',
+      displayName: 'fixture',
+      model: 'fixture-model',
+      capabilities: ['streaming', 'summarize'],
+      status: 'ready',
+      config: {
+        type: 'cli',
+        command: 'fixture',
+        args: [],
+        inputFormat: 'stdin-json',
+        outputFormat: 'stream-json',
+        sessionStrategy: 'persistent',
+        hangTimeout: { first: 30_000, subsequent: 60_000 },
+        model: 'fixture-model',
+      },
+      ...overrides,
+    };
+  }
+
+  it('registers each requested CLI provider via registerCli and reports added', async () => {
+    const registered: string[] = [];
+    setApplyStaffSelectionDeps({
+      detectScan: async () => ({
+        detected: [
+          { command: 'claude', displayName: 'Claude Code', path: '/usr/bin/claude' },
+          { command: 'gemini', displayName: 'Gemini CLI', path: '/usr/bin/gemini' },
+        ],
+      }),
+      isRegistered: () => false,
+      registerCli: async (id, cli) => {
+        registered.push(id);
+        return makeProviderInfo({ id, displayName: cli.displayName });
+      },
+    });
+
+    const out = await handleOnboardingApplyStaffSelection({
+      providerIds: ['claude', 'gemini'],
+    });
+
+    expect(registered).toEqual(['claude', 'gemini']);
+    expect(out.added.map((p) => p.id)).toEqual(['claude', 'gemini']);
+    expect(out.skipped).toEqual([]);
+  });
+
+  it('skips providers already in the registry without calling registerCli', async () => {
+    const registerSpy = vi.fn();
+    setApplyStaffSelectionDeps({
+      detectScan: async () => ({
+        detected: [
+          { command: 'claude', displayName: 'Claude Code', path: '/usr/bin/claude' },
+        ],
+      }),
+      isRegistered: (id) => id === 'claude',
+      registerCli: registerSpy,
+    });
+
+    const out = await handleOnboardingApplyStaffSelection({
+      providerIds: ['claude'],
+    });
+
+    expect(registerSpy).not.toHaveBeenCalled();
+    expect(out.added).toEqual([]);
+    expect(out.skipped).toEqual([
+      { providerId: 'claude', reason: 'already-registered' },
+    ]);
+  });
+
+  it('reports not-detected for ids absent from the rescan', async () => {
+    setApplyStaffSelectionDeps({
+      detectScan: async () => ({ detected: [] }),
+      isRegistered: () => false,
+      registerCli: async () => {
+        throw new Error('should not be invoked');
+      },
+    });
+
+    const out = await handleOnboardingApplyStaffSelection({
+      providerIds: ['copilot'],
+    });
+
+    expect(out.added).toEqual([]);
+    expect(out.skipped).toEqual([
+      { providerId: 'copilot', reason: 'not-detected' },
+    ]);
+  });
+
+  it('reports create-failed with detail when registerCli throws', async () => {
+    setApplyStaffSelectionDeps({
+      detectScan: async () => ({
+        detected: [
+          { command: 'claude', displayName: 'Claude Code', path: '/usr/bin/claude' },
+        ],
+      }),
+      isRegistered: () => false,
+      registerCli: async () => {
+        throw new Error('boom');
+      },
+    });
+
+    const out = await handleOnboardingApplyStaffSelection({
+      providerIds: ['claude'],
+    });
+
+    expect(out.added).toEqual([]);
+    expect(out.skipped).toEqual([
+      { providerId: 'claude', reason: 'create-failed', detail: 'boom' },
+    ]);
+  });
+
+  it('normalises CLI command name (claude.exe → claude) when matching detection', async () => {
+    setApplyStaffSelectionDeps({
+      detectScan: async () => ({
+        detected: [
+          { command: 'claude.exe', displayName: 'Claude Code', path: 'C:\\bin\\claude.exe' },
+        ],
+      }),
+      isRegistered: () => false,
+      registerCli: async (id) => makeProviderInfo({ id }),
+    });
+
+    const out = await handleOnboardingApplyStaffSelection({
+      providerIds: ['claude'],
+    });
+
+    expect(out.added.map((p) => p.id)).toEqual(['claude']);
+    expect(out.skipped).toEqual([]);
   });
 });

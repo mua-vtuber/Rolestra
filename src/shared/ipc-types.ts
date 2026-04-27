@@ -76,6 +76,27 @@ export interface IpcMeta {
   timestamp: number;
 }
 
+/**
+ * F1 (mock/fallback cleanup): `onboarding:apply-staff-selection` 응답의
+ * skipped 배열 entry. main 이 사용자 선택 provider id 를 등록하지 못한 사유를
+ * 코드로 분류해 호출자가 사용자에게 적절한 안내를 표시할 수 있게 한다.
+ *
+ *   - `already-registered` — 같은 id 의 provider 가 이미 registry 에 있어
+ *     finish 흐름이 register 를 시도하지 않고 skip. 정상 케이스 (이전 부팅
+ *     에서 Settings 로 수동 등록 등).
+ *   - `not-detected` — detect-cli 결과에 매칭되는 binary 가 없어 등록 불가.
+ *     (사용자가 step2 진입 후 PATH 변동 또는 staff 배열에 알려지지 않은 id).
+ *   - `unsupported-kind` — provider id 는 알려졌으나 wizard 가 자동 등록을
+ *     지원하지 않는 type (api / local). Settings 에서 수동 등록 권장.
+ *   - `create-failed` — factory.createProvider / registry.register / DB
+ *     persist 중 실패. detail 에 message.
+ */
+export interface OnboardingApplySkip {
+  providerId: string;
+  reason: 'already-registered' | 'not-detected' | 'unsupported-kind' | 'create-failed';
+  detail?: string;
+}
+
 /** Detected CLI tool info returned by provider:detect-cli. */
 export interface DetectedCli {
   command: string;
@@ -707,6 +728,22 @@ export type IpcChannelMap = {
   'onboarding:complete': {
     request: undefined;
     response: { success: true };
+  };
+
+  /**
+   * F1 (mock/fallback cleanup): wizard 가 step 2 에서 사용자가 선택한 staff
+   * provider id 목록을 받아 main 측에서 (i) detect-cli 를 다시 한 번 실행해
+   * binary path / wslDistro 를 도출하고, (ii) 해당 provider 가 registry 에
+   * 아직 등록 안 됐다면 createProvider + saveProvider 흐름으로 영속화한다.
+   * 호출자 (App.tsx) 는 응답의 `added` 와 `skipped` 를 검사해 사용자에게
+   * 필요한 추가 안내 (예: API/local 은 Settings 에서 수동 등록) 를 제시한다.
+   */
+  'onboarding:apply-staff-selection': {
+    request: { providerIds: string[] };
+    response: {
+      added: ProviderInfo[];
+      skipped: OnboardingApplySkip[];
+    };
   };
 
   // ── R11-Task5: Provider auto-detection (Onboarding step 2) ──────

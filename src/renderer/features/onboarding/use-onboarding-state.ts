@@ -1,5 +1,5 @@
 /**
- * `useOnboardingState` — Onboarding wizard state hook (R11-Task6).
+ * `useOnboardingState` — Onboarding wizard state hook.
  *
  * Round-trips three IPC channels (`onboarding:get-state` /
  * `onboarding:set-state` / `onboarding:complete`) against the persisted
@@ -8,10 +8,18 @@
  * candidates without a separate hook.
  *
  * Contract:
- *  - On mount, calls `onboarding:get-state` once. Until that resolves,
- *    consumers see `state=null + loading=true`. We deliberately do NOT
- *    flash a synthetic default to avoid a step-1 frame on a wizard the
- *    user is resuming at step 4.
+ *  - `state` is `OnboardingState | null` — null means "not yet hydrated".
+ *    On mount, calls `onboarding:get-state` once. Until that resolves,
+ *    consumers see `state=null + loading=true` and MUST render a
+ *    loading-equivalent surface (OnboardingPage does this). F1 cleanup
+ *    deliberately removed the `FALLBACK_STATE` constant that previously
+ *    flashed a step-1 frame on a wizard the user was resuming at step 4
+ *    — that fallback masked IPC failures and lied to the user about
+ *    what state they were in.
+ *  - In jsdom test environments (window.arena missing) the hook
+ *    synthesises an empty state synchronously so component tests do not
+ *    need IPC mocks. Production renderers always see the bridge so
+ *    that path is unreachable.
  *  - `applyPartial` calls `onboarding:set-state` and replaces local state
  *    with the response; the IPC response is the source of truth (the
  *    main service merges field-by-field — re-applying its result keeps
@@ -20,17 +28,12 @@
  *    locally — there is no separate "after complete" read because the
  *    only follow-up is unmounting the wizard via App.tsx.
  *  - `restart()` is the AboutTab "Restart onboarding" wire — it sends a
- *    set-state with `currentStep:1, selections:{}` (the main service's
- *    `applyPartial` ignores partial.completed=true so the row stays
- *    completed=true; we explicitly set completed=false through a follow
- *    -up `onboarding:set-state` is impossible, so AboutTab uses
- *    `onboarding:set-state({completed:false})` — the service has a
- *    matching reset path that the renderer does not currently invoke
- *    directly, but we expose `restart` for forward compatibility).
- *
- * The hook works in test environments without `window.arena` by
- * surfacing a synchronous default state immediately. Production renderer
- * always sees the bridge so the IPC path is the live path.
+ *    set-state with `currentStep:1, selections:{}` so the wizard
+ *    re-mounts on a fresh row.
+ *  - `error` carries the last IPC failure. `state===null && error!==null`
+ *    is the explicit failure surface — caller MUST render an error UI
+ *    (OnboardingPage falls back to a small inline message since the
+ *    wizard is the only screen mounted at first boot).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -42,21 +45,30 @@ import type {
   ProviderDetectionSnapshot,
 } from '../../../shared/onboarding-types';
 
-const FALLBACK_STATE: OnboardingState = {
-  completed: false,
-  currentStep: 1,
-  selections: {},
-  updatedAt: 0,
-};
-
 function bridgeAvailable(): boolean {
   if (typeof window === 'undefined') return false;
   const arena = (window as unknown as { arena?: unknown }).arena;
   return arena != null;
 }
 
+/**
+ * Test-only synthetic state. F1 (mock/fallback cleanup) deliberately keeps
+ * a separate path for jsdom: production renderer never enters this branch
+ * (bridgeAvailable() returns true under Electron). The synthesised value
+ * is *not* a fallback for IPC failure — that case is surfaced via
+ * `state===null + error!==null` instead.
+ */
+function emptyTestState(): OnboardingState {
+  return {
+    completed: false,
+    currentStep: 1,
+    selections: {},
+    updatedAt: 0,
+  };
+}
+
 export interface UseOnboardingStateResult {
-  state: OnboardingState;
+  state: OnboardingState | null;
   loading: boolean;
   error: Error | null;
   detection: ProviderDetectionSnapshot[];
@@ -75,10 +87,13 @@ function toError(reason: unknown): Error {
 }
 
 export function useOnboardingState(): UseOnboardingStateResult {
-  // Initialize loading=false when the bridge is missing so the test env
-  // never renders the spinner-equivalent shell. Production renderers
-  // ALWAYS see the bridge so loading=true is the right default there.
-  const [state, setState] = useState<OnboardingState>(FALLBACK_STATE);
+  // Initialize loading=false + state=emptyTestState when the bridge is
+  // missing so the test env never renders the spinner-equivalent shell.
+  // Production renderers ALWAYS see the bridge so state=null + loading
+  // =true is the right default (OnboardingPage handles the gap).
+  const [state, setState] = useState<OnboardingState | null>(() =>
+    bridgeAvailable() ? null : emptyTestState(),
+  );
   const [loading, setLoading] = useState<boolean>(() => bridgeAvailable());
   const [error, setError] = useState<Error | null>(null);
   const [detection, setDetection] = useState<ProviderDetectionSnapshot[]>([]);
@@ -114,6 +129,10 @@ export function useOnboardingState(): UseOnboardingStateResult {
         setError(null);
       } catch (reason) {
         if (!mountedRef.current) return;
+        // F1: do NOT swallow the failure into a synthetic default — leave
+        // state=null and surface the error so OnboardingPage can render
+        // a "wizard 상태를 불러오지 못했어요" frame instead of a
+        // pretend-step-1 screen.
         setError(toError(reason));
       } finally {
         if (mountedRef.current) setLoading(false);
@@ -127,16 +146,20 @@ export function useOnboardingState(): UseOnboardingStateResult {
       if (!bridgeAvailable()) {
         // Test environment merge: mirror the service's pure-function
         // semantics so component tests can drive the wizard without
-        // round-tripping IPC.
-        setState((prev) => ({
-          ...prev,
-          currentStep: partial.currentStep ?? prev.currentStep,
-          selections: {
-            ...prev.selections,
-            ...(partial.selections ?? {}),
-          },
-          updatedAt: Date.now(),
-        }));
+        // round-tripping IPC. `prev` is non-null in the jsdom path
+        // because emptyTestState() was used for the initial value.
+        setState((prev) => {
+          const base = prev ?? emptyTestState();
+          return {
+            ...base,
+            currentStep: partial.currentStep ?? base.currentStep,
+            selections: {
+              ...base.selections,
+              ...(partial.selections ?? {}),
+            },
+            updatedAt: Date.now(),
+          };
+        });
         return;
       }
       const { state: next } = await invoke('onboarding:set-state', {
@@ -164,16 +187,19 @@ export function useOnboardingState(): UseOnboardingStateResult {
 
   const complete = useCallback(async (): Promise<void> => {
     if (!bridgeAvailable()) {
-      setState((prev) => ({
-        ...prev,
-        completed: true,
-        updatedAt: Date.now(),
-      }));
+      setState((prev) => {
+        const base = prev ?? emptyTestState();
+        return { ...base, completed: true, updatedAt: Date.now() };
+      });
       return;
     }
     await invoke('onboarding:complete', undefined);
     if (!mountedRef.current) return;
-    setState((prev) => ({ ...prev, completed: true, updatedAt: Date.now() }));
+    setState((prev) =>
+      prev === null
+        ? null
+        : { ...prev, completed: true, updatedAt: Date.now() },
+    );
   }, []);
 
   const restart = useCallback(async (): Promise<void> => {
@@ -216,12 +242,19 @@ export function useOnboardingState(): UseOnboardingStateResult {
     }
   }, []);
 
-  // R11-Task6: detection auto-fetch is intentionally NOT mounted on
-  // useEffect. Step 2 of the wizard renders the static `STAFF_CANDIDATES`
-  // fixture today; surfacing the live detection snapshot is design
-  // polish (Task 16 sign-off). Keeping the trigger explicit avoids a
-  // setState-in-effect lint flag and lets future polish call
-  // `refreshDetection()` from a click handler instead.
+  // F1: detection auto-mount. STAFF_CANDIDATES fixture 가 사라진 이후
+  // Step2 staff-grid 의 단일 데이터 소스가 `provider:detect` 결과 (live
+  // snapshot) 가 되므로 wizard 가 마운트되는 즉시 한 번 호출한다. didFetch
+  // 가드로 중복 호출을 막고 (StrictMode 의 double-effect 방어), 호출 자체는
+  // bridgeAvailable=false 인 테스트 환경에서 즉시 빠져나가므로 jsdom 비용은
+  // 0 이다.
+  const didFetchDetectionRef = useRef(false);
+  useEffect(() => {
+    if (didFetchDetectionRef.current) return;
+    didFetchDetectionRef.current = true;
+    if (!bridgeAvailable()) return;
+    void refreshDetection();
+  }, [refreshDetection]);
 
   return {
     state,

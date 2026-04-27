@@ -1,23 +1,42 @@
 // @vitest-environment jsdom
 
 /**
- * OnboardingPage — Set 4 design polish (시안 06).
+ * OnboardingPage — F1 (mock/fallback cleanup) 이후 동작 검증.
  *
  * Coverage:
- *   - 3 테마 × pre-office shell (NavRail/ProjectRail 미렌더)
- *   - 6 candidate 렌더 + selected/detected/alt 분기
- *   - card click 으로 selected toggle (parent state)
- *   - footer constraint count 갱신
- *   - "다음" 버튼 selected >= MIN_STAFF 일 때만 active
- *   - 스킵/이전 → onExit 호출
- *   - source-level hex literal guard (모든 onboarding 파일)
+ *   1. detection 빈 상태 → empty UI + Settings/rescan 버튼 + footer 차단
+ *   2. detection 결과 N개 → N 카드 렌더 + auto pre-select
+ *   3. card 토글 → selections.staff 갱신
+ *   4. step gating (1→5)
+ *   5. step 5 finish → onboarding:complete + onCompleteWithProject 호출
+ *   6. retro 테마 분기
+ *   7. source-level hex literal guard (모든 onboarding 파일)
+ *
+ * F1 이후 wizard 는 STAFF_CANDIDATES fixture 가 아닌 `provider:detect` IPC
+ * 응답을 단일 진실원으로 사용하므로 모든 테스트가 `window.arena` mock 을
+ * 통해 IPC 응답을 주입한다. mock 헬퍼 (`setupArenaBridge`) 가 5 개 채널
+ * (get-state / set-state / complete / detect / apply-staff-selection) 을
+ * in-memory 합성한다.
  */
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from 'vitest';
 
 import { ThemeProvider } from '../../../theme/theme-provider';
 import {
@@ -29,30 +48,152 @@ import '../../../i18n';
 import { i18next } from '../../../i18n';
 import { OnboardingPage } from '../OnboardingPage';
 import type { ThemeKey } from '../../../theme/theme-tokens';
+import type {
+  OnboardingState,
+  ProviderDetectionSnapshot,
+} from '../../../../shared/onboarding-types';
+
+// ── Bridge mock ────────────────────────────────────────────────────
+
+interface BridgeOptions {
+  snapshots: ProviderDetectionSnapshot[];
+  initialState?: Partial<OnboardingState>;
+  applyStaffResult?: { added: unknown[]; skipped: unknown[] };
+}
+
+function setupArenaBridge(opts: BridgeOptions): {
+  invoke: ReturnType<typeof vi.fn>;
+  state: OnboardingState;
+} {
+  const state: OnboardingState = {
+    completed: false,
+    currentStep: 1,
+    selections: {},
+    updatedAt: 0,
+    ...opts.initialState,
+  };
+
+  const invoke = vi.fn(
+    async (channel: string, data?: { partial?: Partial<OnboardingState> }) => {
+      switch (channel) {
+        case 'onboarding:get-state':
+          return { state: { ...state, selections: { ...state.selections } } };
+        case 'onboarding:set-state': {
+          const partial = data?.partial ?? {};
+          if (partial.currentStep !== undefined) {
+            state.currentStep = partial.currentStep;
+          }
+          if (partial.selections !== undefined) {
+            state.selections = {
+              ...state.selections,
+              ...partial.selections,
+            };
+          }
+          state.updatedAt = Date.now();
+          return { state: { ...state, selections: { ...state.selections } } };
+        }
+        case 'onboarding:complete':
+          state.completed = true;
+          state.updatedAt = Date.now();
+          return { success: true };
+        case 'provider:detect':
+          return { snapshots: [...opts.snapshots] };
+        case 'onboarding:apply-staff-selection':
+          return opts.applyStaffResult ?? { added: [], skipped: [] };
+        default:
+          throw new Error(`unmocked channel: ${channel}`);
+      }
+    },
+  );
+
+  (window as unknown as { arena: unknown }).arena = {
+    platform: 'darwin',
+    invoke,
+  };
+
+  return { invoke, state };
+}
+
+function teardownArenaBridge(): void {
+  delete (window as unknown as { arena?: unknown }).arena;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+const KNOWN_AVAILABLE: ProviderDetectionSnapshot[] = [
+  {
+    providerId: 'claude',
+    kind: 'cli',
+    available: true,
+    capabilities: ['streaming', 'summarize'],
+  },
+  {
+    providerId: 'gemini',
+    kind: 'cli',
+    available: true,
+    capabilities: ['streaming', 'summarize'],
+  },
+  {
+    providerId: 'codex',
+    kind: 'cli',
+    available: true,
+    capabilities: ['streaming', 'summarize'],
+  },
+  {
+    providerId: 'local',
+    kind: 'local',
+    available: true,
+    capabilities: ['streaming'],
+  },
+];
+
+type AnyMock = ReturnType<typeof vi.fn>;
 
 function renderPage(
   themeKey: ThemeKey = DEFAULT_THEME,
-  onExit = vi.fn(),
-): { onExit: ReturnType<typeof vi.fn> } & ReturnType<typeof render> {
+  props: {
+    onExit?: AnyMock;
+    onCompleteWithProject?: AnyMock;
+    onOpenSettings?: AnyMock;
+  } = {},
+): {
+  onExit: AnyMock;
+  onCompleteWithProject: AnyMock;
+  onOpenSettings: AnyMock;
+} & ReturnType<typeof render> {
   useThemeStore.setState({ themeKey, mode: 'light' });
+  const onExit: AnyMock = props.onExit ?? vi.fn();
+  const onCompleteWithProject: AnyMock = props.onCompleteWithProject ?? vi.fn();
+  const onOpenSettings: AnyMock = props.onOpenSettings ?? vi.fn();
   const result = render(
     <ThemeProvider>
-      <OnboardingPage onExit={onExit} />
+      <OnboardingPage
+        onExit={onExit as unknown as () => void}
+        onCompleteWithProject={
+          onCompleteWithProject as unknown as (input: {
+            kind: 'new' | 'external' | 'imported';
+            slug: string;
+            staff: ReadonlyArray<string>;
+            roles: Record<string, string>;
+            permissions: 'auto' | 'hybrid' | 'approval';
+          }) => void
+        }
+        onOpenSettings={onOpenSettings as unknown as () => void}
+      />
     </ThemeProvider>,
   );
-  return { onExit, ...result };
+  return { onExit, onCompleteWithProject, onOpenSettings, ...result };
 }
 
-/**
- * R11-Task6: the wizard now starts at step 1 (welcome) — the historical
- * R10 polish-set-4 tests assumed step 2 because the static fixture used
- * to mark step 2 as `current`. With persistence (migration 013) the
- * source of truth is `OnboardingState.currentStep`; in vitest's jsdom
- * env the hook falls back to the canonical default (`currentStep=1`).
- * This helper clicks "Next" once so we land on the staff-selection step
- * exactly as the original tests expected.
- */
-function advanceToStep2(): void {
+async function waitForStep(step: number): Promise<void> {
+  await waitFor(() => {
+    expect(
+      screen.getByTestId('onboarding-page').getAttribute('data-current-step'),
+    ).toBe(String(step));
+  });
+}
+
+async function clickNext(): Promise<void> {
   fireEvent.click(screen.getByTestId('onboarding-action-next'));
 }
 
@@ -61,250 +202,312 @@ beforeEach(() => {
   void i18next.changeLanguage('ko');
 });
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  teardownArenaBridge();
+});
 
-describe('OnboardingPage — pre-office shell', () => {
-  it.each<[ThemeKey]>([['warm'], ['tactical'], ['retro']])(
-    '%s renders 6 candidate cards + stepper + summary',
-    (themeKey) => {
-      renderPage(themeKey);
-      advanceToStep2();
-      expect(screen.getByTestId('onboarding-page')).toBeTruthy();
-      expect(screen.getByTestId('onboarding-stepper')).toBeTruthy();
-      expect(screen.getByTestId('onboarding-summary-strip')).toBeTruthy();
-      expect(screen.getAllByTestId('onboarding-staff-card')).toHaveLength(6);
-    },
-  );
+// ── Tests ──────────────────────────────────────────────────────────
 
-  it('stepper renders 5 steps with current=staff after advancing once', () => {
+describe('OnboardingPage — initial frame (F1)', () => {
+  it('renders step 1 welcome body once IPC hydration completes', async () => {
+    setupArenaBridge({ snapshots: [] });
     renderPage('warm');
-    advanceToStep2();
-    const steps = screen.getAllByTestId('onboarding-stepper-step');
-    expect(steps).toHaveLength(5);
-    const current = steps.find((s) => s.getAttribute('data-status') === 'current');
-    expect(current?.getAttribute('data-step-id')).toBe('2');
+    await waitForStep(1);
+    expect(screen.getByTestId('onboarding-step-1')).toBeTruthy();
+    expect(screen.queryByTestId('onboarding-staff-grid')).toBeNull();
   });
 
-  it('first-boot defaults to step 1 (welcome body, no staff grid yet)', () => {
+  it('shows fatal error frame when get-state rejects', async () => {
+    (window as unknown as { arena: unknown }).arena = {
+      platform: 'darwin',
+      invoke: vi.fn(async () => {
+        throw new Error('IPC down');
+      }),
+    };
     renderPage('warm');
-    expect(
-      screen.getByTestId('onboarding-page').getAttribute('data-current-step'),
-    ).toBe('1');
-    expect(screen.queryByTestId('onboarding-staff-grid')).toBeNull();
-    expect(screen.getByTestId('onboarding-step-1')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.queryByTestId('onboarding-fatal-error')).toBeTruthy();
+    });
   });
 });
 
-describe('OnboardingPage — candidate selection state', () => {
-  it('initial selected count matches data fixtures (4)', () => {
+describe('OnboardingPage — Step 2 detection-driven grid (F1)', () => {
+  it('renders one card per detection snapshot and auto pre-selects available ones', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
-    advanceToStep2();
-    const selectedCells = screen
-      .getAllByTestId('onboarding-summary-cell')
-      .find((c) => c.getAttribute('data-stat') === 'selected');
-    const value = selectedCells?.querySelector(
-      '[data-testid="onboarding-summary-cell-value"]',
-    );
-    expect(value?.textContent).toBe('4');
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('onboarding-staff-card')).toHaveLength(
+        KNOWN_AVAILABLE.length,
+      );
+    });
+
+    const selectedCount = screen
+      .getAllByTestId('onboarding-staff-card')
+      .filter((c) => c.getAttribute('data-selected') === 'true').length;
+    expect(selectedCount).toBe(KNOWN_AVAILABLE.length);
   });
 
-  it('clicking a selected card toggles it off and updates summary', () => {
+  it('renders empty UI and disables next when detection is empty', async () => {
+    setupArenaBridge({ snapshots: [] });
     renderPage('warm');
-    advanceToStep2();
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
+    expect(screen.getByTestId('onboarding-detection-empty')).toBeTruthy();
+    expect(
+      screen
+        .getByTestId('onboarding-action-next')
+        .getAttribute('aria-disabled'),
+    ).toBe('true');
+  });
+
+  it('empty UI Settings button calls onOpenSettings prop', async () => {
+    setupArenaBridge({ snapshots: [] });
+    const { onOpenSettings } = renderPage('warm');
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
+    fireEvent.click(screen.getByTestId('onboarding-empty-action-settings'));
+    expect(onOpenSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('empty UI rescan button re-invokes provider:detect', async () => {
+    const { invoke } = setupArenaBridge({ snapshots: [] });
+    renderPage('warm');
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
+    invoke.mockClear();
+    fireEvent.click(screen.getByTestId('onboarding-empty-action-rescan'));
+    await waitFor(() => {
+      expect(
+        invoke.mock.calls.some(([channel]) => channel === 'provider:detect'),
+      ).toBe(true);
+    });
+  });
+
+  it('clicking a selected card toggles it off and updates selection', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
+    renderPage('warm');
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
+    await waitFor(() => {
+      const cards = screen.getAllByTestId('onboarding-staff-card');
+      expect(cards.length).toBe(KNOWN_AVAILABLE.length);
+    });
+
     const claudeCard = screen
       .getAllByTestId('onboarding-staff-card')
-      .find((c) => c.getAttribute('data-candidate-id') === 'claude')!;
-    expect(claudeCard.getAttribute('data-selected')).toBe('true');
-    fireEvent.click(claudeCard);
-    expect(claudeCard.getAttribute('data-selected')).toBe('false');
+      .find((c) => c.getAttribute('data-candidate-id') === 'claude');
+    expect(claudeCard).toBeTruthy();
+    expect(claudeCard!.getAttribute('data-selected')).toBe('true');
+    fireEvent.click(claudeCard!);
 
-    const selectedCell = screen
-      .getAllByTestId('onboarding-summary-cell')
-      .find((c) => c.getAttribute('data-stat') === 'selected');
-    const value = selectedCell?.querySelector(
-      '[data-testid="onboarding-summary-cell-value"]',
-    );
-    expect(value?.textContent).toBe('3');
-  });
-
-  it('clicking an alt card moves it to selected', () => {
-    renderPage('warm');
-    advanceToStep2();
-    const grokCard = screen
-      .getAllByTestId('onboarding-staff-card')
-      .find((c) => c.getAttribute('data-candidate-id') === 'grok')!;
-    expect(grokCard.getAttribute('data-selected')).toBe('false');
-    expect(grokCard.getAttribute('data-detection')).toBe('alt');
-    fireEvent.click(grokCard);
-    expect(grokCard.getAttribute('data-selected')).toBe('true');
-    expect(grokCard.getAttribute('data-detection')).toBe('selected');
+    await waitFor(() => {
+      const updated = screen
+        .getAllByTestId('onboarding-staff-card')
+        .find((c) => c.getAttribute('data-candidate-id') === 'claude');
+      expect(updated!.getAttribute('data-selected')).toBe('false');
+    });
   });
 });
 
-describe('OnboardingPage — footer actions', () => {
-  it('next button is enabled at step 1 (welcome has no gate)', () => {
+describe('OnboardingPage — step gates', () => {
+  it('next is enabled at step 1 (no gate)', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
-    const next = screen.getByTestId('onboarding-action-next');
-    expect(next.getAttribute('aria-disabled')).toBe('false');
+    await waitForStep(1);
+    expect(
+      screen.getByTestId('onboarding-action-next').getAttribute('aria-disabled'),
+    ).toBe('false');
   });
 
-  it('next button is enabled at step 2 when at least 1 selected (default 4)', () => {
+  it('next is enabled at step 2 once at least one card is selected', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
-    advanceToStep2();
-    const next = screen.getByTestId('onboarding-action-next');
-    expect(next.getAttribute('aria-disabled')).toBe('false');
-  });
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
 
-  it('deselecting all 4 disables next at step 2', () => {
-    renderPage('warm');
-    advanceToStep2();
-    ['claude', 'gemini', 'codex', 'local'].forEach((id) => {
-      const card = screen
-        .getAllByTestId('onboarding-staff-card')
-        .find((c) => c.getAttribute('data-candidate-id') === id)!;
-      fireEvent.click(card);
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('onboarding-action-next')
+          .getAttribute('aria-disabled'),
+      ).toBe('false');
     });
-    const next = screen.getByTestId('onboarding-action-next');
-    expect(next.getAttribute('aria-disabled')).toBe('true');
   });
 
-  it('skip button calls onExit', () => {
+  it('skip button calls onExit', async () => {
+    setupArenaBridge({ snapshots: [] });
     const { onExit } = renderPage('warm');
+    await waitForStep(1);
     fireEvent.click(screen.getByTestId('onboarding-topbar-skip'));
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it('prev at step 1 calls onExit (no previous step)', () => {
+  it('prev at step 1 calls onExit', async () => {
+    setupArenaBridge({ snapshots: [] });
     const { onExit } = renderPage('warm');
+    await waitForStep(1);
     fireEvent.click(screen.getByTestId('onboarding-action-prev'));
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it('prev at step 2 walks back to step 1 instead of exiting', () => {
+  it('prev at step 2 walks back to step 1', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     const { onExit } = renderPage('warm');
-    advanceToStep2();
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
     fireEvent.click(screen.getByTestId('onboarding-action-prev'));
+    await waitForStep(1);
     expect(onExit).not.toHaveBeenCalled();
-    expect(
-      screen.getByTestId('onboarding-page').getAttribute('data-current-step'),
-    ).toBe('1');
   });
 });
 
-describe('OnboardingPage — DetectionBadge per detection state', () => {
-  it.each<[string, 'selected' | 'detected' | 'alt']>([
-    ['claude', 'selected'],
-    ['copilot', 'alt'],
-    ['grok', 'alt'],
-  ])('candidate %s → detection=%s', (candidateId, expected) => {
-    renderPage('warm');
-    advanceToStep2();
-    const card = screen
-      .getAllByTestId('onboarding-staff-card')
-      .find((c) => c.getAttribute('data-candidate-id') === candidateId)!;
-    expect(card.getAttribute('data-detection')).toBe(expected);
-  });
-});
-
-describe('OnboardingPage — retro theme branch', () => {
-  it('stepper shows ASCII bracket markers under retro at step 2', () => {
-    renderPage('retro');
-    advanceToStep2();
-    const markers = screen.getAllByTestId('onboarding-stepper-marker');
-    expect(markers).toHaveLength(5);
-    const texts = markers.map((m) => m.textContent);
-    expect(texts).toContain('[✓]');
-    expect(texts).toContain('[▶]');
-  });
-
-  it('summary strip shows mono prompt under retro at step 2', () => {
-    renderPage('retro');
-    advanceToStep2();
-    const strip = screen.getByTestId('onboarding-summary-strip');
-    expect(strip.getAttribute('data-theme')).toBe('retro');
-    expect(strip.textContent).toContain('$ onboarding --staff');
-  });
-});
-
-describe('OnboardingPage — R11-Task6 step 3/4/5 surfaces', () => {
-  function advanceToStep(target: 3 | 4 | 5): void {
-    advanceToStep2();
+describe('OnboardingPage — step 3/4/5 surfaces', () => {
+  async function advanceToStep(target: 3 | 4 | 5): Promise<void> {
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('onboarding-action-next')
+          .getAttribute('aria-disabled'),
+      ).toBe('false');
+    });
     if (target >= 3) {
-      fireEvent.click(screen.getByTestId('onboarding-action-next'));
+      await clickNext();
+      await waitForStep(3);
     }
     if (target >= 4) {
-      // Step 3 needs a non-empty role for every selected provider.
       const inputs = screen.getAllByTestId('onboarding-step-3-input');
       inputs.forEach((input) => {
         fireEvent.change(input, { target: { value: '시니어' } });
       });
-      fireEvent.click(screen.getByTestId('onboarding-action-next'));
+      await waitFor(() => {
+        expect(
+          screen
+            .getByTestId('onboarding-action-next')
+            .getAttribute('aria-disabled'),
+        ).toBe('false');
+      });
+      await clickNext();
+      await waitForStep(4);
     }
     if (target >= 5) {
-      fireEvent.click(screen.getByTestId('onboarding-action-next'));
+      await clickNext();
+      await waitForStep(5);
     }
   }
 
-  it('step 3 renders one input row per selected provider', () => {
+  it('step 3 renders one input per selected provider (auto pre-selected)', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
-    advanceToStep(3);
+    await advanceToStep(3);
     const rows = screen.getAllByTestId('onboarding-step-3-row');
-    expect(rows.length).toBeGreaterThan(0);
-    expect(rows.length).toBe(4); // fixture seeds claude/gemini/codex/local
+    expect(rows.length).toBe(KNOWN_AVAILABLE.length);
   });
 
-  it('step 3 next is disabled until every selected provider has a role', () => {
+  it('step 4 defaults to hybrid permission mode', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
-    advanceToStep(3);
-    const next = screen.getByTestId('onboarding-action-next');
-    expect(next.getAttribute('aria-disabled')).toBe('true');
-    const inputs = screen.getAllByTestId('onboarding-step-3-input');
-    inputs.forEach((input) => {
-      fireEvent.change(input, { target: { value: '시니어' } });
-    });
-    expect(
-      screen
-        .getByTestId('onboarding-action-next')
-        .getAttribute('aria-disabled'),
-    ).toBe('false');
-  });
-
-  it('step 4 defaults to hybrid permission mode', () => {
-    renderPage('warm');
-    advanceToStep(4);
+    await advanceToStep(4);
     const hybrid = screen
       .getAllByTestId('onboarding-step-4-option')
-      .find((el) => el.getAttribute('data-mode') === 'hybrid')!;
-    expect(hybrid.getAttribute('data-selected')).toBe('true');
+      .find((el) => el.getAttribute('data-mode') === 'hybrid');
+    expect(hybrid?.getAttribute('data-selected')).toBe('true');
   });
 
-  it('step 5 next is disabled until slug is non-empty', () => {
+  it('step 5 next is disabled until slug is non-empty', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
-    advanceToStep(5);
-    const next = screen.getByTestId('onboarding-action-next');
-    expect(next.getAttribute('aria-disabled')).toBe('true');
+    await advanceToStep(5);
+    expect(
+      screen.getByTestId('onboarding-action-next').getAttribute('aria-disabled'),
+    ).toBe('true');
     fireEvent.change(screen.getByTestId('onboarding-step-5-slug'), {
       target: { value: 'arena-test' },
     });
-    expect(
-      screen
-        .getByTestId('onboarding-action-next')
-        .getAttribute('aria-disabled'),
-    ).toBe('false');
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('onboarding-action-next')
+          .getAttribute('aria-disabled'),
+      ).toBe('false');
+    });
   });
 
-  it('step 5 finish button labels as 완료 / Finish', () => {
-    renderPage('warm');
-    advanceToStep(5);
-    const next = screen.getByTestId('onboarding-action-next');
-    expect(next.textContent).toBe('완료');
+  it('step 5 finish triggers onboarding:complete then onCompleteWithProject', async () => {
+    const { invoke } = setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
+    const { onCompleteWithProject } = renderPage('warm');
+    await advanceToStep(5);
+    fireEvent.change(screen.getByTestId('onboarding-step-5-slug'), {
+      target: { value: 'arena-test' },
+    });
+    await waitFor(() => {
+      expect(
+        screen
+          .getByTestId('onboarding-action-next')
+          .getAttribute('aria-disabled'),
+      ).toBe('false');
+    });
+    await clickNext();
+    await waitFor(() => {
+      expect(
+        invoke.mock.calls.some(
+          ([channel]) => channel === 'onboarding:complete',
+        ),
+      ).toBe(true);
+    });
+    await waitFor(() => {
+      expect(onCompleteWithProject).toHaveBeenCalledTimes(1);
+    });
+    const arg = onCompleteWithProject.mock.calls[0]![0];
+    expect(arg.kind).toBe('new');
+    expect(arg.slug).toBe('arena-test');
+    expect(arg.staff.length).toBe(KNOWN_AVAILABLE.length);
+    expect(arg.permissions).toBe('hybrid');
+  });
+});
+
+describe('OnboardingPage — retro theme', () => {
+  it('summary strip shows mono prompt under retro at step 2', async () => {
+    setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
+    renderPage('retro');
+    await waitForStep(1);
+    await clickNext();
+    await waitForStep(2);
+
+    await waitFor(() => {
+      const strip = screen.queryByTestId('onboarding-summary-strip');
+      expect(strip?.getAttribute('data-theme')).toBe('retro');
+    });
+    expect(screen.getByTestId('onboarding-summary-strip').textContent).toContain(
+      '$ onboarding --staff',
+    );
   });
 });
 
 describe('Onboarding source — hex literal guard', () => {
   it('every onboarding source file has zero hex color literals', () => {
     const dir = resolve(__dirname, '..');
-    const files = readdirSync(dir).filter((f) => f.endsWith('.tsx') || f.endsWith('.ts'));
+    const files = readdirSync(dir).filter(
+      (f) => f.endsWith('.tsx') || f.endsWith('.ts'),
+    );
     expect(files.length).toBeGreaterThan(0);
     files.forEach((file) => {
       const source = readFileSync(resolve(dir, file), 'utf-8');

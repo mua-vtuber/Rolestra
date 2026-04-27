@@ -19,7 +19,7 @@
  *     user has not yet typed a role for; the parent rejects "Next" if
  *     any role is still empty (the constraint label states this).
  */
-import { type ChangeEvent, type ReactElement } from 'react';
+import { useState, type ChangeEvent, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { OnboardingSelections } from '../../../../shared/onboarding-types';
@@ -52,8 +52,18 @@ export function Step3RoleAssignment({
 }: Step3RoleAssignmentProps): ReactElement {
   const { t } = useTranslation();
 
+  // 한글 IME composition 중에 부모가 IPC 응답으로 setState 하면 controlled
+  // input 의 value prop 이 강제 재할당되어 자모 단위로 끊겨 들어가는 race 가
+  // 있다. 입력 값은 로컬 draft 가 단일 source of truth 이고, 부모로의 전파
+  // (onChange) 는 IPC 트리거 용도로만 쓴다. 부모 state 가 갱신되어도 draft 는
+  // 영향받지 않으므로 IME composition 이 깨지지 않는다.
+  const [draft, setDraft] = useState<Record<string, string>>(() => ({
+    ...roles,
+  }));
+
   const handleEdit = (id: string) => (e: ChangeEvent<HTMLInputElement>) => {
-    const next = { ...roles, [id]: e.target.value };
+    const next = { ...draft, [id]: e.target.value };
+    setDraft(next);
     onChange(next);
   };
 
@@ -71,7 +81,7 @@ export function Step3RoleAssignment({
 
       <ul className="flex flex-col gap-2">
         {staff.map((id) => {
-          const value = roles[id] ?? '';
+          const value = draft[id] ?? '';
           const displayName = PROVIDER_DISPLAY[id] ?? id;
           return (
             <li

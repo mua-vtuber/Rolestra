@@ -634,11 +634,20 @@
     },
     "description": "설치된 CLI / 모델을 감지했습니다. 체크된 모델이 사무실에 입사하고, 다음 단계에서 역할을 부여합니다. 언제든 설정에서 추가·해고할 수 있습니다.",
     "description_settingsCta": "온보딩 흐름을 디자인 polish 모드로 다시 열어 시안 fidelity 를 점검할 수 있습니다.",
+    "empty": {
+      "action": "설정 열기",
+      "body": "Settings → CLI 탭에서 직접 추가한 뒤 다시 감지하세요.",
+      "loading": "CLI 감지 중…",
+      "rescan": "다시 감지",
+      "title": "감지된 CLI 가 없습니다"
+    },
     "footer": {
       "constraint": "선택됨 {{count}}명 · 최소 {{min}}명 필요",
       "constraint_other": "",
       "step1": "환영합니다 — 다음으로 진행하세요.",
       "step3": "선택한 직원에게 한 줄 역할을 부여하세요.",
+      "step3Pending": "역할이 비어 있는 직원 {{count}}명 — 모두 입력해야 다음으로 넘어갈 수 있습니다.",
+      "step3Pending_other": "",
       "step4": "프로젝트 기본 권한 모드를 선택하세요.",
       "step5": "첫 프로젝트의 종류와 slug 를 입력하세요."
     },

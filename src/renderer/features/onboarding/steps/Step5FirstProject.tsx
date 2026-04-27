@@ -19,7 +19,7 @@
  *     validation (non-empty + no whitespace) so the user can preview
  *     the project URL ("projects/<slug>/") inline.
  */
-import { type ChangeEvent, type ReactElement } from 'react';
+import { useState, type ChangeEvent, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { ProjectKind } from '../../../../shared/project-types';
@@ -39,13 +39,21 @@ export function Step5FirstProject({
 }: Step5FirstProjectProps): ReactElement {
   const { t } = useTranslation();
 
+  // 한글 IME composition 중 부모가 IPC 응답으로 setState 하면 controlled
+  // input 의 value prop 이 강제 재할당되어 자모 단위로 끊겨 들어가는 race 가
+  // 있다. slug 입력 값은 로컬 draft 가 단일 source of truth 이고, 부모로의
+  // 전파 (onChange) 는 IPC 트리거 + canProceed gate 동기화 용도로만 쓴다.
+  const [slugDraft, setSlugDraft] = useState<string>(() => slug);
+
   const handleKind = (e: ChangeEvent<HTMLInputElement>): void => {
     const next = e.target.value as ProjectKind;
-    if (KINDS.includes(next)) onChange({ kind: next, slug });
+    if (KINDS.includes(next)) onChange({ kind: next, slug: slugDraft });
   };
 
   const handleSlug = (e: ChangeEvent<HTMLInputElement>): void => {
-    onChange({ kind, slug: e.target.value });
+    const nextSlug = e.target.value;
+    setSlugDraft(nextSlug);
+    onChange({ kind, slug: nextSlug });
   };
 
   return (
@@ -113,14 +121,14 @@ export function Step5FirstProject({
           id="onboarding-step-5-slug"
           data-testid="onboarding-step-5-slug"
           type="text"
-          value={slug}
+          value={slugDraft}
           onChange={handleSlug}
           placeholder={t('onboarding.step5.slugPlaceholder')}
           maxLength={200}
           className="w-full rounded-panel border border-border-soft bg-canvas px-2 py-1 text-sm text-fg focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
         />
         <p className="text-xs text-fg-muted">
-          {t('onboarding.step5.slugHint', { slug: slug || '<slug>' })}
+          {t('onboarding.step5.slugHint', { slug: slugDraft || '<slug>' })}
         </p>
       </div>
     </section>

@@ -148,6 +148,7 @@ import {
   handleOnboardingGetState,
   handleOnboardingSetState,
   handleOnboardingComplete,
+  handleOnboardingApplyStaffSelection,
   handleProviderDetect,
 } from './handlers/onboarding-handler';
 import {
@@ -455,6 +456,9 @@ export function registerIpcHandlers(): void {
   handle('onboarding:get-state', isDev, () => handleOnboardingGetState());
   handle('onboarding:set-state', isDev, (data) => handleOnboardingSetState(data));
   handle('onboarding:complete', isDev, () => handleOnboardingComplete());
+  handle('onboarding:apply-staff-selection', isDev, (data) =>
+    handleOnboardingApplyStaffSelection(data),
+  );
   handle('provider:detect', isDev, () => handleProviderDetect());
 
   // ── R11-Task8: LLM 누적 비용 요약 (Settings 카드) ────────────────

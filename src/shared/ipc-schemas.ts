@@ -430,11 +430,19 @@ const onboardingStepSchema = z.union([
 
 const onboardingSelectionsSchema = z.object({
   staff: z.array(z.string().min(1).max(128)).max(64).optional(),
-  roles: z.record(z.string().min(1).max(128), z.string().min(1).max(200)).optional(),
+  // Step3RoleAssignment 는 사용자가 입력 도중 글자를 모두 지운 상태를 빈 문자열
+  // entry 로 표현한다 (Step3 gate 가 trim().length>0 으로 별도 차단). zod 가
+  // 빈 문자열을 거부하면 IPC 가 reject 되고 controlled input 이 직전 값으로
+  // 되돌아가 backspace 가 먹히지 않는 것처럼 보이므로 value min 은 두지 않는다.
+  roles: z.record(z.string().min(1).max(128), z.string().max(200)).optional(),
   permissions: permissionModeSchema.optional(),
   firstProject: z
     .object({
-      slug: z.string().min(1).max(200),
+      // Step5 입력 도중 사용자가 slug 를 모두 지운 상태도 정상 patch 로 흘러야
+      // 한다. min(1) 을 두면 IPC 가 reject 되어 controlled input 의 value 가
+      // 직전 값으로 강제 복원되며 한글 IME composition 이 깨진다. canProceed
+      // gate (Step 5) 가 slug.trim().length>0 으로 별도 차단한다.
+      slug: z.string().max(200),
       kind: projectKindSchema,
     })
     .optional(),
@@ -462,6 +470,15 @@ export const onboardingSetStateSchema = z.object({
 
 /** R11-Task5/6: `provider:detect` — input 없음. */
 export const providerDetectSchema = z.undefined();
+
+/**
+ * F1 (mock/fallback cleanup): `onboarding:apply-staff-selection` — wizard
+ * 가 collected staff provider id 를 main 으로 넘겨 자동 register 시도. id 길이
+ * / 배열 크기 제한은 `provider:add` 와 동일 (id 128, 배열 64).
+ */
+export const onboardingApplyStaffSelectionSchema = z.object({
+  providerIds: z.array(z.string().min(1).max(128)).max(64),
+});
 
 /**
  * R11-Task5/8: `llm:cost-summary` — periodDays 미지정 시 service default
@@ -574,6 +591,7 @@ export const v3ChannelSchemas = {
   'onboarding:get-state': onboardingGetStateSchema,
   'onboarding:set-state': onboardingSetStateSchema,
   'onboarding:complete': onboardingCompleteSchema,
+  'onboarding:apply-staff-selection': onboardingApplyStaffSelectionSchema,
   'provider:detect': providerDetectSchema,
   'llm:cost-summary': llmCostSummarySchema,
   'execution:dry-run-preview': executionDryRunPreviewSchema,

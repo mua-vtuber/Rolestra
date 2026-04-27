@@ -23,7 +23,18 @@ import type {
   ProviderDetectionSnapshot,
 } from '../../../shared/onboarding-types';
 import type { OnboardingService } from '../../onboarding/onboarding-service';
-import type { ProviderInfo } from '../../../shared/provider-types';
+import type {
+  CliProviderConfig,
+  ProviderInfo,
+} from '../../../shared/provider-types';
+import type { OnboardingApplySkip } from '../../../shared/ipc-types';
+import { providerRegistry } from '../../providers/registry';
+import {
+  CLI_DEFAULT_CAPABILITIES,
+  createProvider,
+  normalizeCliCommand,
+} from '../../providers/factory';
+import { saveProvider } from '../../providers/provider-repository';
 
 // ── Service accessor ───────────────────────────────────────────────
 
@@ -95,29 +106,6 @@ export function handleOnboardingComplete(): { success: true } {
 
 // ── Provider detection ─────────────────────────────────────────────
 
-/**
- * Map a CLI command name (`claude` / `gemini` / `codex`) to a stable
- * snapshot.providerId. The wizard cross-references this id with the
- * STAFF_CANDIDATES fixture so a freshly-detected CLI auto-pre-selects
- * the matching card. Anything not in this map degrades to the raw
- * command name — the renderer treats that as "detected but unknown
- * candidate" and surfaces it in the alt slot.
- */
-const CLI_TO_PROVIDER_ID: Record<string, string> = {
-  claude: 'claude',
-  gemini: 'gemini',
-  codex: 'codex',
-};
-
-/**
- * Default capability snapshot for an unconfigured-but-installed CLI.
- * The user has not yet added the provider via `provider:add`, so the
- * registry has nothing to copy — we surface the well-known capability
- * set the matching CLI provider class would advertise once registered
- * (kept in sync with R11-Task9 `factory.ts` cliCapabilities).
- */
-const CLI_DEFAULT_CAPABILITIES = ['streaming', 'summarize'] as const;
-
 export async function handleProviderDetect(): Promise<{
   snapshots: ProviderDetectionSnapshot[];
 }> {
@@ -154,7 +142,7 @@ export async function handleProviderDetect(): Promise<{
   }
 
   for (const cli of scanned.detected) {
-    const providerId = CLI_TO_PROVIDER_ID[cli.command] ?? cli.command;
+    const providerId = normalizeCliCommand(cli.command);
     if (seenProviderIds.has(providerId)) continue;
     seenProviderIds.add(providerId);
     snapshots.push({
@@ -166,4 +154,146 @@ export async function handleProviderDetect(): Promise<{
   }
 
   return { snapshots };
+}
+
+// ── Apply staff selection (F1: register selected CLI providers) ───
+
+/**
+ * F1 (mock/fallback cleanup): wizard 가 step 5 finish 시 호출하는 진짜 등록
+ * 흐름. 사용자가 step 2 에서 토글한 staff provider id 배열을 받아 main 측
+ * 에서 (i) detect-cli 를 다시 한 번 실행해 binary path / wslDistro 를 도출
+ * 하고 (Step 2 detection 시점과 finish 시점 사이 PATH 변동에 견고하게),
+ * (ii) 매칭되는 detection 결과가 있는 id 에 대해 createProvider + register +
+ * saveProvider + warmup 의 진짜 등록 흐름을 돌린다.
+ *
+ * 등록 가능 = CLI 한정. API / Local provider 는 wizard 입력 폼이 없어
+ * (apiKey / endpoint 등 미수집) 자동 등록 불가능 — `not-detected` 로
+ * skip 후 호출자 (App.tsx) 가 사용자에게 Settings 진입을 권한다 (F3+ 토스트).
+ * 이 결정은 본 plan 의 F1-Task4 acceptance 와 정합 ("Local/API 는 plan 대로
+ * 별도 안내").
+ *
+ * 본 핸들러는 도메인 책임이 onboarding (wizard) 와 provider (register) 의
+ * 교차점이라 onboarding-handler 에 둔다. provider-handler 의
+ * `handleProviderAdd` 와 비슷하지만 (i) id 를 detection 의 providerId 로 강제
+ * 해 wizard 의 selections.staff 와 MemberProfile / 메신저 사이드바가 같은
+ * id 로 매칭되도록 하고 (handleProviderAdd 는 randomUUID), (ii) detection
+ * snapshot 이 없는 id 는 무음 fail 대신 skip 사유 포함 응답으로 명시한다.
+ */
+export interface ApplyStaffSelectionDeps {
+  /**
+   * detect-cli 결과를 다시 한 번 가져온다. production 은
+   * `requireDetectionDeps().scanCli()` 를 위임하지만 unit test 는 임의의
+   * scan 결과를 주입한다.
+   */
+  detectScan: () => Promise<{ detected: CliScanResult[] }>;
+  /** 이미 registry 에 등록된 id 인지 검사 (production 은 providerRegistry.has). */
+  isRegistered: (id: string) => boolean;
+  /**
+   * 등록 흐름 자체. production 은 createProvider + registry.register +
+   * saveProvider + warmup 의 4 단계 default 구현을 사용. test 는 단순한
+   * fake 로 대체.
+   */
+  registerCli: (id: string, cli: CliScanResult) => Promise<ProviderInfo>;
+}
+
+let applyStaffSelectionDeps: ApplyStaffSelectionDeps | null = null;
+
+export function setApplyStaffSelectionDeps(
+  deps: ApplyStaffSelectionDeps | null,
+): void {
+  applyStaffSelectionDeps = deps;
+}
+
+function buildCliConfig(cli: CliScanResult): CliProviderConfig {
+  // factory.ts:getRuntimeCliConfig 가 command basename (claude / gemini /
+  // codex) 으로 default args / inputFormat / outputFormat / hangTimeout 을
+  // 채워주므로 본 placeholder 필드는 알려진 CLI 에서 모두 override 된다.
+  // 알려지지 않은 CLI 는 placeholder 가 그대로 사용된다 (model='unknown'
+  // — 사용자가 Settings 에서 fine tune 영역).
+  return {
+    type: 'cli',
+    command: cli.path,
+    args: [],
+    inputFormat: 'stdin-json',
+    outputFormat: 'stream-json',
+    sessionStrategy: 'persistent',
+    hangTimeout: { first: 30_000, subsequent: 30_000 },
+    model: 'unknown',
+    wslDistro: cli.wslDistro,
+  };
+}
+
+async function defaultRegisterCli(
+  id: string,
+  cli: CliScanResult,
+): Promise<ProviderInfo> {
+  const config = buildCliConfig(cli);
+  const provider = createProvider({
+    id,
+    displayName: cli.displayName,
+    config,
+  });
+  providerRegistry.register(provider);
+  saveProvider(
+    provider.id,
+    provider.type,
+    provider.displayName,
+    provider.persona,
+    config,
+  );
+  void provider.warmup();
+  return provider.toInfo();
+}
+
+function resolveApplyDeps(): ApplyStaffSelectionDeps {
+  if (applyStaffSelectionDeps) return applyStaffSelectionDeps;
+  return {
+    detectScan: () => requireDetectionDeps().scanCli(),
+    isRegistered: (id) => providerRegistry.has(id),
+    registerCli: defaultRegisterCli,
+  };
+}
+
+export async function handleOnboardingApplyStaffSelection(input: {
+  providerIds: string[];
+}): Promise<{
+  added: ProviderInfo[];
+  skipped: OnboardingApplySkip[];
+}> {
+  const deps = resolveApplyDeps();
+  const scanned = await deps.detectScan();
+
+  const cliMap = new Map<string, CliScanResult>();
+  for (const cli of scanned.detected) {
+    const providerId = normalizeCliCommand(cli.command);
+    if (cliMap.has(providerId)) continue;
+    cliMap.set(providerId, cli);
+  }
+
+  const added: ProviderInfo[] = [];
+  const skipped: OnboardingApplySkip[] = [];
+
+  for (const providerId of input.providerIds) {
+    if (deps.isRegistered(providerId)) {
+      skipped.push({ providerId, reason: 'already-registered' });
+      continue;
+    }
+    const cli = cliMap.get(providerId);
+    if (!cli) {
+      skipped.push({ providerId, reason: 'not-detected' });
+      continue;
+    }
+    try {
+      const info = await deps.registerCli(providerId, cli);
+      added.push(info);
+    } catch (reason) {
+      skipped.push({
+        providerId,
+        reason: 'create-failed',
+        detail: reason instanceof Error ? reason.message : String(reason),
+      });
+    }
+  }
+
+  return { added, skipped };
 }

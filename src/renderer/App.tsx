@@ -19,7 +19,11 @@ import { useProjects } from './hooks/use-projects';
 import { useAppViewStore, type AppView } from './stores/app-view-store';
 import { useActiveChannelStore } from './stores/active-channel-store';
 import { invoke } from './ipc/invoke';
-import type { Project, ProjectKind } from '../shared/project-types';
+import type {
+  PermissionMode,
+  Project,
+  ProjectKind,
+} from '../shared/project-types';
 
 /**
  * 현재 마운트할 최상위 뷰. R5에서는 dashboard ↔ messenger 2개만 실제 페이지가
@@ -180,32 +184,100 @@ export function App() {
     [setActive],
   );
 
-  // R11-Task6: step-5 finish hook — wires the wizard's first-project
-  // input into the live `project:create` flow. We delegate to
-  // `useProjects().createNew` so the project list refreshes and the
-  // active-project store can pick up the new id. Failure logs and
-  // continues — the dashboard still renders, the user can retry via
-  // `ProjectCreateModal`.
+  // F1: step-5 finish hook — applies wizard selections to the live
+  // services so the office actually boots populated. The order matters
+  // because each step depends on the previous one's side effect:
+  //   1. `onboarding:apply-staff-selection` — main scans installed CLIs
+  //      again (PATH may have changed since step 2) and registers each
+  //      selected provider via factory + saveProvider + warmup. Only
+  //      kind='cli' can be auto-registered; api/local require user
+  //      input not collected by the wizard so they fall into `skipped`
+  //      with reason='not-detected'. Without this step the registry
+  //      stays empty and the messenger member panel renders nothing.
+  //   2. `member:update-profile` for each registered staff so the role
+  //      label the user typed in step 3 lands on the MemberProfile row
+  //      (member-profile rows are created lazily on first lookup of a
+  //      registered provider — calling update on a non-registered id
+  //      is a no-op so we limit the loop to ids that actually got
+  //      added or were already in the registry).
+  //   3. `project:create` for the first project (kind='new' only —
+  //      the wizard does not host a folder picker for external/imported).
+  //      The selected permission mode flows through instead of a
+  //      hard-coded 'hybrid' fallback.
+  // Each step is best-effort; a failure logs and continues so a single
+  // bad provider does not abandon the rest of the apply pass.
   const handleOnboardingComplete = useCallback(
-    (input: { kind: ProjectKind; slug: string }): void => {
-      // Wizard only auto-creates for `kind='new'` because `external` /
-      // `imported` need a folder picker that the wizard does not host.
-      // For those kinds the user lands on the dashboard with the
-      // `ProjectCreateModal` ready — same UX as before R11-Task6.
-      if (input.kind !== 'new') return;
+    (input: {
+      kind: ProjectKind;
+      slug: string;
+      staff: ReadonlyArray<string>;
+      roles: Record<string, string>;
+      permissions: PermissionMode;
+    }): void => {
       void (async () => {
+        // 1. Register selected CLI providers. Skipped reasons (api/local
+        //    not auto-supported, binary not found) are logged so a dev
+        //    can see them in the renderer console; surfacing them in
+        //    the UI is F3+ scope.
+        const eligibleProviderIds = new Set<string>();
         try {
-          const project = await createNew({
-            kind: 'new',
-            name: input.slug,
-            permissionMode: 'hybrid',
+          const result = await invoke('onboarding:apply-staff-selection', {
+            providerIds: [...input.staff],
           });
-          void setActive(project.id);
+          for (const info of result.added) eligibleProviderIds.add(info.id);
+          for (const skip of result.skipped) {
+            if (skip.reason === 'already-registered') {
+              eligibleProviderIds.add(skip.providerId);
+            } else {
+              console.warn(
+                '[rolestra] onboarding skipped provider',
+                skip.providerId,
+                skip.reason,
+                skip.detail,
+              );
+            }
+          }
         } catch (reason) {
           console.warn(
-            '[rolestra] onboarding first-project create failed',
+            '[rolestra] onboarding:apply-staff-selection failed',
             reason instanceof Error ? reason.message : String(reason),
           );
+        }
+
+        // 2. Persist role labels onto each registered member's profile.
+        for (const providerId of input.staff) {
+          if (!eligibleProviderIds.has(providerId)) continue;
+          const role = (input.roles[providerId] ?? '').trim();
+          if (role.length === 0) continue;
+          try {
+            await invoke('member:update-profile', {
+              providerId,
+              patch: { role },
+            });
+          } catch (reason) {
+            console.warn(
+              '[rolestra] onboarding member:update-profile failed',
+              { providerId, reason },
+            );
+          }
+        }
+
+        // 3. Spawn the first project. external/imported kinds defer to
+        //    ProjectCreateModal because the wizard cannot pick a folder.
+        if (input.kind === 'new') {
+          try {
+            const project = await createNew({
+              kind: 'new',
+              name: input.slug,
+              permissionMode: input.permissions,
+            });
+            void setActive(project.id);
+          } catch (reason) {
+            console.warn(
+              '[rolestra] onboarding first-project create failed',
+              reason instanceof Error ? reason.message : String(reason),
+            );
+          }
         }
       })();
     },
@@ -220,6 +292,7 @@ export function App() {
       <OnboardingPage
         onExit={() => setView('dashboard')}
         onCompleteWithProject={handleOnboardingComplete}
+        onOpenSettings={() => setView('settings')}
       />
     );
   }

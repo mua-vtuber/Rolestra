@@ -1,30 +1,35 @@
 /**
- * OnboardingPage — first-boot 5-step wizard (R11-Task6).
+ * OnboardingPage — first-boot 5-step wizard.
  *
  * Composition:
  *   - Step 1 (office)        → welcome / what-is-this copy + "시작" CTA
- *   - Step 2 (staff)         → existing OBStaffCard grid (R10 polish set 4)
+ *   - Step 2 (staff)         → live `provider:detect` snapshots → OBStaffCard grid
  *   - Step 3 (roles)         → Step3RoleAssignment per selected provider
  *   - Step 4 (permissions)   → Step4Permissions radio group
  *   - Step 5 (firstProject)  → Step5FirstProject kind + slug
  *
  * State source-of-truth:
- *   - {@link useOnboardingState} round-trips against `onboarding:*` IPC.
- *     The hook's `state` is the persisted row; every "Next" button
- *     issues a `set-state` patch so a window close mid-wizard resumes
- *     at the same step + same selections.
- *   - When the bridge is missing (vitest jsdom env without preload), the
- *     hook falls back to local state — the existing R10 design-polish
- *     test (`OnboardingPage.test.tsx`) keeps passing without IPC mocks.
+ *   - {@link useOnboardingState} round-trips against `onboarding:*` IPC and
+ *     also fetches `provider:detect` once on mount (F1).
  *
- * Step gating:
- *   - Step 2 needs ≥1 selected staff.
- *   - Step 3 needs every selected staff to have a non-empty role string.
- *   - Step 4 always satisfied (default = `hybrid`).
- *   - Step 5 needs slug.length > 0.
- *   The footer's primary button is `aria-disabled='true'` until the step
- *   passes its gate; clicking is a no-op so screen readers still see the
- *   element but cannot advance. Step 1 has no gate.
+ * Step 2 data source (F1 cleanup):
+ *   - 단일 데이터 소스 = `provider:detect` snapshots. 알려진 provider 메타
+ *     (claude / gemini / codex / copilot / local / grok) 는 i18n 사전
+ *     `onboarding.providers.<id>` 에서 끌어오고, 알려지지 않은 id 는 unknown
+ *     fallback + providerId 자체를 name 으로 사용한다.
+ *   - 첫 진입 (selections.staff === undefined) 에서는 detection 의 available
+ *     provider 를 자동 pre-select. 사용자가 한 번이라도 수정하면 그 결정이
+ *     영속화되어 다시 갈아엎지 않는다.
+ *   - detection 결과가 비어 있으면 카드 grid 대신 명시 안내 (감지 안 됨 +
+ *     Settings 진입 버튼) 를 표시하고 "다음" 을 차단한다.
+ *
+ * Component split:
+ *   - `OnboardingPage` (parent) — 단일 hook 호출 + state===null 분기. 분기에
+ *     따라 LoadingFrame 또는 OnboardingWizardBody 를 렌더한다. hook 호출 순서
+ *     를 안정화 (early return 후 추가 hook 이 실행되지 않도록) 하기 위한
+ *     구조다.
+ *   - `OnboardingWizardBody` (child) — non-null state 를 prop 으로 받아 wizard
+ *     본체 렌더. 모든 step body / handler / memo 가 본 컴포넌트 내에 위치한다.
  *
  * Step 5 finishes via `complete()` which flips the persisted row +
  * unmounts the wizard via the parent `onExit` (App.tsx switches view to
@@ -33,7 +38,13 @@
  * collects the inputs.
  */
 import { clsx } from 'clsx';
-import { useCallback, useMemo, type ReactElement } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactElement,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Button } from '../../components/primitives/button';
@@ -46,14 +57,21 @@ import { Step4Permissions } from './steps/Step4Permissions';
 import { Step5FirstProject } from './steps/Step5FirstProject';
 import {
   ONBOARDING_STEPS,
-  STAFF_CANDIDATES,
   type OBStep,
   type OBStepStatus,
   type StaffCandidate,
 } from './onboarding-data';
-import { useOnboardingState } from './use-onboarding-state';
+import {
+  buildStaffCandidates,
+  defaultPreSelection,
+} from './build-staff-candidates';
+import {
+  useOnboardingState,
+  type UseOnboardingStateResult,
+} from './use-onboarding-state';
 import type {
   OnboardingSelections,
+  OnboardingState,
   OnboardingStep,
 } from '../../../shared/onboarding-types';
 import type {
@@ -74,7 +92,16 @@ export interface OnboardingPageProps {
   onCompleteWithProject?: (input: {
     kind: ProjectKind;
     slug: string;
+    staff: ReadonlyArray<string>;
+    roles: Record<string, string>;
+    permissions: PermissionMode;
   }) => void;
+  /**
+   * 빈 detection 결과 시 사용자가 "Settings → CLI 탭" 으로 직접 추가하러
+   * 가도록 하는 핸들러. 미연결 시 버튼은 숨김 (콜백 없으면 진입 경로 자체
+   * 가 없는 것으로 간주). App.tsx 가 setView('settings') 를 넘긴다.
+   */
+  onOpenSettings?: () => void;
   className?: string;
 }
 
@@ -98,46 +125,132 @@ function buildStepperRows(
   });
 }
 
-/**
- * Map persisted `selections.staff` (provider id list) onto the
- * STAFF_CANDIDATES fixture so the visual grid (existing OBStaffCard) keeps
- * working with the new state shape. Cards not yet selected fall back to
- * their fixture default; an explicit empty array means "user deselected
- * everything mid-wizard".
- */
-function mergeStaffSelection(
-  staff: ReadonlyArray<string> | undefined,
-): ReadonlyArray<StaffCandidate> {
-  if (!staff) return STAFF_CANDIDATES;
-  const set = new Set(staff);
-  return STAFF_CANDIDATES.map((c) => ({
-    ...c,
-    selected: set.has(c.id),
-  }));
-}
-
 export function OnboardingPage({
   onExit,
   onCompleteWithProject,
+  onOpenSettings,
   className,
 }: OnboardingPageProps): ReactElement {
+  const hook = useOnboardingState();
+
+  // F1: state===null 은 hydrate 미완 (loading) 또는 IPC 실패 (error). 둘 다
+  // 조용한 "step 1 가짜 default" 대신 명시 surface 로 처리한다. 본 분기는
+  // 자식 (OnboardingWizardBody) 의 모든 hook 을 마운트하지 않으므로 hook
+  // 순서가 깨지지 않는다.
+  if (hook.state === null) {
+    return (
+      <LoadingFrame
+        loading={hook.loading}
+        error={hook.error}
+        onExit={onExit}
+        className={className}
+      />
+    );
+  }
+
+  return (
+    <OnboardingWizardBody
+      state={hook.state}
+      hook={hook}
+      onExit={onExit}
+      onCompleteWithProject={onCompleteWithProject}
+      onOpenSettings={onOpenSettings}
+      className={className}
+    />
+  );
+}
+
+interface LoadingFrameProps {
+  loading: boolean;
+  error: Error | null;
+  onExit: () => void;
+  className?: string;
+}
+
+function LoadingFrame({
+  loading,
+  error,
+  onExit,
+  className,
+}: LoadingFrameProps): ReactElement {
+  const { t } = useTranslation();
+  const message =
+    error !== null
+      ? t('onboarding.empty.body', {
+          defaultValue: 'Failed to load onboarding state. Try restarting.',
+        })
+      : t('onboarding.empty.loading');
+  return (
+    <div
+      data-testid="onboarding-page"
+      data-current-step="0"
+      className={clsx(
+        'flex h-full min-h-screen flex-col bg-canvas text-fg',
+        className,
+      )}
+    >
+      <OBTopBar
+        currentStep={1}
+        totalSteps={TOTAL_STEPS}
+        estimatedTime={t('onboarding.topBar.estTime')}
+        onSkip={onExit}
+      />
+      <div
+        data-testid={
+          error !== null ? 'onboarding-fatal-error' : 'onboarding-loading'
+        }
+        className="flex-1 flex items-center justify-center px-6"
+      >
+        <p className="text-sm text-fg-muted">
+          {loading && error === null ? t('onboarding.empty.loading') : message}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+interface OnboardingWizardBodyProps extends OnboardingPageProps {
+  state: OnboardingState;
+  hook: UseOnboardingStateResult;
+}
+
+function OnboardingWizardBody({
+  state,
+  hook,
+  onExit,
+  onCompleteWithProject,
+  onOpenSettings,
+  className,
+}: OnboardingWizardBodyProps): ReactElement {
   const { t } = useTranslation();
   const {
-    state,
     setStep,
     patchSelections,
     complete,
-  } = useOnboardingState();
+    detection,
+    detectionLoading,
+    refreshDetection,
+  } = hook;
 
-  // Step 2 staff selection is derived from the persisted selections.staff
-  // list each render. The visual fixture (STAFF_CANDIDATES) supplies card
-  // order + display copy — the hook only provides the selection mask.
-  // Avoiding local state here keeps the persisted row + UI in lock-step
-  // and dodges a setState-in-effect lint warning.
+  // F1: candidates 는 detection snapshot + selections.staff 의 합성 결과.
+  // STAFF_CANDIDATES fixture 는 제거되었고 본 useMemo 가 단일 진실원이다.
   const candidates = useMemo<ReadonlyArray<StaffCandidate>>(
-    () => mergeStaffSelection(state.selections.staff),
-    [state.selections.staff],
+    () => buildStaffCandidates(detection, state.selections.staff, t),
+    [detection, state.selections.staff, t],
   );
+
+  // F1: 첫 wizard 진입에 한해 (selections.staff === undefined) detection 의
+  // available provider 를 auto pre-select. 사용자가 한 번이라도 staff 배열을
+  // 비우거나 수정하면 selections.staff 가 정의되므로 본 effect 는 다시
+  // 실행되어도 분기에서 빠진다.
+  const autoPreSelectedRef = useRef(false);
+  useEffect(() => {
+    if (autoPreSelectedRef.current) return;
+    if (state.selections.staff !== undefined) return;
+    if (detection.length === 0) return;
+    autoPreSelectedRef.current = true;
+    void patchSelections({ staff: defaultPreSelection(detection) });
+  }, [detection, state.selections.staff, patchSelections]);
 
   const currentStep: OnboardingStep = state.currentStep;
   const stepperRows = useMemo(
@@ -165,13 +278,29 @@ export function OnboardingPage({
   const firstProjectSlug: string =
     state.selections.firstProject?.slug ?? '';
 
+  // Step 3 의 footer 안내를 동적으로 띄우기 위해 빈 role entry 수를 센다.
+  // schema 가 빈 string 을 허용하도록 풀려 있어 (입력 중간 상태 보존),
+  // "다음" 차단 사유는 UI 레벨에서 footer 로 안내한다.
+  const step3PendingCount = useMemo(
+    () =>
+      selectedStaffIds.filter(
+        (id) => (state.selections.roles?.[id] ?? '').trim().length === 0,
+      ).length,
+    [selectedStaffIds, state.selections.roles],
+  );
+
+  // F1: detection 빈 상태 (감지 0 건) 는 Step2 데이터 부재 — 사용자가
+  // 진행할 수 없으므로 "다음" 차단 + empty UI 표시. detectionLoading 일
+  // 때는 spinner 와 등가의 메시지만 보이고 "다음" 은 여전히 차단.
+  const detectionEmpty = detection.length === 0 && !detectionLoading;
+
   // ── Step gates ────────────────────────────────────────────────
   const canProceed = useMemo(() => {
     switch (currentStep) {
       case 1:
         return true;
       case 2:
-        return selectedCount >= MIN_STAFF;
+        return selectedCount >= MIN_STAFF && !detectionEmpty;
       case 3:
         // every selected provider must have a non-empty trimmed role
         return (
@@ -185,16 +314,18 @@ export function OnboardingPage({
       default:
         return false;
     }
-  }, [currentStep, selectedCount, selectedStaffIds, roles, firstProjectSlug]);
+  }, [
+    currentStep,
+    selectedCount,
+    selectedStaffIds,
+    roles,
+    firstProjectSlug,
+    detectionEmpty,
+  ]);
 
   // ── Handlers ──────────────────────────────────────────────────
   const toggleSelected = useCallback(
     (id: string): void => {
-      // Recompute the next staff id list off the live `candidates` mask,
-      // then patch the persisted row. The visual updates on the next
-      // render once the hook resolves with the new state — synchronously
-      // in test envs (the hook short-circuits without window.arena),
-      // asynchronously in production.
       const next = candidates.map((c) =>
         c.id === id ? { ...c, selected: !c.selected } : c,
       );
@@ -246,12 +377,18 @@ export function OnboardingPage({
       goToStep((currentStep + 1) as OnboardingStep);
       return;
     }
-    // Step 5 → complete + delegate first-project creation to App.tsx.
+    // Step 5 → complete + delegate to App.tsx. Beyond firstProject creation,
+    // App.tsx must also persist staff role assignments and the permission
+    // mode the wizard collected — without this hand-off the office boots
+    // empty even though the wizard ran end-to-end.
     void complete().then(() => {
       if (onCompleteWithProject && firstProjectSlug.trim().length > 0) {
         onCompleteWithProject({
           kind: firstProjectKind,
           slug: firstProjectSlug.trim(),
+          staff: selectedStaffIds,
+          roles: { ...roles },
+          permissions,
         });
       }
       onExit();
@@ -265,7 +402,14 @@ export function OnboardingPage({
     onExit,
     firstProjectKind,
     firstProjectSlug,
+    selectedStaffIds,
+    roles,
+    permissions,
   ]);
+
+  const handleRescan = useCallback((): void => {
+    void refreshDetection();
+  }, [refreshDetection]);
 
   // ── Step body ─────────────────────────────────────────────────
   const heading = t(`onboarding.step${currentStep}.heading`, {
@@ -320,21 +464,65 @@ export function OnboardingPage({
 
         {currentStep === 2 && (
           <>
-            <div className="mt-4">
-              <OBSummaryStrip candidates={candidates} />
-            </div>
-            <div
-              data-testid="onboarding-staff-grid"
-              className="mt-4 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-            >
-              {candidates.map((candidate) => (
-                <OBStaffCard
-                  key={candidate.id}
-                  candidate={candidate}
-                  onToggleSelected={toggleSelected}
-                />
-              ))}
-            </div>
+            {detectionLoading && detection.length === 0 ? (
+              <div
+                data-testid="onboarding-detection-loading"
+                className="mt-6 max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm text-fg-muted"
+              >
+                {t('onboarding.empty.loading')}
+              </div>
+            ) : detectionEmpty ? (
+              <section
+                data-testid="onboarding-detection-empty"
+                className="mt-6 max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm leading-relaxed text-fg"
+              >
+                <h2 className="font-semibold text-fg">
+                  {t('onboarding.empty.title')}
+                </h2>
+                <p className="mt-2 text-fg-muted">
+                  {t('onboarding.empty.body')}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    type="button"
+                    tone="primary"
+                    size="sm"
+                    data-testid="onboarding-empty-action-settings"
+                    disabled={onOpenSettings == null}
+                    onClick={onOpenSettings}
+                  >
+                    {t('onboarding.empty.action')}
+                  </Button>
+                  <Button
+                    type="button"
+                    tone="secondary"
+                    size="sm"
+                    data-testid="onboarding-empty-action-rescan"
+                    onClick={handleRescan}
+                  >
+                    {t('onboarding.empty.rescan')}
+                  </Button>
+                </div>
+              </section>
+            ) : (
+              <>
+                <div className="mt-4">
+                  <OBSummaryStrip candidates={candidates} />
+                </div>
+                <div
+                  data-testid="onboarding-staff-grid"
+                  className="mt-4 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+                >
+                  {candidates.map((candidate) => (
+                    <OBStaffCard
+                      key={candidate.id}
+                      candidate={candidate}
+                      onToggleSelected={toggleSelected}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </>
         )}
 
@@ -374,21 +562,28 @@ export function OnboardingPage({
       >
         <span className="text-xs text-fg-muted">
           {currentStep === 2
-            ? t('onboarding.footer.constraint', {
-                count: selectedCount,
-                min: MIN_STAFF,
-              })
-            : t(`onboarding.footer.step${currentStep}`, {
-                defaultValue: '',
-              })}
+            ? detectionEmpty
+              ? t('onboarding.empty.title')
+              : t('onboarding.footer.constraint', {
+                  count: selectedCount,
+                  min: MIN_STAFF,
+                })
+            : currentStep === 3 && step3PendingCount > 0
+              ? t('onboarding.footer.step3Pending', {
+                  count: step3PendingCount,
+                })
+              : t(`onboarding.footer.step${currentStep}`, {
+                  defaultValue: '',
+                })}
         </span>
         <span className="flex-1" />
-        {currentStep === 2 && (
+        {currentStep === 2 && !detectionEmpty && (
           <Button
             type="button"
             tone="ghost"
             size="sm"
             data-testid="onboarding-action-rescan"
+            onClick={handleRescan}
           >
             {t('onboarding.actions.rescan')}
           </Button>
