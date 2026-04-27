@@ -136,13 +136,13 @@
     {
       "id": 13,
       "subject": "Task 13: 사용자 문서 v3 전면 재작성 + ADR 통합 (D8 phase 별 묶음) + 디자인 폴더 정식",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         4,
         12
       ],
-      "description": "**Goal:** spec §10 R11 본 정의 세 번째 — `docs/설계-문서.md` v3 교체. (a) 설계-문서 전면 재작성 (Electron + TS + React + Tailwind + Radix + Zustand + better-sqlite3 + i18next + Vitest + Playwright + electron-builder), (b) 기능-정의서 Rolestra v3 메타포 갱신, (c) 구현-현황 R1~R11 일괄 갱신, (d) `docs/아키텍처-결정-기록/` D8 phase 별 묶음 ADR 6 파일 (R1-R3 / R4-R6 / R7-R9 / R10 / R11 / cross-cutting), (e) `docs/디자인/` 신규 — `Rolestra_sample/` 이전 + 12 스크린샷 sign-off, (f) CLAUDE.md 핵심 문서 표 갱신.\n\n**Files:** docs/설계-문서.md, docs/기능-정의서.md, docs/구현-현황.md, docs/아키텍처-결정-기록/{R1-R3,R4-R6,R7-R9,R10,R11,cross-cutting}-decisions.md, docs/디자인/, CLAUDE.md\n\n**Verify:** 사용자 검토\n\n```json:metadata\n{\"files\":[\"docs/설계-문서.md\",\"docs/기능-정의서.md\",\"docs/구현-현황.md\",\"docs/아키텍처-결정-기록\",\"docs/디자인\",\"CLAUDE.md\"],\"verifyCommand\":\"echo docs review\",\"acceptanceCriteria\":[\"설계-문서.md v3 전면 재작성 (v2 잔재 0)\",\"기능-정의서 Rolestra v3 메타포 반영\",\"구현-현황 R1~R11 일괄 갱신\",\"ADR phase 별 묶음 6 파일\",\"docs/디자인/ 정식 sign-off 마크\",\"CLAUDE.md 문서 표 갱신\"]}\n```",
-      "lastUpdated": "2026-04-26T00:00:00.000Z"
+      "description": "**Goal:** spec §10 R11 본 정의 세 번째 — `docs/설계-문서.md` v3 교체. (a) 설계-문서 전면 재작성 (Electron + TS + React + Tailwind + Radix + Zustand + better-sqlite3 + i18next + Vitest + Playwright + electron-builder), (b) 기능-정의서 Rolestra v3 메타포 갱신, (c) 구현-현황 R1~R11 일괄 갱신, (d) `docs/아키텍처-결정-기록/` D8 phase 별 묶음 ADR 6 파일 (R1-R3 / R4-R6 / R7-R9 / R10 / R11 / cross-cutting), (e) `docs/디자인/` 신규 — `Rolestra_sample/` 이전 + 12 스크린샷 sign-off, (f) CLAUDE.md 핵심 문서 표 갱신.\n\n**Files:** docs/설계-문서.md, docs/기능-정의서.md, docs/구현-현황.md, docs/아키텍처-결정-기록/{R1-R3,R4-R6,R7-R9,R10,R11,cross-cutting}-decisions.md, docs/디자인/, CLAUDE.md\n\n**Verify:** 사용자 검토\n\n```json:metadata\n{\"files\":[\"docs/설계-문서.md\",\"docs/기능-정의서.md\",\"docs/구현-현황.md\",\"docs/아키텍처-결정-기록\",\"docs/디자인\",\"CLAUDE.md\"],\"verifyCommand\":\"echo docs review\",\"acceptanceCriteria\":[\"설계-문서.md v3 전면 재작성 (v2 잔재 0)\",\"기능-정의서 Rolestra v3 메타포 반영\",\"구현-현황 R1~R11 일괄 갱신\",\"ADR phase 별 묶음 6 파일\",\"docs/디자인/ 정식 sign-off 마크\",\"CLAUDE.md 문서 표 갱신\"]}\n```\n\n**완료 기록 (S9 — commit `459b57f`):** docs only (코드 변경 0). docs/설계-문서.md v3 전면 재작성 (v2 잔재 0, Electron 40 + TS strict + React 19 + 4 layer 도식 + 핵심 모듈 9 + 6 테마 + 자율 모드 4 tripwire + Onboarding 5-step + 패키징). docs/기능-정의서.md Rolestra v3 메타포 + 11 phase 누적 기능 (ko-only). docs/구현-현황.md R1~R11 일괄 갱신 + R11 17 task status + 게이트 baseline + V4/R12+ 이연. docs/아키텍처-결정-기록/ ADR 6 묶음 (R1-R3/R4-R6/R7-R9/R10/R11/cross-cutting) + README. 기존 ADR-000~003 4 파일은 cross-cutting C1/C2/C3 흡수 + 물리 삭제. docs/디자인/README.md 신규 (시안 위치 보존 + 12 스크린샷 sign-off + V4 forward pointers). CLAUDE.md 핵심 문서 표 갱신 + 11 phase 메타포 + 핵심 ADR 10 요약. **Verify:** typecheck (node + web) exit 0 + test 250/3306 (회귀 0, S7 baseline 동일) + lint 3/38 baseline + i18n idempotent + theme:check exit 0 + migration 014 chain 32 cases pass.",
+      "lastUpdated": "2026-04-27T05:16:54.000Z"
     },
     {
       "id": 14,
@@ -167,7 +167,7 @@
     {
       "id": 16,
       "subject": "Task 16: R11 Closeout — 정식 게이트 + done-checklist + §10 R11 [x] + tasks 17/17 + release artifact 검증",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         1,
         2,
@@ -185,8 +185,8 @@
         14,
         15
       ],
-      "description": "**Goal:** 모든 정식 게이트 녹색. typecheck/typecheck:web/lint/test/i18n:check/theme:check/build/package + migration 013/014 + Playwright OS matrix workflow_dispatch 9 spec × 3 OS = 27 cell green + release.yml workflow_dispatch dry-run 3 OS artifact 산출. `docs/superpowers/specs/r11-done-checklist.md` 작성 (17 산출물 + 게이트 결과표 + Known Concerns + Decision Log D1~D9 + V4/R12+ forward pointers). spec §10 R11 [ ] → [x]. tasks.json 17/17 completed.\n\n**Files:** docs/superpowers/specs/r11-done-checklist.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R11), tasks.json\n\n**Verify:** 정식 게이트 전체 녹색 + 사용자 sign-off\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/r11-done-checklist.md\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build && npm run package\",\"acceptanceCriteria\":[\"정식 게이트 전체 녹색 (OS matrix + 패키징 artifact 포함)\",\"r11-done-checklist.md 작성\",\"§10 R11 모든 [x]\",\"tasks.json 17/17 completed\",\"release artifact 3 OS 검증\"]}\n```",
-      "lastUpdated": "2026-04-26T00:00:00.000Z"
+      "description": "**Goal:** 모든 정식 게이트 녹색. typecheck/typecheck:web/lint/test/i18n:check/theme:check/build/package + migration 013/014 + Playwright OS matrix workflow_dispatch 9 spec × 3 OS = 27 cell green + release.yml workflow_dispatch dry-run 3 OS artifact 산출. `docs/superpowers/specs/r11-done-checklist.md` 작성 (17 산출물 + 게이트 결과표 + Known Concerns + Decision Log D1~D9 + V4/R12+ forward pointers). spec §10 R11 [ ] → [x]. tasks.json 17/17 completed.\n\n**Files:** docs/superpowers/specs/r11-done-checklist.md, docs/superpowers/specs/2026-04-18-rolestra-design.md (§10 R11), tasks.json\n\n**Verify:** 정식 게이트 전체 녹색 + 사용자 sign-off\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/r11-done-checklist.md\",\"docs/superpowers/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build && npm run package\",\"acceptanceCriteria\":[\"정식 게이트 전체 녹색 (OS matrix + 패키징 artifact 포함)\",\"r11-done-checklist.md 작성\",\"§10 R11 모든 [x]\",\"tasks.json 17/17 completed\",\"release artifact 3 OS 검증\"]}\n```\n\n**완료 기록 (S9 Closeout):** typecheck (node + web) exit 0 + lint 3/38 baseline + test 250 file passed / 4 skipped — 0 failed; 3306 case passed / 9 skipped — 0 failed (S7 baseline 동일) + i18n:check parser idempotent (md5 unchanged on second run, git diff 0) + theme:check exit 0 (hex literal 0 hit) + build success + npm run package:linux Rolestra-0.1.0-linux-x86_64.AppImage (117MB) (R11 Task 12 시점 검증과 동일) + migration 013/014 idempotent (32 cases pass). docs/superpowers/specs/r11-done-checklist.md 작성 — 17 task 산출물 매핑 + 게이트 결과표 + Known Concerns (Playwright OS matrix 33 cell + release.yml dispatch dry-run + 12 native 스크린샷 모두 사용자 sign-off 영역으로 이월) + Decision Log D1~D9 + V4/R12+ forward pointers. spec §10 R11 16 체크박스 모두 [x] 전환. tasks.json 17/17 completed. R11 종료 — main fast-forward merge 후 v0.1.0 tag push 사용자 결정 대기.",
+      "lastUpdated": "2026-04-27T05:16:54.000Z"
     }
   ]
 }
