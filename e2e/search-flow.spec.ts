@@ -41,10 +41,19 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
 const PROJECT_NAME = 'Arena Search E2E';
-const USER_CHANNEL_NAME = '기획';
+// Wizard-only slug — must differ from `generateSlug(PROJECT_NAME)`.
+const PROJECT_SLUG = 'arena-search-e2e-bootstrap';
+// Channel name must be ≥ 3 chars (NAME_MIN_LEN in ChannelCreateModal);
+// '기획' alone is two code points and is rejected client-side before
+// the IPC call ever fires.
+const USER_CHANNEL_NAME = '기획방';
 const MESSAGE_CONTENT = '안녕하세요 검색';
 const SEARCH_QUERY = '안녕';
 const SCREENSHOT_FILENAME = 'search-flow.png';
@@ -65,6 +74,10 @@ test.describe('search flow — topbar 🔍 → query → row click → channel d
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });
@@ -75,10 +88,31 @@ test.describe('search flow — topbar 🔍 → query → row click → channel d
     await window.click('[data-role="create-project"]');
     await window.waitForSelector('[data-testid="project-create-modal"]');
     await window.fill('[data-testid="project-create-name"]', PROJECT_NAME);
+    // Wait for InitialMembersSelector prefill to settle so the new
+    // project lands with `project_members` populated. Required for the
+    // user-channel create that follows.
+    await window.waitForSelector(
+      '[data-testid="initial-members-selector"][data-state="ready"]',
+      { timeout: 10_000 },
+    );
     await window.click('[data-testid="project-create-submit"]');
     await window.waitForSelector('[data-testid="project-create-modal"]', {
       state: 'detached',
       timeout: 20_000,
+    });
+
+    // F1 wizard left an auto-created bootstrap project active; clicking
+    // the freshly-created `PROJECT_NAME` rail row swaps the active
+    // project deterministically before user-channel creation. Without
+    // this nudge the channel/composer surfaces stay attached to the
+    // bootstrap project and the search index never picks up our hits.
+    const newProjectButton = window
+      .locator('[data-testid="project-rail"]')
+      .getByRole('button', { name: PROJECT_NAME });
+    await expect(newProjectButton).toBeVisible({ timeout: 10_000 });
+    await newProjectButton.click();
+    await expect(newProjectButton).toHaveAttribute('aria-current', 'page', {
+      timeout: 10_000,
     });
 
     // 2. Switch to messenger so the user channel + composer surfaces are

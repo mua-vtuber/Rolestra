@@ -29,8 +29,13 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
+const PROJECT_SLUG = 'arena-member-profile-e2e';
 const SCREENSHOT_FILENAME = 'member-profile-flow.png';
 
 test.describe('member profile flow — popover + edit + status toggle', () => {
@@ -49,6 +54,10 @@ test.describe('member profile flow — popover + edit + status toggle', () => {
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });

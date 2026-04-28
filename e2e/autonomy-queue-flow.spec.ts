@@ -51,9 +51,15 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
 const PROJECT_NAME = 'Arena Autonomy E2E';
+// Wizard-only slug — must differ from `generateSlug(PROJECT_NAME)`.
+const PROJECT_SLUG = 'arena-autonomy-e2e-bootstrap';
 const QUEUE_LINES = ['첫 번째 작업', '두 번째 작업'];
 const SCREENSHOT_FILENAME = 'autonomy-queue-flow.png';
 
@@ -73,6 +79,10 @@ test.describe('autonomy + queue flow — R9 promotion → queue → breaker', ()
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });
@@ -83,10 +93,32 @@ test.describe('autonomy + queue flow — R9 promotion → queue → breaker', ()
     await window.click('[data-role="create-project"]');
     await window.waitForSelector('[data-testid="project-create-modal"]');
     await window.fill('[data-testid="project-create-name"]', PROJECT_NAME);
+    // Wait for InitialMembersSelector prefill so the new project's
+    // project_members table is populated up front. Step C's circuit-
+    // breaker downgrade also targets `setAutonomy` on this project
+    // and would race against an empty member set.
+    await window.waitForSelector(
+      '[data-testid="initial-members-selector"][data-state="ready"]',
+      { timeout: 10_000 },
+    );
     await window.click('[data-testid="project-create-submit"]');
     await window.waitForSelector('[data-testid="project-create-modal"]', {
       state: 'detached',
       timeout: 20_000,
+    });
+
+    // F1 wizard left an auto-created bootstrap project active; clicking
+    // the freshly-created `PROJECT_NAME` rail row swaps the active
+    // project deterministically. The shell top-bar AutonomyModeToggle +
+    // QueuePanel only mount when activeProjectId is set, so without
+    // this nudge the Step A toggle assertion times out.
+    const newProjectButton = window
+      .locator('[data-testid="project-rail"]')
+      .getByRole('button', { name: PROJECT_NAME });
+    await expect(newProjectButton).toBeVisible({ timeout: 10_000 });
+    await newProjectButton.click();
+    await expect(newProjectButton).toHaveAttribute('aria-current', 'page', {
+      timeout: 10_000,
     });
 
     // ── Step A — auto_toggle promotion via 2-stage confirm ──────────

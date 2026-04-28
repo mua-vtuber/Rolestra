@@ -8,7 +8,7 @@
  */
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { useState, type ReactElement } from 'react';
+import { useEffect, useRef, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { invoke } from '../../ipc/invoke';
@@ -35,10 +35,30 @@ export function DmCreateModal({
   onCreated,
 }: DmCreateModalProps): ReactElement {
   const { t } = useTranslation();
-  const { data, loading } = useDmSummaries();
+  const { data, loading, refresh } = useDmSummaries();
   const [submittingId, setSubmittingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const panelClip = usePanelClipStyle();
+
+  // Radix's Dialog.Root keeps the children mounted across closed→open
+  // transitions, so `useDmSummaries` only fetches once at App boot.
+  // That snapshot misses every provider added later (e.g. through
+  // Settings or onboarding's apply-staff-selection follow-up). Refresh
+  // on every false→true open transition so the user always picks from
+  // the live registry rather than a build-time-frozen list.
+  //
+  // Tracking with a ref instead of relying on `open` alone keeps the
+  // effect from firing during the very first mount (when open is
+  // already true and the hook's mount fetch is in flight): two fetches
+  // would race for the same IPC slot and double the consumed mock
+  // queue under unit tests.
+  const wasOpenRef = useRef<boolean>(open);
+  useEffect(() => {
+    if (open && !wasOpenRef.current) {
+      void refresh();
+    }
+    wasOpenRef.current = open;
+  }, [open, refresh]);
 
   const handleSelect = async (row: DmSummary): Promise<void> => {
     if (row.exists) return;

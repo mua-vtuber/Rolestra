@@ -26,6 +26,17 @@ import type { ProviderInfo } from '../../../shared/provider-types';
 export interface InitialMembersSelectorProps {
   value: string[];
   onChange: (ids: string[]) => void;
+  /**
+   * When true, the first successful provider fetch tick all available
+   * providers as initially selected (mirrors ChannelCreateModal's
+   * "default include all members" prefill). Skipped if `value` already
+   * carries entries — prefill never overrides an explicit selection.
+   * Without this, a project created from the modal without ticking
+   * boxes would land with empty `project_members`, which makes
+   * subsequent user-channel creation fail the composite FK check
+   * (channel_members → project_members).
+   */
+  defaultSelectAll?: boolean;
 }
 
 interface FetchState {
@@ -37,6 +48,7 @@ interface FetchState {
 export function InitialMembersSelector({
   value,
   onChange,
+  defaultSelectAll = false,
 }: InitialMembersSelectorProps): ReactElement {
   const { t } = useTranslation();
   const [state, setState] = useState<FetchState>({
@@ -45,6 +57,17 @@ export function InitialMembersSelector({
     loading: true,
   });
   const didFetchRef = useRef(false);
+  // Capture the latest defaultSelectAll/value/onChange in refs so the
+  // fetch effect can read them without re-running on every parent
+  // render. Re-running the fetch every render would re-fire the IPC
+  // and (via the prefill branch) clobber any toggle the user just
+  // made — refs let the effect stay strictly mount-only.
+  const defaultSelectAllRef = useRef(defaultSelectAll);
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  defaultSelectAllRef.current = defaultSelectAll;
+  valueRef.current = value;
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     if (didFetchRef.current) return;
@@ -56,6 +79,21 @@ export function InitialMembersSelector({
         const { providers } = await invoke('provider:list', undefined);
         if (cancelled) return;
         setState({ providers, error: null, loading: false });
+        // Default-select-all prefill — fires synchronously after the
+        // fetch resolves so React batches the setState + parent
+        // dispatch into a single render. Skipped when the parent
+        // already carries a selection (user toggled) or the modal
+        // didn't opt in. Without this, a project created via the
+        // modal with no ticked boxes would land with empty
+        // `project_members`, which makes the very next "+ 새 채널"
+        // attempt fail the channel_members composite FK check.
+        if (
+          defaultSelectAllRef.current &&
+          valueRef.current.length === 0 &&
+          providers.length > 0
+        ) {
+          onChangeRef.current(providers.map((p) => p.id));
+        }
       } catch (reason) {
         if (cancelled) return;
         const err =

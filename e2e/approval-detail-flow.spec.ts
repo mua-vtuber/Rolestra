@@ -48,32 +48,56 @@ test.describe('approval detail flow — split layout + filter wiring', () => {
     await window.waitForLoadState('domcontentloaded');
 
     // The first-boot probe lands on the wizard. Walk through it so the
-    // Dashboard is reachable and we can create a project.
-    const onboarding = window.locator('[data-testid="onboarding-page"]');
-    if (await onboarding.count()) {
-      // Step 1 → Next
-      await window.click('[data-testid="onboarding-action-next"]');
-      // Step 2 (default selection) → Next
-      await window
-        .locator('[data-testid="onboarding-staff-grid"]')
-        .waitFor({ timeout: 30_000 });
-      await window.click('[data-testid="onboarding-action-next"]');
-      // Step 3 — fill every role row
-      const roles = window.locator('[data-testid="onboarding-step-3-input"]');
-      const roleCount = await roles.count();
-      for (let i = 0; i < roleCount; i += 1) {
-        await roles.nth(i).fill('역할');
-      }
-      await window.click('[data-testid="onboarding-action-next"]');
-      // Step 4 → Next
-      await window.click('[data-testid="onboarding-action-next"]');
-      // Step 5 — slug + Finish
-      await window.fill(
-        '[data-testid="onboarding-step-5-slug"]',
-        PROJECT_SLUG,
-      );
-      await window.click('[data-testid="onboarding-action-next"]');
+    // Dashboard is reachable and we can create a project. Pattern mirrors
+    // `onboarding-flow.spec.ts` exactly (step transition assertions before
+    // each Next click) so detection / role-input async updates settle
+    // before the gate is evaluated.
+    await window.waitForSelector('[data-testid="onboarding-page"]', {
+      timeout: 30_000,
+    });
+    await expect(
+      window.locator('[data-testid="onboarding-page"]'),
+    ).toHaveAttribute('data-current-step', '1');
+
+    // Step 1 → Next (no gate)
+    await window.click('[data-testid="onboarding-action-next"]');
+    await expect(
+      window.locator('[data-testid="onboarding-page"]'),
+    ).toHaveAttribute('data-current-step', '2');
+
+    // Step 2 — wait for staff-grid (detection populated) and advance
+    await window.waitForSelector('[data-testid="onboarding-staff-grid"]');
+    await window.click('[data-testid="onboarding-action-next"]');
+    await expect(
+      window.locator('[data-testid="onboarding-page"]'),
+    ).toHaveAttribute('data-current-step', '3');
+
+    // Step 3 — every selected provider must have a non-empty trimmed role
+    const roleInputs = window.locator(
+      '[data-testid="onboarding-step-3-input"]',
+    );
+    const inputCount = await roleInputs.count();
+    expect(inputCount).toBeGreaterThan(0);
+    for (let i = 0; i < inputCount; i += 1) {
+      await roleInputs.nth(i).fill('역할');
     }
+    await window.click('[data-testid="onboarding-action-next"]');
+    await expect(
+      window.locator('[data-testid="onboarding-page"]'),
+    ).toHaveAttribute('data-current-step', '4');
+
+    // Step 4 → Next (default 'hybrid')
+    await window.click('[data-testid="onboarding-action-next"]');
+    await expect(
+      window.locator('[data-testid="onboarding-page"]'),
+    ).toHaveAttribute('data-current-step', '5');
+
+    // Step 5 — slug + Finish
+    await window.fill(
+      '[data-testid="onboarding-step-5-slug"]',
+      PROJECT_SLUG,
+    );
+    await window.click('[data-testid="onboarding-action-next"]');
 
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
@@ -124,7 +148,12 @@ test.describe('approval detail flow — split layout + filter wiring', () => {
     await expect(tabs).toHaveCount(4);
 
     for (const filter of ['approved', 'rejected', 'all', 'pending'] as const) {
-      const tab = tabs.locator(`[data-filter="${filter}"]`);
+      // `data-filter` lives on the <button> itself — chaining
+      // `tabs.locator(...)` searches DESCENDANTS, returning 0 matches.
+      // Compound the attribute on the same element instead.
+      const tab = window.locator(
+        `[data-testid="approval-filter-tab"][data-filter="${filter}"]`,
+      );
       await tab.click();
       await expect(inbox).toHaveAttribute('data-filter', filter, {
         timeout: 10_000,

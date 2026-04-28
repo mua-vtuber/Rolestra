@@ -48,6 +48,7 @@ import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
 import { useChannelMessages } from '../../hooks/use-channel-messages';
 import { useChannels } from '../../hooks/use-channels';
+import { useDms } from '../../hooks/use-dms';
 import { useMeetingStream } from '../../hooks/use-meeting-stream';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 
@@ -122,8 +123,18 @@ export function Thread({
 }: ThreadProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { channels } = useChannels(projectId);
-  const { activeChannelId } = useActiveChannel(projectId, channels);
-  const { members } = useChannelMembers(activeChannelId, channels);
+  const { dms } = useDms();
+  // Active channel can be a DM (project_id=null) which lives outside
+  // `useChannels(projectId)`. Merge both into the validation list so the
+  // hook's "stored channel not in list" branch doesn't wipe a freshly
+  // selected DM, and so `channels.find` below can resolve the active
+  // DM into a real `Channel` object for the header/composer.
+  const allChannels = useMemo(() => {
+    if (channels === null && dms === null) return null;
+    return [...(channels ?? []), ...(dms ?? [])];
+  }, [channels, dms]);
+  const { activeChannelId } = useActiveChannel(projectId, allChannels);
+  const { members } = useChannelMembers(activeChannelId, allChannels);
   const { meetings, refresh: refreshMeetings } = useActiveMeetings();
   const { messages, refresh: refreshMessages } = useChannelMessages(activeChannelId);
   const meetingStream = useMeetingStream(activeChannelId);
@@ -133,9 +144,9 @@ export function Thread({
 
   const activeChannel = useMemo(() => {
     if (activeChannelId === null) return null;
-    if (channels === null) return null;
-    return channels.find((c) => c.id === activeChannelId) ?? null;
-  }, [activeChannelId, channels]);
+    if (allChannels === null) return null;
+    return allChannels.find((c) => c.id === activeChannelId) ?? null;
+  }, [activeChannelId, allChannels]);
 
   const activeMeeting = useMemo(() => {
     if (activeChannelId === null) return null;

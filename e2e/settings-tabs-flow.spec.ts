@@ -21,7 +21,13 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
+
+const PROJECT_SLUG = 'arena-settings-e2e';
 
 test.describe('settings tabs flow — open / switch / deep-link', () => {
   let launched: LaunchedApp | null = null;
@@ -39,6 +45,11 @@ test.describe('settings tabs flow — open / switch / deep-link', () => {
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate. Walk it
+    // through so the Dashboard / NavRail are reachable.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="nav-rail"]', {
       timeout: 30_000,
     });

@@ -38,6 +38,38 @@ function toError(reason: unknown): Error {
   return reason instanceof Error ? reason : new Error(String(reason));
 }
 
+/** Detects FTS5 syntax characters that we must not corrupt with prefix `*`. */
+const FTS5_SYNTAX_PATTERN = /["()*:^-]|\s+(?:AND|OR|NOT|NEAR)\s+/i;
+
+/**
+ * Convert a user-facing query into an FTS5 MATCH expression.
+ *
+ * The repository forwards the query verbatim to SQLite's FTS5, whose
+ * tokenizer (unicode61) splits on whitespace + punctuation but does NOT
+ * tokenize within Korean syllable runs — `'안녕하세요 검색'` becomes
+ * `['안녕하세요', '검색']`. A naive `'안녕'` query therefore returns
+ * zero rows even though the user typed a clear prefix.
+ *
+ * To match the UX of "find as you type", we append the FTS5 prefix
+ * operator `*` to each whitespace-separated token when the input is a
+ * simple expression (no quotes, no boolean operators, no existing
+ * `*`/`:`/parentheses). Anything more elaborate is passed verbatim so
+ * power users can still drop their own FTS5 syntax in.
+ */
+function toFtsQuery(input: string): string {
+  if (FTS5_SYNTAX_PATTERN.test(input)) {
+    return input;
+  }
+  // Split into whitespace-separated tokens; append `*` to each so a
+  // multi-word search like "릴리스 계획" still finds rows that contain
+  // longer-token prefixes for both halves.
+  return input
+    .split(/\s+/)
+    .filter((part) => part.length > 0)
+    .map((part) => `${part}*`)
+    .join(' ');
+}
+
 export function useMessageSearch(
   initialScope: MessageSearchScope = 'global',
 ): UseMessageSearchResult {
@@ -80,7 +112,7 @@ export function useMessageSearch(
           }
 
           const resp = await invoke('message:search', {
-            query: trimmed,
+            query: toFtsQuery(trimmed),
             scope: ipcScope,
             limit: DEFAULT_MESSAGE_SEARCH_LIMIT,
           });

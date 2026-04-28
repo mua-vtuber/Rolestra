@@ -35,9 +35,15 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
 const PROJECT_NAME = 'Arena Meeting E2E';
+// Wizard-only slug — must differ from `generateSlug(PROJECT_NAME)`.
+const PROJECT_SLUG = 'arena-meeting-e2e-bootstrap';
 const USER_CHANNEL_NAME = '회의방';
 const MEETING_TOPIC = '릴리스 계획 2026 Q2';
 const SCREENSHOT_FILENAME = 'meeting-flow.png';
@@ -59,6 +65,10 @@ test.describe('meeting flow — start meeting + #회의록 navigation', () => {
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });
@@ -67,10 +77,29 @@ test.describe('meeting flow — start meeting + #회의록 navigation', () => {
     await window.click('[data-role="create-project"]');
     await window.waitForSelector('[data-testid="project-create-modal"]');
     await window.fill('[data-testid="project-create-name"]', PROJECT_NAME);
+    // Wait for InitialMembersSelector prefill to settle so the new
+    // project lands with `project_members` populated. Required for the
+    // user-channel create that follows.
+    await window.waitForSelector(
+      '[data-testid="initial-members-selector"][data-state="ready"]',
+      { timeout: 10_000 },
+    );
     await window.click('[data-testid="project-create-submit"]');
     await window.waitForSelector('[data-testid="project-create-modal"]', {
       state: 'detached',
       timeout: 20_000,
+    });
+
+    // F1 wizard left an auto-created bootstrap project active; clicking
+    // the freshly-created `PROJECT_NAME` rail row swaps the active
+    // project deterministically before any channel/meeting interaction.
+    const newProjectButton = window
+      .locator('[data-testid="project-rail"]')
+      .getByRole('button', { name: PROJECT_NAME });
+    await expect(newProjectButton).toBeVisible({ timeout: 10_000 });
+    await newProjectButton.click();
+    await expect(newProjectButton).toHaveAttribute('aria-current', 'page', {
+      timeout: 10_000,
     });
 
     // 3. Flip to the messenger view.

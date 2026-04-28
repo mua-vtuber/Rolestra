@@ -23,6 +23,7 @@ import { migration as m011 } from './011-notifications';
 import { migration as m012 } from './012-circuit-breaker-state';
 import { migration as m013 } from './013-onboarding-state';
 import { migration as m014 } from './014-llm-cost-audit-log';
+import { migration as m015 } from './015-approval-circuit-breaker-kind';
 
 /**
  * Ordered list of all v3 migrations.
@@ -43,4 +44,5 @@ export const migrations: Migration[] = [
   m012,
   m013,
   m014,
+  m015,
 ];

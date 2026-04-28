@@ -48,7 +48,12 @@
  * Pre-requisite regardless of host: `npm run build` must have produced
  * `out/main/index.js`, `out/preload/index.js`, and `out/renderer/*`.
  */
-import { _electron as electron, type ElectronApplication } from '@playwright/test';
+import {
+  _electron as electron,
+  expect,
+  type ElectronApplication,
+  type Page,
+} from '@playwright/test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -106,4 +111,83 @@ export async function launchRolestra(): Promise<LaunchedApp> {
   };
 
   return { app, arenaRoot, cleanup };
+}
+
+/**
+ * Walk through the F1 onboarding wizard so the Dashboard is reachable.
+ * F1 cleanup made first-boot land on the wizard and gates the Dashboard
+ * behind wizard completion. Specs that exercise post-onboarding surfaces
+ * (Dashboard, NavRail, Messenger, Approvals, Settings) MUST call this
+ * helper after `launchRolestra()` — otherwise `waitForSelector` for
+ * `dashboard-hero` / `nav-rail` times out at 30 s.
+ *
+ * The walk replays the canonical 5-step path:
+ *   1. Step 1 (intro) → Next.
+ *   2. Step 2 (staff grid) → Next. Relies on the host's CLI detection
+ *      finding ≥ MIN_STAFF binaries on PATH (claude / gemini / codex /
+ *      ollama). On a clean WSL host without any CLI installed the gate
+ *      fails — same caveat as the rest of the harness.
+ *   3. Step 3 — fill every role row with a non-empty string.
+ *   4. Step 4 (default `hybrid` permission mode) → Next.
+ *   5. Step 5 — fill the project slug → Finish. The wizard then
+ *      auto-creates the first kind=`new` project (which provisions the
+ *      three system channels including #승인-대기), unmounts the wizard,
+ *      and lands the user on the Dashboard.
+ *
+ * @param window      The first Electron window from `app.firstWindow()`.
+ * @param projectSlug Slug for the auto-created first project. Spec
+ *                    chooses a unique value so post-wizard navigation
+ *                    is unambiguous.
+ */
+export async function walkOnboardingWizard(
+  window: Page,
+  projectSlug: string,
+): Promise<void> {
+  const page = window.locator('[data-testid="onboarding-page"]');
+  await window.waitForSelector('[data-testid="onboarding-page"]', {
+    timeout: 30_000,
+  });
+  await expect(page).toHaveAttribute('data-current-step', '1');
+
+  // Step 1 → Next (no gate)
+  await window.click('[data-testid="onboarding-action-next"]');
+  await expect(page).toHaveAttribute('data-current-step', '2');
+
+  // Step 2 — wait for staff-grid render then advance with default selection
+  await window.waitForSelector('[data-testid="onboarding-staff-grid"]', {
+    timeout: 30_000,
+  });
+  await window.click('[data-testid="onboarding-action-next"]');
+  await expect(page).toHaveAttribute('data-current-step', '3');
+
+  // Step 3 — fill every role row
+  const roleInputs = window.locator('[data-testid="onboarding-step-3-input"]');
+  const inputCount = await roleInputs.count();
+  expect(inputCount).toBeGreaterThan(0);
+  for (let i = 0; i < inputCount; i += 1) {
+    await roleInputs.nth(i).fill('역할');
+  }
+  await window.click('[data-testid="onboarding-action-next"]');
+  await expect(page).toHaveAttribute('data-current-step', '4');
+
+  // Step 4 → Next (default hybrid)
+  await window.click('[data-testid="onboarding-action-next"]');
+  await expect(page).toHaveAttribute('data-current-step', '5');
+
+  // Step 5 — slug + Finish
+  await window.fill('[data-testid="onboarding-step-5-slug"]', projectSlug);
+  await window.click('[data-testid="onboarding-action-next"]');
+
+  // The wizard's `handleOnboardingComplete` runs as a fire-and-forget
+  // async IIFE — clicking Finish flips the renderer to the Dashboard
+  // immediately, but the bootstrap project create completes a few
+  // turns later. Specs that exercise post-onboarding state (rail
+  // entries, KPI counters, channel rolls) need the bootstrap row in
+  // the project rail before they continue, otherwise their first
+  // assertion races against the in-flight create.
+  await expect(
+    window
+      .locator('[data-testid="project-rail"]')
+      .getByRole('button', { name: projectSlug }),
+  ).toBeVisible({ timeout: 30_000 });
 }

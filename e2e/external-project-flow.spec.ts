@@ -52,10 +52,16 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
 const SCREENSHOT_FILENAME = 'external-link-flow.png';
 const PROJECT_NAME = 'Test External';
+// Wizard-only slug — must differ from `generateSlug(PROJECT_NAME)`.
+const PROJECT_SLUG = 'arena-external-e2e-bootstrap';
 const FIXTURE_DIR = resolve(__dirname, 'fixtures', 'external-sample');
 
 test.describe('external project → dashboard KPI', () => {
@@ -85,7 +91,17 @@ test.describe('external project → dashboard KPI', () => {
     cpSync(FIXTURE_DIR, externalRoot, { recursive: true });
     const externalPath = externalRoot;
 
-    // 3. Stub the OS folder picker. Re-registering `project:pick-folder`
+    // 3. Wait for the renderer to land before stubbing the OS folder
+    //    picker. Registering the stub before `firstWindow` resolves
+    //    races against the production handler's own `ipcMain.handle`
+    //    call inside main bootstrap — under WSL the main process boots
+    //    slowly enough that the spec wins, then the production
+    //    registration throws "Attempted to register a second handler"
+    //    and tears the page down before `firstWindow()` can grab it.
+    const window = await app.firstWindow();
+    await window.waitForLoadState('domcontentloaded');
+
+    // 4. Stub the OS folder picker. Re-registering `project:pick-folder`
     //    is safe because the handler is idempotent (one request in →
     //    one response out, no side effects beyond the dialog call it
     //    replaces).
@@ -96,8 +112,9 @@ test.describe('external project → dashboard KPI', () => {
       ipcMain.handle('project:pick-folder', async () => ({ folderPath: path }));
     }, externalPath);
 
-    const window = await app.firstWindow();
-    await window.waitForLoadState('domcontentloaded');
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });
@@ -141,22 +158,27 @@ test.describe('external project → dashboard KPI', () => {
       timeout: 20_000,
     });
 
-    // 9. Junction/symlink on disk. `projects/` contains exactly one slug
-    //    dir after a fresh arena boot + one create. `link` inside that
-    //    dir is a symlink (POSIX) or a directory junction (Windows —
-    //    reported as a plain directory by `lstat`).
+    // 9. Junction/symlink on disk. `projects/` now contains TWO slug
+    //    dirs because the F1 wizard auto-created a bootstrap project
+    //    (kind='new', no link) plus the external project we just
+    //    created. The external slug is `generateSlug(PROJECT_NAME)`
+    //    while the bootstrap dir uses `PROJECT_SLUG`. We locate the
+    //    external slug dir explicitly so the symlink/junction check
+    //    targets the right path.
     const projectsDir = join(arenaRoot, 'projects');
     const slugDirs = readdirSync(projectsDir);
-    expect(slugDirs.length).toBe(1);
-    const linkPath = join(projectsDir, slugDirs[0], 'link');
+    expect(slugDirs.length).toBe(2);
+    const externalSlugDir = slugDirs.find((dir) => dir !== PROJECT_SLUG);
+    expect(externalSlugDir).toBeDefined();
+    const linkPath = join(projectsDir, externalSlugDir!, 'link');
     const stat = lstatSync(linkPath);
     expect(stat.isSymbolicLink() || stat.isDirectory()).toBe(true);
 
-    // 10. KPI widget reports 1 active project.
+    // 10. KPI widget reports 2 active projects (bootstrap + external).
     const kpiValue = window.locator(
       '[data-testid="hero-kpi-tile"][data-variant="projects"] [data-testid="hero-kpi-value"]',
     );
-    await expect(kpiValue).toHaveText('1', { timeout: 10_000 });
+    await expect(kpiValue).toHaveText('2', { timeout: 10_000 });
 
     // 11. ProjectRail shows the new project as active. App.tsx calls
     //     `setActive` on create, so the row should carry

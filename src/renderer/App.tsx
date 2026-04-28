@@ -14,6 +14,7 @@ import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { QueuePanel } from './features/projects/QueuePanel';
 import { MessageSearchView } from './features/search/MessageSearchView';
 import { SettingsView } from './features/settings/SettingsView';
+import { notifyDashboardChanged } from './hooks/dashboard-invalidation-bus';
 import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
 import { useAppViewStore, type AppView } from './stores/app-view-store';
@@ -59,7 +60,7 @@ function toRailProject(project: Project): ProjectRailProject {
 
 export function App() {
   const { t } = useTranslation();
-  const { projects, createNew } = useProjects();
+  const { projects, createNew, refresh: refreshProjects } = useProjects();
   const { activeProjectId, setActive } = useActiveProject();
   const [modalOpen, setModalOpen] = useState<boolean>(false);
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
@@ -207,6 +208,21 @@ export function App() {
 
   const handleProjectCreated = useCallback(
     (project: Project): void => {
+      // ProjectCreateModal owns its own `useProjects` instance, so the
+      // create+refetch it ran on submit only updates the modal's local
+      // state. The rail (driven by App's own `useProjects` instance)
+      // would stay stale until next mount unless we explicitly pull the
+      // list here. Fire-and-forget; if the refresh fails the user will
+      // still see the active project switch via `setActive`.
+      void refreshProjects().catch((reason: unknown) => {
+        console.warn('[rolestra] project list refresh failed after create', reason);
+      });
+      // The dashboard KPI hook keeps an independent snapshot so the
+      // activeProjects counter would also stay stale otherwise — the
+      // bus tells every subscriber to re-fetch.
+      void notifyDashboardChanged().catch(() => {
+        /* per-subscriber errors already swallowed inside the bus */
+      });
       // Drop the user straight into the freshly-created project so the
       // dashboard + rail reflect it immediately. Same error policy as
       // `handleSelectProject` — log and keep current state on failure.
@@ -214,7 +230,7 @@ export function App() {
         console.warn('[rolestra] project:open failed after create', reason);
       });
     },
-    [setActive],
+    [refreshProjects, setActive],
   );
 
   // F1: step-5 finish hook — applies wizard selections to the live
@@ -297,12 +313,19 @@ export function App() {
 
         // 3. Spawn the first project. external/imported kinds defer to
         //    ProjectCreateModal because the wizard cannot pick a folder.
+        //    initialMemberProviderIds carries the staff registered in
+        //    step 1 so the bootstrap project's `project_members` table
+        //    is populated up front — without this seed, the user's
+        //    very first attempt at "+ 새 채널" would fail the composite
+        //    FK check (channel_members.project_id+provider_id has to
+        //    exist in project_members).
         if (input.kind === 'new') {
           try {
             const project = await createNew({
               kind: 'new',
               name: input.slug,
               permissionMode: input.permissions,
+              initialMemberProviderIds: Array.from(eligibleProviderIds),
             });
             void setActive(project.id);
           } catch (reason) {

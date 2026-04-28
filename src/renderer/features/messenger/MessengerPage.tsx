@@ -106,10 +106,16 @@ function MessengerPageActive({
   );
 
   // Success callbacks ──────────────────────────────────────────
+  // Order matters: refetch FIRST, then flip active. `useActiveChannel`'s
+  // validation effect clears the active id when the stored channel is
+  // not in the channels list — if we set active before the refetch
+  // returns, the stale list still lacks the new channel and the effect
+  // wipes our just-applied selection.
   const handleCreated = useCallback(
     (channel: Channel): void => {
-      setActiveChannelId(projectId, channel.id);
-      void notifyChannelsChanged();
+      void notifyChannelsChanged().then(() => {
+        setActiveChannelId(projectId, channel.id);
+      });
     },
     [projectId, setActiveChannelId],
   );

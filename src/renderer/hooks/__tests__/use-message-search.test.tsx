@@ -71,7 +71,10 @@ describe('useMessageSearch', () => {
     const [[channel, payload]] = invoke.mock.calls;
     expect(channel).toBe('message:search');
     expect(payload).toMatchObject({
-      query: 'foo',
+      // R12-cleanup: hook now appends FTS5 prefix `*` so a typed `foo`
+      // matches `foobar` etc. (Korean syllable runs are a single token
+      // by default — without `*`, partial input never finds rows.)
+      query: 'foo*',
       scope: { kind: 'project', projectId: 'p1' },
     });
     expect(result.current.hits).toHaveLength(1);

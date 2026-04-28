@@ -175,7 +175,9 @@ describe('MessageSearchView', () => {
       expect(invoke).toHaveBeenCalledWith(
         'message:search',
         expect.objectContaining({
-          query: 'hi',
+          // R12 cleanup: useMessageSearch appends FTS5 `*` so partial
+          // tokens (especially Korean syllable runs) match prefixes.
+          query: 'hi*',
           scope: { kind: 'channel', channelId: 'c1' },
         }),
       );

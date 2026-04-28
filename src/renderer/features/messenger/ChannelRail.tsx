@@ -77,7 +77,18 @@ export function ChannelRail({ projectId, onCreateChannel, className }: ChannelRa
 
   const { channels, loading: channelsLoading, error: channelsError } = useChannels(projectId);
   const { dms, loading: dmsLoading, error: dmsError } = useDms();
-  const activeChannel = useActiveChannel(projectId, channels);
+  // `useActiveChannel`'s validation clears the stored channelId when the
+  // current channels list does not contain it. DMs live outside the
+  // project's `useChannels` response (project_id IS NULL — fetched
+  // separately by `useDms`), so without merging the two lists the
+  // validation effect would clear the user's active selection the
+  // moment they pick a DM. Concat instead of merge: ids are unique
+  // across the two surfaces so duplicate suppression isn't needed.
+  const validationChannels = useMemo<Channel[] | null>(() => {
+    if (channels === null && dms === null) return null;
+    return [...(channels ?? []), ...(dms ?? [])];
+  }, [channels, dms]);
+  const activeChannel = useActiveChannel(projectId, validationChannels);
 
   const systemChannels = useMemo<Channel[]>(
     () => (channels === null ? [] : channels.filter((c) => SYSTEM_KINDS.includes(c.kind))),

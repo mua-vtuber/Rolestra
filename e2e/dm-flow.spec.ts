@@ -39,8 +39,13 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
+const PROJECT_SLUG = 'arena-dm-e2e';
 const PROVIDER_DISPLAY_NAME = 'Arena DM E2E Provider';
 const PROVIDER_BASE_URL = 'http://localhost:1';
 const PROVIDER_MODEL = 'noop';
@@ -62,6 +67,10 @@ test.describe('DM flow — NavRail "+ 새 DM" → provider → 회의 시작 미
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });

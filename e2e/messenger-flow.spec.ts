@@ -43,10 +43,21 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
 const PROJECT_NAME = 'Arena Messenger E2E';
-const USER_CHANNEL_NAME = '기획';
+// Wizard-only slug — must differ from `generateSlug(PROJECT_NAME)`
+// (lower-cased + kebabified) to avoid the UNIQUE projects.slug
+// collision that hides as a silent project-create failure.
+const PROJECT_SLUG = 'arena-messenger-e2e-bootstrap';
+// Channel name must be ≥ 3 chars (NAME_MIN_LEN in ChannelCreateModal);
+// '기획' alone is two code points and the modal's pre-IPC validation
+// rejects it before the create-channel call ever fires.
+const USER_CHANNEL_NAME = '기획방';
 const MESSAGE_CONTENT = '안녕하세요';
 const SCREENSHOT_FILENAME = 'messenger-flow.png';
 
@@ -67,6 +78,10 @@ test.describe('messenger flow — channel create + message send', () => {
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });
@@ -78,18 +93,33 @@ test.describe('messenger flow — channel create + message send', () => {
     await window.click('[data-role="create-project"]');
     await window.waitForSelector('[data-testid="project-create-modal"]');
     await window.fill('[data-testid="project-create-name"]', PROJECT_NAME);
+    // Wait for the InitialMembersSelector's prefill to settle before
+    // submitting so `project_members` is populated for the new project.
+    // Without this gate the submit can win the race against the
+    // `provider:list` IPC, leaving the project empty — and the very
+    // next user-channel create call fails the composite FK check.
+    await window.waitForSelector(
+      '[data-testid="initial-members-selector"][data-state="ready"]',
+      { timeout: 10_000 },
+    );
     await window.click('[data-testid="project-create-submit"]');
     await window.waitForSelector('[data-testid="project-create-modal"]', {
       state: 'detached',
       timeout: 20_000,
     });
 
-    // Confirm the project landed active — ProjectRail should advertise it.
-    await expect(
-      window
-        .locator('[data-testid="project-rail"]')
-        .getByRole('button', { name: PROJECT_NAME }),
-    ).toHaveAttribute('aria-current', 'page', { timeout: 10_000 });
+    // F1 wizard left an auto-created bootstrap project active; clicking
+    // the freshly-created `PROJECT_NAME` rail row swaps the active
+    // project deterministically. (`handleProjectCreated` already calls
+    // `setActive` async, but the click also serves as a settle point.)
+    const newProjectButton = window
+      .locator('[data-testid="project-rail"]')
+      .getByRole('button', { name: PROJECT_NAME });
+    await expect(newProjectButton).toBeVisible({ timeout: 10_000 });
+    await newProjectButton.click();
+    await expect(newProjectButton).toHaveAttribute('aria-current', 'page', {
+      timeout: 10_000,
+    });
 
     // 3. Flip to the messenger view via NavRail. The `messenger` button's
     //    accessible name is the NAV_ITEMS label 'Messenger' (aria-label).

@@ -411,6 +411,7 @@ export function ProjectCreateModal({
               <InitialMembersSelector
                 value={state.initialMemberProviderIds}
                 onChange={(ids) => dispatch({ type: 'setMembers', value: ids })}
+                defaultSelectAll
               />
             </div>
 

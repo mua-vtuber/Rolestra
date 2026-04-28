@@ -23,6 +23,7 @@ import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
 import { useChannels } from '../../hooks/use-channels';
+import { useDms } from '../../hooks/use-dms';
 
 export interface MemberPanelProps {
   projectId: string;
@@ -35,10 +36,21 @@ export function MemberPanel({
 }: MemberPanelProps): ReactElement {
   const { t } = useTranslation();
   const { channels } = useChannels(projectId);
-  const { activeChannelId } = useActiveChannel(projectId, channels);
+  const { dms } = useDms();
+  // Merge project channels + global DMs so the validation effect inside
+  // `useActiveChannel` doesn't clear a freshly selected DM channel
+  // (DMs have project_id=null and never appear in `useChannels`).
+  // `useChannelMembers` also looks the channel up by id in this list,
+  // so the merge is required for both the validation and the metadata
+  // resolution path.
+  const allChannels = useMemo(() => {
+    if (channels === null && dms === null) return null;
+    return [...(channels ?? []), ...(dms ?? [])];
+  }, [channels, dms]);
+  const { activeChannelId } = useActiveChannel(projectId, allChannels);
   const { members, loading, error } = useChannelMembers(
     activeChannelId,
-    channels,
+    allChannels,
   );
   const { meetings } = useActiveMeetings();
 

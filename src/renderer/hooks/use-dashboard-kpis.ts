@@ -25,6 +25,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { subscribeDashboardInvalidation } from './dashboard-invalidation-bus';
 import { invoke } from '../ipc/invoke';
 import type { KpiSnapshot } from '../../shared/dashboard-types';
 import type {
@@ -130,6 +131,19 @@ export function useDashboardKpis(): UseDashboardKpisResult {
 
   const refresh = useCallback(async (): Promise<void> => {
     await runFetch(false);
+  }, [runFetch]);
+
+  // Re-fetch when something outside the dashboard changes the underlying
+  // counts (project create/archive, etc.). The host fires
+  // `notifyDashboardChanged()` after the mutation IPC resolves; we
+  // re-fetch the full snapshot rather than mutating one counter so we
+  // pick up cross-counter changes (e.g. a new project also creates the
+  // 3 system channels but those don't surface as KPIs today).
+  useEffect(() => {
+    return subscribeDashboardInvalidation(async () => {
+      if (!mountedRef.current) return;
+      await runFetch(false);
+    });
   }, [runFetch]);
 
   return { data, loading, error, refresh };

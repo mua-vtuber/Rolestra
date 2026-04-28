@@ -25,9 +25,16 @@
  */
 import { expect, test } from '@playwright/test';
 
-import { launchRolestra, type LaunchedApp } from './electron-launch';
+import {
+  launchRolestra,
+  walkOnboardingWizard,
+  type LaunchedApp,
+} from './electron-launch';
 
 const PROJECT_NAME = 'Arena Approval E2E';
+// Wizard-only slug — must differ from `generateSlug(PROJECT_NAME)` to
+// avoid the UNIQUE projects.slug collision (silent create failure).
+const PROJECT_SLUG = 'arena-approval-flow-e2e-bootstrap';
 const SCREENSHOT_FILENAME = 'approval-flow.png';
 
 test.describe('approval flow — inbox navigation from #승인-대기', () => {
@@ -46,6 +53,10 @@ test.describe('approval flow — inbox navigation from #승인-대기', () => {
 
     const window = await app.firstWindow();
     await window.waitForLoadState('domcontentloaded');
+
+    // F1 cleanup made the onboarding wizard the first-boot gate.
+    await walkOnboardingWizard(window, PROJECT_SLUG);
+
     await window.waitForSelector('[data-testid="dashboard-hero"]', {
       timeout: 30_000,
     });
@@ -55,16 +66,31 @@ test.describe('approval flow — inbox navigation from #승인-대기', () => {
     await window.click('[data-role="create-project"]');
     await window.waitForSelector('[data-testid="project-create-modal"]');
     await window.fill('[data-testid="project-create-name"]', PROJECT_NAME);
+    // Wait for InitialMembersSelector prefill so the new project lands
+    // with `project_members` populated. Without this the inbox
+    // navigation still works but downstream channel creation fails.
+    await window.waitForSelector(
+      '[data-testid="initial-members-selector"][data-state="ready"]',
+      { timeout: 10_000 },
+    );
     await window.click('[data-testid="project-create-submit"]');
     await window.waitForSelector('[data-testid="project-create-modal"]', {
       state: 'detached',
       timeout: 20_000,
     });
-    await expect(
-      window
-        .locator('[data-testid="project-rail"]')
-        .getByRole('button', { name: PROJECT_NAME }),
-    ).toHaveAttribute('aria-current', 'page', { timeout: 10_000 });
+
+    // F1 wizard left an auto-created bootstrap project active; clicking
+    // the freshly-created `PROJECT_NAME` rail row swaps the active
+    // project deterministically. (`handleProjectCreated` already calls
+    // `setActive` async, but the click also serves as a settle point.)
+    const newProjectButton = window
+      .locator('[data-testid="project-rail"]')
+      .getByRole('button', { name: PROJECT_NAME });
+    await expect(newProjectButton).toBeVisible({ timeout: 10_000 });
+    await newProjectButton.click();
+    await expect(newProjectButton).toHaveAttribute('aria-current', 'page', {
+      timeout: 10_000,
+    });
 
     // 2. Flip to messenger.
     await window
