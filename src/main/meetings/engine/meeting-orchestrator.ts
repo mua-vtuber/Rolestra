@@ -66,16 +66,10 @@ import type { MeetingSession } from './meeting-session';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import { composeMinutes, type MinutesTranslator } from './meeting-minutes-composer';
 import { resolveNotificationLabel } from '../../notifications/notification-labels';
-
-const INTER_TURN_DELAY_MS = 2000;
-
-/**
- * Default wait for the user to decide on the consensus approval (spec §7.5).
- * Spec R7 plan: 24h — long enough that an offline user still has a chance
- * to review, short enough that the meeting row does not linger indefinitely
- * if the user abandons the app.
- */
-const CONSENSUS_DECISION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+import {
+  INTER_TURN_DELAY_MS,
+  CONSENSUS_DECISION_TTL_MS as CONSENSUS_DECISION_TIMEOUT_MS,
+} from '../../../shared/timeouts';
 
 /**
  * SSM states that need user input — the loop hands control back to the

@@ -53,6 +53,8 @@ import type {
   ApprovalStatus,
 } from '../../shared/approval-types';
 import { ApprovalRepository } from './approval-repository';
+import { CONSENSUS_DECISION_TTL_MS as SHARED_CONSENSUS_DECISION_TTL_MS } from '../../shared/timeouts';
+import { tryGetLogger } from '../log/logger-accessor';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
 
@@ -156,11 +158,12 @@ function decisionToStatus(decision: ApprovalDecision): ApprovalStatus {
 }
 
 /**
- * Default consensus_decision approval TTL (24h). Mirrors the orchestrator
- * default so a rehydrated row aged from before app restart still expires
- * at the same wall-clock instant the original meeting timer would have.
+ * Default consensus_decision approval TTL (24h). Re-exports the shared
+ * timeout so the orchestrator and the rehydrate path see the same wall-
+ * clock value — a rehydrated row aged from before app restart still
+ * expires at the same instant the original meeting timer would have.
  */
-export const CONSENSUS_DECISION_TTL_MS = 24 * 60 * 60 * 1000;
+export const CONSENSUS_DECISION_TTL_MS = SHARED_CONSENSUS_DECISION_TTL_MS;
 
 /**
  * Result of {@link ApprovalService.rehydrateConsensusTimers}. Returned for
@@ -431,16 +434,33 @@ export class ApprovalService extends EventEmitter {
   }
 
   /**
-   * Centralised listener-failure logger. Same shape as the
-   * message-service warning so a future structured-logger pass can
-   * capture both sites with one regex.
+   * Centralised listener-failure logger. Routes through the shared
+   * {@link StructuredLogger} when available (F5-T8), falling back to
+   * `console.warn` with the legacy `[rolestra.approvals]` marker so
+   * very-early-boot or test paths without a wired logger still record
+   * the failure.
    */
   private warnListener(origin: 'create' | 'decide', err: unknown): void {
     const errMessage = err instanceof Error ? err.message : String(err);
-    // TODO R2-log: swap for structured logger (src/main/log/)
+    const errName = err instanceof Error ? err.name : undefined;
+    const logger = tryGetLogger();
+    if (logger) {
+      logger.warn({
+        component: 'approvals',
+        action: 'listener-threw',
+        result: 'failure',
+        error: {
+          code: errName ?? 'Error',
+          message: errMessage,
+          stack: err instanceof Error ? err.stack : undefined,
+        },
+        metadata: { origin },
+      });
+      return;
+    }
     console.warn('[rolestra.approvals] listener threw:', {
       origin,
-      name: err instanceof Error ? err.name : undefined,
+      name: errName,
       message: errMessage,
     });
   }

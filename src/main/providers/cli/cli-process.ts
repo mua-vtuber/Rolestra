@@ -9,6 +9,7 @@ import { execFile, type ChildProcess } from 'node:child_process';
 import type { CliRuntimeConfig } from './cli-provider';
 import type { CliSessionState } from './cli-session-state';
 import { getCircuitBreaker } from '../../queue/circuit-breaker-accessor';
+import { KILL_GRACE_PERIOD_MS } from '../../../shared/timeouts';
 
 const MAX_BUFFER_BYTES = 50 * 1024 * 1024; // 50 MB
 
@@ -223,10 +224,10 @@ export class CliProcessManager {
     this.process = null;
     if (!proc || proc.killed) return;
     proc.kill('SIGTERM');
-    // Force kill after 3 seconds if still alive
+    // Force kill after KILL_GRACE_PERIOD_MS if still alive.
     const forceKillTimer = setTimeout(() => {
       if (!proc.killed) proc.kill('SIGKILL');
-    }, 3000);
+    }, KILL_GRACE_PERIOD_MS);
     proc.on('exit', () => clearTimeout(forceKillTimer));
   }
 }

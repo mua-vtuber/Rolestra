@@ -27,6 +27,7 @@ import { DEFAULT_SESSION_CONFIG } from '../../shared/session-state-types';
 import type { Participant } from '../../shared/engine-types';
 import type { SsmContext } from '../../shared/ssm-context-types';
 import { ModeJudgmentCollector } from './mode-judgment-collector';
+import { MAX_SNAPSHOTS } from '../../shared/timeouts';
 import { createHash } from 'node:crypto';
 
 /** Callback signature for state-change listeners. */
@@ -103,7 +104,7 @@ const TRANSITIONS: ReadonlyMap<SessionState, ReadonlyMap<SessionEvent, SessionSt
   ]);
 
 export class SessionStateMachine {
-  private static readonly MAX_SNAPSHOTS = 100;
+  private static readonly MAX_SNAPSHOTS = MAX_SNAPSHOTS;
 
   private _state: SessionState = 'CONVERSATION';
   private _previousState: SessionState | null = null;

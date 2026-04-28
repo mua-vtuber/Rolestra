@@ -8,6 +8,7 @@
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { DetectedCli } from '../../../shared/ipc-types';
+import { CLI_DETECTION_TIMEOUT_MS } from '../../../shared/timeouts';
 
 const execFileAsync = promisify(execFile);
 const IS_WINDOWS = process.platform === 'win32';
@@ -77,7 +78,7 @@ async function detectNative(cli: KnownCli): Promise<DetectedCli | null> {
     const { resolvedCommand: lookupCmd, resolvedArgs: lookupArgs } =
       resolveForWindows(LOOKUP_COMMAND, [cli.command]);
     const { stdout: lookupOut } = await execFileAsync(lookupCmd, lookupArgs, {
-      timeout: 5000,
+      timeout: CLI_DETECTION_TIMEOUT_MS,
     });
     const path = pickDetectedPath(lookupOut);
     if (!path) return null;
@@ -117,7 +118,7 @@ async function detectNative(cli: KnownCli): Promise<DetectedCli | null> {
 async function getWslDistros(): Promise<string[]> {
   try {
     const { stdout } = await execFileAsync('wsl.exe', ['-l', '-q'], {
-      timeout: 5000,
+      timeout: CLI_DETECTION_TIMEOUT_MS,
     });
     // wsl -l -q may output UTF-16LE with null bytes — strip them
     return stdout
@@ -137,7 +138,7 @@ async function detectInWsl(cli: KnownCli, distro: string): Promise<DetectedCli |
     const { stdout: whichOut } = await execFileAsync(
       'wsl.exe',
       ['-d', distro, '--', 'which', cli.command],
-      { timeout: 5000 },
+      { timeout: CLI_DETECTION_TIMEOUT_MS },
     );
     const path = whichOut.replace(/\0/g, '').trim();
     if (!path) return null;

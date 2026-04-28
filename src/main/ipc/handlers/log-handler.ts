@@ -6,27 +6,17 @@
 
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { LogExportOptions } from '../../../shared/log-types';
-import type { StructuredLogger, LogEntryFilter } from '../../log/structured-logger';
+import type { LogEntryFilter } from '../../log/structured-logger';
 import { LogExporter } from '../../log/log-exporter';
+import {
+  getLogger,
+  setLoggerAccessor,
+} from '../../log/logger-accessor';
 
-// ── Lazy accessor ────────────────────────────────────────────────
-
-let loggerAccessor: (() => StructuredLogger) | null = null;
-
-/**
- * Wire the log handler to the app's StructuredLogger instance.
- * Called once during app startup.
- */
-export function setLoggerAccessor(fn: () => StructuredLogger): void {
-  loggerAccessor = fn;
-}
-
-function getLogger(): StructuredLogger {
-  if (!loggerAccessor) {
-    throw new Error('StructuredLogger accessor not initialized');
-  }
-  return loggerAccessor();
-}
+// F5-T8: setLoggerAccessor is now sourced from the shared accessor
+// module so non-IPC modules (approval-service, queue-service…) reach
+// the same logger without owning a parallel accessor.
+export { setLoggerAccessor };
 
 /** List structured log entries with optional filters. */
 export function handleLogList(

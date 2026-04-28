@@ -55,13 +55,19 @@ export function OBSummaryStrip({
         <div className="text-fg-muted">$ onboarding --staff</div>
         <div className="flex items-center gap-3 text-fg">
           <span data-testid="onboarding-summary-cell" data-stat="selected">
-            <span className="text-brand font-semibold">선택[{counts.selected}]</span>
+            <span className="text-brand font-semibold">
+              {t('onboarding.summary.short.selected')}[{counts.selected}]
+            </span>
           </span>
           <span data-testid="onboarding-summary-cell" data-stat="detected">
-            <span className="text-success font-semibold">감지[{counts.detected}]</span>
+            <span className="text-success font-semibold">
+              {t('onboarding.summary.short.detected')}[{counts.detected}]
+            </span>
           </span>
           <span data-testid="onboarding-summary-cell" data-stat="alt">
-            <span className="text-fg-muted font-semibold">대안[{counts.alt}]</span>
+            <span className="text-fg-muted font-semibold">
+              {t('onboarding.summary.short.alternative')}[{counts.alt}]
+            </span>
           </span>
         </div>
       </div>

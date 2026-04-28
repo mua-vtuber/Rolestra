@@ -36,6 +36,7 @@ import type {
 } from '../../shared/consensus-types';
 import { DEFAULT_CONSENSUS_CONFIG } from '../../shared/consensus-types';
 import type { Participant } from '../../shared/engine-types';
+import { MAX_SNAPSHOTS } from '../../shared/timeouts';
 import { createHash } from 'node:crypto';
 
 /** Callback signature for phase-change listeners. */
@@ -101,7 +102,7 @@ const TRANSITIONS: ReadonlyMap<ConsensusPhase, ReadonlyMap<ConsensusEvent, Conse
  * lifecycle covering conversation, work mode, and execution phases.
  */
 export class ConsensusStateMachine {
-  private static readonly MAX_SNAPSHOTS = 100;
+  private static readonly MAX_SNAPSHOTS = MAX_SNAPSHOTS;
 
   private _phase: ConsensusPhase = 'DISCUSSING';
   private _previousPhase: ConsensusPhase | null = null;

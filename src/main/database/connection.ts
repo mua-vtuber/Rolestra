@@ -13,6 +13,8 @@
  */
 
 import Database from 'better-sqlite3';
+
+import { DB_BUSY_TIMEOUT_MS } from '../../shared/timeouts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ArenaRootService } from '../arena/arena-root-service';
@@ -99,8 +101,10 @@ export function getDatabase(): Database.Database {
   // Enable foreign key constraints
   db.pragma('foreign_keys = ON');
 
-  // Set busy timeout to 5 seconds to handle brief lock contention
-  db.pragma('busy_timeout = 5000');
+  // Set busy timeout to handle brief lock contention. Value sourced
+  // from src/shared/timeouts.ts so the renderer parity test can assert
+  // the same constant without re-deriving it.
+  db.pragma(`busy_timeout = ${DB_BUSY_TIMEOUT_MS}`);
 
   return db;
 }

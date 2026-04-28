@@ -42,12 +42,16 @@ export type { SettingsCorruptionReason };
 /**
  * Deep-merges source into target, returning a new object.
  * Only merges plain objects; arrays and primitives are overwritten.
+ *
+ * F5-T9: the generic constraint widens from `Record<string, unknown>`
+ * to `object`, so structured interfaces (e.g. `SettingsConfig`) merge
+ * directly without `as unknown as Record<string, unknown>` chains at
+ * each callsite. The `as T[keyof T]` casts inside stay — TypeScript
+ * cannot prove that `targetVal` and `sourceVal` are both compatible
+ * sub-records of the same `T[K]` from runtime checks alone.
  */
-function deepMerge<T extends Record<string, unknown>>(
-  target: T,
-  source: Partial<T>,
-): T {
-  const result = { ...target };
+function deepMerge<T extends object>(target: T, source: Partial<T>): T {
+  const result: T = { ...target };
 
   for (const key of Object.keys(source) as Array<keyof T>) {
     const sourceVal = source[key];
@@ -63,8 +67,8 @@ function deepMerge<T extends Record<string, unknown>>(
       !Array.isArray(targetVal)
     ) {
       result[key] = deepMerge(
-        targetVal as Record<string, unknown>,
-        sourceVal as Record<string, unknown>,
+        targetVal as object,
+        sourceVal as Partial<object>,
       ) as T[keyof T];
     } else if (sourceVal !== undefined) {
       result[key] = sourceVal as T[keyof T];
@@ -111,10 +115,7 @@ export class SettingsStore {
     }
 
     const loaded = this.loadFromDisk();
-    this.cache = deepMerge(
-      DEFAULT_SETTINGS as unknown as Record<string, unknown>,
-      loaded as unknown as Record<string, unknown>,
-    ) as unknown as SettingsConfig;
+    this.cache = deepMerge(DEFAULT_SETTINGS, loaded);
 
     return { ...this.cache };
   }
@@ -126,10 +127,7 @@ export class SettingsStore {
    */
   updateSettings(patch: Partial<SettingsConfig>): void {
     const current = this.getSettings();
-    this.cache = deepMerge(
-      current as unknown as Record<string, unknown>,
-      patch as unknown as Record<string, unknown>,
-    ) as unknown as SettingsConfig;
+    this.cache = deepMerge(current, patch);
     this.saveToDisk(this.cache);
   }
 

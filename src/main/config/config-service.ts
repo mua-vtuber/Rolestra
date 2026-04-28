@@ -13,6 +13,30 @@ import type { SettingsConfig, RuntimeOverrides } from '../../shared/config-types
 import { SettingsStore, type SettingsCorruptionEvent } from './settings-store';
 import { SecretStore, type SafeStorageAdapter } from './secret-store';
 
+/**
+ * Reads a runtime override for a `SettingsConfig` key. Returns
+ * `undefined` when no override is registered or its value is undefined.
+ *
+ * The cast inside is the single point where {@link RuntimeOverrides}
+ * is bridged to {@link SettingsConfig}; widening it to `unknown` first
+ * keeps TypeScript honest about the fact that the two interfaces only
+ * align for keys present in both. Today no overlap exists, so this
+ * helper effectively returns `undefined` — but a future addition (e.g.
+ * `logLevel`) will continue to compile without changing every callsite.
+ */
+function readRuntimeOverride<K extends keyof SettingsConfig>(
+  runtime: RuntimeOverrides,
+  key: K,
+): SettingsConfig[K] | undefined {
+  const overrideKey = key as string;
+  if (!Object.prototype.hasOwnProperty.call(runtime, overrideKey)) {
+    return undefined;
+  }
+  const value = (runtime as Record<string, unknown>)[overrideKey];
+  if (value === undefined) return undefined;
+  return value as SettingsConfig[K];
+}
+
 /** Options for constructing ConfigServiceImpl. */
 export interface ConfigServiceOptions {
   /** Directory for settings.json file. */
@@ -120,18 +144,19 @@ export class ConfigServiceImpl {
    * 1. Runtime override (if the key exists in RuntimeOverrides and is set)
    * 2. Persisted settings value (merged with defaults)
    *
+   * F5-T9: the runtime-override lookup is gated through a single helper
+   * so the `as unknown as` cast is not duplicated at the callsite. Today
+   * `RuntimeOverrides` and `SettingsConfig` keys do not overlap, so the
+   * branch is dead code; the helper keeps it future-safe for entries
+   * (e.g. `logLevel`) that may shadow a settings key without re-spreading
+   * the cast.
+   *
    * @param key - A key from SettingsConfig.
    * @returns The resolved value.
    */
   get<K extends keyof SettingsConfig>(key: K): SettingsConfig[K] {
-    // Check if the key exists as a runtime override
-    if (key in this.runtime) {
-      const runtimeValue = this.runtime[key as keyof RuntimeOverrides];
-      if (runtimeValue !== undefined) {
-        return runtimeValue as unknown as SettingsConfig[K];
-      }
-    }
-
+    const override = readRuntimeOverride(this.runtime, key);
+    if (override !== undefined) return override;
     return this.getSettings()[key];
   }
 

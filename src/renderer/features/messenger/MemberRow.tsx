@@ -13,6 +13,7 @@
  */
 import { clsx } from 'clsx';
 import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
 
 import { ProfileAvatar } from '../../components/shell/ProfileAvatar';
 import { MemberProfileTrigger } from '../members/MemberProfileTrigger';
@@ -33,6 +34,7 @@ export interface MemberRowProps {
 
 export function MemberRow({ member, className }: MemberRowProps): ReactElement {
   const { themeKey, token } = useTheme();
+  const { t } = useTranslation();
   const statusClass = STATUS_DOT_CLASS[member.workStatus];
   const fontClass = themeKey === 'retro' ? 'font-mono' : 'font-sans';
 
@@ -54,7 +56,7 @@ export function MemberRow({ member, className }: MemberRowProps): ReactElement {
           <button
             type="button"
             data-testid="member-row-trigger"
-            aria-label={`프로필 보기: ${member.displayName}`}
+            aria-label={t('member.profileTrigger.ariaLabel', { name: member.displayName })}
             className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <span
@@ -69,7 +71,7 @@ export function MemberRow({ member, className }: MemberRowProps): ReactElement {
           <button
             type="button"
             data-testid="member-row-trigger"
-            aria-label={`프로필 보기: ${member.displayName}`}
+            aria-label={t('member.profileTrigger.ariaLabel', { name: member.displayName })}
             className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
           >
             <ProfileAvatar

@@ -76,7 +76,7 @@ export function Message({
   compact = false,
   className,
 }: MessageProps): ReactElement {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { themeKey, token } = useTheme();
 
   const showHeader = !compact;
@@ -140,7 +140,7 @@ export function Message({
               <button
                 type="button"
                 data-testid="message-avatar-trigger"
-                aria-label={`프로필 보기: ${member.name}`}
+                aria-label={t('member.profileTrigger.ariaLabel', { name: member.name })}
                 className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <ProfileAvatar

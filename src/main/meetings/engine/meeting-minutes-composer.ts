@@ -31,6 +31,10 @@
  * `messageService.append`.
  */
 
+import {
+  getNotificationLocale,
+  type NotificationLocale,
+} from '../../notifications/notification-labels';
 import type { VoteRecord } from '../../../shared/consensus-types';
 import type { Participant } from '../../../shared/engine-types';
 import type { SessionSnapshot, SessionState } from '../../../shared/session-state-types';
@@ -43,6 +47,15 @@ const MS_PER_MINUTE = 60_000;
 
 /** Cap for the failure-reason paragraph to keep minutes readable. */
 const FAILURE_REASON_MAX = 240;
+
+/**
+ * F5-T5: same locale union as NotificationDictionary. The minutes channel
+ * is a main-process side-effect (composeMinutes runs inside the orchestrator
+ * after the SSM reaches DONE/FAILED), and the v3 design forbids importing
+ * `i18next` from main — so locale-aware default labels piggy-back on the
+ * already-globally-tracked notification locale.
+ */
+export type MinutesLocale = NotificationLocale;
 
 export interface MinutesComposeInput {
   /** Meeting row id — short form appears in the header title. */
@@ -60,11 +73,18 @@ export interface MinutesComposeInput {
   endedAt?: number;
   /**
    * Optional i18n translator. When present the composer calls `t(key)`
-   * for every static label; otherwise the hard-coded Korean strings
-   * land. R6-Task11 populates the key set; until then callers pass
-   * `undefined` and consume the default copy.
+   * for every static label; the default labels resolve through the
+   * locale-aware {@link MinutesDictionary} (F5-T5) and override only
+   * when `t` returns a non-key value.
    */
-  t?: (key: string) => string;
+  t?: MinutesTranslator;
+  /**
+   * Locale for default labels when `t` is missing or returns the key
+   * verbatim. Defaults to {@link getNotificationLocale}, so the minutes
+   * channel matches the active OS-notification language without an
+   * extra setting.
+   */
+  locale?: MinutesLocale;
 }
 
 /**
@@ -73,26 +93,118 @@ export interface MinutesComposeInput {
  */
 export type MinutesTranslator = (key: string) => string;
 
-const DEFAULT_LABELS: Record<string, string> = {
-  'meeting.minutes.header.titlePrefix': '회의',
-  'meeting.minutes.header.participants': '참여자',
-  'meeting.minutes.header.topic': '주제',
-  'meeting.minutes.header.ssmFinal': 'SSM 최종 상태',
-  'meeting.minutes.header.elapsed': '경과 시간',
-  'meeting.minutes.header.votes': '투표',
-  'meeting.minutes.header.elapsedUnit': '분',
-  'meeting.minutes.header.minutesFooter': '회의 종료',
-  'meeting.minutes.failed.reason': '종료 사유',
-  'meeting.minutes.failed.noConsensus': '합의본 없음',
-  'meeting.minutes.failed.unknown': '사유 불명 — 이전 상태 기록 없음',
+/**
+ * Static label dictionary mirrored to ko/en — same shape as
+ * NotificationDictionary so a future refactor can collapse the two.
+ * Keys mirror the renderer's `meeting.minutes.*` namespace.
+ */
+interface MinutesDictionary {
+  header: {
+    titlePrefix: string;
+    participants: string;
+    topic: string;
+    ssmFinal: string;
+    elapsed: string;
+    elapsedUnit: string;
+    votes: string;
+    minutesFooter: string;
+  };
+  failed: {
+    reason: string;
+    noConsensus: string;
+    unknown: string;
+    /** `{{previous}}` interpolation placeholder. */
+    previousState: string;
+  };
+}
+
+const KO: MinutesDictionary = {
+  header: {
+    titlePrefix: '회의',
+    participants: '참여자',
+    topic: '주제',
+    ssmFinal: 'SSM 최종 상태',
+    elapsed: '경과 시간',
+    elapsedUnit: '분',
+    votes: '투표',
+    minutesFooter: '회의 종료',
+  },
+  failed: {
+    reason: '종료 사유',
+    noConsensus: '합의본 없음',
+    unknown: '사유 불명 — 이전 상태 기록 없음',
+    previousState: '이전 상태 {{previous}}에서 종료',
+  },
 };
+
+const EN: MinutesDictionary = {
+  header: {
+    titlePrefix: 'Meeting',
+    participants: 'Participants',
+    topic: 'Topic',
+    ssmFinal: 'SSM final state',
+    elapsed: 'Elapsed',
+    elapsedUnit: 'min',
+    votes: 'Votes',
+    minutesFooter: 'Meeting ended',
+  },
+  failed: {
+    reason: 'Failure reason',
+    noConsensus: 'No consensus body',
+    unknown: 'Unknown reason — no previous-state record',
+    previousState: 'Ended in previous state {{previous}}',
+  },
+};
+
+const DICTIONARIES: Record<MinutesLocale, MinutesDictionary> = { ko: KO, en: EN };
+
+/**
+ * Resolves a flat key (`'header.titlePrefix'`, `'failed.unknown'`) against
+ * the dictionary for the supplied locale. Mirrors the
+ * NotificationDictionary lookup helper. Unknown keys return the literal
+ * key so missing-key bugs surface in the minutes body rather than a blank.
+ */
+function lookupLabel(locale: MinutesLocale, key: string): string {
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES.ko;
+  const segments = key.split('.');
+  let node: unknown = dict;
+  for (const seg of segments) {
+    if (node === null || typeof node !== 'object') return key;
+    node = (node as Record<string, unknown>)[seg];
+  }
+  return typeof node === 'string' ? node : key;
+}
+
+/** Same `{{name}}` interpolation as i18next — keeps the contract local. */
+function interpolate(
+  template: string,
+  vars: Record<string, string | number>,
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (_match, name: string) => {
+    const value = vars[name];
+    return value === undefined ? '' : String(value);
+  });
+}
+
+/**
+ * Maps the legacy flat `meeting.minutes.*` keys (used by callers that
+ * pass an i18next-bound `t`) onto the {@link MinutesDictionary} shape.
+ * The orchestrator threads its own `t`; tests rely on the default
+ * dictionary path. Both stay in sync through this mapping.
+ */
+function legacyKeyToDict(key: string): string | null {
+  const PREFIX = 'meeting.minutes.';
+  if (!key.startsWith(PREFIX)) return null;
+  return key.slice(PREFIX.length);
+}
 
 /**
  * Compose the markdown minutes body for the given terminal snapshot.
  * Idempotent — the same inputs always produce the same string.
  */
 export function composeMinutes(input: MinutesComposeInput): string {
-  const translate = createTranslator(input.t);
+  const locale = input.locale ?? getNotificationLocale();
+  const translate = createTranslator(input.t, locale);
   const endedAt = input.endedAt ?? Date.now();
   const elapsedMinutes = computeElapsedMinutes(input.startedAt, endedAt);
   const voteTally = tallyVotes(input.snapshot.votes ?? []);
@@ -127,7 +239,7 @@ export function composeMinutes(input: MinutesComposeInput): string {
   // see WHY before they see the proposal gap.
   if (input.snapshot.state === 'FAILED') {
     lines.push(
-      `**${translate('meeting.minutes.failed.reason')}**: ${formatFailureReason(input.snapshot, translate)}`,
+      `**${translate('meeting.minutes.failed.reason')}**: ${formatFailureReason(input.snapshot, locale)}`,
     );
   }
 
@@ -157,14 +269,27 @@ export function composeMinutes(input: MinutesComposeInput): string {
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function createTranslator(t: MinutesTranslator | undefined): MinutesTranslator {
-  if (!t) return (key) => DEFAULT_LABELS[key] ?? key;
+/**
+ * Wraps an optional i18next-bound `t` so the composer always has a label
+ * to render. The fallback walks the locale-aware {@link MinutesDictionary}
+ * — same key shape as the renderer's `meeting.minutes.*` namespace.
+ */
+function createTranslator(
+  t: MinutesTranslator | undefined,
+  locale: MinutesLocale,
+): MinutesTranslator {
+  const resolveDefault = (key: string): string => {
+    const dictKey = legacyKeyToDict(key);
+    if (dictKey === null) return key;
+    return lookupLabel(locale, dictKey);
+  };
+  if (!t) return resolveDefault;
   return (key) => {
     const value = t(key);
-    // If the translator returns the key verbatim (i18next missing-key
-    // fallback) we substitute the default label so the minutes body is
-    // never littered with raw keys like `meeting.minutes.header.topic`.
-    if (value === key) return DEFAULT_LABELS[key] ?? key;
+    // i18next returns the key verbatim when no entry exists — fall back
+    // to the locale dictionary so the minutes body is never littered
+    // with raw keys like `meeting.minutes.header.topic`.
+    if (value === key) return resolveDefault(key);
     return value;
   };
 }
@@ -219,13 +344,15 @@ function formatVoteTally(tally: VoteTally): string {
 
 function formatFailureReason(
   snapshot: SessionSnapshot,
-  translate: MinutesTranslator,
+  locale: MinutesLocale,
 ): string {
   const previous: SessionState | 'UNKNOWN' = snapshot.previousState ?? 'UNKNOWN';
   if (previous === 'UNKNOWN') {
-    return translate('meeting.minutes.failed.unknown');
+    return lookupLabel(locale, 'failed.unknown');
   }
-  const reason = `이전 상태 ${previous}에서 종료`;
+  const reason = interpolate(lookupLabel(locale, 'failed.previousState'), {
+    previous,
+  });
   return reason.length > FAILURE_REASON_MAX
     ? reason.slice(0, FAILURE_REASON_MAX) + '…'
     : reason;

@@ -9,15 +9,148 @@
  * - Memory search
  *
  * Served at GET / by the remote HTTP server.
+ *
+ * F5-T4 (D5): UI 라벨은 main-process 사전 (NotificationDictionary 와 동일
+ * 패턴) 으로 분리한다. main bundle 은 의도적으로 i18next 를 import 하지 않
+ * 으므로 정적 dictionary 로 ko/en 을 보유하고, 호출자 (remote-server) 가
+ * 현재 OS 알림 locale 을 그대로 전달한다. dictionary 는 client-side JS 로
+ * 직렬화돼 LABELS 전역으로 주입된다.
  */
 
-export function getRemoteWebClientHtml(): string {
+import {
+  getNotificationLocale,
+  type NotificationLocale,
+} from '../notifications/notification-labels';
+
+/** Re-export for caller readability — same locale union as notifications. */
+export type RemoteWebClientLocale = NotificationLocale;
+
+/**
+ * UI label dictionary mirrored across `ko` / `en`. Keys are intentionally
+ * flat (no nesting) because the entire object is JSON-serialised into
+ * the page so the client JS reads `LABELS.key` directly. Adding a key
+ * here requires populating both locale entries — the test pins parity.
+ */
+export interface RemoteWebClientDictionary {
+  pageTitle: string;
+  brandName: string;
+  tokenSavedHint: string;
+  tokenPrompt: string;
+  tokenPlaceholder: string;
+  tokenRequired: string;
+  authFailedPrefix: string;
+  connectButton: string;
+  loading: string;
+  searching: string;
+  emptyConversations: string;
+  emptyResults: string;
+  emptyMessages: string;
+  untitledConversation: string;
+  memQueryPlaceholder: string;
+  searchButton: string;
+  relevanceLabel: string;
+  logoutButton: string;
+  tabConversations: string;
+  tabMemory: string;
+  backToList: string;
+}
+
+const KO: RemoteWebClientDictionary = {
+  pageTitle: 'AI Chat Arena — 원격',
+  brandName: 'AI Chat Arena',
+  tokenSavedHint: '저장된 토큰이 있습니다. 다시 입력하거나 연결하세요.',
+  tokenPrompt: '접속 토큰을 입력하세요.',
+  tokenPlaceholder: '토큰 입력...',
+  tokenRequired: '토큰을 입력하세요.',
+  authFailedPrefix: '인증 실패: ',
+  connectButton: '연결',
+  loading: '불러오는 중...',
+  searching: '검색 중...',
+  emptyConversations: '대화가 없습니다.',
+  emptyResults: '검색 결과가 없습니다.',
+  emptyMessages: '메시지가 없습니다.',
+  untitledConversation: '(제목 없음)',
+  memQueryPlaceholder: '검색어 입력...',
+  searchButton: '검색',
+  relevanceLabel: '관련도:',
+  logoutButton: '로그아웃',
+  tabConversations: '대화',
+  tabMemory: '메모리',
+  backToList: '← 목록으로',
+};
+
+const EN: RemoteWebClientDictionary = {
+  pageTitle: 'AI Chat Arena — Remote',
+  brandName: 'AI Chat Arena',
+  tokenSavedHint: 'A saved token is on file. Re-enter it or connect.',
+  tokenPrompt: 'Enter your access token.',
+  tokenPlaceholder: 'Enter token...',
+  tokenRequired: 'Please enter a token.',
+  authFailedPrefix: 'Authentication failed: ',
+  connectButton: 'Connect',
+  loading: 'Loading...',
+  searching: 'Searching...',
+  emptyConversations: 'No conversations.',
+  emptyResults: 'No results.',
+  emptyMessages: 'No messages.',
+  untitledConversation: '(untitled)',
+  memQueryPlaceholder: 'Enter query...',
+  searchButton: 'Search',
+  relevanceLabel: 'Relevance:',
+  logoutButton: 'Sign out',
+  tabConversations: 'Conversations',
+  tabMemory: 'Memory',
+  backToList: '← Back to list',
+};
+
+const DICTIONARIES: Record<RemoteWebClientLocale, RemoteWebClientDictionary> = {
+  ko: KO,
+  en: EN,
+};
+
+function dictionaryFor(
+  locale: RemoteWebClientLocale,
+): RemoteWebClientDictionary {
+  return DICTIONARIES[locale] ?? DICTIONARIES.ko;
+}
+
+/**
+ * Escapes string content destined for an HTML attribute or PCDATA so a
+ * pathological dictionary entry never injects markup. The dictionaries
+ * shipped here are static, but escaping keeps the contract local and
+ * survives a future translator-supplied entry without re-auditing.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Returns the remote web-client HTML for the given locale. When omitted,
+ * the active OS-notification locale is used so the remote viewer matches
+ * the desktop UI without a separate setting.
+ */
+export function getRemoteWebClientHtml(
+  locale: RemoteWebClientLocale = getNotificationLocale(),
+): string {
+  const labels = dictionaryFor(locale);
+  // Serialise the dictionary into the page so the client-side JS can do
+  // simple `LABELS.key` lookups. JSON.stringify already produces a valid
+  // JS literal — no XSS surface because the dictionary is static, but the
+  // </script> sequence is escaped defensively in case a future entry
+  // contains it.
+  const labelsJson = JSON.stringify(labels).replace(/<\/script/gi, '<\\/script');
+
   return `<!DOCTYPE html>
-<html lang="ko">
+<html lang="${escapeHtml(locale)}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>AI Chat Arena — Remote</title>
+<title>${escapeHtml(labels.pageTitle)}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -102,6 +235,7 @@ export function getRemoteWebClientHtml(): string {
 <div id="app"></div>
 <script>
 (function() {
+  const LABELS = ${labelsJson};
   const $ = (sel) => document.querySelector(sel);
   const TOKEN_KEY = 'arena_remote_token';
   let token = sessionStorage.getItem(TOKEN_KEY) || '';
@@ -192,15 +326,15 @@ export function getRemoteWebClientHtml(): string {
     const app = $('#app');
     if (view === 'auth') {
       app.innerHTML = \`
-        <div class="header"><h1>AI Chat Arena</h1></div>
+        <div class="header"><h1>\${esc(LABELS.brandName)}</h1></div>
         <div class="container">
           <div class="card">
             <p style="margin-bottom:12px;font-size:14px;color:#555">
-              \${token ? '저장된 토큰이 있습니다. 다시 입력하거나 연결하세요.' : '접속 토큰을 입력하세요.'}
+              \${token ? esc(LABELS.tokenSavedHint) : esc(LABELS.tokenPrompt)}
             </p>
-            <input id="token-input" type="password" placeholder="토큰 입력..."
+            <input id="token-input" type="password" placeholder="\${esc(LABELS.tokenPlaceholder)}"
               value="\${esc(token)}">
-            <button class="btn" id="connect-btn">연결</button>
+            <button class="btn" id="connect-btn">\${esc(LABELS.connectButton)}</button>
             \${error ? '<p class="error">' + esc(error) + '</p>' : ''}
           </div>
         </div>\`;
@@ -214,13 +348,13 @@ export function getRemoteWebClientHtml(): string {
       let tabContent = '';
       if (tab === 'conversations') {
         if (loading) {
-          tabContent = '<div class="loading">불러오는 중...</div>';
+          tabContent = '<div class="loading">' + esc(LABELS.loading) + '</div>';
         } else if (conversations.length === 0) {
-          tabContent = '<div class="empty">대화가 없습니다.</div>';
+          tabContent = '<div class="empty">' + esc(LABELS.emptyConversations) + '</div>';
         } else {
           tabContent = conversations.map((c, i) => \`
             <div class="conv-item" data-idx="\${i}">
-              <div class="conv-title">\${esc(c.title || '(제목 없음)')}</div>
+              <div class="conv-title">\${esc(c.title || LABELS.untitledConversation)}</div>
               <div class="conv-mode">\${esc(c.mode)}</div>
             </div>\`).join('');
         }
@@ -229,14 +363,14 @@ export function getRemoteWebClientHtml(): string {
         content = \`
           <div class="card">
             <div class="search-row">
-              <input id="mem-query" placeholder="검색어 입력...">
-              <button class="btn btn-sm" id="mem-search-btn">검색</button>
+              <input id="mem-query" placeholder="\${esc(LABELS.memQueryPlaceholder)}">
+              <button class="btn btn-sm" id="mem-search-btn">\${esc(LABELS.searchButton)}</button>
             </div>
-            \${loading ? '<div class="loading">검색 중...</div>' :
-              memResults.length === 0 ? '<div class="empty">검색 결과가 없습니다.</div>' :
+            \${loading ? '<div class="loading">' + esc(LABELS.searching) + '</div>' :
+              memResults.length === 0 ? '<div class="empty">' + esc(LABELS.emptyResults) + '</div>' :
               memResults.map(r => \`
                 <div class="mem-item">
-                  <div class="mem-score">관련도: \${(r.score * 100).toFixed(0)}%</div>
+                  <div class="mem-score">\${esc(LABELS.relevanceLabel)} \${(r.score * 100).toFixed(0)}%</div>
                   <div class="mem-content">\${esc(r.content)}</div>
                 </div>\`).join('')}
           </div>\`;
@@ -244,13 +378,13 @@ export function getRemoteWebClientHtml(): string {
 
       app.innerHTML = \`
         <div class="header">
-          <h1>AI Chat Arena</h1>
-          <button id="logout-btn">로그아웃</button>
+          <h1>\${esc(LABELS.brandName)}</h1>
+          <button id="logout-btn">\${esc(LABELS.logoutButton)}</button>
         </div>
         <div class="container">
           <div class="tab-bar">
-            <button class="\${tab === 'conversations' ? 'active' : ''}" data-tab="conversations">대화</button>
-            <button class="\${tab === 'memory' ? 'active' : ''}" data-tab="memory">메모리</button>
+            <button class="\${tab === 'conversations' ? 'active' : ''}" data-tab="conversations">\${esc(LABELS.tabConversations)}</button>
+            <button class="\${tab === 'memory' ? 'active' : ''}" data-tab="memory">\${esc(LABELS.tabMemory)}</button>
           </div>
           \${content}
         </div>\`;
@@ -279,12 +413,12 @@ export function getRemoteWebClientHtml(): string {
 
       app.innerHTML = \`
         <div class="header">
-          <h1>\${esc(currentConv.title || '(제목 없음)')}</h1>
+          <h1>\${esc(currentConv.title || LABELS.untitledConversation)}</h1>
         </div>
         <div class="container">
-          <button class="back-btn" id="back-btn">&larr; 목록으로</button>
-          \${loading ? '<div class="loading">불러오는 중...</div>' :
-            currentConv.messages?.length === 0 ? '<div class="empty">메시지가 없습니다.</div>' : msgs}
+          <button class="back-btn" id="back-btn">\${esc(LABELS.backToList)}</button>
+          \${loading ? '<div class="loading">' + esc(LABELS.loading) + '</div>' :
+            currentConv.messages?.length === 0 ? '<div class="empty">' + esc(LABELS.emptyMessages) + '</div>' : msgs}
         </div>\`;
       $('#back-btn').onclick = () => { view = 'list'; currentConv = null; render(); };
     }
@@ -293,7 +427,7 @@ export function getRemoteWebClientHtml(): string {
   async function doConnect() {
     const input = $('#token-input');
     if (input) token = input.value.trim();
-    if (!token) { error = '토큰을 입력하세요.'; render(); return; }
+    if (!token) { error = LABELS.tokenRequired; render(); return; }
     error = '';
     try {
       await api('GET', '/remote/conversations');
@@ -302,7 +436,7 @@ export function getRemoteWebClientHtml(): string {
       render();
       loadConversations();
     } catch (e) {
-      error = '인증 실패: ' + e.message;
+      error = LABELS.authFailedPrefix + e.message;
       render();
     }
   }
@@ -354,8 +488,8 @@ export function getRemoteWebClientHtml(): string {
   }
 
   function esc(s) {
-    if (!s) return '';
-    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
   }
 
   // Init
@@ -366,3 +500,10 @@ export function getRemoteWebClientHtml(): string {
 </body>
 </html>`;
 }
+
+// Test-only export: exposes the dictionary for parity assertions without
+// re-implementing them in test code.
+export const __REMOTE_WEB_CLIENT_DICTIONARIES_FOR_TESTS = {
+  ko: KO,
+  en: EN,
+} as const;

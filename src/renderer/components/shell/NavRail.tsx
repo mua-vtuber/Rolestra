@@ -1,4 +1,5 @@
 import { clsx } from 'clsx';
+import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../../theme/use-theme';
 import { LineIcon, type IconName } from './LineIcon';
@@ -19,9 +20,10 @@ export interface NavRailProps {
 
 export function NavRail({ items, activeId, onSelect, className }: NavRailProps) {
   const { token } = useTheme();
+  const { t } = useTranslation();
   return (
     <nav
-      aria-label="primary navigation"
+      aria-label={t('shell.nav.ariaLabel', 'primary navigation')}
       data-testid="nav-rail"
       className={clsx(
         'flex flex-col items-center gap-2 py-3 w-16 shrink-0 bg-rail-bg border-r border-border',

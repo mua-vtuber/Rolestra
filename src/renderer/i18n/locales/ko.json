@@ -365,6 +365,9 @@
       "uploadError": "업로드 실패: {{message}}",
       "uploading": "업로드 중…"
     },
+    "profileTrigger": {
+      "ariaLabel": "프로필 보기: {{name}}"
+    },
     "status": {
       "connecting": "재연결 중",
       "offlineConnection": "점검 필요",
@@ -716,7 +719,12 @@
     "summary": {
       "alt": "예외처",
       "detected": "감지됨",
-      "selected": "선택됨"
+      "selected": "선택됨",
+      "short": {
+        "alternative": "대안",
+        "detected": "감지",
+        "selected": "선택"
+      }
     },
     "topBar": {
       "estTime": "약 4분 남음",
@@ -1029,7 +1037,11 @@
     "title": "설정"
   },
   "shell": {
+    "nav": {
+      "ariaLabel": "주 내비게이션"
+    },
     "rail": {
+      "ariaLabel": "프로젝트 레일",
       "direct": "다이렉트 메시지",
       "newProject": "+ 새 프로젝트",
       "projects": "프로젝트"

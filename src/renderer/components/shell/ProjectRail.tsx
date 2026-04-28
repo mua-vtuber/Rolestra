@@ -47,7 +47,7 @@ export function ProjectRail({
   const { t } = useTranslation();
   return (
     <aside
-      aria-label="project rail"
+      aria-label={t('shell.rail.ariaLabel', 'project rail')}
       data-testid="project-rail"
       className={clsx(
         'flex flex-col gap-1 w-60 shrink-0 px-3 py-4 bg-project-bg border-r border-border',

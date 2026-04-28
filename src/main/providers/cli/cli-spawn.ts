@@ -28,6 +28,7 @@ import {
   defaultShellEnvResolver,
   type ShellEnvResolver,
 } from './shell-env';
+import { KILL_GRACE_PERIOD_MS } from '../../../shared/timeouts';
 
 export interface RunCliOptions {
   command: string;
@@ -103,13 +104,14 @@ export async function runCli(opts: RunCliOptions): Promise<RunCliResult> {
     proc.stderr.on('data', (c: Buffer) => errChunks.push(c.toString('utf-8')));
 
     // Two timers: the outer timeout fires SIGTERM; if the child is still
-    // alive 3s later the inner timer escalates to SIGKILL. Both are cleared
-    // on `exit` / `error` so a normally-exiting child does not hold the
-    // event loop open waiting for a SIGKILL that will never fire.
+    // alive KILL_GRACE_PERIOD_MS later the inner timer escalates to
+    // SIGKILL. Both are cleared on `exit` / `error` so a normally-exiting
+    // child does not hold the event loop open waiting for a SIGKILL that
+    // will never fire.
     let killTimer: NodeJS.Timeout | null = null;
     const timeout = setTimeout(() => {
       proc.kill('SIGTERM');
-      killTimer = setTimeout(() => proc.kill('SIGKILL'), 3000);
+      killTimer = setTimeout(() => proc.kill('SIGKILL'), KILL_GRACE_PERIOD_MS);
     }, opts.timeoutMs ?? DEFAULT_TIMEOUT);
 
     proc.on('error', (err) => {

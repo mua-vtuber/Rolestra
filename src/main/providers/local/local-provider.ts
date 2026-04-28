@@ -11,6 +11,7 @@ import type {
   CompletionOptions,
   LocalProviderConfig,
 } from '../../../shared/provider-types';
+import { LOCAL_PROVIDER_TIMEOUT_MS } from '../../../shared/timeouts';
 
 export type LocalProviderInit = Omit<BaseProviderInit, 'type' | 'capabilities'>;
 
@@ -59,13 +60,13 @@ export class LocalProvider extends BaseProvider {
       // Most local servers expose /api/tags (Ollama) or /v1/models (OpenAI-compat)
       const base = this.localConfig.baseUrl.replace(/\/+$/, '');
       const res = await fetch(`${base}/v1/models`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(LOCAL_PROVIDER_TIMEOUT_MS),
       });
       if (res.ok) return true;
 
       // Fallback: try Ollama-specific endpoint
       const ollamaRes = await fetch(`${base}/api/tags`, {
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(LOCAL_PROVIDER_TIMEOUT_MS),
       });
       return ollamaRes.ok;
     } catch {

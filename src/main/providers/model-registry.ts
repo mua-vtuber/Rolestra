@@ -11,6 +11,7 @@
  * UX — user has not chosen to fetch live yet).
  */
 import type { ProviderType } from '../../shared/provider-types';
+import { MODEL_REGISTRY_FETCH_TIMEOUT_MS } from '../../shared/timeouts';
 import { OLLAMA_ENDPOINT_FALLBACK } from './ollama-endpoint-resolver';
 
 /** Anthropic API version header. */
@@ -218,7 +219,7 @@ async function fetchJson<T>(
  */
 async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[]> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), MODEL_REGISTRY_FETCH_TIMEOUT_MS);
   try {
     let body: unknown;
     if (isAnthropicEndpoint(endpoint)) {
@@ -270,7 +271,7 @@ async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[
  */
 async function fetchGoogleModelsDetailed(endpoint: string, apiKey: string): Promise<GoogleModelInfo[]> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), MODEL_REGISTRY_FETCH_TIMEOUT_MS);
   try {
     const body = await fetchJson<{ models?: GoogleModelInfo[] }>(
       endpoint,

@@ -108,7 +108,7 @@ export function PeopleWidget({
               <button
                 type="button"
                 data-testid="people-widget-row-trigger"
-                aria-label={`프로필 보기: ${member.displayName}`}
+                aria-label={t('member.profileTrigger.ariaLabel', { name: member.displayName })}
                 className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >
                 <ProfileAvatar

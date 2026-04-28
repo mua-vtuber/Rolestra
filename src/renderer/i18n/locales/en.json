@@ -365,6 +365,9 @@
       "uploadError": "Upload failed: {{message}}",
       "uploading": "Uploading…"
     },
+    "profileTrigger": {
+      "ariaLabel": "View profile: {{name}}"
+    },
     "status": {
       "connecting": "Reconnecting",
       "offlineConnection": "Needs attention",
@@ -718,7 +721,12 @@
     "summary": {
       "alt": "Alt",
       "detected": "Detected",
-      "selected": "Selected"
+      "selected": "Selected",
+      "short": {
+        "alternative": "Alt",
+        "detected": "Det",
+        "selected": "Sel"
+      }
     },
     "topBar": {
       "estTime": "~4 min left",
@@ -1031,7 +1039,11 @@
     "title": "Settings"
   },
   "shell": {
+    "nav": {
+      "ariaLabel": "Primary navigation"
+    },
     "rail": {
+      "ariaLabel": "Project rail",
       "direct": "Direct Messages",
       "newProject": "+ New project",
       "projects": "Projects"
