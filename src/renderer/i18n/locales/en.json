@@ -659,6 +659,64 @@
       "step5": "Enter the kind and slug of your first project."
     },
     "heading": "Who do you want to work with?",
+    "providers": {
+      "claude": {
+        "bestFor": "Complex code changes · long-form reasoning",
+        "initial": "C",
+        "name": "Claude Code",
+        "price": "Pro $20/mo · API metered",
+        "tagline": "Senior engineer — careful with large contexts.",
+        "vendor": "Anthropic"
+      },
+      "codex": {
+        "bestFor": "Rapid prototyping · auto-complete",
+        "initial": "C",
+        "name": "Codex CLI",
+        "price": "Plus $20/mo · API metered",
+        "tagline": "Quick teammate — brings the ChatGPT coding flow.",
+        "vendor": "OpenAI"
+      },
+      "copilot": {
+        "bestFor": "GitHub integration · daily pair",
+        "initial": "G",
+        "name": "GitHub Copilot",
+        "price": "Pro $10/mo",
+        "tagline": "Pair programmer fused with GitHub.",
+        "vendor": "GitHub"
+      },
+      "gemini": {
+        "bestFor": "Long documents · multimodal inputs",
+        "initial": "G",
+        "name": "Gemini CLI",
+        "price": "AI Studio free · API metered",
+        "tagline": "Broad analyst — sweeps long contexts in one go.",
+        "vendor": "Google"
+      },
+      "grok": {
+        "bestFor": "Real-time info · quick answers",
+        "initial": "X",
+        "name": "Grok",
+        "price": "X Premium subscription",
+        "tagline": "Snappy chatter strong on fresh info.",
+        "vendor": "xAI"
+      },
+      "local": {
+        "bestFor": "Offline · data privacy",
+        "initial": "L",
+        "name": "Local (Ollama)",
+        "price": "Free · local GPU",
+        "tagline": "Your in-house model running on the same box.",
+        "vendor": "Ollama / Local"
+      },
+      "unknown": {
+        "bestFor": "Manual review",
+        "initial": "?",
+        "name": "Detected CLI",
+        "price": "—",
+        "tagline": "Unknown CLI — classify in Settings.",
+        "vendor": "User-added"
+      }
+    },
     "settingsCta": "Restart onboarding",
     "step1": {
       "body": "Rolestra orchestrates multiple AI agents like staff in a single office. The next 5 steps walk you through staff selection, role assignment, permission mode, and your first project.",

@@ -203,6 +203,36 @@ export function App() {
     [activeProjectId, setActiveChannelIdStore, setView],
   );
 
+  // 회의 소집 (대시보드 quick action) — DM 또는 다른 user 채널이 마지막
+  // active 였더라도 회의를 시작할 수 있는 system_general (#일반) 로 강제
+  // 전환한 뒤 messenger view 로 진입한다. `messenger` view 가 그냥 마지막
+  // active 채널을 보여주면 사용자가 DM 안에서 "회의 시작" 버튼이 안 보여
+  // 막히는 dogfooding 보고가 있었다.
+  const handleSummonMeeting = useCallback((): void => {
+    if (activeProjectId === null) {
+      setView('messenger');
+      return;
+    }
+    void (async () => {
+      try {
+        const { channels } = await invoke('channel:list', {
+          projectId: activeProjectId,
+        });
+        const general =
+          channels.find((c) => c.kind === 'system_general') ??
+          channels.find((c) => c.kind === 'user') ??
+          null;
+        if (general) {
+          setActiveChannelIdStore(activeProjectId, general.id);
+        }
+      } catch (reason) {
+        console.warn('[rolestra] summon meeting: channel:list failed', reason);
+      } finally {
+        setView('messenger');
+      }
+    })();
+  }, [activeProjectId, setActiveChannelIdStore, setView]);
+
   // activeChannel 이름은 messenger 내부에서 가져오므로 여기서는 id 만 넘김.
   const activeChannelName: string | null = null;
 
@@ -430,7 +460,7 @@ export function App() {
       ) : (
         <DashboardPage
           onRequestNewProject={handleCreateProject}
-          onRequestStartMeeting={() => setView('messenger')}
+          onRequestStartMeeting={handleSummonMeeting}
         />
       )}
       <ProjectCreateModal

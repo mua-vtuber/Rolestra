@@ -8,6 +8,7 @@ import {
   setExecutionWebContents,
   setExecutionApprovalServiceAccessor,
 } from './ipc/handlers/execution-handler';
+import { setArenaRootServiceAccessor } from './ipc/handlers/arena-root-handler';
 import { setLoggerAccessor } from './ipc/handlers/log-handler';
 import { configureApplicationMenu } from './ui/app-menu';
 import { restoreProvidersFromDb } from './providers/provider-restore';
@@ -160,6 +161,12 @@ app.whenReady().then(async () => {
     // Wire lazy accessors for cross-module dependencies (C1, I2)
     const logger = createLogger();
     setLoggerAccessor(() => logger);
+    // arena-root:* IPC handlers depend on the singleton ArenaRootService.
+    // Without this wiring renderer-side `useArenaRoot` calls (Settings →
+    // Storage tab among others) throw "service not initialized" the very
+    // first time they fire. Discovered during dogfooding — the accessor
+    // was previously only wired inside unit tests.
+    setArenaRootServiceAccessor(() => arenaRoot);
 
     // R4 dashboard aggregator — repositories are owned by the singleton
     // DB handle so the three repos are cheap to construct here. The

@@ -72,6 +72,10 @@ export function MessageSearchView({
 }: MessageSearchViewProps): ReactElement {
   const { t, i18n } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Tracks IME composition state so onChange can ignore intermediate
+  // events while a CJK syllable is mid-assembly (see input handler
+  // comments below for why this matters).
+  const composingRef = useRef<boolean>(false);
   const panelClip = usePanelClipStyle();
 
   // 기본 scope 결정: 채널 > 프로젝트. 둘 다 없으면 disabled 상태.
@@ -192,7 +196,28 @@ export function MessageSearchView({
               placeholder={t('message.search.placeholder', {
                 defaultValue: '검색어를 입력하세요 (FTS5 syntax 지원)',
               })}
-              onChange={(e) => search.setQuery(e.target.value)}
+              // Korean / Japanese / Chinese IME composition guard: while
+              // the IME is assembling a syllable (한글 'ㅎ'+'ㅏ'+'ㄴ' →
+              // '한'), the input emits intermediate `change` events with
+              // partial / malformed code points. Forwarding those to
+              // `setQuery` lands invalid UTF-8 bytes in the IPC payload,
+              // which SQLite rejects as `fts5: syntax error near "?"`
+              // (the `?` is the placeholder for an unmappable byte).
+              // We mirror Composition events: skip `change` while
+              // composing, then sync once on `compositionend` with the
+              // finalized value. Native English typing has no
+              // composition events so this is a no-op for ASCII input.
+              onChange={(e) => {
+                if (composingRef.current) return;
+                search.setQuery(e.target.value);
+              }}
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={(e) => {
+                composingRef.current = false;
+                search.setQuery((e.target as HTMLInputElement).value);
+              }}
               className={clsx(
                 'w-full rounded-panel border border-panel-border bg-sunk px-3 py-2',
                 'text-sm text-fg focus:outline-none focus:ring-1 focus:ring-brand',

@@ -19,6 +19,7 @@
 import { clsx } from 'clsx';
 import {
   useCallback,
+  useRef,
   useState,
   type CSSProperties,
   type KeyboardEvent,
@@ -54,6 +55,13 @@ export function Composer({
   const [value, setValue] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Tracks IME composition (Korean/Japanese/Chinese syllable assembly).
+  // While true, intermediate `change` events are dropped to avoid
+  // sending broken UTF-8 bytes downstream, and Enter is suppressed
+  // because most IMEs use Enter to finalize the candidate — firing
+  // `send` on that keystroke would post the half-finished syllable
+  // before the IME commits.
+  const composingRef = useRef<boolean>(false);
 
   const isRetro = themeKey === 'retro';
   const glyph = isRetro ? '>' : '✎';
@@ -81,8 +89,32 @@ export function Composer({
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key !== 'Enter') return;
     if (event.shiftKey) return;
+    // IME composition guard: pressing Enter to commit a Korean
+    // syllable should NOT fire `send`. `nativeEvent.isComposing` is
+    // the standard signal modern browsers expose; some Electron
+    // versions also surface `keyCode === 229` for the same case.
+    if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+    if (composingRef.current) return;
     event.preventDefault();
     void handleSend();
+  };
+
+  const handleChange = (
+    event: React.ChangeEvent<HTMLTextAreaElement>,
+  ): void => {
+    if (composingRef.current) return;
+    setValue(event.target.value);
+  };
+
+  const handleCompositionStart = (): void => {
+    composingRef.current = true;
+  };
+
+  const handleCompositionEnd = (
+    event: React.CompositionEvent<HTMLTextAreaElement>,
+  ): void => {
+    composingRef.current = false;
+    setValue((event.target as HTMLTextAreaElement).value);
   };
 
   const inputWrapStyle: CSSProperties = {
@@ -134,7 +166,9 @@ export function Composer({
           rows={1}
           disabled={readOnly || submitting}
           placeholder={t('messenger.composer.placeholder')}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={handleChange}
+          onCompositionStart={handleCompositionStart}
+          onCompositionEnd={handleCompositionEnd}
           onKeyDown={handleKeyDown}
           aria-label={t('messenger.composer.inputAriaLabel')}
           className={clsx(

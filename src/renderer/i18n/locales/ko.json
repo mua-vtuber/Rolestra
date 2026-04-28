@@ -657,6 +657,64 @@
       "step5": "첫 프로젝트의 종류와 slug 를 입력하세요."
     },
     "heading": "누구와 함께 일하시겠어요?",
+    "providers": {
+      "claude": {
+        "bestFor": "복잡한 코드 변경 · 장기 추론",
+        "initial": "C",
+        "name": "Claude Code",
+        "price": "Pro $20/mo · API 종량제",
+        "tagline": "꼼꼼한 시니어 — 큰 컨텍스트로 코드를 신중히 다듬습니다.",
+        "vendor": "Anthropic"
+      },
+      "codex": {
+        "bestFor": "빠른 프로토타입 · 자동 완성",
+        "initial": "C",
+        "name": "Codex CLI",
+        "price": "Plus $20/mo · API 종량제",
+        "tagline": "민첩한 일잘러 — ChatGPT 의 코드 흐름을 그대로 가져옵니다.",
+        "vendor": "OpenAI"
+      },
+      "copilot": {
+        "bestFor": "GitHub 통합 · 일상 페어",
+        "initial": "G",
+        "name": "GitHub Copilot",
+        "price": "Pro $10/mo",
+        "tagline": "GitHub 와 한몸인 페어 프로그래머.",
+        "vendor": "GitHub"
+      },
+      "gemini": {
+        "bestFor": "긴 문서 · 멀티모달 입력",
+        "initial": "G",
+        "name": "Gemini CLI",
+        "price": "AI Studio 무료 · API 종량제",
+        "tagline": "넓게 보는 분석가 — 긴 컨텍스트를 한 번에 훑습니다.",
+        "vendor": "Google"
+      },
+      "grok": {
+        "bestFor": "실시간 정보 · 빠른 답",
+        "initial": "X",
+        "name": "Grok",
+        "price": "X Premium 구독",
+        "tagline": "최신 정보에 강한 분위기 메이커.",
+        "vendor": "xAI"
+      },
+      "local": {
+        "bestFor": "오프라인 · 데이터 프라이버시",
+        "initial": "L",
+        "name": "Local (Ollama)",
+        "price": "무료 · 로컬 GPU",
+        "tagline": "내 컴퓨터 안에서 도는 사내 모델.",
+        "vendor": "Ollama / 로컬"
+      },
+      "unknown": {
+        "bestFor": "직접 검토",
+        "initial": "?",
+        "name": "감지된 CLI",
+        "price": "—",
+        "tagline": "알려지지 않은 CLI — Settings 에서 분류해 주세요.",
+        "vendor": "사용자 추가"
+      }
+    },
     "settingsCta": "온보딩 다시 시작",
     "step1": {
       "body": "Rolestra 는 여러 AI 에이전트를 한 사무실의 직원처럼 운영하는 도구입니다. 다음 5단계에서 직원 선택, 역할 부여, 권한 모드, 첫 프로젝트까지 한 번에 설정합니다.",
