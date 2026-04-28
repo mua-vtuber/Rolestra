@@ -17,6 +17,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  handleApprovalCount,
   handleApprovalDetailFetch,
   setApprovalServiceAccessor,
   setApprovalDetailExecutionAccessor,
@@ -181,5 +182,52 @@ describe('handleApprovalDetailFetch (R11-Task7)', () => {
     await expect(
       handleApprovalDetailFetch({ approvalId: 'app-1' }),
     ).rejects.toThrow('service not initialized');
+  });
+});
+
+describe('handleApprovalCount (F6-T1)', () => {
+  let approvalSvc: { count: ReturnType<typeof vi.fn> };
+
+  beforeEach(() => {
+    approvalSvc = { count: vi.fn() };
+    setApprovalServiceAccessor(() => approvalSvc as never);
+  });
+
+  it('returns three buckets plus their union as `all`', () => {
+    approvalSvc.count.mockImplementation(
+      (filter: { status?: string; projectId?: string }) => {
+        if (filter.status === 'pending') return 4;
+        if (filter.status === 'approved') return 2;
+        if (filter.status === 'rejected') return 1;
+        return 0;
+      },
+    );
+
+    const out = handleApprovalCount({ projectId: 'proj-1' });
+
+    expect(out).toEqual({ pending: 4, approved: 2, rejected: 1, all: 7 });
+    expect(approvalSvc.count).toHaveBeenCalledWith({
+      status: 'pending',
+      projectId: 'proj-1',
+    });
+    expect(approvalSvc.count).toHaveBeenCalledWith({
+      status: 'approved',
+      projectId: 'proj-1',
+    });
+    expect(approvalSvc.count).toHaveBeenCalledWith({
+      status: 'rejected',
+      projectId: 'proj-1',
+    });
+  });
+
+  it('omits projectId when the request has no scope (cross-project totals)', () => {
+    approvalSvc.count.mockReturnValue(0);
+
+    handleApprovalCount(undefined);
+
+    expect(approvalSvc.count).toHaveBeenCalledWith({
+      status: 'pending',
+      projectId: undefined,
+    });
   });
 });

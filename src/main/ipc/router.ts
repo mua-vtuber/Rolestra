@@ -137,6 +137,7 @@ import {
   handleApprovalList,
   handleApprovalDecide,
   handleApprovalDetailFetch,
+  handleApprovalCount,
 } from './handlers/approval-handler';
 import {
   handleNotificationGetPrefs,
@@ -219,6 +220,17 @@ function classifyError(err: unknown): IpcErrorCode {
 const registeredChannels: string[] = [];
 
 /**
+ * Reset the channel registry to empty without re-allocating the array.
+ * Single-source helper so both `registerIpcHandlers` (defensive
+ * pre-fill clear) and `unregisterIpcHandlers` (post-removal flush)
+ * speak through the same surface — mutating `length = 0` directly in
+ * two places drifts more easily than calling a named helper.
+ */
+function clearChannelRegistry(): void {
+  clearChannelRegistry();
+}
+
+/**
  * Register a typed IPC handler with validation.
  *
  * - Critical channel payloads are always validated (dev + production).
@@ -281,7 +293,7 @@ export function registerIpcHandlers(): void {
     return;
   }
   registered = true;
-  registeredChannels.length = 0;
+  clearChannelRegistry();
 
   const isDev = process.env.NODE_ENV === 'development' ||
     !!process.env.ELECTRON_RENDERER_URL;
@@ -435,6 +447,9 @@ export function registerIpcHandlers(): void {
   handle('approval:detail-fetch', isDev, (data) =>
     handleApprovalDetailFetch(data),
   );
+  // F6-T1: tab-badge counts (pending/approved/rejected + all). Replaces
+  // the R11-Task7 placeholder that only knew the active filter's count.
+  handle('approval:count', isDev, (data) => handleApprovalCount(data));
 
   // ── v3: Notification ────────────────────────────────────────────
   handle('notification:get-prefs', isDev, () => handleNotificationGetPrefs());
@@ -488,6 +503,6 @@ export function unregisterIpcHandlers(): void {
   for (const channel of registeredChannels) {
     ipcMain.removeHandler(channel);
   }
-  registeredChannels.length = 0;
+  clearChannelRegistry();
   registered = false;
 }

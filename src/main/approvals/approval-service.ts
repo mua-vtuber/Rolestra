@@ -5,9 +5,12 @@
  *   - `create(input)` inserts a new approval with a UUID `id`,
  *     `status='pending'`, `createdAt` epoch ms, `decidedAt=null`,
  *     `decisionComment=null`, and emits `'created'` on the service's
- *     EventEmitter. Task 19 will replace this emitter with the typed
- *     stream-bridge; until then the EventEmitter is the authoritative
- *     in-process broadcast.
+ *     EventEmitter. The R2-Task19 stream-bridge subscribes to this
+ *     EventEmitter (`services.approvals` in `StreamBridge.connect`)
+ *     and re-emits `'created'`/`'decided'` as `stream:approval-*`
+ *     for the renderer; the in-process EventEmitter remains the
+ *     authoritative broadcast for main-side listeners (AutonomyGate,
+ *     ApprovalNotificationBridge).
  *   - `decide(id, decision, comment?)` transitions a pending item to
  *     a terminal state. Three decisions:
  *       - `'approve'`       → `status='approved'`
@@ -431,6 +434,17 @@ export class ApprovalService extends EventEmitter {
    */
   list(filter: { status?: ApprovalStatus; projectId?: string } = {}): ApprovalItem[] {
     return this.repo.list(filter);
+  }
+
+  /**
+   * Counts approvals matching the optional `status` / `projectId`
+   * filter pair (F6-T1). Backs the `approval:count` IPC for the inbox
+   * tab badges so the renderer can show the four counters
+   * (pending/approved/rejected/all) without materialising + JSON-
+   * parsing every payload via `list().length`.
+   */
+  count(filter: { status?: ApprovalStatus; projectId?: string } = {}): number {
+    return this.repo.count(filter);
   }
 
   /**

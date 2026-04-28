@@ -123,7 +123,14 @@ describe('R2 integration smoke', () => {
       messages: messageService,
       approvals: approvalService,
       queue: queueService,
-      queueItemLookup: (id) => queueRepo.get(id),
+      queueItemLookup: (id) => {
+        const row = queueRepo.get(id);
+        return row ? { id: row.id, projectId: row.projectId } : null;
+      },
+      queueSnapshot: (projectId) => ({
+        items: queueService.listByProject(projectId),
+        paused: queueService.isPaused(projectId),
+      }),
     });
 
     seedProvider(db, 'pr1');
@@ -201,8 +208,8 @@ describe('R2 integration smoke', () => {
     // Cancelled rows are not removable — audit preservation.
     expect(() => queueService.remove(queueItem.id)).toThrow(QueueError);
 
-    // ── 5. Queue progress event fired via StreamBridge for id hint ──
-    const queueEvents = events.filter((e) => e.type === 'stream:queue-progress');
+    // ── 5. Queue snapshot fans out as stream:queue-updated ─────────
+    const queueEvents = events.filter((e) => e.type === 'stream:queue-updated');
     expect(queueEvents.length).toBeGreaterThanOrEqual(1);
 
     // ── 6. external + auto is rejected (spec §7.3 CA-1) ─────────────

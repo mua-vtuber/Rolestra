@@ -1,11 +1,11 @@
 /**
  * ApprovalFilterBar — 결재함 상단 필터 탭 (시안 03 `ApvFilterBar`).
  *
- * 4 탭: pending / approved / rejected / all. 현재(R10 polish) 시점에는
- * 결재 인박스 데이터가 pending 만 fetch 되므로(`usePendingApprovals`),
- * `pending` 탭만 활성 데이터로 렌더하고 나머지 탭은 0 카운트(또는
- * 외부에서 주입된 카운트)로 시각만 노출한다. R11 데이터 wiring 확장 시
- * `counts` 와 `onChange` 가 실제 다른 리스트로 전환된다.
+ * 4 탭: pending / approved / rejected / all. F6-T1 부터 `counts` 는
+ * `approval:count` IPC 결과 (`useApprovalCounts`) 를 그대로 받으며 각
+ * 탭이 실제 SQL `COUNT(*)` 를 반영한다. `onChange` 는 ApprovalInboxView
+ * 에서 활성 필터를 갈아 끼워 `usePendingApprovals` 가 새 status 로
+ * 재조회한다.
  *
  * 테마별 시각 정체성 (시안과 1:1):
  * - warm    : rounded-full pill, sans, active bg=brand-14% / border=brand

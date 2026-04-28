@@ -8,10 +8,9 @@
  *   - subscribes to `stream:queue-updated` and replaces items + paused
  *     state atomically when the broadcast's `projectId` matches
  *
- * The hook does NOT emit its own progress events — that stream
- * (`stream:queue-progress`, a per-item status tick) is owned by a
- * separate hook in R10 if we need granular toast UX. For R9, the
- * coarse-grained `stream:queue-updated` snapshot is sufficient.
+ * The coarse-grained `stream:queue-updated` snapshot is the only queue
+ * stream surface — the F6 cleanup retired the per-item
+ * `stream:queue-progress` fall-back since no consumer subscribed to it.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 

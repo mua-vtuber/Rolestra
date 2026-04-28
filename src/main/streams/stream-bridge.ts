@@ -54,7 +54,6 @@ import type {
   StreamMeetingTurnDonePayload,
   StreamMeetingErrorPayload,
   StreamMeetingTurnSkippedPayload,
-  StreamQueueProgressPayload,
   StreamQueueUpdatedPayload,
   StreamMemberStatusChangedPayload,
   StreamNotificationPayload,
@@ -91,7 +90,6 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:meeting-turn-done',
   'stream:meeting-error',
   'stream:meeting-turn-skipped',
-  'stream:queue-progress',
   'stream:queue-updated',
   'stream:notification',
   'stream:notification-clicked',
@@ -145,23 +143,20 @@ export interface StreamBridgeServices {
    */
   projects?: EventEmitter;
   /**
-   * Optional lookup so the bridge can expand `QueueChangedEvent`
-   * (project-scope hint) into full `QueueItem` payloads. If omitted,
-   * single-item 'changed' events emit a stream:queue-progress using
-   * the `id` hint; project-wide hints are skipped.
+   * Resolves a `{id}`-form `changed` hint to its owning `projectId` so
+   * the snapshot lookup below can fire. Required because single-row
+   * mutations (complete / in_progress cancel) carry `{id}` only — the
+   * project scope is implicit. Returns null when the id is unknown
+   * (already-removed row); the bridge then drops the event.
    */
   queueItemLookup?: (id: string) => { projectId: string; id: string } | null;
   /**
-   * R9-Task7: full-snapshot lookup. When provided, `changed` events are
-   * fanned out as `stream:queue-updated` (project-level list + paused
-   * flag) instead of the per-item `stream:queue-progress` fall-back.
-   * The renderer's `useQueue` hook subscribes to `stream:queue-updated`
-   * only, so the snapshot path is the R9 authoritative surface.
-   *
-   * When both `queueItemLookup` and `queueSnapshot` are provided, the
-   * snapshot path wins. The `queueItemLookup` is still used to resolve
-   * the `{id}`-form hint to its owning `projectId` so single-row events
-   * (complete / in_progress cancel) reach the right snapshot.
+   * R9-Task7: full-snapshot lookup. `changed` events fan out as
+   * `stream:queue-updated` (project-level list + paused flag) — the
+   * renderer's `useQueue` hook subscribes to `stream:queue-updated`
+   * only, so this is the authoritative surface. The F6 cleanup retired
+   * the legacy per-item `stream:queue-progress` fall-back; bridge
+   * connections now require `queueSnapshot` to surface queue events.
    */
   queueSnapshot?: (projectId: string) => {
     items: QueueItem[];
@@ -270,37 +265,23 @@ export class StreamBridge {
         // one hop. Resolve projectId from either hint form — for the
         // `{id}`-only form we still need `queueItemLookup` as the id →
         // projectId indirection, because the snapshot query is
-        // project-scoped.
-        if (services.queueSnapshot) {
-          let projectId: string | null = h.projectId ?? null;
-          if (!projectId && h.id) {
-            const resolved = services.queueItemLookup?.(h.id);
-            projectId = resolved?.projectId ?? null;
-          }
-          if (!projectId) return;
-          const snapshot = services.queueSnapshot(projectId);
-          this.emit({
-            type: 'stream:queue-updated',
-            payload: {
-              projectId,
-              items: snapshot.items,
-              paused: snapshot.paused,
-            } as StreamQueueUpdatedPayload,
-          });
-          return;
+        // project-scoped. Without `queueSnapshot` the bridge cannot
+        // produce a usable event and silently drops the hint.
+        if (!services.queueSnapshot) return;
+        let projectId: string | null = h.projectId ?? null;
+        if (!projectId && h.id) {
+          const resolved = services.queueItemLookup?.(h.id);
+          projectId = resolved?.projectId ?? null;
         }
-
-        // Legacy R2 path — per-item `stream:queue-progress`. Retained
-        // so existing smoke-wire fixtures (r2-integration-smoke) keep
-        // working while callers migrate to the snapshot path.
-        const lookup = services.queueItemLookup;
-        if (!lookup) return;
-        if (!h?.id) return;
-        const item = lookup(h.id);
-        if (!item) return;
+        if (!projectId) return;
+        const snapshot = services.queueSnapshot(projectId);
         this.emit({
-          type: 'stream:queue-progress',
-          payload: { item } as StreamQueueProgressPayload,
+          type: 'stream:queue-updated',
+          payload: {
+            projectId,
+            items: snapshot.items,
+            paused: snapshot.paused,
+          } as StreamQueueUpdatedPayload,
         });
       });
     }
@@ -390,10 +371,6 @@ export class StreamBridge {
 
   emitMeetingTurnSkipped(payload: StreamMeetingTurnSkippedPayload): void {
     this.emit({ type: 'stream:meeting-turn-skipped', payload });
-  }
-
-  emitQueueProgress(payload: StreamQueueProgressPayload): void {
-    this.emit({ type: 'stream:queue-progress', payload });
   }
 
   emitQueueUpdated(payload: StreamQueueUpdatedPayload): void {
@@ -534,8 +511,6 @@ export class StreamBridge {
           typeof payload.error === 'string' &&
           typeof payload.fatal === 'boolean'
         );
-      case 'stream:queue-progress':
-        return this.isObject(payload.item);
       case 'stream:queue-updated':
         return (
           typeof payload.projectId === 'string' &&

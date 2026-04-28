@@ -1,14 +1,11 @@
 /**
  * Bridges SSM permission actions to CLI provider permission mode changes.
  *
- * While PermissionRevocationListener updates the file-level PermissionService,
- * this bridge handles the CLI-level concern: respawning CLI providers with
- * updated permission flags (--allowedTools, --add-dir, etc.) when the
- * SessionStateMachine grants or revokes worker status.
- *
- * Separation of concerns:
- * - PermissionRevocationListener → file-level (PermissionService)
- * - CliPermissionBridge          → process-level (CliProvider respawn)
+ * Respawns CLI providers with updated permission flags (--allowedTools,
+ * --add-dir, etc.) when the SessionStateMachine grants or revokes worker
+ * status. The file-level concern is owned by `PermissionService`'s
+ * path-guard model (per-call boundary check, no per-worker state to
+ * mutate), so this bridge is the only SSM permission-action listener.
  */
 
 import type { PermissionAction } from '../../shared/session-state-types';

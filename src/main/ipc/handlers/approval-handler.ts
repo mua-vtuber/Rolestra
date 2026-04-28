@@ -74,6 +74,33 @@ export function handleApprovalDecide(
 }
 
 /**
+ * F6-T1: approval:count — three status buckets + the union as `all`,
+ * scoped by optional `projectId`. Each `count` call is a single
+ * `COUNT(*)` SQL query so 4 buckets cost 4 raw counts (no JSON parse,
+ * no row materialisation). The renderer's `ApprovalInboxView` calls
+ * this once per filter switch to populate the tab badges.
+ *
+ * `expired` / `superseded` rows are excluded from `all` because they
+ * are retirement transitions, not user-facing decisions; the inbox UI
+ * never surfaces them as a tab.
+ */
+export function handleApprovalCount(
+  data: IpcRequest<'approval:count'>,
+): IpcResponse<'approval:count'> {
+  const service = getService();
+  const projectId = data?.projectId;
+  const pending = service.count({ status: 'pending', projectId });
+  const approved = service.count({ status: 'approved', projectId });
+  const rejected = service.count({ status: 'rejected', projectId });
+  return {
+    pending,
+    approved,
+    rejected,
+    all: pending + approved + rejected,
+  };
+}
+
+/**
  * R11-Task7: approval:detail-fetch — single round-trip combining
  * (i) the approval row, (ii) ExecutionService dry-run preview, and (iii)
  * meeting voting context. Each slice is independent so a meeting lookup

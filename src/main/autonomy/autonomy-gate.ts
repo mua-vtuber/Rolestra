@@ -37,10 +37,12 @@
  * contract or crash the listener chain. Pattern mirrors
  * ApprovalNotificationBridge (R7-Task11).
  *
- * i18n note (spec §R9 D8): the `#회의록` trace lines here are written in
- * Korean fixed strings. Task 11 will replace them with main-process
- * i18n dictionary lookups; until then the strings are stable so the
- * audit trail stays legible.
+ * i18n (spec §R9 D8 / R11 NotificationDictionary): every `#회의록` trace
+ * line + OS notification body resolves through `resolveNotificationLabel`
+ * (`notification-labels.ts`), keyed by `autonomyGate.trace.*` /
+ * `autonomyGate.notify.*` / `autonomyGate.label.*`. Locale follows the
+ * notification locale (`getNotificationLocale`) so main-side audit and
+ * renderer-side surfaces stay aligned without a direct i18next import.
  */
 
 import type { ApprovalItem } from '../../shared/approval-types';

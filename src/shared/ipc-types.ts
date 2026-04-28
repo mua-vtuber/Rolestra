@@ -629,6 +629,28 @@ export type IpcChannelMap = {
     };
     response: { success: true };
   };
+  /**
+   * F6-T1: tab-badge counts for the inbox view. Returns one number per
+   * status bucket (`pending`/`approved`/`rejected`) plus the union of
+   * all three as `all` so the renderer can populate the tab badges in
+   * a single round-trip — `approval:list` is single-status and the
+   * naive 4-call workaround returns 0 for inactive tabs. `projectId`
+   * scopes the count when supplied; omit for cross-project totals.
+   *
+   * `expired` / `superseded` rows are deliberately excluded because the
+   * inbox UI does not surface them (they are retirement transitions,
+   * not user-facing decisions). `all` therefore reflects the sum of the
+   * three visible buckets, not the raw row count.
+   */
+  'approval:count': {
+    request: { projectId?: string } | undefined;
+    response: {
+      pending: number;
+      approved: number;
+      rejected: number;
+      all: number;
+    };
+  };
 
   // ── v3: Notification ────────────────────────────────────────────
   'notification:get-prefs': {

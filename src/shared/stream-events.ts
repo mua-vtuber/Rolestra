@@ -80,10 +80,6 @@ export interface StreamMeetingStateChangedPayload {
   outcome?: MeetingOutcome;
 }
 
-export interface StreamQueueProgressPayload {
-  item: QueueItem;
-}
-
 export interface StreamNotificationPayload {
   id: string;
   kind: NotificationKind;
@@ -175,9 +171,10 @@ export interface StreamMeetingTurnSkippedPayload {
 /**
  * R9-Task1: full queue snapshot broadcast. Emitted after any mutation
  * (add/remove/reorder/pause/resume/startNext) so renderers reconcile
- * their view without needing `queue:list` round-trips. Complements the
- * per-item `stream:queue-progress` event above — progress is a fine-grained
- * status tick, `updated` is a coarse-grained authoritative snapshot.
+ * their view without needing `queue:list` round-trips. Authoritative
+ * surface for the renderer's `useQueue` hook — the F6 cleanup retired
+ * the per-item `stream:queue-progress` fall-back since no consumer
+ * subscribed to it (renderer reads only `stream:queue-updated`).
  *
  * `paused` reflects the project-level run state toggled by `queue:pause` /
  * `queue:resume`; when true, `QueueService.startNext` is a no-op even if
@@ -242,7 +239,6 @@ export type StreamEvent =
       type: 'stream:meeting-turn-skipped';
       payload: StreamMeetingTurnSkippedPayload;
     }
-  | { type: 'stream:queue-progress'; payload: StreamQueueProgressPayload }
   | { type: 'stream:queue-updated'; payload: StreamQueueUpdatedPayload }
   | { type: 'stream:notification'; payload: StreamNotificationPayload }
   | {

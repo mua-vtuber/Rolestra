@@ -290,6 +290,17 @@ export const approvalDecideSchema = z
     { message: 'comment is required when decision=conditional', path: ['comment'] },
   );
 
+/**
+ * F6-T1: `approval:count` request. The handler accepts an optional
+ * project scope for the inbox tab badges; omit for cross-project counts.
+ * The undefined-payload form (no scope) is accepted via `.optional()`.
+ */
+export const approvalCountSchema = z
+  .object({
+    projectId: z.string().min(1).max(128).optional(),
+  })
+  .optional();
+
 export const queueAddSchema = z.object({
   projectId: z.string().min(1).max(128),
   prompt: z.string().min(1).max(20_000),
@@ -567,6 +578,7 @@ export const v3ChannelSchemas = {
   'member:set-status': memberSetStatusSchema,
   'member:upload-avatar': memberUploadAvatarSchema,
   'approval:decide': approvalDecideSchema,
+  'approval:count': approvalCountSchema,
   'queue:add': queueAddSchema,
   'queue:reorder': queueReorderSchema,
   'queue:list': queueListSchema,

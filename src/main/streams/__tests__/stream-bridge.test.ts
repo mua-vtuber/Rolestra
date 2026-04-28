@@ -329,36 +329,17 @@ describe('StreamBridge — connect()', () => {
     ]);
   });
 
-  it('QueueService "changed" hint is expanded via queueItemLookup', () => {
-    const queue = new EventEmitter();
-    const queueItemLookup = vi.fn().mockReturnValue({
-      id: 'q1',
-      projectId: 'p1',
-      targetChannelId: null,
-      orderIndex: 1000,
-      prompt: 'run',
-      status: 'in_progress',
-      startedMeetingId: null,
-      startedAt: 1,
-      finishedAt: null,
-      lastError: null,
-      createdAt: 1,
-    });
-
-    bridge.connect({ queue, queueItemLookup });
-    queue.emit('changed', { id: 'q1' });
-
-    expect(queueItemLookup).toHaveBeenCalledWith('q1');
-    expect(received).toHaveLength(1);
-    expect(received[0].type).toBe('stream:queue-progress');
-  });
-
-  it('QueueService project-wide "changed" hint is ignored (no id)', () => {
+  it('QueueService "changed" hint is dropped without queueSnapshot', () => {
     const queue = new EventEmitter();
     const queueItemLookup = vi.fn();
     bridge.connect({ queue, queueItemLookup });
 
-    queue.emit('changed', { projectId: 'p1' });
+    // F6 cleanup retired the legacy per-item `stream:queue-progress`
+    // fall-back. A `changed` hint without `queueSnapshot` cannot
+    // produce a usable event and is silently dropped — production
+    // wires `queueSnapshot` unconditionally, so this is the only
+    // path that exercises the no-snapshot guard.
+    queue.emit('changed', { id: 'q1' });
 
     expect(queueItemLookup).not.toHaveBeenCalled();
     expect(received).toHaveLength(0);

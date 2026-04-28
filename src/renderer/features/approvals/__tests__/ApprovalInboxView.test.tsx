@@ -103,9 +103,30 @@ function stubBridge(items: ApprovalItem[], invokeFallback?: (channel: string, da
       bucket?.delete(cb);
     };
   });
+  // F6-T1: the inbox now issues an `approval:count` IPC alongside the
+  // existing `approval:list` so the tab badges can show real counters
+  // instead of guessing from the active filter's items.length. The stub
+  // splits the canonical fixture by `status` for both endpoints so the
+  // assertions stay coherent across list + count.
   const invoke = vi.fn(async (channel: string, data: unknown) => {
     if (channel === 'approval:list') {
-      return { items };
+      const req = (data ?? {}) as { status?: string };
+      const filtered =
+        req.status === undefined
+          ? items
+          : items.filter((it) => it.status === req.status);
+      return { items: filtered };
+    }
+    if (channel === 'approval:count') {
+      const pending = items.filter((it) => it.status === 'pending').length;
+      const approved = items.filter((it) => it.status === 'approved').length;
+      const rejected = items.filter((it) => it.status === 'rejected').length;
+      return {
+        pending,
+        approved,
+        rejected,
+        all: pending + approved + rejected,
+      };
     }
     if (channel === 'approval:decide') {
       return { success: true };
@@ -307,21 +328,28 @@ describe('ApprovalInboxView — filter bar (Set 1 polish)', () => {
     expect(tabs[0].getAttribute('data-active')).toBe('true');
   });
 
-  it('R11-Task7: pending count reflects fetched items; inactive tabs default to 0 (single-status fetch)', async () => {
-    stubBridge([makeItem(), makeItem({ id: 'appr-2' })]);
+  it('F6-T1: tab counters reflect the approval:count IPC, including inactive tabs', async () => {
+    // Mixed-status fixture so the count IPC has a non-trivial answer
+    // for every bucket — the inbox should show all four numbers, not
+    // just the active filter's `items.length`.
+    stubBridge([
+      makeItem({ id: 'appr-1', status: 'pending' }),
+      makeItem({ id: 'appr-2', status: 'pending' }),
+      makeItem({ id: 'appr-3', status: 'approved' }),
+      makeItem({ id: 'appr-4', status: 'rejected' }),
+      makeItem({ id: 'appr-5', status: 'rejected' }),
+    ]);
     renderInbox();
     await waitFor(() => {
       expect(screen.getByTestId('approval-filter-bar')).toBeTruthy();
     });
-    const counts = screen.getAllByTestId('approval-filter-count');
-    // R11-Task7: each tab shows its own fetched items count under the
-    // active filter, others are 0 — the backend `approval:list` is
-    // single-status so we cannot show cross-tab aggregates without a
-    // separate count IPC (deferred to R12+).
-    expect(counts[0].textContent).toBe('2'); // pending (active)
-    expect(counts[1].textContent).toBe('0'); // approved
-    expect(counts[2].textContent).toBe('0'); // rejected
-    expect(counts[3].textContent).toBe('0'); // all (inactive)
+    await waitFor(() => {
+      const counts = screen.getAllByTestId('approval-filter-count');
+      expect(counts[0].textContent).toBe('2'); // pending
+      expect(counts[1].textContent).toBe('1'); // approved
+      expect(counts[2].textContent).toBe('2'); // rejected
+      expect(counts[3].textContent).toBe('5'); // all = sum of three
+    });
   });
 
   it('R11-Task7: switching to the approved tab refetches with status=approved', async () => {
@@ -349,6 +377,9 @@ describe('ApprovalInboxView — filter bar (Set 1 polish)', () => {
             : allItems.filter((it) => it.status === req.status);
         return { items: filtered };
       }
+      if (channel === 'approval:count') {
+        return { pending: 1, approved: 0, rejected: 0, all: 1 };
+      }
       throw new Error(`no mock for ${channel}`);
     });
     vi.stubGlobal('arena', { platform: 'linux', invoke, onStream });
@@ -375,6 +406,13 @@ describe('ApprovalInboxView — filter bar (Set 1 polish)', () => {
       makeItem({ id: 'appr-approved', status: 'approved' }),
     ]);
     renderInbox();
+    // Default tab is 'pending' which only surfaces pending rows; click
+    // the 'all' tab so both statuses materialise and the badge mapping
+    // can be verified across decisions.
+    await waitFor(() => {
+      expect(screen.getByTestId('approval-filter-bar')).toBeTruthy();
+    });
+    fireEvent.click(screen.getAllByTestId('approval-filter-tab')[3]);
     await waitFor(() => {
       expect(screen.getAllByTestId('approval-inbox-row').length).toBe(2);
     });
@@ -426,6 +464,9 @@ describe('ApprovalInboxView — R11-Task7 split layout', () => {
     const invoke = vi.fn(async (channel: string) => {
       if (channel === 'approval:list') return { items: [makeItem()] };
       if (channel === 'approval:detail-fetch') return detail;
+      if (channel === 'approval:count') {
+        return { pending: 1, approved: 0, rejected: 0, all: 1 };
+      }
       throw new Error(`no mock for ${channel}`);
     });
     vi.stubGlobal('arena', { platform: 'linux', invoke, onStream });

@@ -19,13 +19,13 @@ import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { usePendingApprovals } from '../../hooks/use-pending-approvals';
+import { useApprovalCounts } from '../../hooks/use-approval-counts';
 import type { ApprovalItem } from '../../../shared/approval-types';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 import { ApprovalBlock } from '../messenger/ApprovalBlock';
 import {
   ApprovalFilterBar,
   type ApprovalFilter,
-  type ApprovalFilterCounts,
 } from './ApprovalFilterBar';
 import { ApprovalStatusBadge } from './ApprovalStatusBadge';
 import { CircuitBreakerApprovalRow } from './CircuitBreakerApprovalRow';
@@ -163,28 +163,18 @@ export function ApprovalInboxView({
   );
 
   const { items, loading, error } = usePendingApprovals(projectId, filter);
+  // F6-T1: tab badges now reflect the full pending/approved/rejected/all
+  // truth via the dedicated `approval:count` IPC (4 raw `COUNT(*)` SQL
+  // queries) instead of guessing from the active tab's `items.length`.
+  // Refetches automatically on `stream:approval-{created,decided}` so a
+  // decide on the inbox flips both the pending and approved/rejected
+  // counters atomically with the row vanishing from the list.
+  const { counts } = useApprovalCounts(projectId);
 
   const wrappedMessages = useMemo(() => {
     if (items === null) return [];
     return items.map((it) => ({ item: it, message: approvalToMessage(it) }));
   }, [items]);
-
-  // R11-Task7: counts now reflect the live `items` length under the
-  // active filter — pending was the only real number before, every
-  // other tab showed 0. The inactive tabs still display 0 because the
-  // backend `approval:list` is single-status; an aggregate IPC would be
-  // R12+ work and requires its own service-level count query.
-  const counts = useMemo<ApprovalFilterCounts>(() => {
-    const activeCount = items === null ? 0 : items.length;
-    const base: ApprovalFilterCounts = {
-      pending: 0,
-      approved: 0,
-      rejected: 0,
-      all: 0,
-    };
-    base[filter] = activeCount;
-    return base;
-  }, [items, filter]);
 
   const handleFilterChange = useCallback((next: ApprovalFilter) => {
     setFilter(next);

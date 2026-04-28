@@ -176,6 +176,34 @@ export class ApprovalRepository {
   }
 
   /**
+   * Counts approval rows matching the optional `status` / `projectId`
+   * filter pair (F6-T1). Mirrors {@link list} but returns the raw
+   * SQL `COUNT(*)` so the inbox tab badges can show 4 numbers without
+   * 4 separate `list()` round-trips that materialise + JSON-parse
+   * every payload.
+   *
+   * Combining filters ANDs them; omitting both returns the total
+   * `approval_items` row count (used by the `'all'` inbox tab).
+   */
+  count(filter: ListApprovalsFilter = {}): number {
+    const clauses: string[] = [];
+    const params: (string | number)[] = [];
+    if (filter.status !== undefined) {
+      clauses.push('status = ?');
+      params.push(filter.status);
+    }
+    if (filter.projectId !== undefined) {
+      clauses.push('project_id = ?');
+      params.push(filter.projectId);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const row = this.db
+      .prepare(`SELECT COUNT(*) AS n FROM approval_items ${where}`)
+      .get(...params) as { n: number };
+    return row.n;
+  }
+
+  /**
    * Lists approvals newest-first. Both filters are optional and
    * independent — passing both ANDs them. Tiebreaker on same-ms rows
    * is `id DESC` (deterministic UUID string order).
