@@ -405,7 +405,10 @@ export function App() {
       ) : view === 'settings' ? (
         <SettingsView />
       ) : (
-        <DashboardPage onRequestNewProject={handleCreateProject} />
+        <DashboardPage
+          onRequestNewProject={handleCreateProject}
+          onRequestStartMeeting={() => setView('messenger')}
+        />
       )}
       <ProjectCreateModal
         open={modalOpen}

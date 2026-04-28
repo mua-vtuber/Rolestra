@@ -8,6 +8,16 @@
 export type MessageAuthorKind = 'user' | 'member' | 'system';
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
+/**
+ * Spec §7.5 — `messages.author_id` for the sole end-user is the literal
+ * string `'user'`. Both the service-level guard
+ * (`UserAuthorMismatchError`) and the SQLite trigger
+ * `messages_author_fk_check` enforce this invariant. Renderer-side
+ * optimistic inserts MUST use the same constant so the row submitted
+ * via `message:append` round-trips against the same contract.
+ */
+export const USER_AUTHOR_LITERAL = 'user' as const;
+
 export interface MessageMeta {
   toolCalls?: unknown[];
   approvalRef?: string;

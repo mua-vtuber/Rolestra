@@ -25,7 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useThrowToBoundary } from '../components/ErrorBoundary';
 import { invoke } from '../ipc/invoke';
-import type { Message } from '../../shared/message-types';
+import { USER_AUTHOR_LITERAL, type Message } from '../../shared/message-types';
 
 export interface UseChannelMessagesOptions {
   /** 서버쪽 기본값이 우선이지만 원하면 override 가능(spec §6). */
@@ -173,10 +173,13 @@ export function useChannelMessages(
         id: tempId,
         channelId,
         meetingId: input.meetingId ?? null,
-        // We don't have a synchronously-known userId; 'user' literal
-        // matches the established placeholder used throughout the
-        // dashboard / messenger fixtures (see message-types docstring).
-        authorId: 'user',
+        // Spec §7.5: `messages.author_id` for end-user messages is the
+        // literal `'user'` (constant at `shared/message-types.ts`).
+        // Same value the main process re-stamps inside
+        // `message:append`, so the swap-by-clientId reconcile keeps
+        // ordering even when the server row arrives before the
+        // optimistic resolve.
+        authorId: USER_AUTHOR_LITERAL,
         authorKind: 'user',
         role: 'user',
         content: input.content,

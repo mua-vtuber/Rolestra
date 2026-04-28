@@ -228,11 +228,7 @@
     },
     "insight": {
       "ariaLabel": "대시보드 인사이트 스트립",
-      "avgResponse": "평균 응답",
-      "cumApprovals": "누적 승인",
-      "placeholder": "—",
-      "reviewRate": "리뷰 완료율",
-      "weeklyDelta": "이번 주"
+      "placeholder": "—"
     },
     "kpi": {
       "activeMeetings": "진행 회의",
@@ -593,9 +589,6 @@
       "empty": "아직 메시지가 없습니다",
       "liveTurnPending": "응답 준비 중…",
       "loading": "메시지를 불러오는 중…"
-    },
-    "typing": {
-      "label": "{{names}} — 작성 중"
     }
   },
   "notification": {

@@ -7,8 +7,6 @@
  * - Render the Hero row: 4 KPI tiles + 2 quick-action buttons.
  * - Surface loading/error states explicitly — never silently substitute
  *   stale or fake data when the snapshot fails to load.
- * - Leave structural placeholders for Task 7 (2×2 widget grid) and
- *   Task 8 (insight strip) so App-level routing can mount the page today.
  *
  * Modal hosting (R4-Task10):
  * - The `ProjectCreateModal` is no longer owned by DashboardPage. It was
@@ -22,7 +20,19 @@
  * Prop escape hatches:
  * - `onRequestNewProject` — invoked when the user clicks the Hero's
  *   new-project button.
- * - `onRequestStartMeeting` defaults to a no-op; R6 wires the real flow.
+ * - `onRequestStartMeeting` — invoked when the user clicks the Hero's
+ *   "회의 소집 →" button. App.tsx wires this to a messenger-view
+ *   navigation: the actual `channel:start-meeting` IPC lives inside
+ *   `StartMeetingModal`, mounted from a chosen channel. The dashboard
+ *   button cannot launch a meeting on its own — it has no channel
+ *   context — so the routing handoff is the canonical flow.
+ *
+ * F3 (cleanup-2026-04-27):
+ * - The R4 Insight Strip (4-cell em-dash placeholder) was removed
+ *   because it shipped no real data. V4 will reintroduce it once the
+ *   week-windowed aggregates exist in the repositories. The
+ *   `InsightStrip` component itself is kept as a presentation primitive
+ *   for callers ready to pass real `cells`.
  */
 import { clsx } from 'clsx';
 import { type ReactElement } from 'react';
@@ -30,7 +40,6 @@ import { useTranslation } from 'react-i18next';
 
 import { HeroKpiTile } from './HeroKpiTile';
 import { HeroQuickActions } from './HeroQuickActions';
-import { InsightStrip } from './InsightStrip';
 import { TasksWidget } from './widgets/TasksWidget';
 import { PeopleWidget } from './widgets/PeopleWidget';
 import { RecentWidget } from './widgets/RecentWidget';
@@ -148,12 +157,6 @@ export function DashboardPage({
         <ApprovalsWidget className="[grid-area:approvals] min-h-[22rem]" />
       </section>
 
-      {/*
-        R4-Task8 — Insight strip: 4 aggregate metrics (weekly delta, avg
-        response, cumulative approvals, review completion). Values remain
-        placeholders until R6 wires in the stream aggregates.
-      */}
-      <InsightStrip />
     </div>
   );
 }

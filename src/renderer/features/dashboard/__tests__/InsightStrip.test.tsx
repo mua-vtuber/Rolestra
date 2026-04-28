@@ -19,44 +19,19 @@ afterEach(() => {
   cleanup();
 });
 
-describe('InsightStrip — default placeholder path', () => {
-  it('renders exactly 4 cells when no `cells` prop is passed', () => {
-    render(<InsightStrip />);
-    expect(screen.getAllByTestId('insight-cell')).toHaveLength(4);
-  });
-
-  it('each default cell shows the i18n placeholder value (not a bare string literal)', () => {
-    render(<InsightStrip />);
-    const placeholder = i18next.t('dashboard.insight.placeholder');
-    const values = screen
-      .getAllByTestId('insight-value')
-      .map((node) => node.textContent);
-    expect(values).toEqual([placeholder, placeholder, placeholder, placeholder]);
-  });
-
-  it('renders the 4 canonical labels from dashboard.insight.*', () => {
-    render(<InsightStrip />);
-    expect(screen.getByText(i18next.t('dashboard.insight.weeklyDelta'))).toBeTruthy();
-    expect(screen.getByText(i18next.t('dashboard.insight.avgResponse'))).toBeTruthy();
-    expect(screen.getByText(i18next.t('dashboard.insight.cumApprovals'))).toBeTruthy();
-    expect(screen.getByText(i18next.t('dashboard.insight.reviewRate'))).toBeTruthy();
-  });
-
-  it('default tone is neutral → value uses text-fg (not success / danger)', () => {
-    render(<InsightStrip />);
-    const values = screen.getAllByTestId('insight-value');
-    values.forEach((node) => {
-      expect(node.className).toMatch(/(^|\s)text-fg(\s|$)/);
-      expect(node.className).not.toContain('text-success');
-      expect(node.className).not.toContain('text-danger');
-    });
-    screen.getAllByTestId('insight-cell').forEach((cell) => {
-      expect(cell.getAttribute('data-tone')).toBe('neutral');
-    });
-  });
+describe('InsightStrip — region semantics', () => {
+  // F3 (cleanup-2026-04-27) removed the 4-cell em-dash default. The
+  // strip is now a presentation primitive; callers pass real `cells`.
+  // These tests exercise region semantics through a minimal cells prop.
+  const SAMPLE_CELLS: InsightCell[] = [
+    { label: 'a', value: '1' },
+    { label: 'b', value: '2' },
+    { label: 'c', value: '3' },
+    { label: 'd', value: '4' },
+  ];
 
   it('region is labelled via dashboard.insight.ariaLabel', () => {
-    render(<InsightStrip />);
+    render(<InsightStrip cells={SAMPLE_CELLS} />);
     const strip = screen.getByTestId('dashboard-insight-strip');
     expect(strip.getAttribute('role')).toBe('region');
     expect(strip.getAttribute('aria-label')).toBe(
@@ -65,7 +40,7 @@ describe('InsightStrip — default placeholder path', () => {
   });
 
   it('puts N-1 vertical separators between N cells', () => {
-    render(<InsightStrip />);
+    render(<InsightStrip cells={SAMPLE_CELLS} />);
     expect(screen.getAllByTestId('insight-separator')).toHaveLength(3);
   });
 });
@@ -152,13 +127,15 @@ describe('InsightStrip — custom cells prop', () => {
 });
 
 describe('InsightStrip — en locale', () => {
-  it('labels switch when the i18n language changes', async () => {
+  it('aria-label switches when the i18n language changes', async () => {
     await i18next.changeLanguage('en');
-    render(<InsightStrip />);
-    expect(screen.getByText('This week')).toBeTruthy();
-    expect(screen.getByText('Avg response')).toBeTruthy();
-    expect(screen.getByText('Cumulative approvals')).toBeTruthy();
-    expect(screen.getByText('Review completion')).toBeTruthy();
+    render(
+      <InsightStrip
+        cells={[{ label: 'a', value: '1' }]}
+      />,
+    );
+    const strip = screen.getByTestId('dashboard-insight-strip');
+    expect(strip.getAttribute('aria-label')).toBe('Dashboard insight strip');
   });
 });
 

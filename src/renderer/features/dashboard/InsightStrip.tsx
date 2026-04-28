@@ -1,24 +1,22 @@
 /**
- * InsightStrip — bottom 4-cell aggregate metrics row for the Dashboard.
+ * InsightStrip — aggregate metrics row primitive.
  *
- * R4 scope (Task 8):
- * - Structural 4-cell strip rendered at the bottom of DashboardPage.
- * - Real stream aggregates land in R6; until then every cell value
- *   defaults to the i18n'd em-dash (`dashboard.insight.placeholder`).
- * - Tone mapping (`up` / `down` / `neutral`) is wired through a prop so
- *   R6 can drive it directly from aggregate deltas without touching the
- *   component contract again.
+ * Pure presentation component. Callers MUST supply `cells` — the
+ * component never fabricates placeholder values. R4 originally shipped a
+ * 4-cell em-dash default ("real aggregates land in R6") which became a
+ * forbidden mock per CLAUDE.md (no placeholder data on production code
+ * paths). F3 (cleanup-2026-04-27) removed that default; until V4 wires
+ * real aggregations the strip is not mounted on `DashboardPage`. Tests
+ * and future callers that have real data pass it through `cells`.
  *
  * Prop behaviour:
- * - `cells` omitted → render the 4 canonical placeholder cells
- *   (weeklyDelta / avgResponse / cumApprovals / reviewRate) each with
- *   `value = t('dashboard.insight.placeholder')` and `tone = 'neutral'`.
- * - `cells` provided → render exactly what's passed (NO auto-padding to
- *   4). Callers must be explicit about what they are showing; silently
- *   padding would let a bug upstream leak through as an apparently
- *   well-formed strip. The acceptance criteria require "4 cells always
- *   render" only for the default placeholder path; custom `cells`
- *   callers own their own cardinality. See tests for both paths.
+ * - `cells` is required. Renders exactly what's passed — no padding, no
+ *   truncation. Callers own their own cardinality.
+ * - Empty value strings render as `dashboard.insight.placeholder` (the
+ *   i18n em-dash) so a partial cell does not collapse to zero-width.
+ *   This is a presentation-layer guard, not a fallback for missing
+ *   data: callers MUST pass formatted values, but if formatting yields
+ *   `''` the row still has visual height.
  *
  * Styling:
  * - Zero hex literals — every color flows through the Tailwind theme
@@ -38,20 +36,15 @@ export type InsightTone = 'up' | 'down' | 'neutral';
 export interface InsightCell {
   /** Pre-translated label. Callers pass `t('dashboard.insight.*')`. */
   label: string;
-  /** Pre-formatted value string. `"—"` (the i18n placeholder) for missing. */
+  /** Pre-formatted value string. */
   value: string;
   /** Tone → value color class. Defaults to `'neutral'`. */
   tone?: InsightTone;
 }
 
 export interface InsightStripProps {
-  /**
-   * Optional explicit cell list. When omitted, the component renders 4
-   * canonical placeholder cells using the `dashboard.insight.*` i18n
-   * labels. When provided, renders exactly what's passed — no padding,
-   * no truncation.
-   */
-  cells?: InsightCell[];
+  /** Explicit cell list. Required — no default placeholder rendering. */
+  cells: InsightCell[];
   className?: string;
 }
 
@@ -68,30 +61,6 @@ export function InsightStrip({
   const { t } = useTranslation();
   const placeholder = t('dashboard.insight.placeholder');
 
-  const resolved: InsightCell[] =
-    cells ?? [
-      {
-        label: t('dashboard.insight.weeklyDelta'),
-        value: placeholder,
-        tone: 'neutral',
-      },
-      {
-        label: t('dashboard.insight.avgResponse'),
-        value: placeholder,
-        tone: 'neutral',
-      },
-      {
-        label: t('dashboard.insight.cumApprovals'),
-        value: placeholder,
-        tone: 'neutral',
-      },
-      {
-        label: t('dashboard.insight.reviewRate'),
-        value: placeholder,
-        tone: 'neutral',
-      },
-    ];
-
   return (
     <div
       role="region"
@@ -102,9 +71,11 @@ export function InsightStrip({
         className,
       )}
     >
-      {resolved.map((cell, index) => {
+      {cells.map((cell, index) => {
         const tone: InsightTone = cell.tone ?? 'neutral';
-        // Never render an empty string — fall back to the i18n placeholder.
+        // Empty value → presentation-layer placeholder so a degenerate
+        // string does not collapse the row. Callers MUST pass formatted
+        // values; this only guards visual height.
         const value = cell.value.length > 0 ? cell.value : placeholder;
         return (
           <Fragment key={`${cell.label}-${index}`}>

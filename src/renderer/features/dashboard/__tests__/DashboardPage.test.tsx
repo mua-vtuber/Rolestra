@@ -208,7 +208,7 @@ describe('DashboardPage — quick actions wiring', () => {
 });
 
 describe('DashboardPage — layout', () => {
-  it('renders the 2x2 widget grid (Task7) and the insight strip (Task8)', () => {
+  it('renders the 2x2 widget grid (Task7) without the R4 insight-strip placeholder', () => {
     kpisState.data = SUCCESS_SNAPSHOT;
     kpisState.loading = false;
     renderPage(<DashboardPage />);
@@ -225,11 +225,10 @@ describe('DashboardPage — layout', () => {
     expect(screen.getByTestId('recent-widget')).toBeTruthy();
     expect(screen.getByTestId('approvals-widget')).toBeTruthy();
 
-    // Task 8 insight strip now renders as a real 4-cell strip.
-    expect(screen.queryByTestId('dashboard-insight-placeholder')).toBeNull();
-    const strip = screen.getByTestId('dashboard-insight-strip');
-    expect(strip).toBeTruthy();
-    expect(screen.getAllByTestId('insight-cell')).toHaveLength(4);
+    // F3 (cleanup-2026-04-27): the R4 em-dash placeholder strip was
+    // removed because it shipped no real data. V4 will reintroduce it
+    // once aggregate repositories exist.
+    expect(screen.queryByTestId('dashboard-insight-strip')).toBeNull();
   });
 });
 

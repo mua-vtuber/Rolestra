@@ -228,11 +228,7 @@
     },
     "insight": {
       "ariaLabel": "Dashboard insight strip",
-      "avgResponse": "Avg response",
-      "cumApprovals": "Cumulative approvals",
-      "placeholder": "—",
-      "reviewRate": "Review completion",
-      "weeklyDelta": "This week"
+      "placeholder": "—"
     },
     "kpi": {
       "activeMeetings": "Active meetings",
@@ -593,9 +589,6 @@
       "empty": "No messages yet",
       "liveTurnPending": "Preparing response…",
       "loading": "Loading messages…"
-    },
-    "typing": {
-      "label": "{{names}} — typing"
     }
   },
   "notification": {

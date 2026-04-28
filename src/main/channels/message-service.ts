@@ -49,13 +49,14 @@
 
 import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
-import type {
-  Message,
-  MessageAuthorKind,
-  MessageMeta,
-  MessageRole,
-  MessageSearchResult,
-  RecentMessage,
+import {
+  USER_AUTHOR_LITERAL as SHARED_USER_AUTHOR_LITERAL,
+  type Message,
+  type MessageAuthorKind,
+  type MessageMeta,
+  type MessageRole,
+  type MessageSearchResult,
+  type RecentMessage,
 } from '../../shared/message-types';
 import type { MessageSearchHit } from '../../shared/message-search-types';
 import { MessageRepository } from './message-repository';
@@ -253,8 +254,13 @@ export interface MessageServiceEvents {
 
 // ── Service ────────────────────────────────────────────────────────────
 
-/** Literal author id reserved for the sole end user (see spec §7.5). */
-export const USER_AUTHOR_LITERAL = 'user' as const;
+/**
+ * Re-export of the shared author literal (see
+ * `shared/message-types.ts`). Kept here so existing main-side imports
+ * — `import { USER_AUTHOR_LITERAL } from '../channels/message-service'`
+ * — continue to compile without churn.
+ */
+export const USER_AUTHOR_LITERAL = SHARED_USER_AUTHOR_LITERAL;
 
 export class MessageService extends EventEmitter {
   constructor(private readonly repo: MessageRepository) {
