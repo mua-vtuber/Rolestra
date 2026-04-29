@@ -85,6 +85,30 @@ export interface MinutesComposeInput {
    * extra setting.
    */
   locale?: MinutesLocale;
+  /**
+   * D-A T8: 라운드 한계 도달 (FAILED) 종료 시 partial-summary layout.
+   *
+   * `true` 일 때 composer 는:
+   *   - 제목 끝에 " (라운드 한계 도달)" suffix 추가
+   *   - body 영역은 {@link partialSummary} 본문 (없으면 fallback 한 줄) 으로 렌더
+   *
+   * 본문의 "합의된 결정 / 논쟁 점 / 미결 항목" 3 섹션 분리는 T9 의
+   * orchestrator 가 MeetingSummaryService.summarize 로 미리 생성한
+   * 텍스트를 `partialSummary` 로 전달한다 (composer 자체는 LLM 미호출 —
+   * R6 D3 의 pure-function 계약 유지).
+   *
+   * 기본값 `false` — 기존 동작 그대로.
+   */
+  partial?: boolean;
+  /**
+   * D-A T8: partial=true 일 때 body 로 렌더할 미리 생성된 3 섹션 요약.
+   *
+   * - non-empty string: 그대로 본문에 삽입 (헤딩 / 마크다운 포함 가능).
+   * - null / undefined / 빈 문자열: fallback i18n 메시지 한 줄 표시.
+   *
+   * partial=false 일 때는 무시.
+   */
+  partialSummary?: string | null;
 }
 
 /**
@@ -101,6 +125,7 @@ export type MinutesTranslator = (key: string) => string;
 interface MinutesDictionary {
   header: {
     titlePrefix: string;
+    titlePartialSuffix: string;
     participants: string;
     topic: string;
     ssmFinal: string;
@@ -115,12 +140,14 @@ interface MinutesDictionary {
     unknown: string;
     /** `{{previous}}` interpolation placeholder. */
     previousState: string;
+    partialFallback: string;
   };
 }
 
 const KO: MinutesDictionary = {
   header: {
     titlePrefix: '회의',
+    titlePartialSuffix: ' (라운드 한계 도달)',
     participants: '참여자',
     topic: '주제',
     ssmFinal: 'SSM 최종 상태',
@@ -134,12 +161,14 @@ const KO: MinutesDictionary = {
     noConsensus: '합의본 없음',
     unknown: '사유 불명 — 이전 상태 기록 없음',
     previousState: '이전 상태 {{previous}}에서 종료',
+    partialFallback: '회의가 라운드 한계로 종료되었습니다. 합의 도달 안 함.',
   },
 };
 
 const EN: MinutesDictionary = {
   header: {
     titlePrefix: 'Meeting',
+    titlePartialSuffix: ' (round limit reached)',
     participants: 'Participants',
     topic: 'Topic',
     ssmFinal: 'SSM final state',
@@ -153,6 +182,7 @@ const EN: MinutesDictionary = {
     noConsensus: 'No consensus body',
     unknown: 'Unknown reason — no previous-state record',
     previousState: 'Ended in previous state {{previous}}',
+    partialFallback: 'Meeting ended at the round limit; no consensus reached.',
   },
 };
 
@@ -213,8 +243,13 @@ export function composeMinutes(input: MinutesComposeInput): string {
   const lines: string[] = [];
 
   // ── Title ────────────────────────────────────────────────────────
+  // D-A T8: partial=true 일 때 제목 끝에 " (라운드 한계 도달)" suffix 첨부.
+  // partial=false (default) 동작 그대로.
+  const titleSuffix = input.partial
+    ? translate('meeting.minutes.header.titlePartialSuffix')
+    : '';
   lines.push(
-    `## ${translate('meeting.minutes.header.titlePrefix')} #${shortId(input.meetingId)}`,
+    `## ${translate('meeting.minutes.header.titlePrefix')} #${shortId(input.meetingId)}${titleSuffix}`,
   );
   lines.push('');
 
@@ -247,12 +282,24 @@ export function composeMinutes(input: MinutesComposeInput): string {
   lines.push('---');
   lines.push('');
 
-  // ── Body (proposal / fallback) ───────────────────────────────────
-  const proposal = (input.snapshot.proposal ?? '').trim();
-  if (proposal.length > 0) {
-    lines.push(proposal);
+  // ── Body (partial summary / proposal / fallback) ────────────────
+  // D-A T8: partial=true 일 때 partialSummary 우선. T9 의 orchestrator 가
+  // MeetingSummaryService 로 미리 생성한 3 섹션 텍스트를 그대로 본문에
+  // 삽입한다. 빈 문자열 / null / undefined 면 fallback 한 줄.
+  if (input.partial) {
+    const partialBody = (input.partialSummary ?? '').trim();
+    if (partialBody.length > 0) {
+      lines.push(partialBody);
+    } else {
+      lines.push(`_${translate('meeting.minutes.failed.partialFallback')}_`);
+    }
   } else {
-    lines.push(`_${translate('meeting.minutes.failed.noConsensus')}_`);
+    const proposal = (input.snapshot.proposal ?? '').trim();
+    if (proposal.length > 0) {
+      lines.push(proposal);
+    } else {
+      lines.push(`_${translate('meeting.minutes.failed.noConsensus')}_`);
+    }
   }
 
   lines.push('');
