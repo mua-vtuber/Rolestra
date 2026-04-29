@@ -157,6 +157,8 @@ export class MeetingService {
       startedAt: Date.now(),
       endedAt: null,
       outcome: null,
+      pausedAt: null,
+      kind: 'manual',
     };
 
     try {

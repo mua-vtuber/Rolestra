@@ -25,6 +25,8 @@ function makeMeeting(snapshotJson: string | null, id = 'mtg-1'): Meeting {
     startedAt: 0,
     endedAt: null,
     outcome: null,
+    pausedAt: null,
+    kind: 'manual',
   };
 }
 

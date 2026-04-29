@@ -231,6 +231,31 @@ export const meetingAbortSchema = z.object({
 });
 
 /**
+ * D-A T2: 4 신규 회의 lifecycle IPC 채널의 입력 스키마.
+ *
+ * - `meeting:request-stop` / `meeting:pause` / `meeting:resume` —
+ *   meetingId 만 받음. 1..128 char 동일 컨벤션.
+ * - `meeting:edit-topic` — meetingId + topic. topic 은 1..200 char
+ *   (spec §9 ChannelHeader inline 편집 maxLength 와 일치).
+ */
+export const meetingRequestStopSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
+export const meetingEditTopicSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  topic: z.string().min(1).max(200),
+});
+
+export const meetingPauseSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
+export const meetingResumeSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
+/**
  * `meeting:list-active` input schema (R4 dashboard TasksWidget).
  *
  * `limit` is optional; the handler clamps to the repository's internal
@@ -574,6 +599,10 @@ export const v3ChannelSchemas = {
   'message:search': messageSearchSchema,
   'message:list-recent': messageListRecentSchema,
   'meeting:abort': meetingAbortSchema,
+  'meeting:request-stop': meetingRequestStopSchema,
+  'meeting:edit-topic': meetingEditTopicSchema,
+  'meeting:pause': meetingPauseSchema,
+  'meeting:resume': meetingResumeSchema,
   'meeting:list-active': meetingListActiveSchema,
   'member:set-status': memberSetStatusSchema,
   'member:upload-avatar': memberUploadAvatarSchema,

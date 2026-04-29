@@ -23,6 +23,7 @@ import type Database from 'better-sqlite3';
 import type {
   ActiveMeetingSummary,
   Meeting,
+  MeetingKind,
   MeetingOutcome,
 } from '../../shared/meeting-types';
 import { sessionStateToIndex } from '../../shared/constants';
@@ -41,6 +42,8 @@ interface MeetingRow {
   started_at: number;
   ended_at: number | null;
   outcome: MeetingOutcome | null;
+  paused_at: number | null;
+  kind: MeetingKind;
 }
 
 function rowToMeeting(row: MeetingRow): Meeting {
@@ -53,6 +56,8 @@ function rowToMeeting(row: MeetingRow): Meeting {
     startedAt: row.started_at,
     endedAt: row.ended_at,
     outcome: row.outcome,
+    pausedAt: row.paused_at,
+    kind: row.kind,
   };
 }
 
@@ -64,7 +69,7 @@ export class MeetingRepository {
     const row = this.db
       .prepare(
         `SELECT id, channel_id, topic, state, state_snapshot_json,
-                started_at, ended_at, outcome
+                started_at, ended_at, outcome, paused_at, kind
          FROM meetings WHERE id = ?`,
       )
       .get(id) as MeetingRow | undefined;
@@ -80,7 +85,7 @@ export class MeetingRepository {
     const row = this.db
       .prepare(
         `SELECT id, channel_id, topic, state, state_snapshot_json,
-                started_at, ended_at, outcome
+                started_at, ended_at, outcome, paused_at, kind
          FROM meetings
          WHERE channel_id = ? AND ended_at IS NULL`,
       )
@@ -101,8 +106,8 @@ export class MeetingRepository {
       .prepare(
         `INSERT INTO meetings (
            id, channel_id, topic, state, state_snapshot_json,
-           started_at, ended_at, outcome
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           started_at, ended_at, outcome, paused_at, kind
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         meeting.id,
@@ -113,6 +118,8 @@ export class MeetingRepository {
         meeting.startedAt,
         meeting.endedAt,
         meeting.outcome,
+        meeting.pausedAt,
+        meeting.kind,
       );
   }
 
@@ -207,6 +214,7 @@ export class MeetingRepository {
       topic: string;
       state: string;
       started_at: number;
+      paused_at: number | null;
       channel_id: string;
       channel_name: string;
       project_id: string | null;
@@ -218,6 +226,7 @@ export class MeetingRepository {
                 m.topic AS topic,
                 m.state AS state,
                 m.started_at AS started_at,
+                m.paused_at AS paused_at,
                 m.channel_id AS channel_id,
                 c.name AS channel_name,
                 c.project_id AS project_id,
@@ -245,6 +254,7 @@ export class MeetingRepository {
       // Guard against clock skew on persisted rows — never surface negative
       // elapsed time to the UI (a gauge with a negative label is noise).
       elapsedMs: Math.max(0, now - row.started_at),
+      pausedAt: row.paused_at,
     }));
   }
 

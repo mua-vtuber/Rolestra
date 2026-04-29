@@ -29,6 +29,8 @@ function buildMeeting(overrides: Partial<Meeting> = {}): Meeting {
     startedAt: 0,
     endedAt: null,
     outcome: null,
+    pausedAt: null,
+    kind: 'manual',
     ...overrides,
   };
 }

@@ -532,6 +532,43 @@ export type IpcChannelMap = {
     request: { meetingId: string };
     response: { success: true };
   };
+  /**
+   * D-A T2: 진행 중 회의 종료 요청 (사용자 hover [회의 종료] 클릭).
+   *
+   * `meeting:abort` 와 다른 점 — abort 는 즉시 강제 중단 + 회의록 미생성,
+   * request-stop 은 graceful: orchestrator 가 다음 turn 경계에서 중단 신호를
+   * 받아 합의/논쟁/미결 3 섹션 partial 회의록을 생성한다 (T9 에서 wired).
+   * 응답의 `stoppedAt` 은 종료 표시 시각 ms epoch — 실제 회의 종료까지는
+   * 약간의 지연이 있을 수 있다.
+   */
+  'meeting:request-stop': {
+    request: { meetingId: string };
+    response: { stoppedAt: number };
+  };
+  /**
+   * D-A T2: 회의 주제 inline 편집 (ChannelHeader MeetingTopicEditor).
+   * 200 자 이내. 호출 즉시 DB 갱신 + meeting:list-active stream 재방출.
+   */
+  'meeting:edit-topic': {
+    request: { meetingId: string; topic: string };
+    response: { topic: string };
+  };
+  /**
+   * D-A T2: 회의 일시정지. orchestrator 가 다음 turn 경계에서 PAUSED state
+   * 로 진입하고 paused_at 을 DB 에 기록. 응답의 `pausedAt` 은 같은 ms epoch.
+   */
+  'meeting:pause': {
+    request: { meetingId: string };
+    response: { pausedAt: number };
+  };
+  /**
+   * D-A T2: 일시정지된 회의 재개. paused_at 을 NULL 로 되돌리고 orchestrator
+   * 가 다음 turn 부터 정상 진행. 응답의 `resumedAt` 은 재개 시각 ms epoch.
+   */
+  'meeting:resume': {
+    request: { meetingId: string };
+    response: { resumedAt: number };
+  };
   'meeting:list-active': {
     request: { limit?: number } | undefined;
     response: { meetings: ActiveMeetingSummary[] };
