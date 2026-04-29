@@ -96,6 +96,11 @@ export function useChannelMessages(
         if (beforeCreatedAt !== undefined) request.beforeCreatedAt = beforeCreatedAt;
         const { messages: list } = await invoke('message:list-by-channel', request);
         if (!mountedRef.current) return;
+        // Repository returns newest-first (DESC) — the hook stores
+        // chronological (oldest-first) so `send`'s `[...prev, optimistic]`
+        // tail-append, the auto-scroll-to-bottom logic in Thread, and the
+        // visual "newest at the bottom" expectation all line up.
+        const chronological = [...list].reverse();
         // D8: a refetch may collide with an in-flight optimistic send.
         // We keep any pending row (id starting `pending-`) whose clientId
         // is NOT yet represented in the canonical list — this is the
@@ -103,9 +108,9 @@ export function useChannelMessages(
         // canonical list already includes a server row carrying the same
         // `meta.clientId`, the pending row is dropped to avoid duplication.
         setMessages((prev) => {
-          if (prev === null) return list;
+          if (prev === null) return chronological;
           const serverClientIds = new Set<string>();
-          for (const m of list) {
+          for (const m of chronological) {
             const cid = readClientId(m);
             if (cid !== null) serverClientIds.add(cid);
           }
@@ -114,7 +119,7 @@ export function useChannelMessages(
             const cid = readClientId(m);
             return cid !== null && !serverClientIds.has(cid);
           });
-          return [...list, ...stillPending];
+          return [...chronological, ...stillPending];
         });
         setError(null);
       } catch (reason) {

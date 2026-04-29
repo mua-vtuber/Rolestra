@@ -30,6 +30,12 @@ export interface ChannelHeaderProps {
   /** 이 채널에서 진행중인 회의 수. 0 이면 회의 시작 활성, >0 이면 비활성 + 안내. */
   activeMeetingCount?: number;
   onStartMeeting?: () => void;
+  /**
+   * round2.5 fix: 회의 진행 중 [회의 시작] 버튼이 disabled 인 자리를
+   * [회의 중단] 으로 swap. 사용자가 무한 라운드 / 응답 없는 회의에서
+   * 빠져나갈 수 있도록. T11 정식 사이드바 hover-swap 정착 전 임시.
+   */
+  onAbortMeeting?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
   className?: string;
@@ -44,6 +50,7 @@ export function ChannelHeader({
   memberCount,
   activeMeetingCount = 0,
   onStartMeeting,
+  onAbortMeeting,
   onRename,
   onDelete,
   className,
@@ -135,20 +142,37 @@ export function ChannelHeader({
       </span>
 
       {isUser ? (
-        <button
-          type="button"
-          onClick={onStartMeeting}
-          disabled={startMeetingDisabled || onStartMeeting === undefined}
-          title={startMeetingTitle}
-          data-testid="channel-header-start-meeting"
-          data-disabled={startMeetingDisabled ? 'true' : 'false'}
-          className={clsx(
-            actionBtnClasses,
-            'border border-border-soft',
-          )}
-        >
-          {t('messenger.channelHeader.startMeeting')}
-        </button>
+        hasActiveMeeting && onAbortMeeting !== undefined ? (
+          // round2.5 fix: 회의 진행 중에는 [회의 시작] 자리에 [회의 중단]
+          // 버튼을 노출. 사용자가 무한 라운드 / 응답 없는 회의에서 빠져나
+          // 갈 수 있게 한다. T11 의 정식 사이드바 hover-swap 정착 전 임시.
+          <button
+            type="button"
+            onClick={onAbortMeeting}
+            data-testid="channel-header-abort-meeting"
+            className={clsx(
+              actionBtnClasses,
+              'border border-danger text-danger',
+            )}
+          >
+            {t('messenger.channelHeader.abortMeeting')}
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={onStartMeeting}
+            disabled={startMeetingDisabled || onStartMeeting === undefined}
+            title={startMeetingTitle}
+            data-testid="channel-header-start-meeting"
+            data-disabled={startMeetingDisabled ? 'true' : 'false'}
+            className={clsx(
+              actionBtnClasses,
+              'border border-border-soft',
+            )}
+          >
+            {t('messenger.channelHeader.startMeeting')}
+          </button>
+        )
       ) : null}
 
       {!isDm ? (

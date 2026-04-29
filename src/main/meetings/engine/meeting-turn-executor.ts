@@ -178,6 +178,18 @@ export class MeetingTurnExecutor {
    *  EXECUTING turn. Read by the orchestrator to hand reviewers the path. */
   lastWorkerSummaryFileName: string | null = null;
 
+  /**
+   * round2.5 fix: 직전 turn 의 결과 분류. orchestrator 가 라운드 단위로
+   * 누적해서 "라운드 전원 실패" 상태를 감지한다 (모든 직원이 매번 실패하면
+   * 회의가 영원히 빈 라운드를 반복하는 문제 fix).
+   *
+   * - 'success' : assistant message 가 정상 append 됨
+   * - 'failed'  : turn-error emit (CLI 실패, provider not found 등)
+   * - 'skipped' : work-status gate 로 skip (offline 등)
+   * - 'idle'    : 초기 / 직전 호출 없음
+   */
+  lastTurnResult: 'success' | 'failed' | 'skipped' | 'idle' = 'idle';
+
   /** Tracks whether the worker's first EXECUTING turn injected the
    *  permission-request instruction. Resets when the worker id changes. */
   private workerPermissionInstructionSentForId: string | null = null;
@@ -201,6 +213,7 @@ export class MeetingTurnExecutor {
 
   /** Execute a single AI turn for the given speaker. */
   async executeTurn(speaker: Participant): Promise<void> {
+    this.lastTurnResult = 'idle';
     // R8-Task9 / R11-Task2: work-status gate (spec §7.2). Skip the turn
     // entirely when the speaker is not `online`. The skip is NOT a turn
     // failure — we do not emit TURN_DONE/TURN_FAIL. The orchestrator's
@@ -257,6 +270,7 @@ export class MeetingTurnExecutor {
             e instanceof Error ? e.message : String(e),
           );
         }
+        this.lastTurnResult = 'skipped';
         return;
       }
     }
@@ -283,6 +297,7 @@ export class MeetingTurnExecutor {
           phase: 'pre-start',
         },
       });
+      this.lastTurnResult = 'failed';
       return;
     }
 
@@ -449,6 +464,49 @@ export class MeetingTurnExecutor {
             `[MeetingOrchestrator:${this.session.meetingId}] DB persist error:`,
             dbErr,
           );
+          // round2.5 fix: FK constraint / disk-full 등 메시지 영속 실패는
+          // 단순 swallow 가 아니라 fatal — 회의를 즉시 FAILED 로 종료한다.
+          // 사용자가 앱 종료 / abort 한 직후 stale turn 응답이 도착해
+          // channel / meeting / provider FK 가 깨진 경우, 다음 라운드도
+          // 같은 패턴으로 무한 반복되는 것을 막기 위해.
+          const dbErrCode =
+            dbErr instanceof Error
+              ? (dbErr as { code?: string }).code ?? 'unknown'
+              : 'unknown';
+          this.streamBridge.emitMeetingError({
+            meetingId: this.session.meetingId,
+            channelId: this.session.channelId,
+            error:
+              dbErr instanceof Error
+                ? `DB persist failed: ${dbErr.message}`
+                : 'DB persist failed',
+            fatal: true,
+            messageId,
+            speakerId: speaker.id,
+          });
+          tryGetLogger()?.error({
+            component: 'meeting',
+            action: 'turn-error',
+            result: 'failure',
+            participantId: speaker.id,
+            error: { code: 'db_persist', message: dbErrCode },
+            metadata: {
+              meetingId: this.session.meetingId,
+              channelId: this.session.channelId,
+              messageId,
+              participantName: speaker.displayName,
+              phase: 'persist',
+            },
+          });
+          this.lastTurnResult = 'failed';
+          // FAILED 로 강제 transition — orchestrator loop 가 다음 iteration
+          // 에서 isTerminal 검사로 handleTerminal 진입 → 회의록 마무리.
+          try {
+            this.session.sessionMachine.transition('ERROR');
+          } catch {
+            // SSM 이 이미 terminal 이거나 transition map 에 없는 경우 무시.
+          }
+          return;
         }
       }
 
@@ -473,6 +531,7 @@ export class MeetingTurnExecutor {
           contentLength: fullContent.length,
         },
       });
+      this.lastTurnResult = 'success';
 
       this.personaPrimedParticipants.add(speaker.id);
 
@@ -490,6 +549,7 @@ export class MeetingTurnExecutor {
       }
     } catch (err) {
       if (!signal.aborted) {
+        this.lastTurnResult = 'failed';
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
         const errorCategory = classifyTurnError(err);
         this.streamBridge.emitMeetingError({

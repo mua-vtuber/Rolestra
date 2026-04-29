@@ -42,7 +42,12 @@ describe('useChannelMessages', () => {
     expect(result.current.messages).toBeNull();
   });
 
-  it('happy path: message:list-by-channel called exactly once in strict mode', async () => {
+  it('happy path: message:list-by-channel called exactly once in strict mode (round2.5: reversed to chronological)', async () => {
+    // round2.5 fix: repository 는 newest-first (DESC) 로 주는데, hook 은
+    // chronological 순 (oldest-first / newest-last) 로 저장한다. UI 가
+    // "새 메시지가 아래" 로 보고, send() 의 `[...prev, optimistic]` tail
+    // append 가 자연스럽게 newest 자리에 들어가게 하기 위함. 따라서 server
+    // 가 [m-1, m-2] (m-1 = newer) 를 주면 hook 은 [m-2, m-1] 로 보관.
     const rows = [makeMessage({ id: 'm-1' }), makeMessage({ id: 'm-2' })];
     const invoke = vi.fn().mockResolvedValue({ messages: rows });
     vi.stubGlobal('arena', { platform: 'linux', invoke });
@@ -54,7 +59,7 @@ describe('useChannelMessages', () => {
     const listCalls = invoke.mock.calls.filter((c) => c[0] === 'message:list-by-channel');
     expect(listCalls).toHaveLength(1);
     expect(listCalls[0]?.[1]).toEqual({ channelId: 'c-a' });
-    expect(result.current.messages).toEqual(rows);
+    expect(result.current.messages).toEqual([rows[1], rows[0]]);
   });
 
   it('passes limit + beforeCreatedAt when supplied', async () => {

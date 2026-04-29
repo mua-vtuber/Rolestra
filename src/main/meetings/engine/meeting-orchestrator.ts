@@ -184,6 +184,21 @@ export class MeetingOrchestrator {
    *  retry). */
   private terminalHandled = false;
 
+  /**
+   * round2.5 fix: 라운드 단위 success/fail 카운터.
+   *
+   * 한 라운드 내 모든 turn 이 실패 ('failed') 로 끝났는데도 round 가
+   * "정상 종료" 로 처리되어 다음 라운드를 무한 반복하는 문제를 막는다.
+   *
+   * 카운터는 `runSpeakerRound` 내에서 누적되고 `getNextSpeaker() === null`
+   * 시점에 검사 후 reset 된다. success > 0 이면 라운드는 살아있는 것으로
+   * 보고 ROUND_COMPLETE 그대로. 0 success && >=1 failed 이면 ssm.transition
+   * ('ERROR') 으로 FAILED 상태 진입 → handleTerminal 이 partial 회의록
+   * (T8 layout) 으로 마무리.
+   */
+  private roundSuccessCount = 0;
+  private roundFailCount = 0;
+
   constructor(deps: MeetingOrchestratorDeps) {
     this.session = deps.session;
     this.turnExecutor = deps.turnExecutor;
@@ -419,13 +434,38 @@ export class MeetingOrchestrator {
   private async runSpeakerRound(): Promise<boolean> {
     const speaker = this.session.getNextSpeaker();
     if (!speaker) {
-      // Round boundary: transition SSM out of the speaker state. The
-      // SSM's transition map handles CONVERSATION → CONVERSATION
-      // (no-mode-judgment majority) vs → MODE_TRANSITION_PENDING.
-      this.session.sessionMachine.transition('ROUND_COMPLETE');
+      // round2.5 fix: 라운드 종료 직전 — 모든 참가자가 실패였다면
+      // ROUND_COMPLETE 대신 ERROR transition 으로 FAILED 진입. handleTerminal
+      // 이 partial-summary 양식 (T8) 으로 회의록을 마무리한다.
+      const allFailed =
+        this.roundSuccessCount === 0 && this.roundFailCount > 0;
+      this.roundSuccessCount = 0;
+      this.roundFailCount = 0;
+
+      if (allFailed) {
+        console.warn(
+          `[MeetingOrchestrator:${this.session.meetingId}] all participants failed this round — forcing FAILED state`,
+        );
+        this.session.sessionMachine.transition('ERROR');
+      } else {
+        // SSM 의 transition map 이 CONVERSATION → CONVERSATION
+        // (no-mode-judgment majority) vs → MODE_TRANSITION_PENDING 분기.
+        this.session.sessionMachine.transition('ROUND_COMPLETE');
+      }
       return true;
     }
     await this.turnExecutor.executeTurn(speaker);
+    switch (this.turnExecutor.lastTurnResult) {
+      case 'success':
+        this.roundSuccessCount += 1;
+        break;
+      case 'failed':
+        this.roundFailCount += 1;
+        break;
+      // 'skipped' / 'idle' 는 카운트 안 함 — work-status gate 의 정상 흐름
+      // 이거나 사용자 abort 같은 control-flow signal 이라 round-fatal 이
+      // 아님.
+    }
     return false;
   }
 

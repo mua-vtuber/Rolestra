@@ -18,7 +18,14 @@ import { GeminiPermissionAdapter } from './permission-adapter';
 
 export const GEMINI_CLI_CONFIG: CliRuntimeConfig = {
   command: 'gemini',
-  args: ['--output-format', 'stream-json'],
+  // round2.5 fix: Gemini CLI 가 도입한 "trusted directory" 정책을 우회.
+  // 사용자 보고 stderr: "Gemini CLI is not running in a trusted directory.
+  // To proceed, either use `--skip-trust`, set the `GEMINI_CLI_TRUST_WORKSPACE
+  // =true` environment variable, or trust this directory in interactive mode."
+  // ArenaRoot 가 사용자 Documents 안의 정해진 위치라 매번 trust 등록을
+  // 요구하면 dogfooding 흐름이 막힘 — `--skip-trust` 플래그를 default 로
+  // 첨부.
+  args: ['--skip-trust', '--output-format', 'stream-json'],
   inputFormat: 'pipe',
   outputFormat: 'stream-json',
   sessionStrategy: 'per-turn',

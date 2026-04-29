@@ -489,7 +489,8 @@
       "rename": "이름 변경",
       "renameDisabledSystem": "시스템 채널은 이름을 바꿀 수 없습니다",
       "startMeeting": "회의 시작",
-      "startMeetingDisabledBusy": "이미 회의 중"
+      "startMeetingDisabledBusy": "이미 회의 중",
+      "abortMeeting": "회의 중단"
     },
     "channelRail": {
       "createChannel": "새 채널",

@@ -489,7 +489,8 @@
       "rename": "Rename",
       "renameDisabledSystem": "System channels cannot be renamed",
       "startMeeting": "Start meeting",
-      "startMeetingDisabledBusy": "A meeting is already active"
+      "startMeetingDisabledBusy": "A meeting is already active",
+      "abortMeeting": "Abort meeting"
     },
     "channelRail": {
       "createChannel": "New channel",

@@ -35,6 +35,7 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import { ChannelHeader } from './ChannelHeader';
+import { invoke } from '../../ipc/invoke';
 import { Composer } from './Composer';
 import { DateSeparator } from './DateSeparator';
 import { MeetingBanner } from './MeetingBanner';
@@ -281,6 +282,19 @@ export function Thread({
   const handleStartedMeeting = useCallback((): void => {
     void refreshMeetings();
   }, [refreshMeetings]);
+  const handleAbortMeeting = useCallback(async (): Promise<void> => {
+    if (!activeMeeting) return;
+    try {
+      await invoke('meeting:abort', { meetingId: activeMeeting.id });
+    } catch (err) {
+      console.warn(
+        '[Thread] meeting:abort failed',
+        err instanceof Error ? err.message : String(err),
+      );
+    } finally {
+      void refreshMeetings();
+    }
+  }, [activeMeeting, refreshMeetings]);
   const handleComposerSendSuccess = useCallback((): void => {
     void refreshMessages();
   }, [refreshMessages]);
@@ -323,6 +337,7 @@ export function Thread({
         memberCount={memberCount}
         activeMeetingCount={activeMeetingCount}
         onStartMeeting={handleStartMeeting}
+        onAbortMeeting={handleAbortMeeting}
         onRename={handleRename}
         onDelete={handleDelete}
       />

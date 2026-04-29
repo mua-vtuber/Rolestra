@@ -169,7 +169,10 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
     expect(startBtn.getAttribute('data-disabled')).toBe('false');
   });
 
-  it('disables the start-meeting button when a meeting is active in the channel', async () => {
+  it('swaps the start-meeting button for an abort-meeting button when a meeting is active in the channel', async () => {
+    // round2.5 fix: 회의 진행 중에는 [회의 시작] 자리에 [회의 중단] 으로
+    // swap. 이전 동작 (동일 버튼 disabled) 은 회귀 — 사용자가 무한 라운드
+    // 에서 빠져나갈 출구가 없었다.
     useActiveChannelStore.setState({
       channelIdByProject: { [PROJECT_ID]: 'c-plan' },
     });
@@ -194,12 +197,14 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
     renderThread(<Thread projectId={PROJECT_ID} />);
 
     await waitFor(() =>
-      expect(screen.queryByTestId('channel-header-start-meeting')).toBeTruthy(),
+      expect(screen.queryByTestId('channel-header-abort-meeting')).toBeTruthy(),
     );
-    const btn = screen.getByTestId('channel-header-start-meeting') as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(btn.getAttribute('data-disabled')).toBe('true');
-    expect(btn.getAttribute('title')).toContain('회의');
+    const abortBtn = screen.getByTestId(
+      'channel-header-abort-meeting',
+    ) as HTMLButtonElement;
+    expect(abortBtn.disabled).toBe(false);
+    // 활성 회의 시 start-meeting 버튼은 더 이상 노출되지 않는다.
+    expect(screen.queryByTestId('channel-header-start-meeting')).toBeNull();
   });
 });
 
