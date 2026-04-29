@@ -62,6 +62,7 @@ import {
   postGeneralMeetingDoneMessage,
   type V3SideEffectDisposer,
 } from '../../engine/v3-side-effects';
+import { tryGetLogger } from '../../log/logger-accessor';
 import type { MeetingSession } from './meeting-session';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import { composeMinutes, type MinutesTranslator } from './meeting-minutes-composer';
@@ -215,6 +216,21 @@ export class MeetingOrchestrator {
     this.terminalHandled = false;
     this.abortController = new AbortController();
 
+    const runStartedAt = Date.now();
+    tryGetLogger()?.info({
+      component: 'meeting',
+      action: 'run-start',
+      result: 'success',
+      metadata: {
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        projectId: this.session.projectId,
+        topic: this.session.topic,
+        participantCount: this.session.participants.length,
+        roundSetting: this.session.turnManager.roundSetting,
+      },
+    });
+
     // Per-meeting wiring: SSM transitions → meetings DB + stream-bridge
     // state-changed + terminal #회의록 post + notifications.
     this.sideEffectDisposer = wireV3SideEffects(this.session.sessionMachine, {
@@ -252,6 +268,17 @@ export class MeetingOrchestrator {
       this.abortController = null;
       this.sideEffectDisposer?.();
       this.sideEffectDisposer = null;
+      tryGetLogger()?.info({
+        component: 'meeting',
+        action: 'run-end',
+        result: 'success',
+        latencyMs: Date.now() - runStartedAt,
+        metadata: {
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          finalState: this.session.sessionMachine.state,
+        },
+      });
     }
   }
 

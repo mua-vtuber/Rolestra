@@ -591,6 +591,13 @@
     "thread": {
       "empty": "No messages yet",
       "liveTurnPending": "Preparing response…",
+      "liveTurn": {
+        "acknowledged": "{{name}} acknowledged the message…",
+        "composing": "{{name}} is writing a reply…",
+        "failed": "{{name}} failed to write a reply — {{reason}}",
+        "skipped": "{{name}} is offline and was skipped this turn",
+        "unknownSpeaker": "AI"
+      },
       "loading": "Loading messages…"
     }
   },

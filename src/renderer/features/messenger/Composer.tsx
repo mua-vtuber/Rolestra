@@ -56,11 +56,14 @@ export function Composer({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Tracks IME composition (Korean/Japanese/Chinese syllable assembly).
-  // While true, intermediate `change` events are dropped to avoid
-  // sending broken UTF-8 bytes downstream, and Enter is suppressed
-  // because most IMEs use Enter to finalize the candidate — firing
-  // `send` on that keystroke would post the half-finished syllable
-  // before the IME commits.
+  // While true, Enter is suppressed because most IMEs use Enter to
+  // finalize the candidate — firing `send` on that keystroke would
+  // post the half-finished syllable before the IME commits. We do
+  // NOT skip `change` updates: with a controlled textarea, dropping
+  // the setState during composition makes React revert the rendered
+  // value to the prior state on every keystroke, so the user sees
+  // typing as a no-op (especially on Windows where having a Korean
+  // IME installed can fire compositionstart even for ASCII keys).
   const composingRef = useRef<boolean>(false);
 
   const isRetro = themeKey === 'retro';
@@ -102,7 +105,6 @@ export function Composer({
   const handleChange = (
     event: React.ChangeEvent<HTMLTextAreaElement>,
   ): void => {
-    if (composingRef.current) return;
     setValue(event.target.value);
   };
 

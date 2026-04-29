@@ -76,7 +76,16 @@ type ThreadItem =
     }
   | { kind: 'system'; key: string; message: ChannelMessage }
   | { kind: 'approval'; key: string; message: ChannelMessage }
-  | { kind: 'live'; key: string; messageId: string; speakerId: string; cumulative: string };
+  | {
+      kind: 'live';
+      key: string;
+      messageId: string;
+      speakerId: string;
+      speakerName: string;
+      cumulative: string;
+      status: 'acknowledged' | 'composing' | 'failed' | 'skipped';
+      errorMessage: string | null;
+    };
 
 function formatDateLabel(ts: number, lang: string): string {
   const locale = lang.startsWith('ko') ? 'ko-KR' : 'en-US';
@@ -226,17 +235,29 @@ export function Thread({
     for (const turn of meetingStream.liveTurns) {
       const existing = messages.find((m) => m.id === turn.messageId);
       if (existing) continue; // DB already has the row — skip live buffer.
+      // Resolve display name: prefer the payload-supplied name (skipped
+      // path carries it), otherwise look up via the channel member
+      // roster. Falls through to a localised "AI" fallback so the
+      // status row is never raw-id ugly.
+      const memberName = memberByProvider.get(turn.speakerId)?.name ?? null;
+      const speakerName =
+        turn.participantName ??
+        memberName ??
+        t('messenger.thread.liveTurn.unknownSpeaker');
       out.push({
         kind: 'live',
         key: `live-${turn.messageId}`,
         messageId: turn.messageId,
         speakerId: turn.speakerId,
+        speakerName,
         cumulative: turn.cumulative,
+        status: turn.status,
+        errorMessage: turn.errorMessage,
       });
     }
 
     return out;
-  }, [messages, memberByProvider, meetingStream.liveTurns, i18n.language]);
+  }, [messages, memberByProvider, meetingStream.liveTurns, i18n.language, t]);
 
   // Refresh on turn-done: when a live turn disappears from liveTurns it
   // means the orchestrator persisted the row; pull the latest DB list.
@@ -374,25 +395,72 @@ export function Thread({
                     // in i18next-parser.config.js.
                     t(`meeting.state.${meetingStream.ssmState}`)
                   : null;
+              // Status-specific status row. The Composer's "is the AI
+              // even doing anything?" question is answered here so the
+              // user can distinguish a slow turn from a silent failure.
+              let statusLine: string;
+              switch (it.status) {
+                case 'acknowledged':
+                  statusLine = t('messenger.thread.liveTurn.acknowledged', {
+                    name: it.speakerName,
+                  });
+                  break;
+                case 'composing':
+                  statusLine = t('messenger.thread.liveTurn.composing', {
+                    name: it.speakerName,
+                  });
+                  break;
+                case 'failed':
+                  statusLine = t('messenger.thread.liveTurn.failed', {
+                    name: it.speakerName,
+                    reason:
+                      it.errorMessage ??
+                      t('messenger.thread.liveTurn.unknownSpeaker'),
+                  });
+                  break;
+                case 'skipped':
+                  statusLine = t('messenger.thread.liveTurn.skipped', {
+                    name: it.speakerName,
+                  });
+                  break;
+              }
+              const statusTone =
+                it.status === 'failed'
+                  ? 'text-danger'
+                  : it.status === 'skipped'
+                    ? 'text-warning'
+                    : 'text-fg-muted';
               return (
                 <div
                   key={it.key}
                   data-testid="thread-live-turn"
                   data-message-id={it.messageId}
                   data-speaker-id={it.speakerId}
+                  data-status={it.status}
                   className="px-4 py-1 text-sm text-fg"
                 >
-                  {ssmLabel ? (
-                    <span
-                      data-testid="thread-live-turn-ssm"
-                      className="mr-2 text-xs text-fg-muted"
+                  <div
+                    data-testid="thread-live-turn-status"
+                    className={clsx('text-xs', statusTone)}
+                  >
+                    {ssmLabel ? (
+                      <span
+                        data-testid="thread-live-turn-ssm"
+                        className="mr-2 text-fg-subtle"
+                      >
+                        [{ssmLabel}]
+                      </span>
+                    ) : null}
+                    <span>{statusLine}</span>
+                  </div>
+                  {it.cumulative ? (
+                    <div
+                      data-testid="thread-live-turn-content"
+                      className="mt-1 whitespace-pre-wrap"
                     >
-                      [{ssmLabel}]
-                    </span>
+                      {it.cumulative}
+                    </div>
                   ) : null}
-                  <span className="whitespace-pre-wrap">
-                    {it.cumulative || t('messenger.thread.liveTurnPending')}
-                  </span>
                 </div>
               );
             }

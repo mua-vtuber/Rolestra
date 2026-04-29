@@ -59,6 +59,7 @@ import {
   type RecentMessage,
 } from '../../shared/message-types';
 import type { MessageSearchHit } from '../../shared/message-search-types';
+import { tryGetLogger } from '../log/logger-accessor';
 import { MessageRepository } from './message-repository';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -315,6 +316,27 @@ export class MessageService extends EventEmitter {
       }
       throw err;
     }
+
+    // Dogfooding visibility (R12): a one-line breadcrumb every time a
+    // message lands. Lets a dev tail `npm run dev` and confirm "the user
+    // typed → IPC fired → row was inserted", separately from the
+    // separate question of "did a meeting actually start". `info` keeps
+    // it out of warn/error visual noise.
+    tryGetLogger()?.info({
+      component: 'message',
+      action: 'append',
+      result: 'success',
+      metadata: {
+        messageId: message.id,
+        channelId: message.channelId,
+        meetingId: message.meetingId,
+        authorKind: message.authorKind,
+        authorId: message.authorId,
+        role: message.role,
+        contentLength:
+          typeof message.content === 'string' ? message.content.length : -1,
+      },
+    });
 
     // Emit is strictly a broadcast — listener failures must not rewrite
     // the contract of `append()`, which is "row is saved, you get the

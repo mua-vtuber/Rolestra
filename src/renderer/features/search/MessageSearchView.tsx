@@ -21,7 +21,13 @@
  */
 import * as Dialog from '@radix-ui/react-dialog';
 import { clsx } from 'clsx';
-import { useEffect, useMemo, useRef, type ReactElement } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 
 import type { MessageSearchInput } from '../../../shared/ipc-types';
@@ -72,10 +78,18 @@ export function MessageSearchView({
 }: MessageSearchViewProps): ReactElement {
   const { t, i18n } = useTranslation();
   const inputRef = useRef<HTMLInputElement | null>(null);
-  // Tracks IME composition state so onChange can ignore intermediate
-  // events while a CJK syllable is mid-assembly (see input handler
-  // comments below for why this matters).
+  // Tracks IME composition state. While composing, the input still
+  // updates its local visual value (see `inputValue` below), but we
+  // suppress forwarding to `search.setQuery` so partial / malformed
+  // UTF-8 bytes never reach SQLite FTS5 (which would throw
+  // `fts5: syntax error near "?"`).
   const composingRef = useRef<boolean>(false);
+  // Local state mirrors the input box so React renders every
+  // keystroke — including IME-intermediate ones — without React's
+  // controlled-input model snapping the field back to the prior
+  // committed query. The hook's `search.query` is updated only when
+  // composition is idle (or finishes via compositionend).
+  const [inputValue, setInputValue] = useState<string>('');
   const panelClip = usePanelClipStyle();
 
   // 기본 scope 결정: 채널 > 프로젝트. 둘 다 없으면 disabled 상태.
@@ -94,6 +108,8 @@ export function MessageSearchView({
   useEffect(() => {
     if (!open) return;
     search.clear();
+    setInputValue('');
+    composingRef.current = false;
     const nextScope = resolveScope(
       initialChoice,
       activeProjectId,
@@ -192,7 +208,7 @@ export function MessageSearchView({
               type="search"
               data-testid="message-search-input"
               disabled={inputDisabled}
-              value={search.query}
+              value={inputValue}
               placeholder={t('message.search.placeholder', {
                 defaultValue: '검색어를 입력하세요 (FTS5 syntax 지원)',
               })}
@@ -203,20 +219,30 @@ export function MessageSearchView({
               // `setQuery` lands invalid UTF-8 bytes in the IPC payload,
               // which SQLite rejects as `fts5: syntax error near "?"`
               // (the `?` is the placeholder for an unmappable byte).
-              // We mirror Composition events: skip `change` while
-              // composing, then sync once on `compositionend` with the
-              // finalized value. Native English typing has no
-              // composition events so this is a no-op for ASCII input.
+              //
+              // We always update the visual `inputValue` so the
+              // controlled input renders the IME's intermediate state
+              // (otherwise React snaps the field back to the prior
+              // committed value and typing appears broken). The hook's
+              // `setQuery` (which fires the FTS5 IPC) is only called
+              // when composition is idle, or once on compositionend
+              // with the finalized value. Native English typing has
+              // no composition events so the FTS5 path runs eagerly.
               onChange={(e) => {
-                if (composingRef.current) return;
-                search.setQuery(e.target.value);
+                const next = e.target.value;
+                setInputValue(next);
+                if (!composingRef.current) {
+                  search.setQuery(next);
+                }
               }}
               onCompositionStart={() => {
                 composingRef.current = true;
               }}
               onCompositionEnd={(e) => {
                 composingRef.current = false;
-                search.setQuery((e.target as HTMLInputElement).value);
+                const final = (e.target as HTMLInputElement).value;
+                setInputValue(final);
+                search.setQuery(final);
               }}
               className={clsx(
                 'w-full rounded-panel border border-panel-border bg-sunk px-3 py-2',

@@ -142,12 +142,20 @@ export interface StreamMeetingTurnDonePayload {
 /**
  * R6: Error raised during a meeting. `fatal=true` means the meeting is
  * finished with outcome='failed'; `fatal=false` is a recoverable retry.
+ *
+ * `messageId` / `speakerId` are populated when the failure is tied to a
+ * specific in-flight turn (e.g. provider stream rejected mid-response).
+ * Renderer hooks use them to flip the matching liveTurn's status to
+ * `failed` and surface the speaker's name. Failures that fire BEFORE a
+ * turn was even allocated (e.g. provider not found) leave them unset.
  */
 export interface StreamMeetingErrorPayload {
   meetingId: string;
   channelId: string;
   error: string;
   fatal: boolean;
+  messageId?: string;
+  speakerId?: string;
 }
 
 /**
@@ -166,6 +174,9 @@ export interface StreamMeetingTurnSkippedPayload {
   participantId: string;
   participantName: string;
   reason: 'connecting' | 'offline-connection' | 'offline-manual';
+  /** Synthetic id used by the renderer to key a transient liveTurn entry
+   *  for this skip notice (no persisted message row corresponds to it). */
+  skipId?: string;
 }
 
 /**

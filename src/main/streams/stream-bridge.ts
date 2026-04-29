@@ -509,7 +509,11 @@ export class StreamBridge {
           typeof payload.meetingId === 'string' &&
           typeof payload.channelId === 'string' &&
           typeof payload.error === 'string' &&
-          typeof payload.fatal === 'boolean'
+          typeof payload.fatal === 'boolean' &&
+          (payload.messageId === undefined ||
+            typeof payload.messageId === 'string') &&
+          (payload.speakerId === undefined ||
+            typeof payload.speakerId === 'string')
         );
       case 'stream:queue-updated':
         return (

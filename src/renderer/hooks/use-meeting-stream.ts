@@ -5,17 +5,24 @@
  * Contract:
  * - `channelId === null` → idle. No subscription, derived shape only.
  * - On each `stream:meeting-turn-start` the hook allocates a new
- *   `liveTurn` entry keyed by `messageId`.
+ *   `liveTurn` entry keyed by `messageId` with status='acknowledged'.
  * - On each `stream:meeting-turn-token` the cumulative buffer on the
  *   matching `liveTurn` is replaced by `payload.cumulative` so late
- *   subscribers jump straight to the current view without replay.
+ *   subscribers jump straight to the current view without replay, and
+ *   status flips to 'composing' the first time tokens arrive.
  * - On `stream:meeting-turn-done` the `liveTurn` is removed — the DB
  *   row is now authoritative and the Thread refetches via
  *   `useChannelMessages`.
+ * - On `stream:meeting-turn-skipped` a transient liveTurn entry with
+ *   status='skipped' is appended (keyed by `skipId` or a synthesised id)
+ *   and auto-removed after `TRANSIENT_NOTICE_TTL_MS` so the Thread can
+ *   show "{name} was offline" briefly without permanent clutter.
+ * - On `stream:meeting-error` carrying a `messageId`, the matching
+ *   liveTurn is flipped to status='failed' with the error message, and
+ *   auto-removed after `TRANSIENT_NOTICE_TTL_MS`. Without `messageId`
+ *   only the global `error` field is populated (legacy R6 behaviour).
  * - On `stream:meeting-state-changed` (fired by v3-side-effects) the
  *   SSM state is updated so `MeetingBanner` re-renders.
- * - `stream:meeting-error` populates `error`. Non-fatal errors leave the
- *   SSM state intact; fatal errors additionally set `fatal=true`.
  *
  * Messages from OTHER channels (different `channelId`) are dropped at
  * the hook layer so multiple renders of the Thread component don't
@@ -30,15 +37,35 @@ import type {
   StreamMeetingTurnStartPayload,
   StreamMeetingTurnTokenPayload,
   StreamMeetingTurnDonePayload,
+  StreamMeetingTurnSkippedPayload,
   StreamMeetingErrorPayload,
 } from '../../shared/stream-events';
+
+/** How long a `failed` / `skipped` notice lingers in the live buffer
+ *  before the hook drops it. The Thread renders these as inline
+ *  status rows; long enough to be noticed, short enough not to pile up
+ *  across a multi-round meeting. */
+const TRANSIENT_NOTICE_TTL_MS = 6_000;
+
+export type LiveTurnStatus =
+  | 'acknowledged'
+  | 'composing'
+  | 'failed'
+  | 'skipped';
 
 export interface LiveTurn {
   messageId: string;
   meetingId: string;
   speakerId: string;
+  /** Display name when the source event carried one (skipped path). For
+   *  `acknowledged` / `composing` / `failed` the renderer joins
+   *  `speakerId` against the channel member roster instead. */
+  participantName: string | null;
   cumulative: string;
   sequence: number;
+  status: LiveTurnStatus;
+  /** Human-readable error message — only set for `failed`. */
+  errorMessage: string | null;
 }
 
 export interface UseMeetingStreamResult {
@@ -71,6 +98,11 @@ export function useMeetingStream(
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [error, setError] = useState<UseMeetingStreamResult['error']>(null);
   const mountedRef = useRef(true);
+  // messageId → timeout id, so cleanup / channel-change can clear any
+  // outstanding "remove this transient notice in 6s" timers.
+  const transientTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(
+    new Map(),
+  );
 
   useEffect(() => {
     mountedRef.current = true;
@@ -90,9 +122,31 @@ export function useMeetingStream(
       return () => {};
     }
 
+    const timers = transientTimersRef.current;
+
+    const scheduleRemoval = (key: string): void => {
+      const existing = timers.get(key);
+      if (existing) clearTimeout(existing);
+      const handle = setTimeout(() => {
+        if (!mountedRef.current) return;
+        timers.delete(key);
+        setLiveTurns((prev) => prev.filter((t) => t.messageId !== key));
+      }, TRANSIENT_NOTICE_TTL_MS);
+      timers.set(key, handle);
+    };
+
+    const cancelRemoval = (key: string): void => {
+      const existing = timers.get(key);
+      if (existing) {
+        clearTimeout(existing);
+        timers.delete(key);
+      }
+    };
+
     const onStart = (payload: StreamMeetingTurnStartPayload): void => {
       if (payload.channelId !== channelId) return;
       if (!mountedRef.current) return;
+      cancelRemoval(payload.messageId);
       setActiveMeetingId(payload.meetingId);
       setLiveTurns((prev) => [
         ...prev.filter((t) => t.messageId !== payload.messageId),
@@ -100,8 +154,11 @@ export function useMeetingStream(
           messageId: payload.messageId,
           meetingId: payload.meetingId,
           speakerId: payload.speakerId,
+          participantName: null,
           cumulative: '',
           sequence: -1,
+          status: 'acknowledged',
+          errorMessage: null,
         },
       ]);
     };
@@ -116,6 +173,7 @@ export function useMeetingStream(
                 ...t,
                 cumulative: payload.cumulative,
                 sequence: payload.sequence,
+                status: 'composing',
               }
             : t,
         ),
@@ -125,9 +183,32 @@ export function useMeetingStream(
     const onDone = (payload: StreamMeetingTurnDonePayload): void => {
       if (payload.channelId !== channelId) return;
       if (!mountedRef.current) return;
+      cancelRemoval(payload.messageId);
       setLiveTurns((prev) =>
         prev.filter((t) => t.messageId !== payload.messageId),
       );
+    };
+
+    const onSkipped = (payload: StreamMeetingTurnSkippedPayload): void => {
+      if (payload.channelId !== channelId) return;
+      if (!mountedRef.current) return;
+      const key =
+        payload.skipId ??
+        `skipped-${payload.participantId}-${Date.now()}`;
+      setLiveTurns((prev) => [
+        ...prev.filter((t) => t.messageId !== key),
+        {
+          messageId: key,
+          meetingId: payload.meetingId,
+          speakerId: payload.participantId,
+          participantName: payload.participantName,
+          cumulative: '',
+          sequence: -1,
+          status: 'skipped',
+          errorMessage: null,
+        },
+      ]);
+      scheduleRemoval(key);
     };
 
     const onStateChanged = (
@@ -143,11 +224,35 @@ export function useMeetingStream(
       if (payload.channelId !== channelId) return;
       if (!mountedRef.current) return;
       setError({ message: payload.error, fatal: payload.fatal });
+      // R12 dogfooding: when the failure is tied to a specific in-flight
+      // turn the Thread should flip that bubble to "AI failed to write"
+      // instead of leaving it stuck on "writing…". Untargeted errors
+      // (provider not found, fatal meeting collapse) only populate the
+      // global `error` field — no liveTurn to flip.
+      const targetId = payload.messageId;
+      if (targetId) {
+        setLiveTurns((prev) =>
+          prev.map((t) =>
+            t.messageId === targetId
+              ? {
+                  ...t,
+                  status: 'failed',
+                  errorMessage: payload.error,
+                }
+              : t,
+          ),
+        );
+        scheduleRemoval(targetId);
+      }
     };
 
     const unsubStart = subscribeStream('stream:meeting-turn-start', onStart);
     const unsubToken = subscribeStream('stream:meeting-turn-token', onToken);
     const unsubDone = subscribeStream('stream:meeting-turn-done', onDone);
+    const unsubSkipped = subscribeStream(
+      'stream:meeting-turn-skipped',
+      onSkipped,
+    );
     const unsubState = subscribeStream(
       'stream:meeting-state-changed',
       onStateChanged,
@@ -158,8 +263,14 @@ export function useMeetingStream(
       unsubStart();
       unsubToken();
       unsubDone();
+      unsubSkipped();
       unsubState();
       unsubError();
+      // Drop any pending auto-removal timers — leaving them armed
+      // would resolve to a setLiveTurns call after the next channel's
+      // effect already initialised state.
+      for (const handle of timers.values()) clearTimeout(handle);
+      timers.clear();
       // Reset state here (in cleanup, not body) so a later resubscribe
       // doesn't show stale turns from a channel the user navigated away
       // from. The guarded `prev === x ? prev : x` pattern no-ops when

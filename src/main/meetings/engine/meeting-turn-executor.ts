@@ -59,6 +59,7 @@ import type { ParsedAiOutput } from '../../../shared/message-protocol-types';
 import { buildPermissionRules } from '../../members/persona-permission-rules';
 import { MessageFormatter } from '../../engine/message-formatter';
 import { AppToolProvider, type AppTool } from '../../engine/app-tool-provider';
+import { tryGetLogger } from '../../log/logger-accessor';
 import type { BaseProvider } from '../../providers/provider-interface';
 import { CliProvider } from '../../providers/cli/cli-provider';
 import type { ParsedCliPermissionRequest } from '../../providers/cli/cli-permission-parser';
@@ -213,6 +214,19 @@ export class MeetingTurnExecutor {
           participantId: speaker.id,
           participantName: speaker.displayName,
           reason: status,
+          skipId: randomUUID(),
+        });
+        tryGetLogger()?.info({
+          component: 'meeting',
+          action: 'turn-skipped',
+          result: 'success',
+          participantId: speaker.id,
+          metadata: {
+            meetingId: this.session.meetingId,
+            channelId: this.session.channelId,
+            participantName: speaker.displayName,
+            reason: status,
+          },
         });
         // Persist a system message so the channel transcript shows the
         // skip even after the meeting ends. The renderer Thread (Task 9
@@ -249,16 +263,31 @@ export class MeetingTurnExecutor {
 
     const provider = this.providerRegistry.get(speaker.id);
     if (!provider) {
+      const errorMsg = `Provider not found: ${speaker.id}`;
       this.streamBridge.emitMeetingError({
         meetingId: this.session.meetingId,
         channelId: this.session.channelId,
-        error: `Provider not found: ${speaker.id}`,
+        error: errorMsg,
         fatal: false,
+        speakerId: speaker.id,
+      });
+      tryGetLogger()?.error({
+        component: 'meeting',
+        action: 'turn-error',
+        result: 'failure',
+        participantId: speaker.id,
+        error: { code: 'ProviderNotFound', message: errorMsg },
+        metadata: {
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          phase: 'pre-start',
+        },
       });
       return;
     }
 
     const messageId = randomUUID();
+    const turnStartedAt = Date.now();
     let fullContent = '';
 
     this.streamBridge.emitMeetingTurnStart({
@@ -266,6 +295,20 @@ export class MeetingTurnExecutor {
       channelId: this.session.channelId,
       speakerId: speaker.id,
       messageId,
+    });
+    tryGetLogger()?.info({
+      component: 'meeting',
+      action: 'turn-start',
+      result: 'success',
+      participantId: speaker.id,
+      metadata: {
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        messageId,
+        participantName: speaker.displayName,
+        ssmState: this.session.sessionMachine.state,
+        providerType: provider.type,
+      },
     });
 
     this.abortController = new AbortController();
@@ -415,6 +458,21 @@ export class MeetingTurnExecutor {
         messageId,
         totalTokens: outputTokens ?? sequence,
       });
+      tryGetLogger()?.info({
+        component: 'meeting',
+        action: 'turn-done',
+        result: 'success',
+        participantId: speaker.id,
+        latencyMs: Date.now() - turnStartedAt,
+        metadata: {
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          messageId,
+          participantName: speaker.displayName,
+          totalTokens: outputTokens ?? sequence,
+          contentLength: fullContent.length,
+        },
+      });
 
       this.personaPrimedParticipants.add(speaker.id);
 
@@ -433,14 +491,29 @@ export class MeetingTurnExecutor {
     } catch (err) {
       if (!signal.aborted) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error(
-          `[MeetingOrchestrator:${this.session.meetingId}] ${speaker.displayName} turn error: ${errorMsg}`,
-        );
+        const errorCategory = classifyTurnError(err);
         this.streamBridge.emitMeetingError({
           meetingId: this.session.meetingId,
           channelId: this.session.channelId,
           error: errorMsg,
           fatal: false,
+          messageId,
+          speakerId: speaker.id,
+        });
+        tryGetLogger()?.error({
+          component: 'meeting',
+          action: 'turn-error',
+          result: 'failure',
+          participantId: speaker.id,
+          latencyMs: Date.now() - turnStartedAt,
+          error: { code: errorCategory, message: errorMsg },
+          metadata: {
+            meetingId: this.session.meetingId,
+            channelId: this.session.channelId,
+            messageId,
+            participantName: speaker.displayName,
+            partialContentLength: fullContent.length,
+          },
         });
         // R9-Task6: feed the `same_error` tripwire. User-initiated aborts
         // (signal.aborted) are a control-flow signal, not a failure — we
@@ -448,7 +521,7 @@ export class MeetingTurnExecutor {
         // breaker. Classification is a closed enum (see
         // `classifyTurnError`) so the streak counter cannot be perturbed
         // by attacker-controlled error text.
-        this.circuitBreaker?.recordError(classifyTurnError(err));
+        this.circuitBreaker?.recordError(errorCategory);
       }
     } finally {
       this.abortController = null;
