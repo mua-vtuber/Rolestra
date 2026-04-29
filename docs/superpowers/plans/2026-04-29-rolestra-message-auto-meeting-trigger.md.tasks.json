@@ -4,7 +4,8 @@
     {
       "id": 0,
       "subject": "T0: round2 A+B uncommitted commit",
-      "status": "pending",
+      "status": "completed",
+      "completedCommit": "97e2803",
       "description": "**Goal:** D-A 시작 전 round2 A+B (turn status indicator + dev logs) 의 uncommitted 11 파일 commit.\n\n**Files:** message-service.ts / meeting-orchestrator.ts / meeting-turn-executor.ts / stream-bridge.ts / Composer.tsx / Thread.tsx / MessageSearchView.tsx / use-meeting-stream.ts / locales(ko/en).json / stream-events.ts\n\n**Verify:** git status clean (.omx 제외)\n\n```json:metadata\n{\"files\":[\"src/main/channels/message-service.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\",\"src/main/meetings/engine/meeting-turn-executor.ts\",\"src/main/streams/stream-bridge.ts\",\"src/renderer/features/messenger/Composer.tsx\",\"src/renderer/features/messenger/Thread.tsx\",\"src/renderer/features/search/MessageSearchView.tsx\",\"src/renderer/hooks/use-meeting-stream.ts\",\"src/renderer/i18n/locales/en.json\",\"src/renderer/i18n/locales/ko.json\",\"src/shared/stream-events.ts\"],\"verifyCommand\":\"git status --porcelain | grep -v '^.. \\\\.omx' | wc -l\",\"acceptanceCriteria\":[\"working tree clean (.omx 제외)\",\"commit message round2 A+B 명시\",\"typecheck PASS\"]}\n```"
     },
     {
@@ -120,5 +121,5 @@
       "description": "**Goal:** 전체 test/typecheck/lint GREEN + spec §7.4/§7.5/§8 갱신 + R12-decisions.md ADR + 메모리.\n\n**Files:** spec / ADR / MEMORY / 신규 메모리\n\n**Verify:** npm run test && typecheck && lint 전체 GREEN\n\n```json:metadata\n{\"files\":[\"docs/superpowers/specs/2026-04-18-rolestra-design.md\",\"docs/아키텍처-결정-기록/R12-decisions.md\"],\"verifyCommand\":\"npm run test && npm run typecheck && npm run lint\",\"acceptanceCriteria\":[\"전체 test PASS\",\"typecheck 0 error\",\"lint PASS\",\"spec 본문 갱신\",\"ADR 추가\",\"메모리 D-A 완료 항목\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-04-29T00:00:00Z"
+  "lastUpdated": "2026-04-29T17:30:00+09:00"
 }
