@@ -38,6 +38,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   ActiveMeetingSummary,
   Meeting,
+  MeetingKind,
   MeetingOutcome,
 } from '../../shared/meeting-types';
 import type { SessionState } from '../../shared/session-state-types';
@@ -131,6 +132,13 @@ export interface StartMeetingInput {
   channelId: string;
   /** Free-form short topic. Empty string (default) is allowed — spec §5.2. */
   topic?: string;
+  /**
+   * D-A T4: distinguishes manually-started meetings (default) from those
+   * auto-spawned by {@link MeetingAutoTrigger} on first user message.
+   * Persisted as `meetings.kind` (migration 016) so analytics + the
+   * "회의록" surface can label provenance without reconstructing it.
+   */
+  kind?: MeetingKind;
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -158,7 +166,7 @@ export class MeetingService {
       endedAt: null,
       outcome: null,
       pausedAt: null,
-      kind: 'manual',
+      kind: input.kind ?? 'manual',
     };
 
     try {
