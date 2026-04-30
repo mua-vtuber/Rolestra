@@ -67,31 +67,34 @@ describe('ClaudePermissionAdapter', () => {
 describe('CodexPermissionAdapter', () => {
   const a = new CodexPermissionAdapter();
 
-  it('auto: danger-full-access sandbox with skip-git-repo-check', () => {
+  // round2.6 fix — `-a` / `--sandbox` 는 *상위* codex 옵션 (subcommand 앞).
+  // `codex exec -a ...` 는 codex-cli 0.125+ 가 unexpected 로 거부.
+  it('auto: -a never --sandbox danger-full-access exec -C cwd --skip-git-repo-check --json', () => {
     const args = a.buildArgs(ctx({ permissionMode: 'auto' }));
     expect(args).toEqual([
-      'exec', '-a', 'never', '--sandbox', 'danger-full-access',
-      '-C', '/tmp/proj', '--skip-git-repo-check', '-',
+      '-a', 'never', '--sandbox', 'danger-full-access',
+      'exec', '-C', '/tmp/proj', '--skip-git-repo-check', '--json',
     ]);
   });
 
-  it('hybrid: --full-auto alias', () => {
+  it('hybrid: exec -C cwd --full-auto --json', () => {
     const args = a.buildArgs(ctx({ permissionMode: 'hybrid' }));
-    expect(args).toEqual(['exec', '--full-auto', '-C', '/tmp/proj', '-']);
+    expect(args).toEqual(['exec', '-C', '/tmp/proj', '--full-auto', '--json']);
   });
 
-  it('approval: on-failure + workspace-write', () => {
+  it('approval: -a on-failure --sandbox workspace-write exec -C cwd --json', () => {
     const args = a.buildArgs(ctx({ permissionMode: 'approval' }));
     expect(args).toEqual([
-      'exec', '-a', 'on-failure', '--sandbox', 'workspace-write',
-      '-C', '/tmp/proj', '-',
+      '-a', 'on-failure', '--sandbox', 'workspace-write',
+      'exec', '-C', '/tmp/proj', '--json',
     ]);
   });
 
-  it('buildReadOnlyArgs: read-only sandbox', () => {
+  it('buildReadOnlyArgs: -a never --sandbox read-only exec -C cwd --json', () => {
     const args = a.buildReadOnlyArgs(ctx());
     expect(args).toEqual([
-      'exec', '-a', 'never', '--sandbox', 'read-only', '-C', '/tmp/proj', '-',
+      '-a', 'never', '--sandbox', 'read-only',
+      'exec', '-C', '/tmp/proj', '--json',
     ]);
   });
 

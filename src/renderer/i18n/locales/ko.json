@@ -218,6 +218,11 @@
         "review_outcome": "리뷰 결과"
       },
       "loading": "승인 목록을 불러오는 중…",
+      "preview": {
+        "cli_permission": "{{toolName}} · {{target}}",
+        "consensus_decision": "찬성 {{yes}} · 반대 {{no}}",
+        "mode_transition": "{{from}} → {{to}}"
+      },
       "title": "승인 대기"
     },
     "error": {

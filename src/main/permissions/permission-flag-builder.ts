@@ -130,6 +130,20 @@ function buildClaudeFlags(
 function buildCodexFlags(
   input: PermissionFlagBuilderInput,
 ): PermissionFlagOutput {
+  // round2.6 fix — codex-cli 0.125+ 에서 `-a` / `--sandbox` 는 *상위* codex
+  // 옵션이지 `codex exec` 서브커맨드 옵션이 아니다. 즉 정상 호출 형태는
+  // `codex -a <val> --sandbox <val> exec <exec-sub-opts>` 이며, 이전 매트릭스
+  // (`codex exec -a never ...`) 는 codex 가 `-a` 를 unexpected 로 거부한다
+  // (사용자 dogfooding round2.6 + Codex CLI 자체 진단으로 재현 확인).
+  //
+  // 따라서 본 builder 는 *전체* codex spawn args 를 반환한다 — base args 는
+  // `codex-config.ts` 에서 빈 배열 (`[]`) 로 두고, cli-provider 의 단순 concat
+  // 후에도 옵션 순서가 정확히 `<global>` → `'exec'` → `<exec-sub>` → `'--json'`
+  // 이 되도록.
+  //
+  // resume (이어 말하기) 흐름은 `codex-config.ts` 의 `buildResumeArgs` 가 이
+  // 결과 배열에서 첫 `'exec'` 인덱스 뒤에 `['resume', sessionId]` 를 끼워
+  // 넣어 처리. global flags / exec sub flags 는 그대로 보존.
   const rationale: string[] = ['permission.flag.reason.codex'];
   let flags: string[];
 
@@ -137,15 +151,16 @@ function buildCodexFlags(
     case 'auto':
       // spec §7.6.3 Codex auto: -a never + danger-full-access sandbox.
       // dangerousAutonomyOptIn 일 때는 --dangerously-bypass-approvals-and-sandbox
-      // 단일 alias 로 표현 (spec §7.6.5 명시).
+      // 단일 alias 로 표현 (spec §7.6.5 명시) — Agestra 패턴과 일관되게
+      // exec 서브커맨드 하위에 둔다.
       if (input.dangerousAutonomyOptIn) {
         flags = [
           'exec',
-          '--dangerously-bypass-approvals-and-sandbox',
           '-C',
           input.cwd,
           '--skip-git-repo-check',
-          '-',
+          '--dangerously-bypass-approvals-and-sandbox',
+          '--json',
         ];
         rationale.push(
           'permission.flag.reason.auto',
@@ -153,36 +168,36 @@ function buildCodexFlags(
         );
       } else {
         flags = [
-          'exec',
           '-a',
           'never',
           '--sandbox',
           'danger-full-access',
+          'exec',
           '-C',
           input.cwd,
           '--skip-git-repo-check',
-          '-',
+          '--json',
         ];
         rationale.push('permission.flag.reason.auto');
       }
       break;
     case 'hybrid':
-      // spec §7.6.3 Codex hybrid: --full-auto alias. Rolestra 가 shell/network
-      // 승인 prompt 를 앱 레벨에서 가로채어 처리 (CB-6).
-      flags = ['exec', '--full-auto', '-C', input.cwd, '-'];
+      // spec §7.6.3 Codex hybrid: --full-auto alias. codex-cli 의 --full-auto
+      // 는 exec 서브커맨드 옵션 (Agestra 패턴 검증).
+      flags = ['exec', '-C', input.cwd, '--full-auto', '--json'];
       rationale.push('permission.flag.reason.hybrid');
       break;
     case 'approval':
-      // spec §7.6.3 Codex approval: -a on-failure + workspace-write.
+      // spec §7.6.3 Codex approval: -a on-failure + workspace-write (상위).
       flags = [
-        'exec',
         '-a',
         'on-failure',
         '--sandbox',
         'workspace-write',
+        'exec',
         '-C',
         input.cwd,
-        '-',
+        '--json',
       ];
       rationale.push('permission.flag.reason.approval');
       break;
@@ -266,15 +281,18 @@ export function buildReadOnlyPermissionFlags(
         input.consensusPath,
       ];
     case 'codex':
+      // round2.6 fix — `-a never` / `--sandbox read-only` 는 *상위* codex
+      // 옵션, 그 뒤에 `exec` 서브커맨드 + `-C` / `--json` 을 둔다. base args
+      // 가 `[]` 라서 본 결과가 그대로 전체 spawn args 가 된다.
       return [
-        'exec',
         '-a',
         'never',
         '--sandbox',
         'read-only',
+        'exec',
         '-C',
         input.cwd,
-        '-',
+        '--json',
       ];
     case 'gemini':
       return ['--approval-mode', 'default'];

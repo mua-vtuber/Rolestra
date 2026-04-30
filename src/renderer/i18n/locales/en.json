@@ -218,6 +218,11 @@
         "review_outcome": "Review outcome"
       },
       "loading": "Loading approvals…",
+      "preview": {
+        "cli_permission": "{{toolName}} · {{target}}",
+        "consensus_decision": "{{yes}} yes · {{no}} no",
+        "mode_transition": "{{from}} → {{to}}"
+      },
       "title": "Approvals"
     },
     "error": {

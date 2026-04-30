@@ -64,27 +64,31 @@ const CLAUDE_APPROVAL = [
   CONSENSUS,
 ];
 
+// round2.6 fix — codex-cli 0.125+ 매트릭스. `-a` / `--sandbox` 는 *상위* 옵션
+// (subcommand 앞), `-C` / `--full-auto` / `--skip-git-repo-check` /
+// `--dangerously-bypass-approvals-and-sandbox` / `--json` 은 *exec* 서브커맨드
+// 옵션. `-` stdin marker 는 사용하지 않음 (`codex-config.ts` round2.5 와 일관).
 const CODEX_AUTO = [
-  'exec',
   '-a',
   'never',
   '--sandbox',
   'danger-full-access',
+  'exec',
   '-C',
   CWD,
   '--skip-git-repo-check',
-  '-',
+  '--json',
 ];
-const CODEX_HYBRID = ['exec', '--full-auto', '-C', CWD, '-'];
+const CODEX_HYBRID = ['exec', '-C', CWD, '--full-auto', '--json'];
 const CODEX_APPROVAL = [
-  'exec',
   '-a',
   'on-failure',
   '--sandbox',
   'workspace-write',
+  'exec',
   '-C',
   CWD,
-  '-',
+  '--json',
 ];
 
 const GEMINI_AUTO = ['--approval-mode', 'yolo'];
@@ -230,11 +234,11 @@ describe('PermissionFlagBuilder — dangerousAutonomyOptIn=true flips (spec §7.
     expect(out.blocked).toBe(false);
     expect(out.flags).toEqual([
       'exec',
-      '--dangerously-bypass-approvals-and-sandbox',
       '-C',
       CWD,
       '--skip-git-repo-check',
-      '-',
+      '--dangerously-bypass-approvals-and-sandbox',
+      '--json',
     ]);
   });
 
@@ -338,7 +342,7 @@ describe('buildReadOnlyPermissionFlags', () => {
     ]);
   });
 
-  it('codex → exec -a never --sandbox read-only', () => {
+  it('codex → -a never --sandbox read-only exec -C cwd --json (round2.6 옵션 위치 fix)', () => {
     expect(
       buildReadOnlyPermissionFlags({
         cliKind: 'codex',
@@ -346,14 +350,14 @@ describe('buildReadOnlyPermissionFlags', () => {
         consensusPath: CONSENSUS,
       }),
     ).toEqual([
-      'exec',
       '-a',
       'never',
       '--sandbox',
       'read-only',
+      'exec',
       '-C',
       CWD,
-      '-',
+      '--json',
     ]);
   });
 
