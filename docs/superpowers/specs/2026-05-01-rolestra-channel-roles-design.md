@@ -1,0 +1,502 @@
+# Rolestra v3 — Phase R12 Channel Roles + Persona/Skill Separation (Design)
+
+작성일: 2026-05-01
+작성 배경: D-A batch 2 (자동 회의 트리거) dogfooding 후 사용자 피드백으로 발전한 architecture 변경.
+
+본 문서는 design 단계 — 구현 plan / tasks 는 phase 진입 시 별도 문서.
+
+## 1. 동기 (Why)
+
+D-A batch 2 dogfooding 에서 다음 한계가 드러남:
+
+1. **회의 흐름이 채널 종류와 무관** — #일반 / 회의 채널 모두 같은 SSM 12-phase 사용. 사용자 의도는 채널 종류에 따라 다른 회의 (잡담 vs 본격 회의 vs 작업 vs 검토).
+2. **AI 가 모든 일 다 함** — 한 AI 가 기획·디자인·구현·검토 전부 담당. 역할 분화 / 전문성 결여.
+3. **persona 가 캐릭터 + 능력 모두 표현** — 사용자가 "신중한 PM" 같이 캐릭터 작성하려는데 그 안에 tool 권한 / 스킬까지 섞여 있음.
+4. **회의 모드의 SSM 작업 phase (WORK_DISCUSSING ~ EXECUTING ~ REVIEWING) 가 복잡** — phase 간 전환 / 사용자 승인 게이트 / 권한 변동 모두 한 회의 안에 들어 있음.
+
+사용자 vision (메타포):
+
+```
+프로젝트 = 회사
+채널 = 부서 (역할 부여됨)
+직원 = AI (캐릭터 페르소나 + 복수 역할 + 역할별 스킬)
+
+기획 부서 회의 → 디자인 부서로 인계 → 디자인 결과 → 기획 부서 검토
+  → 의도 맞으면 → 구현 부서로 인계 → 검토 부서 → 완료
+  → 의도 다르면 → 디자인 부서 수정 의뢰
+```
+
+→ 각 부서 (채널) 가 명확한 역할 + 전용 회의 흐름 + 역할별 스킬 결합. **SSM 작업 phase 는 채널 인계로 자연 대체**.
+
+## 2. 4 Phase 묶음 (요약)
+
+| Phase | 내용 | 추정 |
+|-------|------|------|
+| **R12-S** | 페르소나 / 스킬 분리 (provider 데이터 모델) | 5~7 일 |
+| **R12-C** | 채널 역할 (idea / plan / design / implement / review / general) | 7~10 일 |
+| **D-B** | 구조화된 합의 (의견 + vote + 협의) — 기획 부서 흐름 | 17~28 일 |
+| **R12-H** | 방 간 인계 (E 작업 통합) — 작업 모드 deprecate 종결 | 10~15 일 |
+| **합계** | | **40~60 일** |
+
+v0.1 → v0.2 / v0.3 메이저 릴리스급.
+
+## 3. R12-S — 페르소나 / 스킬 분리
+
+### 데이터 모델 변경
+
+기존 `providers` row:
+```
+{
+  id, type, displayName, model, capabilities, config, status,
+  persona  ← 단일 텍스트, 캐릭터 + 능력 + 형식 instruction 섞여 있음
+}
+```
+
+새 `providers` row:
+```
+{
+  id, type, displayName, model, capabilities, config, status,
+  persona      ← 자유 텍스트, 캐릭터 / 말투 / 정체성만
+  roles        ← string[], 예: ['planning', 'design']
+  skill_overrides ← Record<string, string> | null, 사용자 customize
+}
+```
+
+### 시스템 정의 스킬 카탈로그
+
+| Role ID | 핵심 스킬 |
+|---------|----------|
+| `planning` | spec 작성 + 사용자 페르소나 분석 + brainstorm 가이드 + 우선순위 매트릭스 + (외부) 시장 조사 |
+| `design` | 시안 제시 + 형태/아트 분리 + 디자인 토큰 추출 + (외부) figma URL 처리 + 색상 추출 |
+| `implement` | 코드 생성 + 파일 쓰기 권한 + 명령 실행 + diff 적용 + 테스트 실행 |
+| `review` | lint / typecheck / 테스트 실행 + 스파게티 / 하드코딩 / 버그 위험 평가 + e2e |
+| `idea` | brainstorm 자유 발산 + 다양성 강조 + 비판 보류 |
+
+각 스킬 = (system prompt 템플릿 + tool 권한 matrix + 외부 자원 endpoint).
+
+### 페르소나 prompt 합성
+
+회의 / 인계 시:
+```
+{persona 자유 텍스트}    ← 캐릭터
++
+당신은 {channel.role} 부서에서 일하고 있습니다.
+{role_skill_template}    ← 능력
+{permission_rules}       ← R7 권한 시스템
++
+{format_instruction}     ← 채널 회의 흐름 별 format
+```
+
+페르소나가 "신중한 PM" 이면, 같은 사람이 기획 부서에선 기획 스킬, 디자인 부서에선 디자인 스킬 (할당된 경우) 사용. **캐릭터는 일관, 스킬은 채널 역할에 맞춤**.
+
+### 설정 UI (R12-S)
+
+직원 편집 모달 탭 분리:
+- **캐릭터** 탭 — persona 자유 텍스트, 말투 가이드, 사용자 작성.
+- **역할 + 스킬** 탭 — roles 다중 선택 (chip), 각 role 의 default 스킬 노출, customize 가능.
+
+### DB Migration
+
+`017-providers-roles-skills.ts`:
+- persona 컬럼 의미 변경 (캐릭터 only) — 기존 데이터는 그대로 (사용자가 정리하라는 안내).
+- `roles` 컬럼 (TEXT, JSON array, default '[]').
+- `skill_overrides` 컬럼 (TEXT, JSON, nullable).
+
+---
+
+## 4. R12-C — 채널 역할
+
+### 채널 데이터 모델 변경
+
+기존 `channels.kind`: `'system_general' | 'system_approval' | 'system_minutes' | 'user' | 'dm'`
+
+새 `channels.kind`: 동일 (마이그레이션 호환). 추가 컬럼:
+- `role`: `'idea' | 'plan' | 'design.art' | 'design.shape' | 'implement' | 'review' | 'general' | null`
+- `purpose`: 자유 텍스트 (사용자 작성, optional)
+
+### 부서별 회의 흐름 (사용자 design 확정)
+
+| 부서 (role) | 회의 형태 | 종료 조건 | 결과물 | trigger |
+|------------|----------|----------|--------|---------|
+| **idea (아이디어)** | 자유 brainstorm | no_action 만장일치 OR cap 5 | brainstorm 회의록 | auto-trigger |
+| **plan (기획)** | D-B 구조화 합의 (의견 + vote + 협의) | 모든 의견 합의/거절 처리 | spec 문서 | auto-trigger |
+| **design.art / design.shape** | 시안 제시 → revision loop | 기획 부서 의도 확인 OK | 시안 + 가이드 | 인계 only |
+| **implement (구현)** | 회의 ❌, 단일 worker AI 작업 | 사용자 승인 게이트 | 코드 변경 | 인계 only |
+| **review (검토)** | 체크리스트 검증 | pass/fail report | 검증 결과 + 재작업 지시 | 인계 only |
+| **general (일반)** | round 5 cap (현재 그대로) | no_action / cap | 잡담 회의록 | auto-trigger |
+
+→ 채널 역할 = (SSM phase line + prompt template + permission matrix + trigger 방식) 한 묶음.
+
+### 사이드바 UX 변경
+
+기존 사이드바:
+```
+시스템
+  #일반
+  #승인-대기
+  #회의록
+채널
+  채널A
+  채널B
+DM
+  Claude DM
+```
+
+새 사이드바 (R12-C):
+```
+시스템
+  #일반 (general)
+  #승인-대기 / #회의록
+부서 (프로젝트 기본)
+  💡 아이디어
+  📋 기획
+  🎨 디자인 (아트)
+  📐 디자인 (형태)
+  🔧 구현
+  ✅ 검토
+사용자 채널 (자유)
+  채널A (general)
+  ...
+DM
+  Claude DM
+```
+
+→ **부서 = 프로젝트 단위 자동 1 개씩 default**. 사용자 가 추가 자유 채널 만들 수 있지만 default role='general'.
+→ **#일반 (system_general) 은 기존 그대로** — 영향 없음 (round 5 fix 의 1라운드 단순 응답 보존).
+
+### 작업 모드 deprecate 시작
+
+R12-C 진입 시:
+- 구현 부서 (role='implement') = 작업 권한 자동 ON. 메시지 = 즉시 작업 (회의 안 거침).
+- 기존 SSM 의 EXECUTING phase 를 구현 부서 default behavior 로 흡수.
+- WORK_DISCUSSING / SYNTHESIZING / VOTING 은 일단 보존 (deprecate 는 R12-H 종결 시).
+
+### auto-trigger vs 인계 trigger 분기
+
+- **auto-trigger**: 사용자가 채널 메시지 입력 → 회의 자동 시작 (현재 D-A T4/T5 흐름).
+  - 적용: idea, plan, general
+- **인계 trigger**: 다른 부서가 의뢰 → 부서가 받아서 작업 시작.
+  - 적용: design.*, implement, review
+  - 사용자 직접 트리거 안 됨 (의도된 제약 — 인계 chain 통해서만)
+
+### Migration
+
+`018-channels-role-purpose.ts`:
+- `role` 컬럼 (TEXT, default 'general' for 'user' kind / null for system 채널).
+- `purpose` 컬럼 (TEXT, nullable).
+- 기존 사용자 user 채널 = role='general' default. 기존 DB 데이터는 wipe (사용자 결정).
+
+---
+
+## 5. D-B — 구조화된 합의 (기획 부서)
+
+기획 부서 (role='plan') 의 회의 흐름. 다른 부서는 별도.
+
+### Phase 흐름
+
+```
+[OPINION_GATHERING]   각 AI 가 주제에 대한 의견 제시 (자연어, R1)
+   ↓
+[OPINION_TALLY]       시스템 취합 + opinion_id 부여 (안 보임)
+   ↓
+[AGREEMENT_VOTE]      모든 AI 가 각 의견 동의 여부 응답 (안 보임)
+   ↓
+[합의 결과 표시]       시스템 메시지: 합의 N개 / 미합의 M개 카드
+   ↓
+[REVISION_NEGOTIATION] 미합의 의견 1개씩 협의
+   ↓ 합의 도달
+[모든 의견 처리 완료]   → DONE → 회의록 (= spec 문서)
+```
+
+### 데이터 모델 (D-B)
+
+`opinions`:
+- id (UUID), meeting_id, author_provider_id, content, round, status
+
+`opinion_votes`:
+- opinion_id, voter_provider_id, agree (bool), round
+
+`opinion_revisions`:
+- parent_opinion_id, child_opinion_id, proposer_provider_id, kind ('revise' | 'block'), round
+
+### Message Schema (D-B)
+
+**OPINION_GATHERING (R1)**:
+```json
+{ "name": "Claude", "opinion": "...", "rationale": "..." }
+```
+
+**AGREEMENT_VOTE** (system → AI):
+```
+prompt 에 의견 표 주입 (markdown 표):
+| id | author | content |
+응답 schema:
+{ "name": "Claude", "votes": [{"opinion_id": 1, "agree": true}, ...] }
+```
+
+**REVISION_NEGOTIATION**:
+```json
+{
+  "name": "Codex",
+  "opinion_id": 2,
+  "stance": "revise" | "block" | "agree",
+  "revision": "...",
+  "rationale": "..."
+}
+```
+
+### 컨텍스트 / token 관리 (사용자 우려 해결)
+
+| 의견 수 | 전달 방식 |
+|--------|----------|
+| ≤ 5 | prompt 직접 |
+| > 5 | `<ArenaRoot>/<projectId>/consensus/opinions.md` 파일 작성 + read 권한 부여 |
+| 누적 R3+ | 직전 회의록 markdown 만 prompt + 자세한 history 는 파일 read |
+| 인계 시 | 회의록 + 합의 결과만. 자세한 내용은 인계받은 채널이 필요 시 read |
+
+추가:
+- **Anthropic API prompt caching** — 재사용 부분 (스킬 템플릿, 페르소나) cache.
+- **검토 부서**: 코드 + spec 만 read. 전체 대화 안 봄.
+- **메모리 시스템 (R12-M, future)** 진입 시 working memory 압축 (bara_system 의 hybrid search 응용).
+
+### Revision cap
+
+- per-opinion revision 최대 3 R 후 강제 reject + 다음 의견 진행.
+- prompt 에 명시: "수정 지시 N회 제한이니 정확한 지시 작성하라".
+
+---
+
+## 6. R12-H — 방 간 인계 (E 작업 통합)
+
+기존 메모리 `rolestra-e-cross-room-handoff.md` 의 E 작업이 R12-H 로 흡수.
+
+### 인계 워크플로우 (사용자 확정)
+
+```
+아이디어 부서 → (회의록 생성) → 기획 부서
+기획 부서   → (기획 완료) → 디자인 부서
+디자인 부서 → (의도 확인) → 기획 부서
+기획 부서 의도 확인:
+  ✅ 맞음 → 디자인 부서 archive + 구현 부서로 인계
+  ❌ 다름 → 디자인 부서로 수정 요청 (revision loop)
+구현 부서 → (작업 완료) → 검토 부서 (구현은 대기)
+검토 부서 → 검증:
+  ✅ 통과 → 업무 완료 처리
+  ❌ 불통과 → 구현 부서 재작업
+```
+
+### 인계 데이터 모델
+
+`handoffs`:
+- id (UUID), meeting_id, from_channel_id, to_channel_id, kind ('forward' | 'revision'),
+- payload_path (consensus 폴더 회의록 파일 경로), depth (cycle prevention), parent_handoff_id, created_at
+
+### Cycle prevention
+
+- max depth (예: 5).
+- parent chain 추적 — 같은 from→to 반복 시 reject.
+- prompt 안내 "X 부서에서 Y 부서로의 N번째 인계입니다. 정확한 지시를 부탁합니다".
+
+### 자동 채널 생성 (기획 부서 권한)
+
+기획 부서가 디자인 / 구현 / 검토 부서 자동 생성:
+- 사용자 승인 게이트 (R7 approval 흐름 활용).
+- 기본 채널 만 1 개 (role 별). 추가 sub-channel (예: design.art vs design.shape) 은 사용자 결정.
+
+### 작업 모드 완전 deprecate (R12-H 종결 시)
+
+- WORK_DISCUSSING / SYNTHESIZING / VOTING / EXECUTING / REVIEWING SSM phase 정리.
+- 보존: `consensus_decision` approval gate (사용자 승인 흐름). 이건 R12-H 종결 시점에 인계 승인 / 검토 통과 시점으로 통합.
+- 결과 SSM: CONVERSATION + 종료 / 일시정지 + 인계 transition 정도로 단순화.
+
+---
+
+## 7. 결정 사항 (사용자 답변 반영)
+
+### P0
+1. **레거시 폴더 보존 후 삭제** ✅ — `legacy/` 폴더 이동 = 새 시스템 진입 시점. 삭제 = 안정화 후. DB migration 010~016 그대로 보존 (forward-only).
+2. **Fallback 정책** ✅ — AI 가 역할 안 따른 응답 시 inappropriate 표시 + 인계 권유.
+3. **스킬 scope** ✅ — prompt + tool 권한 + 외부 자원 (단계적 추가).
+
+### P1
+4. 권한 시스템 재설계 ✅ — 채널 단위 권한 체계 (R7 path-guard 흡수).
+5. 인계 워크플로우 ✅ (위 R12-H 참조). 컨텍스트 관리 = 회의록 + prompt cache + 부분 read.
+6. Revision cap ✅ — per-opinion / per-handoff cap + prompt 명시.
+
+### P2
+7. 사이드바 위치 ✅ — 좌측 메뉴 프로젝트 폴더 아래 부서 고정.
+8. 기존 사용 내역 wipe ✅ — DB migration 시 회의 / 채널 / persona 정리.
+9. auto-trigger vs 인계 trigger 분기 ✅ (위 부서별 표 참조).
+
+---
+
+## 8. 진입 순서
+
+```
+지금 (2026-05-01)
+  ↓ D-A batch 2 잔여 (DM 삭제 / stale UI / 라벨) ✅ 종결
+  ↓
+R12-S 페르소나 / 스킬 분리   [기반]
+  ↓
+R12-C 채널 역할             [기반]
+  ↓
+D-B 구조화 합의             [기획 부서 회의 흐름]
+  ↓
+R12-H 방 간 인계            [통합 + 작업 모드 deprecate]
+  ↓
+R12 종결 → v0.2 / v0.3 메이저 릴리스
+```
+
+각 phase 진입 시 별도 plan / tasks.json 작성.
+
+## 9. 예상 위험
+
+P0:
+- 데이터 마이그레이션 forward-only — 사용자 의사 반영 (기존 wipe).
+- AI 가 역할 강제 prompt 따르나 — fallback 정책으로 mitigate.
+- 스킬 scope 외부 자원 단계 — 처음엔 prompt + tool 권한만, 외부는 R12-S 후 단계 추가.
+
+P1:
+- R7 권한 시스템 재설계 — R12-C 작업 안에서.
+- 채널 폭증 — auto archive / lifecycle 도입.
+- 인계 cycle — depth + parent chain detection.
+
+P2:
+- renderer UX 큰 변화 — 사이드바 부서 그룹화, 부서별 view.
+- 기존 사용자 user 채널 호환 — role='general' default.
+- 부서별 trigger 방식 다름 — auto vs 인계 분기 명확화.
+
+## 10. 관련 문서 / 메모리
+
+- `rolestra-r12-channel-roles-design.md` (메모리 — 본 design 의 첫 정리)
+- `rolestra-e-cross-room-handoff.md` (E 작업 — R12-H 로 흡수)
+- `rolestra-d-a-batch2-dogfooding-fix-round*.md` (D-A 잔여 검증)
+
+---
+
+## 11. 사용자 추가 의견 (2026-05-01) 반영
+
+### 11.1 컨텍스트 폭발 — 세션 진척도 저장 + 워크트리/브랜치 분할
+
+**옵션 A (R12-H 통합 — 1차)**: **세션 진척도 저장 + resume**
+- 작업 중간 *N 단위* (예: 큰 함수 1 개 / 5 파일 변경 / 30 분 작업) 마다 snapshot 저장.
+  - `<ArenaRoot>/<projectId>/consensus/progress/<task_id>.md` (markdown)
+  - provider sessionState (Claude Code CLI 의 `--resume <session_id>` 활용)
+- 새 session 진입 시 snapshot 읽어 resume. 토큰 절감 — 전체 history 대신 *직전 snapshot + 변경된 파일* 만.
+- 구현: TaskSnapshotService 신규. R10-Task11 의 LLM summarize 활용 (큰 task 일 때 snapshot 자체를 LLM 요약).
+
+**옵션 B (별도 phase R13 — 2차)**: **기능별 worktree / branch 분할**
+- 기획 부서가 task 를 sub-task 로 분할 → 각 sub-task 를 별도 branch / worktree 에서 AI 작업 → 머지.
+- **충돌 처리 정책**:
+  1. **Dependency graph 우선 sequential**: A 가 base, B 가 A 의존 → A 완료 후 B 시작. 병렬 X.
+  2. **자동 conflict 발생 시 사용자 승인 필수** — AI 가 임의 resolve 절대 X.
+  3. **Rebase 우선**, 다발 시 reject + 재계획.
+  4. **Shared 파일 변경 lock**: 같은 파일 두 branch 동시 변경 금지 → sequential 강제.
+- R13 phase 로 분리. R12 종결 후 진입.
+
+**진입 결정**: R12-H 에 옵션 A, R13 (multi-worker) 에 옵션 B.
+
+### 11.2 사이드바 구조 갱신
+
+```
+💬 일반 채널 (전역, 프로젝트 외부)         ← 단일 전역 채널, 회의 X
+─────
+📁 프로젝트 A  [▼ 펼침 토글]
+  ├ 시스템 채널 (#승인-대기 / #회의록)
+  ├ 부서: 💡아이디어 / 📋기획 / 🎨디자인 / 🔧구현 / ✅검토
+  └ 사용자 자유 채널 (선택)
+📁 프로젝트 B  [▲ 접힘]
+  ...
+─────
+💬 DM (전역, 제일 아래)
+```
+
+- 프로젝트별 collapsible (Radix Accordion). 펼침/접힘 상태 zustand persist.
+- DM 은 기존 그대로 제일 아래 별도 섹션.
+- 일반 채널 = 프로젝트 외부 전역 1 개 (현재 system_general 의 프로젝트 종속에서 변경).
+
+### 11.3 일반 채널 = 프로젝트 외부 전역, 회의 X
+
+- **회의 시작/종료 버튼 제거**. auto-trigger 도 X.
+- "새 대화 시작" 버튼 — 이전 세션 archive (consensus 폴더 또는 별도 archive) + 채널 비우기.
+- 단순 chat 모드 — round 5 fix 의 1라운드 응답 그대로.
+- DB migration: system_general 의 의미 변경 (프로젝트 종속 → 전역 1 개). 프로젝트 단위 system_approval / system_minutes 는 유지.
+
+### 11.4 분기 — 프로젝트 워크플로우 Entry "할 일 작성"
+
+기존 auto-trigger / manual [회의 시작] 둘 다 변형 / 통합:
+
+**프로젝트 진입 화면**:
+- "할 일 작성" 입력란 (project entry view) — 현재 빈 화면 / 첫 채널 default 대신.
+- 입력 → 자동 워크플로우 시작 — **default 시작 부서 = 아이디어 (또는 사용자 선택)**.
+- 사용자가 이미 기획안 있으면 entry 시점에 "기획 부터 시작" 옵션 선택.
+
+**회의 시작 전까지 부서 채널 메시지란 disabled**:
+- 부서 채널은 워크플로우 진입 후에만 메시지란 enabled.
+- 사용자가 회의 시작 전 임의 메시지 입력 불가.
+
+**회의 시작 후**:
+- 메시지란 enabled.
+- 사용자 메시지 = 끼어들기 (D-A T2.5 dispatcher 활용 — 이미 구현).
+- 일시정지 가능 (T7 — 미구현. R12-C 진입 시 우선 implement).
+
+**부서 인계 직전 사용자 승인 gate**:
+- 디자인 → 기획 / 기획 → 구현 / 검토 통과 / etc 모든 부서 transition 시 R7 approval gate 흡수 또는 신규 handoff_approval kind.
+- 사용자가 "이 인계로 진행 OK" 명시 승인.
+
+**구현 범위 옵션** (사용자 design 핵심):
+- 프로젝트 entry 또는 기획 종결 시 사용자 confirmation:
+  - **논스톱 완성**: 한 번에 끝까지.
+  - **단계별 (MVP → 1단계 → 2단계 → 완성)**: 각 단계 종결 시 사용자 confirm gate.
+  - **사용자 정의 단계**: 자유 단계 작성.
+- 디폴트 = **단계별 (MVP first)** — 사용자 본인 경험 ("논스톱이라 생각했는데 중간 완성이라 화남") 반영.
+- UI 에 명확 표시 — entry 화면 / 기획 종결 시 모달.
+
+**결론**: auto-trigger / manual 분기 사실상 사라짐. 단일 흐름 = "프로젝트 entry → 할 일 입력 → 워크플로우 자동 진행 → 부서별 인계 승인 → 사용자 끼어들기 가능".
+
+### 11.5 회의록 작성자 — 시스템 자동 정리
+
+- **시스템이 LLM 으로 자동 정리** (R10-Task11 의 `MeetingSummaryService` 활용 — 첫 ready provider 의 summarize capability 사용).
+- 사용자 settings 에서 customize:
+  - 어떤 model 로 정리할지
+  - prompt 템플릿 (객관적 / 친근한 톤 / 짧게 / 상세)
+- AI 직원 중 하나가 정리하면 그 직원 캐릭터가 회의록 톤에 영향 — 객관적 정리는 system 이 좋음.
+
+### 11.6 부서별 AI 둘 이상 — Designated Worker 디폴트
+
+| 옵션 | 설명 | 적용 시점 |
+|------|------|----------|
+| 1. **Designated worker (디폴트)** | 한 명만 작업. 부서 만들 때 사용자 선택 또는 자동 (역할 + 능력 score). 다른 AI 는 옵저버. | R12-C |
+| 2. **Pre-batch 사용자 결정** | 누가 할지 매 task 마다 사용자 선택 | R12-C |
+| 3. **병렬 작업 + 머지** | 두 시안 / 두 구현 결과 → 부서 회의에서 선택 / 머지 | R13 (옵션 B 와 결합) |
+
+### 11.7 phase 별 새 task 추가
+
+**R12-S (페르소나/스킬)**:
+- 스킬 카탈로그 정의에 "회의록 정리 prompt 템플릿" 옵션 포함 (사용자 customize 위함).
+
+**R12-C (채널 역할)**:
+- 사이드바 collapsible 프로젝트 그룹 (R12-C 추가 task).
+- 일반 채널 전역 분리 + system_general migration.
+- 프로젝트 entry view "할 일 작성" 입력란 + 워크플로우 시작 IPC.
+- 부서 채널 메시지란 disabled / enabled 상태 관리.
+- T7 (pause/resume) 의 일시정지 IPC 우선 implement.
+- Designated worker 선택 UI.
+
+**R12-H (인계 + 작업 모드 deprecate)**:
+- 옵션 A (세션 진척도 + resume) 통합.
+- 인계 승인 gate (handoff_approval).
+- 구현 범위 옵션 (논스톱 / MVP / 단계별 / 사용자 정의) gate.
+
+### 11.8 phase 추정 갱신
+
+| Phase | 변경 전 | 변경 후 |
+|-------|--------|--------|
+| R12-S | 5~7 일 | 5~7 일 (변경 없음) |
+| R12-C | 7~10 일 | **10~14 일** (사이드바 collapsible / 일반채널 전역 / 프로젝트 entry / disabled 상태 관리 / designated worker UI 추가) |
+| D-B | 17~28 일 | 17~28 일 (변경 없음) |
+| R12-H | 10~15 일 | **15~20 일** (옵션 A 세션 resume / 구현 범위 gate / 모든 인계 승인 gate 추가) |
+| **합계** | 40~60 일 | **47~69 일** |
+
+R13 (multi-worker / branch 분할) 별도 — R12 종결 후.
+- `2026-04-18-rolestra-design.md` (기존 v3 spec — R12-H 후 일부 deprecate 표시)
