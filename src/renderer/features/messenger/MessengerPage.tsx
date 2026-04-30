@@ -37,6 +37,7 @@ import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useChannels } from '../../hooks/use-channels';
+import { useDms } from '../../hooks/use-dms';
 import { useActiveChannelStore } from '../../stores/active-channel-store';
 import { invoke } from '../../ipc/invoke';
 import type { Channel } from '../../../shared/channel-types';
@@ -86,7 +87,18 @@ function MessengerPageActive({
 }): ReactElement {
   const { t } = useTranslation();
   const { channels } = useChannels(projectId);
+  const { dms } = useDms();
   const setActiveChannelId = useActiveChannelStore((s) => s.setActiveChannelId);
+
+  // Merge project channels + DMs so rename / delete modals can resolve
+  // DM targets too. DMs have `projectId === null` and never appear in
+  // `useChannels`; without this merge the delete confirm sees
+  // `deleteTarget === null` and the submit button stays disabled
+  // (dogfooding 2026-05-01 #2 — "DM 삭제 모달의 삭제 버튼 활성화 안 됨").
+  const allChannels = useMemo<Channel[] | null>(() => {
+    if (channels === null && dms === null) return null;
+    return [...(channels ?? []), ...(dms ?? [])];
+  }, [channels, dms]);
 
   // Modal state ────────────────────────────────────────────────
   const [createOpen, setCreateOpen] = useState(false);
@@ -101,17 +113,17 @@ function MessengerPageActive({
 
   const renameTarget = useMemo<Channel | null>(
     () =>
-      renameTargetId === null || channels === null
+      renameTargetId === null || allChannels === null
         ? null
-        : channels.find((c) => c.id === renameTargetId) ?? null,
-    [renameTargetId, channels],
+        : allChannels.find((c) => c.id === renameTargetId) ?? null,
+    [renameTargetId, allChannels],
   );
   const deleteTarget = useMemo<Channel | null>(
     () =>
-      deleteTargetId === null || channels === null
+      deleteTargetId === null || allChannels === null
         ? null
-        : channels.find((c) => c.id === deleteTargetId) ?? null,
-    [deleteTargetId, channels],
+        : allChannels.find((c) => c.id === deleteTargetId) ?? null,
+    [deleteTargetId, allChannels],
   );
 
   // Success callbacks ──────────────────────────────────────────
