@@ -137,6 +137,14 @@ export interface SessionConfig {
   modeTransitionTimeout: number;
   /** Worker selection timeout in milliseconds (CONSENSUS_APPROVED). */
   workerSelectionTimeout: number;
+  /**
+   * Hard cap on consecutive CONVERSATION rounds before forcing DONE.
+   * Prevents infinite-loop topics (끝말잇기, brainstorming) from
+   * running unbounded. Reaching the cap transitions to DONE
+   * regardless of mode_judgment majority. Set to 0 to disable.
+   * Default 5 (dogfooding 2026-05-01 #2-1 follow-up).
+   */
+  maxConversationRounds: number;
 }
 
 export const DEFAULT_SESSION_CONFIG: SessionConfig = {
@@ -146,4 +154,5 @@ export const DEFAULT_SESSION_CONFIG: SessionConfig = {
   parseRetryLimit: 2,
   modeTransitionTimeout: 60_000,
   workerSelectionTimeout: 120_000,
+  maxConversationRounds: 5,
 };

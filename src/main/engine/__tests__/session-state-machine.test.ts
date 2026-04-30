@@ -101,6 +101,34 @@ describe('SessionStateMachine', () => {
     expect(machine.state).toBe('CONVERSATION');
   });
 
+  // dogfooding 2026-05-01 #2-1 follow-up — hard cap on conversation rounds.
+  it('hard-caps CONVERSATION at maxConversationRounds (default 5) when no consensus reached', () => {
+    // simulate 5 rounds of further_discussion (no work majority, not unanimous)
+    for (let r = 0; r < 4; r++) {
+      machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation', reason: 'further_discussion' });
+      machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation', reason: 'further_discussion' });
+      const result = machine.transition('ROUND_COMPLETE');
+      expect(result).toBe('CONVERSATION');
+    }
+    // 5th round triggers cap
+    machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation', reason: 'further_discussion' });
+    machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation', reason: 'further_discussion' });
+    const result = machine.transition('ROUND_COMPLETE');
+    expect(result).toBe('DONE');
+    expect(machine.isTerminal).toBe(true);
+  });
+
+  it('respects maxConversationRounds=0 as "disabled" (unbounded conversation)', () => {
+    machine.updateConfig({ maxConversationRounds: 0 });
+    for (let r = 0; r < 12; r++) {
+      machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation', reason: 'further_discussion' });
+      machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation', reason: 'further_discussion' });
+      const result = machine.transition('ROUND_COMPLETE');
+      expect(result).toBe('CONVERSATION');
+    }
+    expect(machine.state).toBe('CONVERSATION');
+  });
+
   it('transitions CONVERSATION → PAUSED on USER_PAUSE', () => {
     const result = machine.transition('USER_PAUSE');
     expect(result).toBe('PAUSED');

@@ -480,6 +480,14 @@ export class SessionStateMachine {
       return this.moveTo('DONE', 'ROUND_COMPLETE');
     }
 
+    // dogfooding 2026-05-01 #2-1 follow-up — 끝말잇기 / 브레인스토밍 같이
+    // 자연 무한 주제 보호용 hard cap. 합의 시그널 없이도 N 라운드 후 강제
+    // 종료. config.maxConversationRounds === 0 이면 무한 (기존 동작).
+    const cap = this._config.maxConversationRounds;
+    if (cap > 0 && this._conversationRound >= cap) {
+      return this.moveTo('DONE', 'ROUND_COMPLETE');
+    }
+
     // Stay in CONVERSATION, reset judgments for next round
     this._modeJudgmentCollector.reset();
     return this.moveTo('CONVERSATION', 'ROUND_COMPLETE');
