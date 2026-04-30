@@ -80,6 +80,22 @@ export abstract class BaseProvider {
     signal?: AbortSignal,
   ): AsyncGenerator<string>;
 
+  /**
+   * Drop any cached conversation context so the next `streamCompletion`
+   * call starts a fresh exchange. CLI providers persist a `sessionId`
+   * across calls (Claude Code `--resume`, etc.) so once a meeting puts
+   * the CLI into "format JSON with mode_judgment" mode, every later
+   * call inherits the format instruction — including DM. Default is a
+   * no-op for stateless providers (API).
+   *
+   * D-A T6 dogfooding (#7): without this, opening a DM with a CLI
+   * provider after a meeting produces raw JSON `mode_judgment` output
+   * because the CLI session is still in meeting mode.
+   */
+  resetConversationContext(): void {
+    // default: no-op for stateless providers (API)
+  }
+
   isReady(): boolean {
     return this.status === 'ready';
   }

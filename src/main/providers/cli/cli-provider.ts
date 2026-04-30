@@ -226,6 +226,18 @@ export class CliProvider extends BaseProvider {
     return this.processManager.ping(this.getCliConfig());
   }
 
+  /**
+   * D-A T6 / dogfooding (#7) — drop the persistent session id so the
+   * next `streamCompletion` invocation does not `--resume` an earlier
+   * meeting-mode exchange. Used by `DmAutoResponder` before each DM
+   * turn so CLI conversation history from prior meetings does not
+   * leak its JSON format instructions into the DM reply.
+   */
+  override resetConversationContext(): void {
+    this.sessionState.clearSession();
+    this.sessionState.resetForTurn();
+  }
+
   // ── Streaming ─────────────────────────────────────────────
 
   async *streamCompletion(

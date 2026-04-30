@@ -49,7 +49,7 @@ async function* yieldThenThrow(
 function mkProvider(
   streamImpl: () => AsyncGenerator<string>,
   persona = 'persona-text',
-): BaseProvider {
+): BaseProvider & { resetConversationContext: ReturnType<typeof vi.fn> } {
   return {
     id: 'p-claude',
     type: 'api',
@@ -58,7 +58,10 @@ function mkProvider(
     streamCompletion: streamImpl,
     consumeLastTokenUsage: () => null,
     isReady: () => true,
-  } as unknown as BaseProvider;
+    resetConversationContext: vi.fn(),
+  } as unknown as BaseProvider & {
+    resetConversationContext: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe('DmAutoResponder', () => {
@@ -101,7 +104,14 @@ describe('DmAutoResponder', () => {
     });
   });
 
-  it('passes channel history to streamCompletion in chronological order', async () => {
+  it('resets the provider conversation context before streaming', async () => {
+    const provider = mkProvider(() => yieldChunks(['ok']));
+    providerLookup.get.mockReturnValue(provider);
+    await responder.handle(mkChannelMessage('hi'), dmChannel);
+    expect(provider.resetConversationContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes channel history to streamCompletion in chronological order with empty persona', async () => {
     const stream =
       vi.fn<
         (
@@ -162,8 +172,8 @@ describe('DmAutoResponder', () => {
       'assistant',
       'user',
     ]);
-    // persona forwarded as 2nd arg.
-    expect(callArgs[1]).toBe('persona-text');
+    // DM 은 회의용 persona 를 사용하지 않으므로 빈 문자열을 전달한다.
+    expect(callArgs[1]).toBe('');
   });
 
   it('appends a system error message when provider streamCompletion throws', async () => {

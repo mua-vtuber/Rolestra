@@ -65,11 +65,25 @@ export class DmAutoResponder {
 
     const providerMessages = this.buildProviderMessages(channel.id);
 
+    // D-A T6 dogfooding (#7) — clear any persistent CLI session so the
+    // DM does not inherit meeting-mode format instructions (e.g.
+    // `mode_judgment` JSON wrapper) from a previous `--resume`-able
+    // exchange. Stateless API providers see this as a no-op.
+    provider.resetConversationContext();
+
+    // DM is a single-turn chat — no SSM, no consensus format, no
+    // permission rules. Pass an empty persona so the meeting-mode
+    // identity / permission text the user customized for meetings does
+    // not flow into the DM reply. (User-visible per-DM persona belongs
+    // to a future feature; until then DM uses the model's default
+    // assistant behavior.)
+    const dmPersona = '';
+
     let fullContent = '';
     try {
       for await (const token of provider.streamCompletion(
         providerMessages,
-        provider.persona ?? '',
+        dmPersona,
       )) {
         fullContent += token;
       }
