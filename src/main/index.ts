@@ -13,6 +13,7 @@ import { setLoggerAccessor } from './ipc/handlers/log-handler';
 import { configureApplicationMenu } from './ui/app-menu';
 import { restoreProvidersFromDb } from './providers/provider-restore';
 import { createLogger } from './log/structured-logger';
+import { tryGetLogger } from './log/logger-accessor';
 import { consensusFolderService } from './ipc/handlers/workspace-handler';
 import { getConfigService } from './config/instance';
 import { ArenaRootService } from './arena/arena-root-service';
@@ -400,6 +401,212 @@ app.whenReady().then(async () => {
     const orchestratorFactoryHolder: {
       current: MeetingOrchestratorFactory | null;
     } = { current: null };
+
+    // D-A T5 / T6 / spec §3.1+§4.1 — message-driven auto meeting trigger
+    // + DM responder. The renderer no longer initiates meetings via
+    // `channel:start-meeting` for the common path; users just type into a
+    // user/system_general channel and a meeting auto-spawns. DM channels
+    // get a single-turn response without spawning a meeting at all.
+    //
+    // Wiring order vs. T2.5: both subscribe to MessageService 'message'.
+    // T2.5 dispatcher (registered above) handles already-tagged messages
+    // (`meetingId !== null` — i.e. interjections into a meeting the
+    // renderer already showed). The auto-trigger handles untagged ones.
+    // The two are mutually exclusive in effect — see meeting-auto-trigger.ts.
+    const { DmAutoResponder } = await import(
+      './channels/dm-auto-responder'
+    );
+    const { MeetingAutoTrigger } = await import(
+      './meetings/meeting-auto-trigger'
+    );
+    const { getOrchestrator } = await import(
+      './meetings/engine/meeting-orchestrator-registry'
+    );
+
+    const dmAutoResponder = new DmAutoResponder({
+      channelService,
+      messageService,
+      providerLookup: providerRegistry,
+    });
+
+    // Adapter — bridges MeetingAutoTrigger's narrow contract to the
+    // production orchestrator factory (which wants `participants` +
+    // `ssmCtx` resolved). Auto meetings always use permission='hybrid'
+    // / autonomy='manual' since no UI dialog asked the user otherwise;
+    // a project autonomy mode upgrade lands by the user's later flow.
+    const meetingAutoOrchestratorFactory = {
+      createAndRun: async ({
+        meetingId,
+        channelId,
+        topic,
+        firstMessage,
+      }: {
+        meetingId: string;
+        channelId: string;
+        topic: string;
+        firstMessage: import('../shared/message-types').Message;
+      }): Promise<void> => {
+        const factory = orchestratorFactoryHolder.current;
+        if (!factory) {
+          tryGetLogger()?.warn({
+            component: 'meeting-auto-trigger',
+            action: 'no-factory',
+            result: 'failure',
+            metadata: { meetingId, channelId },
+          });
+          return;
+        }
+        const channel = channelService.get(channelId);
+        if (!channel || !channel.projectId) {
+          tryGetLogger()?.warn({
+            component: 'meeting-auto-trigger',
+            action: 'channel-or-project-missing',
+            result: 'failure',
+            metadata: { meetingId, channelId },
+          });
+          return;
+        }
+        const members = channelService.listMembers(channelId);
+        const aiMembers = members.filter((m) => m.providerId !== 'user');
+        if (aiMembers.length < 2) {
+          // MeetingSession requires >= 2 AI participants. Auto-trigger
+          // can't satisfy that with a single-member channel; we'd insert
+          // a meeting row that immediately fails on session construction.
+          // Drop the trigger + warn so the user sees something happened.
+          tryGetLogger()?.warn({
+            component: 'meeting-auto-trigger',
+            action: 'insufficient-participants',
+            result: 'failure',
+            metadata: {
+              meetingId,
+              channelId,
+              memberCount: aiMembers.length,
+            },
+          });
+          return;
+        }
+        const meeting = meetingService.get(meetingId);
+        if (!meeting) {
+          tryGetLogger()?.warn({
+            component: 'meeting-auto-trigger',
+            action: 'meeting-row-missing',
+            result: 'failure',
+            metadata: { meetingId },
+          });
+          return;
+        }
+        const participants = aiMembers.map((m) => {
+          const provider = providerRegistry.get(m.providerId);
+          return {
+            id: m.providerId,
+            providerId: m.providerId,
+            displayName: provider?.displayName ?? m.providerId,
+            isActive: true,
+          };
+        });
+        const ssmCtx = {
+          meetingId,
+          channelId,
+          projectId: channel.projectId,
+          projectPath: '',
+          permissionMode: 'hybrid' as const,
+          autonomyMode: 'manual' as const,
+        };
+        await factory.createAndRun({
+          meeting,
+          projectId: channel.projectId,
+          participants,
+          topic,
+          ssmCtx,
+        });
+        // The orchestrator is now registered; inject the user's first
+        // message so the AI's first turn sees what the user actually
+        // wrote (the topic system message alone would let the AI guess
+        // intent from the truncated topic only). This mirrors what the
+        // T2.5 dispatcher does for already-tagged messages.
+        const orchestrator = getOrchestrator(meetingId);
+        if (orchestrator) {
+          try {
+            orchestrator.handleUserInterjection({
+              id: firstMessage.id,
+              role: 'user',
+              content: firstMessage.content,
+              participantId: 'user',
+              participantName: '사용자',
+            });
+          } catch (err) {
+            tryGetLogger()?.warn({
+              component: 'meeting-auto-trigger',
+              action: 'first-message-injection-failed',
+              result: 'failure',
+              metadata: {
+                meetingId,
+                error: err instanceof Error ? err.message : String(err),
+              },
+            });
+          }
+        }
+      },
+      interruptActive: async ({
+        meetingId,
+        message,
+      }: {
+        meetingId: string;
+        message: import('../shared/message-types').Message;
+      }): Promise<void> => {
+        const orchestrator = getOrchestrator(meetingId);
+        if (!orchestrator) {
+          // Meeting may have ended between the channel append and the
+          // listener firing. Drop silently — the message is on disk.
+          tryGetLogger()?.debug?.({
+            component: 'meeting-auto-trigger',
+            action: 'interrupt-no-active-orchestrator',
+            result: 'success',
+            metadata: { meetingId, messageId: message.id },
+          });
+          return;
+        }
+        try {
+          orchestrator.handleUserInterjection({
+            id: message.id,
+            role: 'user',
+            content: message.content,
+            participantId: 'user',
+            participantName: '사용자',
+          });
+        } catch (err) {
+          tryGetLogger()?.warn({
+            component: 'meeting-auto-trigger',
+            action: 'interrupt-throw',
+            result: 'failure',
+            metadata: {
+              meetingId,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          });
+        }
+      },
+    };
+
+    const meetingAutoTrigger = new MeetingAutoTrigger({
+      channelService,
+      meetingService,
+      orchestratorFactory: meetingAutoOrchestratorFactory,
+      dmResponder: dmAutoResponder,
+    });
+
+    messageService.on('message', (msg) => {
+      Promise.resolve(meetingAutoTrigger.onMessage(msg)).catch((err) => {
+        // Listener errors must not propagate into MessageService.append's
+        // contract. Log loudly so a real bug doesn't hide.
+        tryGetLogger()?.warn({
+          component: 'meeting-auto-trigger',
+          action: 'listener-error',
+          result: 'failure',
+          metadata: { error: err instanceof Error ? err.message : String(err) },
+        });
+      });
+    });
 
     // Use a forward-declared queueService reference inside the starter so
     // the lookup hands back the just-claimed row's `targetChannelId`.
