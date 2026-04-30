@@ -286,12 +286,30 @@ export class CliProvider extends BaseProvider {
     const adapter = this.cliConfig.permissionAdapter;
     if (!adapter) return this.cliConfig;
 
-    const consensusPath = consensusFolderService.getFolderPath() ?? undefined;
+    const consensusPath = consensusFolderService.getFolderPath() ?? '';
+
+    // R2-Task21 cleanup (dogfooding 2026-04-30 #5 root cause): the v2
+    // adapter signature `buildReadOnlyArgs(projectPath, consensusPath)`
+    // was removed when permission-flag-builder consolidated to a single
+    // `AdapterContext` object. The two `@ts-expect-error` casts that
+    // were holding the old call shape silently produced
+    // `ctx.cwd === undefined`, which spawned Codex with literal `-C
+    // undefined` and triggered "지정된 파일을 찾을 수 없습니다". Read-only
+    // path only consumes `cwd` + `consensusPath` (`buildReadOnlyPermissionFlags`),
+    // so safe defaults for `permissionMode` / `projectKind` are
+    // sufficient here — the worker path's full permission resolution
+    // belongs to the higher-level caller that knows the project, not
+    // the provider.
+    const ctx: import('./permission-adapter').AdapterContext = {
+      permissionMode: 'approval',
+      projectKind: 'new',
+      cwd: this._projectPath,
+      consensusPath,
+      dangerousAutonomyOptIn: false,
+    };
     const permArgs = this._permissionMode === 'worker'
-      // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
-      ? adapter.buildWorkerArgs(this._projectPath, consensusPath)
-      // @ts-expect-error R2-Task21 — v2 adapter API removed; cleanup pending
-      : adapter.buildReadOnlyArgs(this._projectPath, consensusPath);
+      ? adapter.buildArgs(ctx)
+      : adapter.buildReadOnlyArgs(ctx);
 
     if (permArgs.length === 0) return this.cliConfig;
 
