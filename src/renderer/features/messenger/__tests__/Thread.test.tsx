@@ -139,7 +139,7 @@ describe('Thread — empty state when no active channel', () => {
 });
 
 describe('Thread — renders ChannelHeader when a user channel is active', () => {
-  it('mounts ChannelHeader with channel name + start meeting button enabled (Task 7 host)', async () => {
+  it('mounts ChannelHeader with channel name; meeting buttons live in the sidebar (R12)', async () => {
     useActiveChannelStore.setState({
       channelIdByProject: { [PROJECT_ID]: 'c-plan' },
     });
@@ -160,19 +160,13 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
     expect(thread.getAttribute('data-empty')).toBe('false');
     expect(thread.getAttribute('data-channel-id')).toBe('c-plan');
 
-    const startBtn = screen.getByTestId(
-      'channel-header-start-meeting',
-    ) as HTMLButtonElement;
-    // R5-Task7: Thread 가 StartMeetingModal 을 자체 호스팅하므로 onStartMeeting
-    // prop 이 항상 바인딩된다. 외부 prop 없이도 버튼이 활성화된다.
-    expect(startBtn.disabled).toBe(false);
-    expect(startBtn.getAttribute('data-disabled')).toBe('false');
+    // R12 dogfooding: 회의 시작 / 중단 버튼은 좌측 ChannelMeetingControl
+    // 로 이전. ChannelHeader 는 더 이상 렌더하지 않음.
+    expect(screen.queryByTestId('channel-header-start-meeting')).toBeNull();
+    expect(screen.queryByTestId('channel-header-abort-meeting')).toBeNull();
   });
 
-  it('swaps the start-meeting button for an abort-meeting button when a meeting is active in the channel', async () => {
-    // round2.5 fix: 회의 진행 중에는 [회의 시작] 자리에 [회의 중단] 으로
-    // swap. 이전 동작 (동일 버튼 disabled) 은 회귀 — 사용자가 무한 라운드
-    // 에서 빠져나갈 출구가 없었다.
+  it('does NOT render an abort-meeting button in the header even with an active meeting (R12 — sidebar owns it)', async () => {
     useActiveChannelStore.setState({
       channelIdByProject: { [PROJECT_ID]: 'c-plan' },
     });
@@ -197,13 +191,9 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
     renderThread(<Thread projectId={PROJECT_ID} />);
 
     await waitFor(() =>
-      expect(screen.queryByTestId('channel-header-abort-meeting')).toBeTruthy(),
+      expect(screen.getByTestId('channel-header-name').textContent).toBe('기획'),
     );
-    const abortBtn = screen.getByTestId(
-      'channel-header-abort-meeting',
-    ) as HTMLButtonElement;
-    expect(abortBtn.disabled).toBe(false);
-    // 활성 회의 시 start-meeting 버튼은 더 이상 노출되지 않는다.
+    expect(screen.queryByTestId('channel-header-abort-meeting')).toBeNull();
     expect(screen.queryByTestId('channel-header-start-meeting')).toBeNull();
   });
 });

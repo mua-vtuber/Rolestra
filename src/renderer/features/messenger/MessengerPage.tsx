@@ -32,10 +32,13 @@ import { Thread } from './Thread';
 import { ChannelCreateModal } from '../channels/ChannelCreateModal';
 import { ChannelDeleteConfirm } from '../channels/ChannelDeleteConfirm';
 import { ChannelRenameDialog } from '../channels/ChannelRenameDialog';
+import { StartMeetingModal } from '../meetings/StartMeetingModal';
 import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
+import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useChannels } from '../../hooks/use-channels';
 import { useActiveChannelStore } from '../../stores/active-channel-store';
+import { invoke } from '../../ipc/invoke';
 import type { Channel } from '../../../shared/channel-types';
 
 export interface MessengerPageProps {
@@ -89,6 +92,12 @@ function MessengerPageActive({
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  // R12: meeting start/abort were promoted from the channel header to
+  // the sidebar (per-row controls). The host owns one
+  // `useActiveMeetings` instance + the start-meeting modal so abort and
+  // start success both refresh the same data source the sidebar reads.
+  const [startMeetingChannel, setStartMeetingChannel] = useState<Channel | null>(null);
+  const { meetings: activeMeetings, refresh: refreshActiveMeetings } = useActiveMeetings();
 
   const renameTarget = useMemo<Channel | null>(
     () =>
@@ -148,6 +157,33 @@ function MessengerPageActive({
     setDeleteTargetId(channelId);
   }, []);
 
+  // R12 sidebar meeting controls ────────────────────────────────
+  const handleRequestStartMeeting = useCallback((channel: Channel): void => {
+    setStartMeetingChannel(channel);
+  }, []);
+  const handleStartMeetingOpenChange = useCallback((open: boolean): void => {
+    if (!open) setStartMeetingChannel(null);
+  }, []);
+  const handleStarted = useCallback((): void => {
+    setStartMeetingChannel(null);
+    void refreshActiveMeetings();
+  }, [refreshActiveMeetings]);
+  const handleAbortMeeting = useCallback(
+    async (meetingId: string): Promise<void> => {
+      try {
+        await invoke('meeting:abort', { meetingId });
+      } catch (err) {
+        console.warn(
+          '[MessengerPage] meeting:abort failed',
+          err instanceof Error ? err.message : String(err),
+        );
+      } finally {
+        void refreshActiveMeetings();
+      }
+    },
+    [refreshActiveMeetings],
+  );
+
   return (
     <div
       data-testid="messenger-page"
@@ -164,6 +200,9 @@ function MessengerPageActive({
       >
         <ChannelRail
           projectId={projectId}
+          meetings={activeMeetings}
+          onStartMeeting={handleRequestStartMeeting}
+          onAbortMeeting={handleAbortMeeting}
           onCreateChannel={handleOpenCreate}
         />
       </aside>
@@ -209,6 +248,13 @@ function MessengerPageActive({
         }}
         channel={deleteTarget}
         onDeleted={handleDeleted}
+      />
+      <StartMeetingModal
+        open={startMeetingChannel !== null}
+        onOpenChange={handleStartMeetingOpenChange}
+        channelId={startMeetingChannel?.id ?? null}
+        channelName={startMeetingChannel?.name ?? null}
+        onStarted={handleStarted}
       />
     </div>
   );

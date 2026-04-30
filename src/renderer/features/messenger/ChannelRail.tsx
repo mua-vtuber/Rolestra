@@ -26,12 +26,14 @@ import { clsx } from 'clsx';
 import { useMemo, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { ChannelMeetingControl } from './ChannelMeetingControl';
 import { ChannelRow } from './ChannelRow';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
 import { useTheme } from '../../theme/use-theme';
 import type { Channel, ChannelKind } from '../../../shared/channel-types';
+import type { ActiveMeetingSummary } from '../../../shared/meeting-types';
 import type { ThemeKey } from '../../theme/theme-tokens';
 
 const SYSTEM_KINDS: ReadonlyArray<ChannelKind> = [
@@ -42,6 +44,16 @@ const SYSTEM_KINDS: ReadonlyArray<ChannelKind> = [
 
 export interface ChannelRailProps {
   projectId: string;
+  /**
+   * Active meetings across all channels (host owns the {@link useActiveMeetings}
+   * instance so abort/start refreshes there propagate to the row controls).
+   * `null` while the initial fetch is in flight — controls render nothing.
+   */
+  meetings?: ActiveMeetingSummary[] | null;
+  /** Open the start-meeting modal targeted at `channel`. */
+  onStartMeeting?: (channel: Channel) => void;
+  /** Abort the meeting with the given id. Resolves on IPC completion. */
+  onAbortMeeting?: (meetingId: string) => Promise<void> | void;
   /** `+ 새 채널` 클릭 핸들러. Task 10 에서 Radix Dialog 기반 create modal 오픈에 연결. */
   onCreateChannel?: () => void;
   className?: string;
@@ -71,7 +83,14 @@ function sectionTitleClasses(themeKey: ThemeKey): string {
   );
 }
 
-export function ChannelRail({ projectId, onCreateChannel, className }: ChannelRailProps): ReactElement {
+export function ChannelRail({
+  projectId,
+  meetings,
+  onStartMeeting,
+  onAbortMeeting,
+  onCreateChannel,
+  className,
+}: ChannelRailProps): ReactElement {
   const { t } = useTranslation();
   const { themeKey } = useTheme();
 
@@ -108,14 +127,43 @@ export function ChannelRail({ projectId, onCreateChannel, className }: ChannelRa
   const initialDmsLoading = dmsLoading && dms === null;
   const isInitialLoading = initialChannelsLoading && initialDmsLoading;
 
-  const renderRow = (channel: Channel): ReactElement => (
-    <ChannelRow
-      key={channel.id}
-      channel={channel}
-      active={channel.id === activeChannel.activeChannelId}
-      onClick={() => activeChannel.set(channel.id)}
-    />
-  );
+  // Map channelId → active meeting (one per channel by spec — see
+  // `idx_meetings_active_per_channel`). `null` while meetings are still
+  // loading so we don't briefly flash a "no meeting" affordance over a
+  // channel that's actually busy.
+  const meetingByChannel = useMemo<Map<string, ActiveMeetingSummary> | null>(() => {
+    if (meetings === null || meetings === undefined) return null;
+    const map = new Map<string, ActiveMeetingSummary>();
+    for (const m of meetings) map.set(m.channelId, m);
+    return map;
+  }, [meetings]);
+
+  const meetingControlReady =
+    meetingByChannel !== null &&
+    onStartMeeting !== undefined &&
+    onAbortMeeting !== undefined;
+
+  const renderRow = (channel: Channel): ReactElement => {
+    const activeMeeting = meetingByChannel?.get(channel.id) ?? null;
+    const rightSlot =
+      meetingControlReady && (channel.kind === 'user' || activeMeeting !== null) ? (
+        <ChannelMeetingControl
+          channel={channel}
+          activeMeeting={activeMeeting}
+          onStartMeeting={onStartMeeting!}
+          onAbortMeeting={onAbortMeeting!}
+        />
+      ) : undefined;
+    return (
+      <ChannelRow
+        key={channel.id}
+        channel={channel}
+        active={channel.id === activeChannel.activeChannelId}
+        onClick={() => activeChannel.set(channel.id)}
+        rightSlot={rightSlot}
+      />
+    );
+  };
 
   return (
     <div

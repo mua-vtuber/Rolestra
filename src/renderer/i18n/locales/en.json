@@ -498,10 +498,13 @@
       "abortMeeting": "Abort meeting"
     },
     "channelRail": {
+      "abortMeeting": "Stop",
+      "abortingMeeting": "Stopping…",
       "createChannel": "New channel",
       "dmEmpty": "No direct messages",
       "error": "Could not load channels.",
       "loading": "Loading channels…",
+      "meetingActive": "In meeting",
       "sectionAria": {
         "dm": "Direct message list",
         "system": "System channel list",
@@ -521,6 +524,7 @@
           "dm": "DM"
         }
       },
+      "startMeeting": "Start meeting",
       "userEmpty": "No channels yet"
     },
     "channelRename": {

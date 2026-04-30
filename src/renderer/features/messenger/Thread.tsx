@@ -29,13 +29,11 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ChannelHeader } from './ChannelHeader';
-import { invoke } from '../../ipc/invoke';
 import { Composer } from './Composer';
 import { DateSeparator } from './DateSeparator';
 import { MeetingBanner } from './MeetingBanner';
@@ -43,7 +41,6 @@ import { Message, type MessageAuthorInfo } from './Message';
 import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
-import { StartMeetingModal } from '../meetings/StartMeetingModal';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
@@ -145,11 +142,14 @@ export function Thread({
   }, [channels, dms]);
   const { activeChannelId } = useActiveChannel(projectId, allChannels);
   const { members } = useChannelMembers(activeChannelId, allChannels);
-  const { meetings, refresh: refreshMeetings } = useActiveMeetings();
+  // R12: meeting start/abort moved to MessengerPage's sidebar control —
+  // Thread keeps useActiveMeetings only to render the in-thread
+  // MeetingBanner for the active channel. The host's separate instance
+  // owns the start-modal trigger + abort dispatch.
+  const { meetings } = useActiveMeetings();
   const { messages, refresh: refreshMessages } = useChannelMessages(activeChannelId);
   const meetingStream = useMeetingStream(activeChannelId);
 
-  const [startMeetingOpen, setStartMeetingOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   const activeChannel = useMemo(() => {
@@ -162,12 +162,6 @@ export function Thread({
     if (activeChannelId === null) return null;
     if (meetings === null) return null;
     return meetings.find((m) => m.channelId === activeChannelId) ?? null;
-  }, [activeChannelId, meetings]);
-
-  const activeMeetingCount = useMemo(() => {
-    if (activeChannelId === null) return 0;
-    if (meetings === null) return 0;
-    return meetings.filter((m) => m.channelId === activeChannelId).length;
   }, [activeChannelId, meetings]);
 
   const memberCount = members === null ? null : members.length;
@@ -276,25 +270,8 @@ export function Thread({
     if (el) el.scrollTop = el.scrollHeight;
   }, [items.length]);
 
-  const handleStartMeeting = useCallback((): void => {
-    setStartMeetingOpen(true);
-  }, []);
-  const handleStartedMeeting = useCallback((): void => {
-    void refreshMeetings();
-  }, [refreshMeetings]);
-  const handleAbortMeeting = useCallback(async (): Promise<void> => {
-    if (!activeMeeting) return;
-    try {
-      await invoke('meeting:abort', { meetingId: activeMeeting.id });
-    } catch (err) {
-      console.warn(
-        '[Thread] meeting:abort failed',
-        err instanceof Error ? err.message : String(err),
-      );
-    } finally {
-      void refreshMeetings();
-    }
-  }, [activeMeeting, refreshMeetings]);
+  // R12: meeting start/abort handlers moved to MessengerPage. Thread
+  // keeps only Composer success refresh.
   const handleComposerSendSuccess = useCallback((): void => {
     void refreshMessages();
   }, [refreshMessages]);
@@ -335,9 +312,6 @@ export function Thread({
       <ChannelHeader
         channel={activeChannel}
         memberCount={memberCount}
-        activeMeetingCount={activeMeetingCount}
-        onStartMeeting={handleStartMeeting}
-        onAbortMeeting={handleAbortMeeting}
         onRename={handleRename}
         onDelete={handleDelete}
       />
@@ -499,13 +473,6 @@ export function Thread({
         </>
       )}
 
-      <StartMeetingModal
-        open={startMeetingOpen}
-        onOpenChange={setStartMeetingOpen}
-        channelId={activeChannel.id}
-        channelName={activeChannel.name}
-        onStarted={handleStartedMeeting}
-      />
     </div>
   );
 }

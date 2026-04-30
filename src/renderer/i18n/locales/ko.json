@@ -498,10 +498,13 @@
       "abortMeeting": "회의 중단"
     },
     "channelRail": {
+      "abortMeeting": "중단",
+      "abortingMeeting": "중단 중…",
       "createChannel": "새 채널",
       "dmEmpty": "DM이 없습니다",
       "error": "채널을 불러오지 못했습니다.",
       "loading": "채널을 불러오는 중…",
+      "meetingActive": "회의 중",
       "sectionAria": {
         "dm": "DM 목록",
         "system": "시스템 채널 목록",
@@ -521,6 +524,7 @@
           "dm": "DM"
         }
       },
+      "startMeeting": "회의 시작",
       "userEmpty": "아직 채널이 없습니다"
     },
     "channelRename": {

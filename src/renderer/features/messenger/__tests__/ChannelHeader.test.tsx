@@ -90,59 +90,35 @@ describe('ChannelHeader — core content', () => {
   });
 });
 
-describe('ChannelHeader — start-meeting button by kind + meeting state', () => {
-  it('user kind + no active meeting → start meeting button rendered and enabled', () => {
-    const onStart = vi.fn();
+describe('ChannelHeader — meeting buttons relocated to sidebar (R12)', () => {
+  // R12 dogfooding: 회의 시작 / 회의 중단 버튼은 좌측 ChannelRail 의
+  // ChannelMeetingControl 로 이전. ChannelHeader 는 더 이상 노출 X.
+  it('user kind → no start-meeting button in header', () => {
     renderWithTheme(
       'warm',
-      <ChannelHeader
-        channel={makeChannel('user')}
-        memberCount={3}
-        activeMeetingCount={0}
-        onStartMeeting={onStart}
-      />,
+      <ChannelHeader channel={makeChannel('user')} memberCount={3} />,
     );
-    const btn = screen.getByTestId('channel-header-start-meeting') as HTMLButtonElement;
-    expect(btn.disabled).toBe(false);
-    fireEvent.click(btn);
-    expect(onStart).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('channel-header-start-meeting')).toBeNull();
+    expect(screen.queryByTestId('channel-header-abort-meeting')).toBeNull();
   });
 
-  it('user kind + active meeting → start meeting disabled with tooltip', () => {
-    renderWithTheme(
-      'warm',
-      <ChannelHeader
-        channel={makeChannel('user')}
-        memberCount={3}
-        activeMeetingCount={1}
-        onStartMeeting={() => undefined}
-      />,
-    );
-    const btn = screen.getByTestId('channel-header-start-meeting') as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(btn.getAttribute('data-disabled')).toBe('true');
-    expect(btn.getAttribute('title')).toBe('이미 회의 중');
-  });
-
-  it('dm kind → start meeting button NOT rendered', () => {
+  it('dm kind → no start-meeting button (unchanged)', () => {
     renderWithTheme(
       'warm',
       <ChannelHeader
         channel={makeChannel('dm', { name: 'yuna' })}
         memberCount={2}
-        onStartMeeting={() => undefined}
       />,
     );
     expect(screen.queryByTestId('channel-header-start-meeting')).toBeNull();
   });
 
-  it('system kind → start meeting button NOT rendered', () => {
+  it('system kind → no start-meeting button (unchanged)', () => {
     renderWithTheme(
       'warm',
       <ChannelHeader
         channel={makeChannel('system_approval')}
         memberCount={3}
-        onStartMeeting={() => undefined}
       />,
     );
     expect(screen.queryByTestId('channel-header-start-meeting')).toBeNull();

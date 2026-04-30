@@ -5,14 +5,17 @@
  * - `#` glyph + 채널명 (retro 는 mono font, 나머지는 sans)
  * - 읽기 전용 배지 (channel.readOnly === true)
  * - 참여자 수 (우측, memberCount 가 null 이면 dash)
- * - 액션 버튼: 회의 시작 / 이름 변경 / 삭제
+ * - 액션 버튼: 이름 변경 / 삭제
  *
  * kind 별 동작 매트릭스:
- * - user          : 회의 시작 렌더(활성: activeMeetingCount===0 만, 이미 회의 중이면 disabled + title).
- *                   rename/delete 렌더 + 활성.
- * - dm            : 회의 시작 미렌더. rename 미렌더(이름은 상대 이름 고정), delete 렌더 + 활성.
- * - system_*      : 회의 시작 미렌더. `[읽기 전용]` 배지 노출. rename/delete 렌더 + 비활성 +
+ * - user          : rename/delete 렌더 + 활성.
+ * - dm            : rename 미렌더(이름은 상대 이름 고정), delete 렌더 + 활성.
+ * - system_*      : `[읽기 전용]` 배지 노출. rename/delete 렌더 + 비활성 +
  *                   title 안내(defence-in-depth — 서비스 레벨 SystemChannelProtectedError 도 존재).
+ *
+ * R12 dogfooding 변경: 회의 시작 / 회의 중단 버튼은 좌측 채널 사이드바
+ * (`ChannelRail` → `ChannelMeetingControl`) 로 이전. 헤더는 채널 메타데이터
+ * 와 이름 변경 / 삭제만 다룬다.
  *
  * hex literal 금지 — Tailwind utility + CSS variable 만 사용.
  */
@@ -27,15 +30,6 @@ export interface ChannelHeaderProps {
   channel: Channel;
   /** 참여자 수. null 은 loading / DM 같이 수치 미정 상태. */
   memberCount: number | null;
-  /** 이 채널에서 진행중인 회의 수. 0 이면 회의 시작 활성, >0 이면 비활성 + 안내. */
-  activeMeetingCount?: number;
-  onStartMeeting?: () => void;
-  /**
-   * round2.5 fix: 회의 진행 중 [회의 시작] 버튼이 disabled 인 자리를
-   * [회의 중단] 으로 swap. 사용자가 무한 라운드 / 응답 없는 회의에서
-   * 빠져나갈 수 있도록. T11 정식 사이드바 hover-swap 정착 전 임시.
-   */
-  onAbortMeeting?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
   className?: string;
@@ -48,9 +42,6 @@ function isSystemKind(channel: Channel): boolean {
 export function ChannelHeader({
   channel,
   memberCount,
-  activeMeetingCount = 0,
-  onStartMeeting,
-  onAbortMeeting,
   onRename,
   onDelete,
   className,
@@ -59,14 +50,7 @@ export function ChannelHeader({
   const { themeKey } = useTheme();
 
   const system = isSystemKind(channel);
-  const isUser = channel.kind === 'user';
   const isDm = channel.kind === 'dm';
-  const hasActiveMeeting = activeMeetingCount > 0;
-
-  const startMeetingDisabled = hasActiveMeeting;
-  const startMeetingTitle = hasActiveMeeting
-    ? t('messenger.channelHeader.startMeetingDisabledBusy')
-    : undefined;
 
   const renameDisabled = system;
   const renameTitle = system
@@ -141,39 +125,10 @@ export function ChannelHeader({
         {memberCountLabel}
       </span>
 
-      {isUser ? (
-        hasActiveMeeting && onAbortMeeting !== undefined ? (
-          // round2.5 fix: 회의 진행 중에는 [회의 시작] 자리에 [회의 중단]
-          // 버튼을 노출. 사용자가 무한 라운드 / 응답 없는 회의에서 빠져나
-          // 갈 수 있게 한다. T11 의 정식 사이드바 hover-swap 정착 전 임시.
-          <button
-            type="button"
-            onClick={onAbortMeeting}
-            data-testid="channel-header-abort-meeting"
-            className={clsx(
-              actionBtnClasses,
-              'border border-danger text-danger',
-            )}
-          >
-            {t('messenger.channelHeader.abortMeeting')}
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onStartMeeting}
-            disabled={startMeetingDisabled || onStartMeeting === undefined}
-            title={startMeetingTitle}
-            data-testid="channel-header-start-meeting"
-            data-disabled={startMeetingDisabled ? 'true' : 'false'}
-            className={clsx(
-              actionBtnClasses,
-              'border border-border-soft',
-            )}
-          >
-            {t('messenger.channelHeader.startMeeting')}
-          </button>
-        )
-      ) : null}
+      {/*
+        R12: 회의 시작 / 중단 버튼은 좌측 사이드바의 ChannelMeetingControl
+        로 이전. 헤더는 채널 메타데이터 + rename/delete 만 담당.
+      */}
 
       {!isDm ? (
         <button
