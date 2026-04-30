@@ -65,33 +65,29 @@ export class MessageFormatter {
    * Always returns type: 'conversation' — gracefully degrades on parse failure.
    */
   parseConversationOutput(raw: string, speakerName: string): ParsedAiOutput {
-    try {
-      const parsed = JSON.parse(stripCodeFence(raw)) as Record<string, unknown>;
-      if (typeof parsed === 'object' && parsed !== null) {
-        const content = typeof parsed.content === 'string' ? parsed.content : undefined;
-        const modeJudgment = parsed.mode_judgment === 'work' ? 'work' as const : 'conversation' as const;
-        const name = typeof parsed.name === 'string' ? parsed.name : speakerName;
-        const rawReason = parsed.judgment_reason;
-        const judgmentReason: JudgmentReason | undefined =
-          typeof rawReason === 'string' && (VALID_JUDGMENT_REASONS as readonly string[]).includes(rawReason)
-            ? rawReason as JudgmentReason
-            : undefined;
+    const parsed = tryParseTrailingJson(raw);
+    if (parsed !== null) {
+      const content = typeof parsed.content === 'string' ? parsed.content : undefined;
+      const modeJudgment = parsed.mode_judgment === 'work' ? 'work' as const : 'conversation' as const;
+      const name = typeof parsed.name === 'string' ? parsed.name : speakerName;
+      const rawReason = parsed.judgment_reason;
+      const judgmentReason: JudgmentReason | undefined =
+        typeof rawReason === 'string' && (VALID_JUDGMENT_REASONS as readonly string[]).includes(rawReason)
+          ? rawReason as JudgmentReason
+          : undefined;
 
-        if (content) {
-          const data: ConversationModeOutput = {
-            name,
-            content,
-            mode_judgment: modeJudgment,
-          };
-          if (judgmentReason) data.judgment_reason = judgmentReason;
-          return { type: 'conversation', data };
-        }
+      if (content) {
+        const data: ConversationModeOutput = {
+          name,
+          content,
+          mode_judgment: modeJudgment,
+        };
+        if (judgmentReason) data.judgment_reason = judgmentReason;
+        return { type: 'conversation', data };
       }
-    } catch {
-      // Fall through to fallback
     }
 
-    // Fallback: treat raw text as content
+    // Fallback: treat raw text as content (no JSON found at all).
     return {
       type: 'conversation',
       data: {
@@ -107,24 +103,20 @@ export class MessageFormatter {
    * Returns type: 'raw' on parse failure (structured fields required).
    */
   parseWorkDiscussionOutput(raw: string, speakerName: string): ParsedAiOutput {
-    try {
-      const parsed = JSON.parse(stripCodeFence(raw)) as Record<string, unknown>;
-      if (
-        typeof parsed === 'object' && parsed !== null &&
-        typeof parsed.opinion === 'string' &&
-        typeof parsed.reasoning === 'string' &&
-        typeof parsed.agreements === 'object' && parsed.agreements !== null
-      ) {
-        const data: WorkDiscussionMessage = {
-          name: typeof parsed.name === 'string' ? parsed.name : speakerName,
-          opinion: parsed.opinion,
-          reasoning: parsed.reasoning,
-          agreements: parsed.agreements as Record<string, boolean>,
-        };
-        return { type: 'work_discussion', data };
-      }
-    } catch {
-      // Fall through
+    const parsed = tryParseTrailingJson(raw);
+    if (
+      parsed !== null &&
+      typeof parsed.opinion === 'string' &&
+      typeof parsed.reasoning === 'string' &&
+      typeof parsed.agreements === 'object' && parsed.agreements !== null
+    ) {
+      const data: WorkDiscussionMessage = {
+        name: typeof parsed.name === 'string' ? parsed.name : speakerName,
+        opinion: parsed.opinion,
+        reasoning: parsed.reasoning,
+        agreements: parsed.agreements as Record<string, boolean>,
+      };
+      return { type: 'work_discussion', data };
     }
 
     return { type: 'raw', content: raw };
@@ -135,24 +127,20 @@ export class MessageFormatter {
    * Returns type: 'raw' on parse failure.
    */
   parseReviewOutput(raw: string, speakerName: string): ParsedAiOutput {
-    try {
-      const parsed = JSON.parse(stripCodeFence(raw)) as Record<string, unknown>;
-      if (
-        typeof parsed === 'object' && parsed !== null &&
-        (parsed.review_result === 'approve' || parsed.review_result === 'request_changes') &&
-        Array.isArray(parsed.issues) &&
-        typeof parsed.comments === 'string'
-      ) {
-        const data: ReviewOutput = {
-          name: typeof parsed.name === 'string' ? parsed.name : speakerName,
-          review_result: parsed.review_result,
-          issues: parsed.issues.filter((i): i is string => typeof i === 'string'),
-          comments: parsed.comments,
-        };
-        return { type: 'review', data };
-      }
-    } catch {
-      // Fall through
+    const parsed = tryParseTrailingJson(raw);
+    if (
+      parsed !== null &&
+      (parsed.review_result === 'approve' || parsed.review_result === 'request_changes') &&
+      Array.isArray(parsed.issues) &&
+      typeof parsed.comments === 'string'
+    ) {
+      const data: ReviewOutput = {
+        name: typeof parsed.name === 'string' ? parsed.name : speakerName,
+        review_result: parsed.review_result,
+        issues: parsed.issues.filter((i): i is string => typeof i === 'string'),
+        comments: parsed.comments,
+      };
+      return { type: 'review', data };
     }
 
     return { type: 'raw', content: raw };
@@ -266,4 +254,103 @@ function stripCodeFence(text: string): string {
   const trimmed = text.trim();
   const match = trimmed.match(/^```(?:\w*)\s*\n?([\s\S]*?)\n?\s*```$/);
   return match ? match[1].trim() : trimmed;
+}
+
+/**
+ * Scan `text` for top-level balanced `{ ... }` blocks and return the
+ * substring of the *last* one whose contents successfully parse as
+ * JSON. Returns `null` when no balanced + valid JSON object is found.
+ *
+ * Why we need this (dogfooding 2026-05-01 #4): Gemini CLI sometimes
+ * echoes the prompt back (the `<<INSTRUCTIONS>> ... <<CONVERSATION>> ...`
+ * blocks the pipe-format builder writes) before emitting its own
+ * `{name, content, mode_judgment, judgment_reason}` JSON. The outer
+ * `JSON.parse(rawTrim)` call rejects the whole blob because of the
+ * leading echoed text, falling through to the "treat raw as content"
+ * fallback — that puts the entire echoed transcript into the persisted
+ * message and also breaks downstream consumers (the SSM mode-judgment
+ * tally never sees a parse, so consensus rounds run unbounded).
+ *
+ * This helper isolates Gemini's actual reply (the trailing JSON block)
+ * so the downstream parser can pick up `mode_judgment` correctly and
+ * the renderer shows just the model's content. Falls back to the
+ * original "raw text becomes content" path only when no JSON object is
+ * present at all.
+ *
+ * Brace counting tracks string literals (with backslash escapes) so a
+ * `"}"` inside a value does not terminate the block early.
+ */
+function extractLastJsonObject(text: string): string | null {
+  const candidates: string[] = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== '{') continue;
+    let depth = 0;
+    let inStr = false;
+    let escape = false;
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (inStr && c === '\\') {
+        escape = true;
+        continue;
+      }
+      if (c === '"') {
+        inStr = !inStr;
+        continue;
+      }
+      if (inStr) continue;
+      if (c === '{') {
+        depth++;
+      } else if (c === '}') {
+        depth--;
+        if (depth === 0) {
+          candidates.push(text.slice(i, j + 1));
+          i = j; // skip past consumed block
+          break;
+        }
+      }
+    }
+  }
+  for (let k = candidates.length - 1; k >= 0; k--) {
+    const candidate = candidates[k]!;
+    try {
+      JSON.parse(candidate);
+      return candidate;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * Best-effort JSON object extractor: try the entire (code-fence-stripped)
+ * input first, fall back to the trailing balanced-brace scan. Returns
+ * the parsed JS value on success, `null` otherwise.
+ */
+function tryParseTrailingJson(raw: string): Record<string, unknown> | null {
+  const stripped = stripCodeFence(raw);
+  try {
+    const parsed = JSON.parse(stripped) as unknown;
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // fall through
+  }
+  const last = extractLastJsonObject(stripped);
+  if (last !== null) {
+    try {
+      const parsed = JSON.parse(last) as unknown;
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }

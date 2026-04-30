@@ -125,4 +125,68 @@ describe('MessageFormatter', () => {
       expect(instruction).toContain('review_result');
     });
   });
+
+  // ── Trailing-JSON extraction (Gemini echo workaround) ─────────
+  // dogfooding 2026-05-01 #4: Gemini occasionally echoes the prompt
+  // before emitting its real reply. The parser must isolate the
+  // trailing valid JSON object instead of falling through to "raw
+  // text becomes content" — otherwise the persisted message contains
+  // the entire echoed transcript and the SSM mode-judgment tally
+  // never sees the model's actual vote.
+
+  describe('parseConversationOutput trailing-JSON extraction', () => {
+    it('extracts the trailing JSON object when Gemini echoes the prompt before its reply', () => {
+      const raw = `[사용자]: 끝말잇기 하자. 의자\n\n[Claude Code]: {"name":"Claude Code","content":"자전거","mode_judgment":"conversation","judgment_reason":"no_action"}\n\n[Codex CLI]: {"name":"Codex CLI","content":"거울","mode_judgment":"conversation","judgment_reason":"no_action"}{\n  "name": "Gemini CLI",\n  "content": "울타리",\n  "mode_judgment": "conversation",\n  "judgment_reason": "no_action"\n}`;
+      const result = formatter.parseConversationOutput(raw, 'Gemini CLI');
+      expect(result.type).toBe('conversation');
+      if (result.type === 'conversation') {
+        expect(result.data.content).toBe('울타리');
+        expect(result.data.name).toBe('Gemini CLI');
+        expect(result.data.mode_judgment).toBe('conversation');
+        expect(result.data.judgment_reason).toBe('no_action');
+      }
+    });
+
+    it('handles braces inside string literals correctly', () => {
+      const raw = `prefix text { not a real obj\n{"name":"Beta","content":"hello {world}","mode_judgment":"conversation"}`;
+      const result = formatter.parseConversationOutput(raw, 'Beta');
+      expect(result.type).toBe('conversation');
+      if (result.type === 'conversation') {
+        expect(result.data.content).toBe('hello {world}');
+      }
+    });
+
+    it('still falls back to raw text when no JSON object is present', () => {
+      const result = formatter.parseConversationOutput('plain message no braces', 'Alpha');
+      expect(result.type).toBe('conversation');
+      if (result.type === 'conversation') {
+        expect(result.data.content).toBe('plain message no braces');
+      }
+    });
+
+    it('uses the entire input when it parses cleanly (no echo prefix)', () => {
+      const raw = JSON.stringify({
+        name: 'Alpha',
+        content: 'clean reply',
+        mode_judgment: 'conversation',
+      });
+      const result = formatter.parseConversationOutput(raw, 'Alpha');
+      expect(result.type).toBe('conversation');
+      if (result.type === 'conversation') {
+        expect(result.data.content).toBe('clean reply');
+      }
+    });
+  });
+
+  describe('parseWorkDiscussionOutput trailing-JSON extraction', () => {
+    it('extracts the trailing work-discussion JSON when prompt is echoed', () => {
+      const raw = `<<INSTRUCTIONS>> ... <</INSTRUCTIONS>>\n[Alpha]: previous turn\n{"name":"Beta","opinion":"agree","reasoning":"because reasons","agreements":{"Alpha":true}}`;
+      const result = formatter.parseWorkDiscussionOutput(raw, 'Beta');
+      expect(result.type).toBe('work_discussion');
+      if (result.type === 'work_discussion') {
+        expect(result.data.opinion).toBe('agree');
+        expect(result.data.agreements.Alpha).toBe(true);
+      }
+    });
+  });
 });
