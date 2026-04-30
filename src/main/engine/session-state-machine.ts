@@ -470,6 +470,16 @@ export class SessionStateMachine {
       return this.moveTo('MODE_TRANSITION_PENDING', 'ROUND_COMPLETE');
     }
 
+    // dogfooding 2026-05-01 #2-1 — 모든 참가자가 conversation + no_action 으로
+    // 합의했다면 추가 토의 의지가 없는 것이므로 회의를 자연 종료한다.
+    // 이 분기 없이는 사용자가 "동의" 의사를 표현해도 SSM 가 항상
+    // CONVERSATION → CONVERSATION 만 반복 (work majority 외 다른 종료 시그널이
+    // 없음). 누군가 further_discussion 으로 응답하면 hasUnanimousNoAction 은
+    // false 가 되어 라운드가 계속된다.
+    if (this._modeJudgmentCollector.hasUnanimousNoAction()) {
+      return this.moveTo('DONE', 'ROUND_COMPLETE');
+    }
+
     // Stay in CONVERSATION, reset judgments for next round
     this._modeJudgmentCollector.reset();
     return this.moveTo('CONVERSATION', 'ROUND_COMPLETE');

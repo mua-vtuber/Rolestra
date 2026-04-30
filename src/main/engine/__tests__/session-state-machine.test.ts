@@ -75,9 +75,27 @@ describe('SessionStateMachine', () => {
     expect(machine.state).toBe('MODE_TRANSITION_PENDING');
   });
 
-  it('stays in CONVERSATION when no work majority on ROUND_COMPLETE', () => {
-    machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation' });
-    machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation' });
+  it('stays in CONVERSATION when no work majority on ROUND_COMPLETE (further_discussion)', () => {
+    machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation', reason: 'further_discussion' });
+    machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation', reason: 'further_discussion' });
+    const result = machine.transition('ROUND_COMPLETE');
+    expect(result).toBe('CONVERSATION');
+    expect(machine.state).toBe('CONVERSATION');
+  });
+
+  // dogfooding 2026-05-01 #2-1 — unanimous no_action concludes naturally.
+  it('transitions CONVERSATION → DONE when all judgments are conversation + no_action', () => {
+    machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation', reason: 'no_action' });
+    machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation', reason: 'no_action' });
+    machine.recordModeJudgment({ participantId: 'ai-3', participantName: 'Gamma', judgment: 'conversation', reason: 'no_action' });
+    const result = machine.transition('ROUND_COMPLETE');
+    expect(result).toBe('DONE');
+    expect(machine.isTerminal).toBe(true);
+  });
+
+  it('does NOT terminate when one participant still wants further_discussion', () => {
+    machine.recordModeJudgment({ participantId: 'ai-1', participantName: 'Alpha', judgment: 'conversation', reason: 'no_action' });
+    machine.recordModeJudgment({ participantId: 'ai-2', participantName: 'Beta', judgment: 'conversation', reason: 'further_discussion' });
     const result = machine.transition('ROUND_COMPLETE');
     expect(result).toBe('CONVERSATION');
     expect(machine.state).toBe('CONVERSATION');
