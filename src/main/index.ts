@@ -512,12 +512,19 @@ app.whenReady().then(async () => {
           permissionMode: 'hybrid' as const,
           autonomyMode: 'manual' as const,
         };
+        // dogfooding 2026-05-01 — system_general 채널은 캐주얼 chat
+        // 표면이지 multi-round 합의 회의가 아님. 자동 트리거된 #일반 회의는
+        // 1 라운드 (각 참여자 1 턴씩) 만 진행 후 종료한다. 명시 user 채널은
+        // 기존대로 unlimited (사용자가 본격 회의를 의도한 채널).
+        const roundSetting =
+          channel.kind === 'system_general' ? 1 : 'unlimited';
         await factory.createAndRun({
           meeting,
           projectId: channel.projectId,
           participants,
           topic,
           ssmCtx,
+          roundSetting,
         });
         // The orchestrator is now registered; seed the meeting with the
         // user's first message so the AI's first turn sees what the user
@@ -798,7 +805,7 @@ app.whenReady().then(async () => {
     // `meetingStarter` (constructed earlier) can invoke it without a
     // direct import of the closure body.
     const meetingOrchestratorFactory: MeetingOrchestratorFactory = {
-      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx }) => {
+      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx, roundSetting }) => {
         const { MeetingSession } = await import(
           './meetings/engine/meeting-session'
         );
@@ -820,6 +827,7 @@ app.whenReady().then(async () => {
           topic,
           participants,
           ssmCtx,
+          ...(roundSetting !== undefined ? { roundSetting } : {}),
         });
 
         const personaPrimedParticipants = new Set<string>();

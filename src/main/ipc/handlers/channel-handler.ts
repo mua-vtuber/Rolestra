@@ -37,6 +37,15 @@ export interface MeetingOrchestratorFactory {
     participants: Participant[];
     topic: string;
     ssmCtx: SsmContext;
+    /**
+     * Optional cap on round count. Defaults to `'unlimited'` so the
+     * historical [회의 시작] button flow keeps producing full
+     * deliberation. The auto-trigger path passes `1` for system_general
+     * channels — those are casual chat surfaces where one round of
+     * responses is the expected affordance, not a multi-round consensus
+     * meeting (dogfooding 2026-05-01).
+     */
+    roundSetting?: import('../../../shared/engine-types').RoundSetting;
   }): Promise<void> | void;
 }
 
