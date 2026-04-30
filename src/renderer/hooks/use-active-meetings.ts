@@ -19,6 +19,10 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { invoke } from '../ipc/invoke';
 import type { ActiveMeetingSummary } from '../../shared/meeting-types';
+import type {
+  StreamMeetingStateChangedPayload,
+  StreamMeetingErrorPayload,
+} from '../../shared/stream-events';
 
 export interface UseActiveMeetingsResult {
   meetings: ActiveMeetingSummary[] | null;
@@ -76,6 +80,51 @@ export function useActiveMeetings(limit?: number): UseActiveMeetingsResult {
     void runFetch(true);
     return () => {
       mountedRef.current = false;
+    };
+  }, [runFetch]);
+
+  // dogfooding 2026-05-01 #1-4 / 추가2 — stream-driven refresh.
+  // 사용자 보고: 합의 패널 / 채널 진행중 라벨 / SSM 진행도 가 stale —
+  // 회의 시작 / state 변경 / 종료 / abort 시 자동 갱신 안 됨.
+  // 원래 mount 시 한 번만 fetch 했는데, 활성 회의 목록은 라이브 데이터라
+  // streambridge 가 emit 하는 4 이벤트 (state-changed / turn-done /
+  // error / turn-skipped) 받을 때마다 refetch.
+  // 모든 이벤트가 active list 의 변화를 반드시 의미하지는 않지만 (예:
+  // turn-token 은 빠짐) refetch 비용은 cheap 하고 stale 노출이 더 큰 문제.
+  // turn-token 만 의도적 제외 — 매 토큰 마다 IPC 라운드트립은 과함.
+  useEffect(() => {
+    const bridge = typeof window !== 'undefined' ? window.arena : undefined;
+    const onStream = bridge?.onStream;
+    if (!onStream) return undefined;
+
+    const triggerRefresh = (): void => {
+      if (!mountedRef.current) return;
+      void runFetch(false);
+    };
+
+    const offState = onStream(
+      'stream:meeting-state-changed',
+      (_payload: StreamMeetingStateChangedPayload) => {
+        triggerRefresh();
+      },
+    );
+    const offError = onStream(
+      'stream:meeting-error',
+      (_payload: StreamMeetingErrorPayload) => {
+        triggerRefresh();
+      },
+    );
+    const offTurnDone = onStream('stream:meeting-turn-done', () => {
+      triggerRefresh();
+    });
+    const offTurnSkipped = onStream('stream:meeting-turn-skipped', () => {
+      triggerRefresh();
+    });
+    return () => {
+      offState();
+      offError();
+      offTurnDone();
+      offTurnSkipped();
     };
   }, [runFetch]);
 
