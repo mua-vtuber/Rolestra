@@ -446,7 +446,7 @@
       "metaCrew": "{{n}} crew",
       "metaCrewUnknown": "crew —",
       "metaElapsed": "elapsed {{minutes}}m",
-      "metaSsm": "SSM {{cur}}/{{total}}"
+      "metaSsm": "Phase {{cur}}/{{total}}"
     },
     "channelCreate": {
       "cancel": "Cancel",

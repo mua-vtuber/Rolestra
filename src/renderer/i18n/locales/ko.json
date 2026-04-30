@@ -446,7 +446,7 @@
       "metaCrew": "참여 {{n}}",
       "metaCrewUnknown": "참여 —",
       "metaElapsed": "경과 {{minutes}}분",
-      "metaSsm": "SSM {{cur}}/{{total}}"
+      "metaSsm": "단계 {{cur}}/{{total}}"
     },
     "channelCreate": {
       "cancel": "취소",
