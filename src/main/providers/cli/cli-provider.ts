@@ -227,15 +227,31 @@ export class CliProvider extends BaseProvider {
   }
 
   /**
-   * D-A T6 / dogfooding (#7) — drop the persistent session id so the
-   * next `streamCompletion` invocation does not `--resume` an earlier
-   * meeting-mode exchange. Used by `DmAutoResponder` before each DM
-   * turn so CLI conversation history from prior meetings does not
-   * leak its JSON format instructions into the DM reply.
+   * D-A T6 / dogfooding (#7) — drop any cached conversation context so
+   * the next `streamCompletion` invocation starts fresh. Used by
+   * `DmAutoResponder` before each DM turn so CLI history from prior
+   * meetings does not leak its JSON format instructions into the DM
+   * reply.
+   *
+   * Per-turn providers (Codex / Gemini): clearing `sessionState` is
+   * enough — the next call spawns a brand-new subprocess.
+   *
+   * Persistent providers (Claude Code): the long-running subprocess
+   * keeps its own conversation memory in-process, so clearing our
+   * `sessionState.sessionId` alone is insufficient — the next payload
+   * still lands in a subprocess that already saw the meeting's
+   * `mode_judgment` / format-instruction exchange. Kill the subprocess
+   * here so `streamPersistent` respawns a fresh one on the next call.
+   * Dogfooding round 2 verified that without this kill, Claude DM
+   * still echoed `{name, content, mode_judgment, judgment_reason}` JSON
+   * even after the wrapper sessionId was cleared.
    */
   override resetConversationContext(): void {
     this.sessionState.clearSession();
     this.sessionState.resetForTurn();
+    if (this.cliConfig.sessionStrategy === 'persistent') {
+      this.processManager.kill();
+    }
   }
 
   // ── Streaming ─────────────────────────────────────────────
