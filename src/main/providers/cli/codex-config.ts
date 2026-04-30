@@ -71,10 +71,19 @@ export const CODEX_CLI_CONFIG: CliRuntimeConfig = {
   buildResumeArgs(sessionId: string, baseArgs: string[]): string[] {
     // baseArgs 는 cli-provider 가 합쳐준 전체 args (`<global> exec <exec-sub>
     // --json`). resume 서브커맨드는 `exec` 다음에 `resume <id>` 를 끼워
-    // 넣는 형태이므로, baseArgs 안에서 첫 `exec` 인덱스 뒤에 splice.
+    // 넣는다.
     //
-    // 예: `['-a','never','--sandbox','read-only','exec','-C',cwd,'--json']`
-    //   → `['-a','never','--sandbox','read-only','exec','resume',<id>,'-C',cwd,'--json']`
+    // dogfooding 2026-04-30 (#1-3) — codex-cli 0.125.0 의 `exec resume`
+    // 서브커맨드는 `-C` / `--cd` 같은 cwd 옵션을 받지 않는다.
+    //   `error: unexpected argument '-C' found
+    //    Usage: codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]`
+    // resume 은 이전 세션의 cwd 를 그대로 이어가므로 `-C cwd` 는 의미적으로
+    // 도 불필요. exec 이후의 args 에서 `-C <value>` 쌍을 제거한 뒤 resume
+    // + sessionId 를 prepend 한다. 다른 옵션 (`--json` 등) 은 보존.
+    //
+    // 예 (fix 후):
+    //   `['-a','never','--sandbox','read-only','exec','-C',cwd,'--json']`
+    //     → `['-a','never','--sandbox','read-only','exec','resume',<id>,'--json']`
     //
     // base args 가 비어 있고 permission flags 가 아직 적용되지 않은 경계
     // (예: warmup 시 readonly 가 attach 되기 전) 에서는 fallback 으로
@@ -83,9 +92,17 @@ export const CODEX_CLI_CONFIG: CliRuntimeConfig = {
     if (execIdx === -1) {
       return ['exec', 'resume', sessionId, '--json'];
     }
-    const result = [...baseArgs];
-    result.splice(execIdx + 1, 0, 'resume', sessionId);
-    return result;
+    const beforeExec = baseArgs.slice(0, execIdx + 1);
+    const afterExec: string[] = [];
+    const tail = baseArgs.slice(execIdx + 1);
+    for (let i = 0; i < tail.length; i++) {
+      if (tail[i] === '-C' || tail[i] === '--cd') {
+        i += 1; // skip the option's value too
+        continue;
+      }
+      afterExec.push(tail[i]!);
+    }
+    return [...beforeExec, 'resume', sessionId, ...afterExec];
   },
 
   permissionAdapter: new CodexPermissionAdapter(),
