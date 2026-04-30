@@ -149,7 +149,10 @@ describe('MeetingSession — state and message management', () => {
       role: 'assistant',
       content: 'hello',
     });
-    expect(session.messages).toHaveLength(1);
+    // T2.5: constructor injects a topic system message at index 0, so the
+    // assistant message above lands at index 1 (length === 2).
+    expect(session.messages).toHaveLength(2);
+    expect(session.messages[0].role).toBe('system');
     expect(msg.participantId).toBe('ai-1');
     expect(msg.content).toBe('hello');
   });
@@ -170,6 +173,80 @@ describe('MeetingSession — state and message management', () => {
     });
     const forAi1 = session.getMessagesForProvider('ai-1');
     expect(forAi1.length).toBeGreaterThan(0);
+  });
+});
+
+// ── D-A T2.5 / spec §5.5 — topic prompt + user-message injection ──
+
+describe('MeetingSession — topic prompt injection (D-A T2.5)', () => {
+  it('injects the topic as a system message at index 0', () => {
+    const session = new MeetingSession(buildOptions({ topic: '1+1=2 동의?' }));
+    expect(session.messages).toHaveLength(1);
+    expect(session.messages[0].role).toBe('system');
+    expect(session.messages[0].content).toContain('1+1=2 동의?');
+  });
+
+  it('topic system message uses the system sentinel participant id', () => {
+    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
+    expect(session.messages[0].participantId).toBe('__system__');
+  });
+
+  it('topic system message survives subsequent createMessage calls', () => {
+    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
+    session.createMessage({
+      participantId: 'ai-1',
+      participantName: 'AI 1',
+      role: 'assistant',
+      content: 'first reply',
+    });
+    expect(session.messages).toHaveLength(2);
+    expect(session.messages[0].role).toBe('system');
+    expect(session.messages[1].role).toBe('assistant');
+  });
+});
+
+describe('MeetingSession — interruptWithUserMessage (D-A T2.5)', () => {
+  function buildUserMessage(content: string) {
+    return {
+      id: `um-${content}`,
+      role: 'user' as const,
+      content,
+      participantId: 'user',
+      participantName: '사용자',
+    };
+  }
+
+  it('pushes the user message onto the buffer in addition to flagging the turn manager', () => {
+    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
+    const msg = buildUserMessage('1+1=2 동의?');
+    session.interruptWithUserMessage(msg);
+    // [topic-system, user-message]
+    expect(session.messages).toHaveLength(2);
+    expect(session.messages[1]).toEqual(msg);
+  });
+
+  it('throws when given a non-user role (defends against prompt contamination)', () => {
+    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
+    expect(() =>
+      session.interruptWithUserMessage({
+        id: 'bad',
+        role: 'assistant',
+        content: 'hi',
+        participantId: 'ai-1',
+        participantName: 'AI 1',
+      }),
+    ).toThrow(/user/);
+  });
+
+  it('multiple interjections accumulate in order', () => {
+    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
+    session.interruptWithUserMessage(buildUserMessage('first'));
+    session.interruptWithUserMessage(buildUserMessage('second'));
+    expect(session.messages.map((m) => m.content)).toEqual([
+      session.messages[0].content, // topic system message
+      'first',
+      'second',
+    ]);
   });
 });
 

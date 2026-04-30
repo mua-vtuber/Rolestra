@@ -50,6 +50,16 @@ import {
   adaptMessagesForProvider,
   type ParticipantMessage,
 } from '../../engine/history';
+import { buildTopicSystemPrompt } from './meeting-prompt-labels';
+
+/**
+ * Sentinel participant id / name for the auto-injected topic system message
+ * (D-A T2.5, spec §5.5). Picked so it never collides with a real provider id
+ * (which are non-empty alphanumeric) and so renderer surfaces filtering AI
+ * vs system messages can match on this exact literal.
+ */
+export const SYSTEM_TOPIC_PARTICIPANT_ID = '__system__';
+export const SYSTEM_TOPIC_PARTICIPANT_NAME = 'system';
 
 /**
  * IPC-safe projection used when the renderer asks for the current meeting
@@ -162,6 +172,19 @@ export class MeetingSession {
     this._title = options.title ?? topic;
     this._messages = [];
     this._taskSettings = options.taskSettings ?? null;
+
+    // D-A T2.5 / spec §5.5 — 회의 주제를 첫 system 메시지로 주입한다.
+    // 이전에는 `topic` 이 metadata 로만 보존되고 AI prompt 에 들어가지 않아
+    // (logging only) 사용자가 준 주제가 무시되는 회귀가 있었다 (round2.6
+    // dogfooding 보고 #3). 본 주입이 _messages[0] 의 불변식.
+    this._messages.push({
+      id: randomUUID(),
+      role: 'system',
+      content: buildTopicSystemPrompt(topic),
+      participantId: SYSTEM_TOPIC_PARTICIPANT_ID,
+      participantName: SYSTEM_TOPIC_PARTICIPANT_NAME,
+    });
+
     this._turnManager = new TurnManager({
       roundSetting: options.roundSetting ?? 'unlimited',
       participants,
@@ -280,7 +303,26 @@ export class MeetingSession {
     return this._turnManager.getNextSpeaker();
   }
 
-  interruptWithUserMessage(): void {
+  /**
+   * Append a user message to the meeting buffer AND interrupt turn rotation
+   * so the next AI turn sees it (D-A T2.5 / spec §5.5).
+   *
+   * Prior to T2.5 this method only flagged the turn manager — the message
+   * text never reached `_messages`, so AI providers received an empty user
+   * history and replied to a generic phantom prompt. Callers must now pass
+   * the full {@link ParticipantMessage} they appended to the channel; the
+   * session pushes it onto the buffer in addition to interrupting.
+   *
+   * @throws when `message.role !== 'user'` — guards against accidental
+   *   prompt contamination by mis-routed system / assistant messages.
+   */
+  interruptWithUserMessage(message: ParticipantMessage): void {
+    if (message.role !== 'user') {
+      throw new Error(
+        `[MeetingSession] interruptWithUserMessage requires role='user' (got '${message.role}')`,
+      );
+    }
+    this._messages.push(message);
     this._turnManager.interruptWithUserMessage();
   }
 

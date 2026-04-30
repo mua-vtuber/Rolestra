@@ -447,6 +447,82 @@ git -c user.name='mua-vtuber' -c user.email='mua.vtuber@gmail.com' commit -m "fe
 
 ---
 
+## Task 2.5: 회의 prompt 메시지 주입 계약 (round2.6 dogfooding 발견)
+
+**Goal:** spec §5.5 의 "회의 prompt 메시지 주입 계약" 구현. 회의 주제 + 사용자 메시지가 AI prompt 에 실제 전달되도록 만든다. 이 task 는 T4/T5/T6 (자동 트리거 + DM) 의 *전제* — 자동 트리거가 없어도 수동 [회의 시작] 흐름 + 회의 진행 중 사용자 추가 메시지가 정상 동작하도록 우선 land.
+
+**배경**: round2.6 dogfooding 에서 회의가 시작되었지만 AI 가 주제와 사용자 추가 메시지를 모르고 generic 메타 토론으로 빠지는 회귀 보고 (#3). 코드 분석 결과 두 누락 발견:
+1. `MeetingSession.topic` 이 constructor 에서 받지만 logging only — `_messages` 또는 prompt 어디에도 안 들어감.
+2. `MeetingSession.interruptWithUserMessage()` / `MeetingOrchestrator.handleUserInterjection()` 이 turn rotation interrupt 만 하고 사용자 메시지 텍스트를 `_messages` 에 push 안 함.
+
+**Files:**
+- Modify: `src/main/meetings/engine/meeting-session.ts` (constructor topic 주입 + interruptWithUserMessage(message) 시그니처)
+- Modify: `src/main/meetings/engine/meeting-orchestrator.ts` (handleUserInterjection(message) 시그니처)
+- Modify: `src/main/engine/turn-manager.ts` (필요 시 시그니처 정합)
+- Modify: `src/main/channels/channel-handler.ts` 또는 `src/main/messages/message-service.ts` (회의 진행 채널의 user 메시지 수신 시 `handleUserInterjection(message)` 호출)
+- Modify: `src/renderer/i18n/locales/{ko,en}.json` (`meeting.topicSystemPrompt` 신규 키)
+- Test: `src/main/meetings/engine/__tests__/meeting-session.test.ts` (topic system 메시지 주입 + interrupt 메시지 push)
+- Test: `src/main/meetings/engine/__tests__/meeting-turn-executor.test.ts` (회귀 — turn 의 messages 가 topic + interrupt user 포함)
+
+**Acceptance Criteria:**
+- [ ] `new MeetingSession({topic: '1+1=2 동의?'})` 직후 `_messages.length === 1`, `_messages[0]` 이 `{role: 'system', content: '회의 주제: 1+1=2 동의?', participantId: 'system', ...}` 형태.
+- [ ] `session.interruptWithUserMessage(userMessage)` 호출 후 `_messages.last() === userMessage`, 동시에 turn manager 가 interrupt 됨.
+- [ ] `interruptWithUserMessage(message)` 가 `message.role !== 'user'` 인 객체 받으면 throw.
+- [ ] turn-executor 가 호출하는 `getMessagesForProvider(speakerId)` 결과가 (formatInstruction prepend 후) `[formatInstruction(system), topic(system), user1, ...]` 순서로 AI prompt 에 들어감.
+- [ ] 회의 진행 중 사용자 메시지 송신 → channel-handler/message-service 가 `MeetingOrchestrator.handleUserInterjection(message)` 호출 → 다음 AI turn 의 messages 에 user1 포함.
+- [ ] `topic.trim().length < 3` 일 때 constructor throw 동작 유지 (regression).
+- [ ] `meeting.topicSystemPrompt` i18n 키가 ko/en 양쪽 추가, dictionary 경유.
+- [ ] vitest unit + e2e regression PASS.
+
+**Test Plan:**
+```
+describe('MeetingSession topic prompt injection', () => {
+  it('injects topic as first system message', () => {
+    const s = new MeetingSession({ topic: '1+1=2 동의?', /* ... */ });
+    expect(s.messages.length).toBe(1);
+    expect(s.messages[0].role).toBe('system');
+    expect(s.messages[0].content).toContain('1+1=2 동의?');
+  });
+});
+
+describe('MeetingSession interruptWithUserMessage', () => {
+  it('pushes user message to _messages and interrupts turn', () => {
+    const s = new MeetingSession({ /* ... */ });
+    const msg: ParticipantMessage = { id: 'u1', role: 'user', content: '추가 의견', participantId: 'user', participantName: '사용자' };
+    s.interruptWithUserMessage(msg);
+    expect(s.messages[s.messages.length - 1]).toEqual(msg);
+    expect(s.turnManager.userInterruptPending).toBe(true);
+  });
+
+  it('throws on non-user role', () => {
+    const s = new MeetingSession({ /* ... */ });
+    expect(() => s.interruptWithUserMessage({ role: 'assistant', /* ... */ } as any))
+      .toThrow(/user/);
+  });
+});
+```
+
+**Implementation Notes:**
+
+`MeetingSession.constructor` 끝에 자동 주입 — 호출자가 신경 쓸 필요 없음. content 는 dictionary 룩업으로 만들고, 주입 시점은 main process 라 i18next direct import 금지 규칙 (CLAUDE.md ADR C7) 에 따라 `notification-labels.ts` 와 같은 dictionary 경유 패턴으로:
+
+```ts
+// src/shared/meeting-prompt-labels.ts (신규)
+export const MEETING_TOPIC_PROMPT_KEY = 'meeting.topicSystemPrompt';
+export function buildTopicSystemPrompt(topic: string, locale: 'ko' | 'en'): string {
+  // dictionary 룩업 — main 측 locale resolver (R11 D9) 활용
+}
+```
+
+`participantId='system'` / `participantName='시스템'` (또는 i18n) 로 회의 직원과 구분되는 메시지로 표시. UI 도 system 메시지를 회의록 본문에는 포함하지 않거나 별도 styling — 단 그건 R12 별도 task 로.
+
+**완료 후 commit:**
+```
+git -c user.name='mua-vtuber' -c user.email='mua.vtuber@gmail.com' commit -m "feat(rolestra): D-A T2.5 — 회의 prompt 메시지 주입 계약 (topic system + interruptWithUserMessage(message))"
+```
+
+---
+
 ## Task 3: Per-meeting CliSessionState 격리
 
 **Goal:** CLI provider 가 같은 직원이라도 회의별로 독립 session state 를 유지하도록. 인스턴스 필드 1 개에서 `Map<meetingId|"default", CliSessionState>` 로 외부화. 호출 entry point 가 `meetingId` 옵션 받음.

@@ -192,6 +192,17 @@ app.whenReady().then(async () => {
     setMeetingAbortServiceAccessor(() => meetingService);
     setMessageServiceAccessor(() => messageService);
 
+    // D-A T2.5 / spec §5.5 — 채널에 user 메시지가 들어오면 활성 회의의
+    // orchestrator 로 전달해 다음 AI turn 의 prompt 에 합류시킨다. 이전에는
+    // handleUserInterjection 호출자 자체가 없어 사용자 추가 메시지가
+    // _messages 에 들어가지 못하고 AI 가 무시하는 회귀가 있었다 (round2.6
+    // dogfooding 보고 #3). T4/T5 의 자동 트리거(회의 *생성*) 와는 별개로
+    // 이미 활성 회의에는 본 dispatcher 만으로 합류 동작.
+    const { dispatchUserMessageToActiveMeeting } = await import(
+      './meetings/engine/meeting-orchestrator-registry'
+    );
+    messageService.on('message', dispatchUserMessageToActiveMeeting);
+
     // R8-Task8: MemberProfileService boot (production wire — R2~R7 only
     // wired this in tests). Without this block the renderer's six member:*
     // IPC calls all throw "service not initialized". The service depends

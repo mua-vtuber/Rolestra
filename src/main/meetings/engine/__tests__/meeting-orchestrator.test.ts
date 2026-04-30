@@ -919,11 +919,19 @@ describe('MeetingOrchestrator — lifecycle', () => {
     expect(mocks.session.turnManager.state).toBe('running');
   });
 
-  it('handleUserInterjection() flags the turn manager', () => {
+  it('handleUserInterjection(message) pushes the message and flags the turn manager (D-A T2.5)', () => {
     const mocks = buildMocks();
     const orc = buildOrchestrator(mocks);
-    // Smoke — turn-manager has no public getter for the flag, but the
-    // call must not throw.
-    expect(() => orc.handleUserInterjection()).not.toThrow();
+    // T2.5: handleUserInterjection now requires a ParticipantMessage and
+    // forwards the body to session._messages so the next AI turn's prompt
+    // sees it. The smoke test verifies both legs.
+    const userMsg = {
+      id: 'um1',
+      role: 'user' as const,
+      content: 'follow-up from the user',
+      participantId: 'user',
+      participantName: '사용자',
+    };
+    expect(() => orc.handleUserInterjection(userMsg)).not.toThrow();
   });
 });

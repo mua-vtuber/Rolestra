@@ -214,6 +214,57 @@ manual 사용자는 D-A 도입 후에도 "내가 통제" 의도를 잃지 않는
 
 ---
 
+## 5.5 회의 prompt 메시지 주입 계약 (round2.6 dogfooding 발견 갭)
+
+### 5.5.1 문제
+
+§3.2 / §4.2 / §4.8 은 "사용자 메시지 = user turn 합류" 라고 본문에 가정하지만, 현 구현 (`MeetingSession.interruptWithUserMessage()` + `MeetingOrchestrator.handleUserInterjection()`) 은 **turn rotation 만 interrupt** 하고 *메시지 텍스트 자체를 회의 buffer (`_messages`) 에 push 하지 않는다*. 또한 `MeetingSession.topic` 은 constructor 가 받지만 *logging 에만* 쓰이고 prompt 로 들어가지 않는다.
+
+증상: 사용자가 회의를 시작 (수동 또는 자동) 한 뒤 채널에 단순 주제 ("1+1=2 동의?") 를 적어도, AI 들이 받는 prompt = `persona + formatInstruction (단계별 행동 지침) + 비어있는 messages`. 주제 텍스트가 없고 사용자 추가 메시지도 전달되지 않아, AI 가 generic 메타 토론으로 빠진다 (round2.6 dogfooding 보고 #3).
+
+### 5.5.2 계약
+
+D-A 의 "회의 prompt" 는 다음 4 종 메시지로만 구성된다:
+
+| 종류 | 역할 | 주입 시점 | 보존 위치 |
+|---|---|---|---|
+| **회의 주제** | `system` | `MeetingSession` 생성 직후 (constructor 끝) — 1 회 | `_messages[0]` |
+| **단계별 형식 지시** | `system` | turn-executor 가 매 turn 직전 unshift | turn 단위 (영속 X) |
+| **사용자 메시지** | `user` | 사용자 채널 메시지 송신 시 — 첫 메시지 (`firstMessage`) 와 후속 메시지 모두 | `_messages` 끝에 append |
+| **AI 발언** | `assistant` | turn 종료 시 turn-executor 가 push (현 line 439) | `_messages` 끝에 append |
+
+> **불변식**: `_messages[0]` 이 `system` role 의 topic 메시지가 아니면 `MeetingSession` 생성이 잘못된 것이다. 자동 트리거 (T4/T5) 와 수동 [회의 시작] 양쪽 모두 동일.
+
+### 5.5.3 시그니처 변경
+
+- `MeetingSession.constructor` 끝에서 `_messages.push({ role: 'system', content: topic 으로 만든 prompt 문자열, ... })`. 문자열 형식: `${i18n('meeting.topicSystemPrompt')}: ${topic}` — 한글: "회의 주제: {topic}" 정도. dictionary 경유 (CLAUDE.md `#5 하드코딩 UI 문자열 금지` 의 정신을 main-process prompt 까지 확장).
+- `MeetingSession.interruptWithUserMessage()` → `interruptWithUserMessage(message: ParticipantMessage)` 로 시그니처 확장. 내부에서:
+  1. `_messages.push(message)` (role='user' 보장된 채로)
+  2. `_turnManager.interruptWithUserMessage()` (기존 동작 유지)
+- `MeetingOrchestrator.handleUserInterjection()` → `handleUserInterjection(message: ParticipantMessage)`. 호출자 (channel-handler / message-service hook / T5 의 wiring) 는 채널의 user 메시지 송신 직후 이 메서드를 호출하며 메시지 객체를 인자로 전달.
+- 자동 트리거 T4/T5 의 `createAndRun({meetingId, channelId, topic, firstMessage})` 도 같은 계약을 따른다 — `firstMessage` 는 `MeetingSession` 생성 후 `interruptWithUserMessage(firstMessage)` 로 주입 (또는 동등한 push 경로). topic 은 constructor 가 자동 주입.
+
+### 5.5.4 prompt 구성 (turn-executor)
+
+turn-executor 가 매 turn 시작 시 만드는 messages 배열:
+1. `_messages` 전체 (= topic system + user/assistant 누적)
+2. 그 위에 단계별 `formatInstruction` 을 system role 로 `unshift` (현 line 345 그대로)
+3. 결과: `[formatInstruction(system), topic(system), user1, assistant1, user2, ...]` 순.
+
+`persona` 인자는 주제와 별개로 provider.streamCompletion 에 그대로 전달 — 즉 AI 마다 자기 역할/성격은 그대로 주입되고, *모든 AI 가 공유하는 회의 주제* 는 `_messages` 안의 첫 system 메시지로 단일 출처.
+
+### 5.5.5 fallback / 에러
+
+- topic 이 빈 문자열 또는 `< 3` 자라면 `MeetingSession` constructor 가 throw (현 line 126 그대로). 즉 topic 부재 시 prompt 가 비어있는 상태로 회의가 만들어지는 경로는 *존재할 수 없다*. silent fallback 금지 (CLAUDE.md `mock/fallback 절대 금지`).
+- `interruptWithUserMessage(message)` 가 `message.role !== 'user'` 인 객체를 받으면 throw — 호출자 실수를 prompt 오염 전에 catch.
+- `_messages[0].role !== 'system'` 인 상태로 turn-executor 가 들어오면 dev assertion fail (즉 `MeetingSession` 생성 후 누군가 `_messages` 를 직접 만지면 잡힘).
+
+### 5.5.6 마이그레이션
+
+기존 회의 (D-A 이전 생성된 row 들) 는 영향 없음 — `_messages` 는 in-memory buffer 라 부팅 시 history 에서 rehydrate 되며, rehydrate 흐름은 §4.8 의 SSM snapshot path. 본 계약은 **신규 `MeetingSession` 생성 시점부터** 적용. 부팅 시 paused 회의 재개 (§4.8) 도 새 인스턴스이므로 동일 적용.
+
+---
+
 ## 6. AI 복제 모델 (동시 회의 격리)
 
 ### 6.1 문제

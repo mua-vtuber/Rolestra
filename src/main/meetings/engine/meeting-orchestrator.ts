@@ -64,6 +64,7 @@ import {
 } from '../../engine/v3-side-effects';
 import { tryGetLogger } from '../../log/logger-accessor';
 import type { MeetingSession } from './meeting-session';
+import type { ParticipantMessage } from '../../engine/history';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import { composeMinutes, type MinutesTranslator } from './meeting-minutes-composer';
 import { resolveNotificationLabel } from '../../notifications/notification-labels';
@@ -371,11 +372,18 @@ export class MeetingOrchestrator {
     }
   }
 
-  /** Signal from the channel-handler that the user sent a message
-   *  mid-meeting. Interrupts the turn rotation so the user message
-   *  lands before the next AI turn. */
-  handleUserInterjection(): void {
-    this.session.interruptWithUserMessage();
+  /**
+   * Signal from the channel-handler that the user sent a message
+   * mid-meeting. Pushes the message body onto the session buffer (so the
+   * next AI turn's prompt actually sees it — D-A T2.5 / spec §5.5) and
+   * interrupts the turn rotation.
+   *
+   * Pre-T2.5 this method only interrupted; the message text was lost on
+   * the way to the AI, which manifested as the round2.6 dogfooding
+   * report (#3 — AI 가 사용자 추가 메시지를 무시하고 메타 토론으로 빠짐).
+   */
+  handleUserInterjection(message: ParticipantMessage): void {
+    this.session.interruptWithUserMessage(message);
   }
 
   // ── Main loop ───────────────────────────────────────────────────────
