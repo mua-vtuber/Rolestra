@@ -326,6 +326,30 @@ export class MeetingSession {
     this._turnManager.interruptWithUserMessage();
   }
 
+  /**
+   * D-A T5 dogfooding fix — push a user message into `_messages` *without*
+   * raising the TurnManager's `_interrupted` flag. Used by the
+   * auto-trigger flow to seed the meeting with the user's first message
+   * before any AI turn fires; using `interruptWithUserMessage` here would
+   * cause the very first `getNextSpeaker()` to return null (the
+   * interrupt-yield contract), which the orchestrator treats as
+   * `ROUND_COMPLETE` → meeting ends after zero or one AI turn. The
+   * interrupt mechanic is for *interjections during a live turn round*,
+   * not for seeding the initial prompt.
+   *
+   * Use {@link interruptWithUserMessage} when an in-flight round must
+   * yield. Use this method for the *first* user message of an auto-spawned
+   * meeting.
+   */
+  appendUserMessage(message: ParticipantMessage): void {
+    if (message.role !== 'user') {
+      throw new Error(
+        `[MeetingSession] appendUserMessage requires role='user' (got '${message.role}')`,
+      );
+    }
+    this._messages.push(message);
+  }
+
   isComplete(): boolean {
     return this._turnManager.isAllRoundsComplete();
   }

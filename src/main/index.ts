@@ -519,15 +519,22 @@ app.whenReady().then(async () => {
           topic,
           ssmCtx,
         });
-        // The orchestrator is now registered; inject the user's first
-        // message so the AI's first turn sees what the user actually
-        // wrote (the topic system message alone would let the AI guess
-        // intent from the truncated topic only). This mirrors what the
-        // T2.5 dispatcher does for already-tagged messages.
+        // The orchestrator is now registered; seed the meeting with the
+        // user's first message so the AI's first turn sees what the user
+        // actually wrote (the topic system message alone would let the
+        // AI guess intent from the truncated topic only).
+        //
+        // dogfooding 2026-04-30 fix — must NOT use `handleUserInterjection`
+        // here: that path raises TurnManager's interrupt flag, which
+        // causes the very first `getNextSpeaker()` to yield null, which
+        // the orchestrator treats as `ROUND_COMPLETE` and ends the
+        // meeting after zero or one AI turn. Use the dedicated
+        // initial-message inject method which only appends to
+        // `_messages` without disturbing the turn rotation.
         const orchestrator = getOrchestrator(meetingId);
         if (orchestrator) {
           try {
-            orchestrator.handleUserInterjection({
+            orchestrator.injectInitialUserMessage({
               id: firstMessage.id,
               role: 'user',
               content: firstMessage.content,

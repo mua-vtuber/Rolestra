@@ -386,6 +386,18 @@ export class MeetingOrchestrator {
     this.session.interruptWithUserMessage(message);
   }
 
+  /**
+   * Seed the meeting with the user's first message *before* any AI turn
+   * runs. Differs from {@link handleUserInterjection} in that it does
+   * NOT raise the TurnManager's interrupt flag — the auto-trigger path
+   * (D-A T5) appends the message that *spawned* the meeting, not an
+   * interjection into a live round, so the first AI turn must be free
+   * to start normally.
+   */
+  injectInitialUserMessage(message: ParticipantMessage): void {
+    this.session.appendUserMessage(message);
+  }
+
   // ── Main loop ───────────────────────────────────────────────────────
 
   private async loop(): Promise<void> {
