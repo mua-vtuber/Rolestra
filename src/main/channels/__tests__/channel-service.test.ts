@@ -185,7 +185,7 @@ describe('ChannelService', () => {
   // ── createSystemChannels ────────────────────────────────────────────
 
   describe('createSystemChannels', () => {
-    it('creates exactly 3 channels in blueprint order with correct kinds/readOnly', async () => {
+    it('R12-C: creates exactly 2 system channels (system_general 제외 — 전역 1개로 분리됨)', async () => {
       const project = await projectService.create({
         name: 'Sysch',
         kind: 'new',
@@ -193,18 +193,13 @@ describe('ChannelService', () => {
       });
 
       const channels = channelService.createSystemChannels(project.id);
-      expect(channels).toHaveLength(3);
+      expect(channels).toHaveLength(2);
       expect(channels[0]).toMatchObject({
-        name: '일반',
-        kind: 'system_general',
-        readOnly: false,
-      });
-      expect(channels[1]).toMatchObject({
         name: '승인-대기',
         kind: 'system_approval',
         readOnly: true,
       });
-      expect(channels[2]).toMatchObject({
+      expect(channels[1]).toMatchObject({
         name: '회의록',
         kind: 'system_minutes',
         readOnly: true,
@@ -227,8 +222,8 @@ describe('ChannelService', () => {
         DuplicateChannelNameError,
       );
 
-      // Still only 3 channels — second call rolled back entirely.
-      expect(channelService.listByProject(project.id)).toHaveLength(3);
+      // R12-C: 2 system channels (system_general 제외) — second call rolled back entirely.
+      expect(channelService.listByProject(project.id)).toHaveLength(2);
     });
 
     it('materialises channel_members rows for each project member at create time', async () => {
@@ -267,12 +262,12 @@ describe('ChannelService', () => {
   // ── onProjectCreated hook end-to-end ────────────────────────────────
 
   describe('ProjectService onProjectCreated hook', () => {
-    it('wires ChannelService.createSystemChannels into project creation', async () => {
-      // Reconstruct a ProjectService with the hook wired — this is the
-      // shape Task 18 IPC layer will use.
+    it('R12-C: wires ChannelService.createSystemChannels + createDepartmentChannels into project creation (2 system + 5 dept = 7)', async () => {
+      // Reconstruct a ProjectService with the R12-C hooks wired.
       const wired = new ProjectService(projectRepo, arenaRootService, {
         onProjectCreated: (p) => {
           channelService.createSystemChannels(p.id);
+          channelService.createDepartmentChannels(p.id);
         },
       });
 
@@ -283,11 +278,19 @@ describe('ChannelService', () => {
       });
 
       const channels = channelService.listByProject(project.id);
-      expect(channels).toHaveLength(3);
-      expect(channels.map((c) => c.kind)).toEqual([
-        'system_general',
+      expect(channels).toHaveLength(7);
+      // listByProject orders by kind (system first) then created_at
+      expect(channels.slice(0, 2).map((c) => c.kind)).toEqual([
         'system_approval',
         'system_minutes',
+      ]);
+      expect(channels.slice(2).every((c) => c.kind === 'user')).toBe(true);
+      expect(channels.slice(2).map((c) => c.role)).toEqual([
+        'idea',
+        'planning',
+        'design.ux',
+        'implement',
+        'review',
       ]);
     });
   });
@@ -374,8 +377,8 @@ describe('ChannelService', () => {
           SystemChannelProtectedError,
         );
       }
-      // All three still present.
-      expect(channelService.listByProject(project.id)).toHaveLength(3);
+      // R12-C: 2 system channels still present (system_general 분리됨).
+      expect(channelService.listByProject(project.id)).toHaveLength(2);
     });
 
     it('throws ChannelNotFoundError for unknown ids', () => {
@@ -486,16 +489,16 @@ describe('ChannelService', () => {
       });
 
       const listed = channelService.listByProject(project.id);
+      // R12-C: system_general 분리됨 → 2 system + 2 user.
       expect(listed.map((c) => c.kind)).toEqual([
-        'system_general',
         'system_approval',
         'system_minutes',
         'user',
         'user',
       ]);
       // User channels preserve insertion order.
-      expect(listed[3]!.id).toBe(uA.id);
-      expect(listed[4]!.id).toBe(uB.id);
+      expect(listed[2]!.id).toBe(uA.id);
+      expect(listed[3]!.id).toBe(uB.id);
     });
   });
 

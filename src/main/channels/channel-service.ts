@@ -190,7 +190,12 @@ function isMemberFkViolation(err: unknown): boolean {
 // ── System channel blueprint ──────────────────────────────────────────
 
 /**
- * Fixed blueprint for the three auto-provisioned system channels.
+ * Fixed blueprint for the per-project system channels.
+ *
+ * R12-C 변경: `system_general` 제거 — 일반 채널은 전역 1개로 옮겨졌고
+ * `ensureGlobalGeneralChannel()` 가 boot 시점에 보장한다. 마이그레이션
+ * 018 이 기존 프로젝트 종속 system_general row 를 정리한다.
+ *
  * Order matters: `listByProject()` relies on the kind ordering but
  * this list also determines create order (affects `created_at`).
  */
@@ -199,9 +204,38 @@ const SYSTEM_CHANNEL_BLUEPRINT: ReadonlyArray<{
   kind: ChannelKind;
   readOnly: boolean;
 }> = [
-  { name: '일반', kind: 'system_general', readOnly: false },
   { name: '승인-대기', kind: 'system_approval', readOnly: true },
   { name: '회의록', kind: 'system_minutes', readOnly: true },
+];
+
+/**
+ * R12-C — 디폴트 부서 채널 5종. 프로젝트 생성 시 자동 생성.
+ * `createDepartmentChannels()` 가 이 blueprint 를 사용한다.
+ *
+ * 디자인 부서 = `design.ui + design.ux` 통합 부서. 단일 RoleId 표면이라
+ * `design.ux` 를 대표 role 로 두고, 디자인 워크플로우 (R12-C Task 14) 가
+ * 채널 멤버 중 `design.ui` / `design.ux` 능력자를 모두 찾는다.
+ *
+ * 옵션 부서 (캐릭터 / 배경 디자인) 는 사용자 명시 시 추가 — Task 4 input.
+ */
+export const DEFAULT_DEPARTMENT_BLUEPRINT: ReadonlyArray<{
+  name: string;
+  role: ChannelRole;
+}> = [
+  { name: '아이디어', role: 'idea' },
+  { name: '기획', role: 'planning' },
+  { name: '디자인', role: 'design.ux' },
+  { name: '구현', role: 'implement' },
+  { name: '검토', role: 'review' },
+];
+
+/** 옵션 부서 (사용자 추가 시) — 게임 / 일러스트 프로젝트용. */
+export const OPTIONAL_DEPARTMENT_BLUEPRINT: ReadonlyArray<{
+  name: string;
+  role: ChannelRole;
+}> = [
+  { name: '디자인-캐릭터', role: 'design.character' },
+  { name: '디자인-배경', role: 'design.background' },
 ];
 
 // ── Lookup dependency ─────────────────────────────────────────────────
@@ -285,9 +319,13 @@ export class ChannelService {
   }
 
   /**
-   * Create the three system channels for `projectId` in lock-step. All
-   * channels + their member rows live in a single transaction — if any
+   * Create the per-project system channels for `projectId` in lock-step.
+   * All channels + their member rows live in a single transaction — if any
    * fails, none are inserted.
+   *
+   * R12-C 변경: 2 channels (`system_approval` + `system_minutes`) 만
+   * 생성. `system_general` 은 전역 1개로 분리되어 `ensureGlobalGeneralChannel()`
+   * 가 boot 시점에 책임진다.
    *
    * System channels materialise `channel_members` rows for every current
    * project member so that downstream queries treat membership uniformly
@@ -573,5 +611,91 @@ export class ChannelService {
       );
     }
     return row;
+  }
+
+  /**
+   * R12-C — Boot-time idempotent: ensure exactly one global
+   * `system_general` row exists (project_id IS NULL). Called from
+   * the main process startup sequence (after migrations run). Returns
+   * the row whether it was just created or already existed.
+   *
+   * Migration 018 already collapsed any pre-existing per-project
+   * system_general rows down to one (oldest survives, project_id
+   * becomes NULL). This method handles fresh installs where no
+   * system_general row existed yet.
+   */
+  ensureGlobalGeneralChannel(): Channel {
+    const existing = this.repo.getGlobalGeneralChannel();
+    if (existing) return existing;
+    const channel: Channel = {
+      id: randomUUID(),
+      projectId: null,
+      name: '일반',
+      kind: 'system_general',
+      readOnly: false,
+      createdAt: Date.now(),
+      role: null,
+      purpose: null,
+      handoffMode: DEFAULT_HANDOFF_MODE,
+    };
+    this.repo.insert(channel);
+    return channel;
+  }
+
+  /**
+   * R12-C — Create the default 5 department channels (idea / planning /
+   * design / implement / review) for a project, plus optional 2
+   * (design.character / design.background) when `includeOptional` is true.
+   *
+   * Each department channel:
+   *   - kind = 'user' (the schema treats role-bearing channels as user channels)
+   *   - role = blueprint role (RoleId)
+   *   - handoff_mode = 'check' default
+   *   - members = current project_members (materialised at create time)
+   *
+   * @throws {DuplicateChannelNameError} when a department channel name
+   *   already exists for this project (idempotency guard — call once
+   *   per project lifetime).
+   */
+  createDepartmentChannels(
+    projectId: string,
+    options?: { includeOptional?: boolean },
+  ): Channel[] {
+    const blueprint = options?.includeOptional
+      ? [...DEFAULT_DEPARTMENT_BLUEPRINT, ...OPTIONAL_DEPARTMENT_BLUEPRINT]
+      : DEFAULT_DEPARTMENT_BLUEPRINT;
+    const members = this.projectMembers.listMembers(projectId);
+    // Department channels go AFTER system channels in `created_at` so
+    // listByProject 정렬이 system → department 자연 순.
+    const createdAt = Date.now() + 1000;
+    const channels: Channel[] = blueprint.map((spec, idx) => ({
+      id: randomUUID(),
+      projectId,
+      name: spec.name,
+      kind: 'user' as const,
+      readOnly: false,
+      createdAt: createdAt + idx,
+      role: spec.role,
+      purpose: null,
+      handoffMode: DEFAULT_HANDOFF_MODE,
+    }));
+
+    try {
+      this.repo.transaction(() => {
+        for (const channel of channels) {
+          this.repo.insert(channel);
+          for (const member of members) {
+            this.repo.addMember(channel.id, projectId, member.providerId);
+          }
+        }
+      });
+    } catch (err) {
+      if (isChannelNameUniqueViolation(err)) {
+        throw new DuplicateChannelNameError(projectId, '<department>');
+      }
+      throw err;
+    }
+
+    return channels;
   }
 }

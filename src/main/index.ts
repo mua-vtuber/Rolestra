@@ -257,6 +257,11 @@ app.whenReady().then(async () => {
     const channelRepo = new ChannelRepository(db);
     const channelService = new ChannelService(channelRepo, projectRepo);
 
+    // R12-C — boot 시점에 전역 일반 채널 1개 보장 (마이그레이션 018 +
+    // ensureGlobalGeneralChannel). 사이드바 상단 entry 가 이 row 를
+    // 참조하므로 service / IPC 활성 전에 land 되어야 한다.
+    channelService.ensureGlobalGeneralChannel();
+
     // R7-Task2: ApprovalService must be instantiated BEFORE StreamBridge
     // so `streamBridge.connect({ approvals })` can subscribe to the
     // service's EventEmitter (spec §6 stream:approval-*). This also
@@ -286,7 +291,11 @@ app.whenReady().then(async () => {
 
     const projectService = new ProjectService(projectRepo, arenaRoot, {
       onProjectCreated: (project) => {
+        // R12-C — system 채널 (승인-대기 + 회의록) 2개 + 부서 채널 (아이디어
+        // / 기획 / 디자인 / 구현 / 검토) 5개 = 7 채널 자동 생성.
+        // 일반 채널은 전역 1개라 여기서 안 만든다 (boot 시 ensureGlobalGeneralChannel).
         channelService.createSystemChannels(project.id);
+        channelService.createDepartmentChannels(project.id);
       },
       approvalService,
       // spec §7.3 CB-3: no mode transition while a meeting is live.
