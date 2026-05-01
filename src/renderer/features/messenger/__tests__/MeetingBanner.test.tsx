@@ -76,7 +76,7 @@ describe('MeetingBanner — warm theme (heroBg + pulse dot + pill label)', () =>
     const meta = screen.getByTestId('meeting-banner-meta');
     expect(meta.textContent).toContain('3');
     expect(meta.textContent).toContain('10');
-    expect(meta.textContent).toContain('SSM');
+    expect(meta.textContent).toContain('단계');
     expect(screen.queryByTestId('meeting-banner-retro-prefix')).toBeNull();
   });
 
@@ -160,7 +160,7 @@ describe('MeetingBanner — retro theme (별도 1-line mono strip)', () => {
     const meta = screen.getByTestId('meeting-banner-meta');
     expect(meta.textContent).toContain(' · ');
     expect(meta.textContent).toContain('3');
-    expect(meta.textContent).toContain('SSM');
+    expect(meta.textContent).toContain('단계');
     // retro has mono-only DOM; no warm pulse dot and no spark icon label.
     expect(screen.queryByTestId('meeting-banner-dot')).toBeNull();
     expect(screen.queryByTestId('meeting-banner-label')).toBeNull();
