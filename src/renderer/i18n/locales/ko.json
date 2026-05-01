@@ -985,6 +985,17 @@
       "title": "자율 기본값",
       "unlimited": "무제한"
     },
+    "summaryModel": {
+      "cardTitle": "회의록 정리 담당",
+      "cardSubtitle": "회의 종료 시 회의록을 자동 정리하는 모델입니다. 회의에 참여하는 직원과 별도입니다.",
+      "modeAuto": "자동 (추천)",
+      "modeManual": "특정 모델 지정",
+      "currentLabel": "현재: {{name}}",
+      "currentNone": "사용 가능한 모델이 없습니다 — 회의록은 결정문만 저장됩니다.",
+      "selectPlaceholder": "모델 선택",
+      "loading": "설정을 불러오는 중…",
+      "error": "회의록 정리 모델 설정 오류: {{message}}"
+    },
     "cli": {
       "description": "등록된 CLI 프로바이더와 자동 감지 결과를 관리합니다.",
       "detect": {

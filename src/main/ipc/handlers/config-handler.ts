@@ -8,8 +8,11 @@ import type {
   SettingsConfig,
   SettingsCorruptionInfo,
 } from '../../../shared/config-types';
+import type { ProviderInfo } from '../../../shared/provider-types';
 import { getConfigService } from '../../config/instance';
 import { reconfigureMemoryFacade } from '../../memory/instance';
+import { providerRegistry } from '../../providers/registry';
+import { resolveSummaryProvider } from '../../llm/summary-model-resolver';
 
 export function handleConfigGetSettings(): { settings: SettingsConfig } {
   return { settings: getConfigService().getSettings() };
@@ -48,6 +51,25 @@ export function handleSettingsSetSummaryModel(
   const svc = getConfigService();
   svc.updateSettings({ summaryModelProviderId: data.providerId });
   return { settings: svc.getSettings() };
+}
+
+/**
+ * settings:getResolvedSummaryModel — R12-S Task 11.
+ *
+ * UI 카드가 "현재 자동 선택 결과는 무엇인지" 보여주기 위한 read-only IPC.
+ * 사용자 명시 시점에는 그 provider 그대로, null 이면 4단계 resolver 결과
+ * (Haiku → Flash → 기타 → Ollama). 모두 부재면 null.
+ */
+export function handleSettingsGetResolvedSummaryModel(): {
+  provider: ProviderInfo | null;
+} {
+  const settings = getConfigService().getSettings();
+  const all = providerRegistry.listAll();
+  const resolved = resolveSummaryProvider(
+    { summaryModelProviderId: settings.summaryModelProviderId },
+    all,
+  );
+  return { provider: resolved };
 }
 
 export function handleConfigSetSecret(data: { key: string; value: string }): { success: true } {

@@ -369,6 +369,11 @@ export type IpcChannelMap = {
     request: { providerId: string | null };
     response: { settings: SettingsConfig };
   };
+  // R12-S: 현재 자동 선택 결과 미리보기 — UI 카드가 "현재: Claude Haiku" 표시용.
+  'settings:getResolvedSummaryModel': {
+    request: undefined;
+    response: { provider: ProviderInfo | null };
+  };
   'config:take-startup-diagnostics': {
     request: undefined;
     response: { settingsCorruption: SettingsCorruptionInfo | null };

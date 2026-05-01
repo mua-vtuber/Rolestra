@@ -987,6 +987,17 @@
       "title": "Autonomy defaults",
       "unlimited": "Unlimited"
     },
+    "summaryModel": {
+      "cardTitle": "Meeting summary model",
+      "cardSubtitle": "Model that automatically writes the meeting summary when a meeting ends. Separate from the members who attend the meeting.",
+      "modeAuto": "Automatic (recommended)",
+      "modeManual": "Pick a specific model",
+      "currentLabel": "Current: {{name}}",
+      "currentNone": "No model available — the meeting log keeps only the decision block.",
+      "selectPlaceholder": "Pick a model",
+      "loading": "Loading settings…",
+      "error": "Summary model setting error: {{message}}"
+    },
     "cli": {
       "description": "Manage registered CLI providers and run auto-detection.",
       "detect": {

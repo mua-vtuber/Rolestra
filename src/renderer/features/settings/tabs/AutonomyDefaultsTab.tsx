@@ -26,6 +26,7 @@ import { Button } from '../../../components/primitives/button';
 import type { SettingsConfig } from '../../../../shared/config-types';
 import { useLlmCostSummary } from '../../../hooks/use-llm-cost-summary';
 import type { LlmCostSummary } from '../../../../shared/llm-cost-types';
+import { SummaryModelCard } from '../SummaryModelCard';
 
 type RoundsValue = number | 'unlimited';
 
@@ -144,6 +145,7 @@ export function AutonomyDefaultsTab(): ReactElement {
               });
             }}
           />
+          <SummaryModelCard />
         </div>
       )}
     </section>

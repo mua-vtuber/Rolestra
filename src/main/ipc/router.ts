@@ -58,6 +58,7 @@ import {
   handleConfigListSecretKeys,
   handleConfigTakeStartupDiagnostics,
   handleSettingsSetSummaryModel,
+  handleSettingsGetResolvedSummaryModel,
 } from './handlers/config-handler';
 import {
   handleRecoveryList,
@@ -370,6 +371,8 @@ export function registerIpcHandlers(): void {
   handle('config:take-startup-diagnostics', isDev, () => handleConfigTakeStartupDiagnostics());
   // R12-S Task 9: 회의록 자동 정리 모델 명시 갱신.
   handle('settings:setSummaryModel', isDev, (data) => handleSettingsSetSummaryModel(data));
+  // R12-S Task 11: 현재 resolver 결과 미리보기 (자동 / 명시 모두).
+  handle('settings:getResolvedSummaryModel', isDev, () => handleSettingsGetResolvedSummaryModel());
 
   // ── Recovery ───────────────────────────────────────────────────────
   handle('recovery:list', isDev, () => handleRecoveryList());

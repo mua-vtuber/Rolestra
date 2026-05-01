@@ -73,7 +73,7 @@
     {
       "id": 10,
       "subject": "Task 10: MeetingSummaryService wire — 자동 선택 로직 사용",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [9],
       "description": "**Goal:** MeetingSummaryService 가 settings + registry 받아 resolveSummaryProvider 호출. system prompt = SKILL_CATALOG['meeting-summary'].systemPromptKo. 사용자 명시 + capability 없음 = throw.\n\n**Files:**\n- Modify: src/main/llm/meeting-summary-service.ts\n- Modify: src/main/llm/__tests__/meeting-summary-service.test.ts\n- Modify: 호출지 (MeetingOrchestrator 등)\n\n**Verify:** npx vitest run src/main/llm/__tests__/meeting-summary-service.test.ts → all PASS (4 신규 케이스 포함)\n\n```json:metadata\n{\"files\": [\"src/main/llm/meeting-summary-service.ts\", \"src/main/llm/__tests__/meeting-summary-service.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/llm/\", \"acceptanceCriteria\": [\"resolveSummaryProvider 사용\", \"카탈로그 prompt 사용\", \"사용자 명시 + 무능력 throw\", \"resolver null = silent skip\", \"4 신규 케이스 PASS\"]}\n```"
     },
