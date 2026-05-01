@@ -52,7 +52,7 @@
     {
       "id": 7,
       "subject": "Task 7: IPC handlers — skill.list/getTemplate + provider.updateRoles",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6],
       "description": "**Goal:** 3 IPC channel + zod schema + preload whitelist. RoleId enum / SkillId union schema. provider.updateRoles 가 SkillService.validateRoles 게이트 + saveProvider upsert.\n\n**Files:**\n- Create: src/main/ipc/handlers/skill-handler.ts\n- Modify: src/main/ipc/router.ts, src/main/ipc/handlers/provider-handler.ts\n- Modify: src/shared/ipc-types.ts, src/shared/ipc-schemas.ts\n- Modify: src/preload/index.ts\n- Create: src/main/ipc/__tests__/skill-handler.test.ts\n\n**Verify:** npx vitest run src/main/ipc/ → all PASS\n\n```json:metadata\n{\"files\": [\"src/main/ipc/handlers/skill-handler.ts\", \"src/main/ipc/router.ts\", \"src/main/ipc/handlers/provider-handler.ts\", \"src/shared/ipc-types.ts\", \"src/shared/ipc-schemas.ts\", \"src/preload/index.ts\", \"src/main/ipc/__tests__/skill-handler.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/ipc/\", \"acceptanceCriteria\": [\"3 IPC channel 등록\", \"zod RoleId/SkillId enum\", \"preload whitelist 추가\", \"provider:updateRoles validateRoles\", \"3+ 단위 케이스 PASS\"]}\n```"
     },

@@ -823,7 +823,19 @@
       "save": "저장",
       "saveError": "저장 실패: {{message}}",
       "saving": "저장 중…",
-      "title": "{{name}} 프로필 편집"
+      "title": "{{name}} 프로필 편집",
+      "tab": {
+        "character": "캐릭터",
+        "rolesSkills": "역할 + 스킬"
+      },
+      "rolesSkillsTab": {
+        "title": "능력 선택 (다중 가능)",
+        "subtitle": "선택한 능력의 부서에 이 직원이 들어갈 수 있습니다.",
+        "customizeTitle": "스킬 customize",
+        "customizePlaceholder": "비워두면 기본 시스템 프롬프트를 사용합니다.",
+        "loading": "능력 카탈로그 불러오는 중…",
+        "loadError": "능력 카탈로그 불러오기 실패: {{message}}"
+      }
     },
     "popover": {
       "actions": {

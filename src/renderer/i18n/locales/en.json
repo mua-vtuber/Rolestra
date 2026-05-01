@@ -825,7 +825,19 @@
       "save": "Save",
       "saveError": "Save failed: {{message}}",
       "saving": "Saving…",
-      "title": "Edit profile — {{name}}"
+      "title": "Edit profile — {{name}}",
+      "tab": {
+        "character": "Character",
+        "rolesSkills": "Roles + Skills"
+      },
+      "rolesSkillsTab": {
+        "title": "Select skills (multiple allowed)",
+        "subtitle": "This member can join channels that match the selected skills.",
+        "customizeTitle": "Customize skill prompts",
+        "customizePlaceholder": "Leave blank to use the default system prompt.",
+        "loading": "Loading skill catalog…",
+        "loadError": "Failed to load skill catalog: {{message}}"
+      }
     },
     "popover": {
       "actions": {
