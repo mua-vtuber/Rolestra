@@ -240,6 +240,8 @@ async function defaultRegisterCli(
     provider.displayName,
     provider.persona,
     config,
+    provider.roles,
+    provider.skill_overrides,
   );
   void provider.warmup();
   return provider.toInfo();

@@ -45,12 +45,16 @@ export async function handleProviderAdd(
 
   // Persist to DB so the provider survives app restart. v3 schema stores
   // model inside config_json (§5.2 001_core); no separate column.
+  // R12-S Task 5: provider:add 는 능력 미부여 — 사용자가 직원 편집 모달
+  // (Task 8) 에서 명시 부여하면 provider:updateRoles 가 갱신.
   saveProvider(
     provider.id,
     provider.type,
     provider.displayName,
     provider.persona,
     data.config,
+    provider.roles,
+    provider.skill_overrides,
   );
 
   // Warmup in background (don't block the response)

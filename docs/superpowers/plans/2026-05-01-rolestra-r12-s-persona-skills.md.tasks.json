@@ -17,21 +17,21 @@
     {
       "id": 2,
       "subject": "Task 2: Shared Types — RoleId/SkillTemplate + ProviderInfo 확장",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [1],
       "description": "**Goal:** src/shared/role-types.ts 신규 (9 RoleId + meeting-summary SystemSkillId + ToolGrant + SkillTemplate). ProviderInfo 에 roles + skill_overrides 필드.\n\n**Files:**\n- Create: src/shared/role-types.ts\n- Modify: src/shared/provider-types.ts\n\n**Verify:** npm run typecheck → 0 error. ProviderInfo 호출지 임시 default 채워 통과.\n\n```json:metadata\n{\"files\": [\"src/shared/role-types.ts\", \"src/shared/provider-types.ts\"], \"verifyCommand\": \"npm run typecheck\", \"acceptanceCriteria\": [\"RoleId 9개 union\", \"SystemSkillId 'meeting-summary'\", \"ToolGrant 5개\", \"SkillTemplate interface\", \"ProviderInfo roles/skill_overrides 필수 필드\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: 스킬 카탈로그 모듈 — 10 능력 정의 (agestra reference)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [2],
       "description": "**Goal:** src/shared/skill-catalog.ts — SKILL_CATALOG (10) + getSkillTemplate + listEmployeeRoles. agestra plugin 4.13.0 agent prompt reference, 한국어 + Rolestra 메타포.\n\n**Files:**\n- Create: src/shared/skill-catalog.ts\n\n**Verify:** npm run typecheck → 0 error\n\n```json:metadata\n{\"files\": [\"src/shared/skill-catalog.ts\"], \"verifyCommand\": \"npm run typecheck\", \"acceptanceCriteria\": [\"10 SkillTemplate 모두 정의\", \"한국어 systemPromptKo\", \"implement 만 file.write+command.exec\", \"general 모든 tool false\", \"meeting-summary 카탈로그 포함\", \"getSkillTemplate / listEmployeeRoles helper\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: SkillService + 단위 테스트 (TDD)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [3],
       "description": "**Goal:** src/main/skills/skill-service.ts — getSkillForRole / validateRoles / listAvailableRolesForProvider. TDD red-green.\n\n**Files:**\n- Create: src/main/skills/skill-service.ts\n- Create: src/main/skills/__tests__/skill-service.test.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/skill-service.test.ts → 8+ PASS\n\n```json:metadata\n{\"files\": [\"src/main/skills/skill-service.ts\", \"src/main/skills/__tests__/skill-service.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/skill-service.test.ts\", \"acceptanceCriteria\": [\"getSkillForRole override merge\", \"validateRoles unknown throw\", \"meeting-summary system-only throw\", \"listAvailableRolesForProvider 교집합\", \"8+ 케이스 PASS\"]}\n```"
     },
@@ -92,5 +92,5 @@
       "description": "**Goal:** ADR 작성 (결정 5건), 구현-현황.md R12-S 표 추가, 메모리 phase-status / r12-channel-roles-design 갱신, r12-s-completion 메모리 신규 작성. 최종 회귀 + push.\n\n**Files:**\n- Create: docs/아키텍처-결정-기록/r12-s-persona-skills.md\n- Modify: docs/구현-현황.md\n- Modify: ~/.claude/projects/.../memory/rolestra-phase-status.md\n- Modify: ~/.claude/projects/.../memory/rolestra-r12-channel-roles-design.md\n- Create: ~/.claude/projects/.../memory/rolestra-r12-s-completion.md\n\n**Verify:** npm run typecheck && npm run lint && npx vitest run → 모두 통과 + git log oneline 으로 12+ commit 확인 + git push origin main\n\n```json:metadata\n{\"files\": [\"docs/아키텍처-결정-기록/r12-s-persona-skills.md\", \"docs/구현-현황.md\"], \"verifyCommand\": \"npm run typecheck && npm run lint && npx vitest run\", \"acceptanceCriteria\": [\"ADR 결정 5건\", \"구현현황 R12-S 표\", \"phase-status 갱신\", \"r12-s-completion 메모리\", \"R12-C 진입 가이드\", \"전체 회귀 PASS\", \"push 완료\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-01T21:30:00Z"
+  "lastUpdated": "2026-05-01T22:25:00Z"
 }

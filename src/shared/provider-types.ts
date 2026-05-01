@@ -114,6 +114,7 @@ export interface ProviderInfo {
   persona?: string;
   /** R12-S: 직원에게 부여된 능력 (다중 가능, 빈 배열 = 어떤 부서도 못 들어감). */
   roles: RoleId[];
-  /** R12-S: 능력별 사용자 customize prompt — null = 카탈로그 default. */
-  skill_overrides: Record<RoleId, string> | null;
+  /** R12-S: 능력별 사용자 customize prompt — null = 카탈로그 default.
+   *  Partial — 일부 role 만 override 한 경우 나머지는 카탈로그 default. */
+  skill_overrides: Partial<Record<RoleId, string>> | null;
 }

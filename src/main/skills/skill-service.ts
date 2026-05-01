@@ -16,7 +16,7 @@ export class SkillService {
   /** 카탈로그 default + override merge. */
   getSkillForRole(
     roleId: RoleId,
-    overrides: Record<RoleId, string> | null,
+    overrides: Partial<Record<RoleId, string>> | null,
   ): SkillTemplate {
     const base = getSkillTemplate(roleId);
     const overridePrompt = overrides?.[roleId];

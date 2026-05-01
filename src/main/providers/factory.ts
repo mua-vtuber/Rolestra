@@ -8,6 +8,7 @@
 import { randomUUID } from 'node:crypto';
 import { basename } from 'node:path';
 import type { ProviderConfig, ProviderCapability } from '../../shared/provider-types';
+import type { RoleId } from '../../shared/role-types';
 import type { BaseProvider } from './provider-interface';
 import { ApiProvider, type ApiKeyResolver } from './api/api-provider';
 import { LocalProvider } from './local/local-provider';
@@ -79,6 +80,10 @@ export interface CreateProviderOptions {
   config: ProviderConfig;
   /** Callback to resolve an API key reference (from SecretStore). */
   resolveApiKey?: ApiKeyResolver;
+  /** R12-S: 직원 부여 능력. 미지정 시 빈 배열 (어떤 부서에도 합류 X). */
+  roles?: RoleId[];
+  /** R12-S: 능력별 customize prompt. null = 카탈로그 default. */
+  skill_overrides?: Partial<Record<RoleId, string>> | null;
 }
 
 /**
@@ -87,6 +92,8 @@ export interface CreateProviderOptions {
 export function createProvider(options: CreateProviderOptions): BaseProvider {
   const id = options.id ?? randomUUID();
   const model = options.config.model ?? 'unknown';
+  const roles = options.roles ?? [];
+  const skill_overrides = options.skill_overrides ?? null;
 
   switch (options.config.type) {
     case 'api': {
@@ -100,6 +107,8 @@ export function createProvider(options: CreateProviderOptions): BaseProvider {
         persona: options.persona,
         config: options.config,
         resolveApiKey: options.resolveApiKey,
+        roles,
+        skill_overrides,
       });
     }
 
@@ -110,6 +119,8 @@ export function createProvider(options: CreateProviderOptions): BaseProvider {
         model,
         persona: options.persona,
         config: options.config,
+        roles,
+        skill_overrides,
       });
     }
 
@@ -131,6 +142,8 @@ export function createProvider(options: CreateProviderOptions): BaseProvider {
         capabilities: cliCapabilities,
         config: options.config,
         cliConfig: runtimeCliConfig,
+        roles,
+        skill_overrides,
       });
     }
 

@@ -17,6 +17,7 @@ import type {
   Message,
   CompletionOptions,
 } from '../../shared/provider-types';
+import type { RoleId } from '../../shared/role-types';
 
 export interface BaseProviderInit {
   id: string;
@@ -26,6 +27,10 @@ export interface BaseProviderInit {
   persona?: string;
   capabilities: ProviderCapability[];
   config: ProviderConfig;
+  /** R12-S: 직원에게 부여된 능력 (다중 가능). 미지정 시 빈 배열. */
+  roles?: RoleId[];
+  /** R12-S: 능력별 사용자 customize prompt. null = 카탈로그 default. */
+  skill_overrides?: Partial<Record<RoleId, string>> | null;
 }
 
 export interface TokenUsage {
@@ -42,6 +47,10 @@ export abstract class BaseProvider {
   persona: string;
   readonly capabilities: Set<ProviderCapability>;
   config: ProviderConfig;
+  /** R12-S: 직원 부여 능력. provider:updateRoles 로 갱신. */
+  roles: RoleId[];
+  /** R12-S: 능력별 customize prompt. null = 카탈로그 default. */
+  skill_overrides: Partial<Record<RoleId, string>> | null;
 
   protected status: ProviderStatus = 'not-installed';
   private statusListeners: Array<(status: ProviderStatus) => void> = [];
@@ -55,6 +64,8 @@ export abstract class BaseProvider {
     this.persona = init.persona ?? '';
     this.capabilities = new Set(init.capabilities);
     this.config = init.config;
+    this.roles = init.roles ?? [];
+    this.skill_overrides = init.skill_overrides ?? null;
   }
 
   /** Prepare provider for use (pre-connect, load model, etc.). */
@@ -148,10 +159,9 @@ export abstract class BaseProvider {
       status: this.status,
       config: this.config,
       persona: this.persona || undefined,
-      // R12-S Task 2: 임시 default — Task 5 에서 BaseProvider 가 실제 roles/
-      // skill_overrides 필드를 보유하도록 확장 후 진짜 값으로 교체.
-      roles: [],
-      skill_overrides: null,
+      roles: [...this.roles],
+      skill_overrides:
+        this.skill_overrides === null ? null : { ...this.skill_overrides },
     };
   }
 }
