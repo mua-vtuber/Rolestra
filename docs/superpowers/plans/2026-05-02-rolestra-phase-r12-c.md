@@ -5,7 +5,7 @@
 **Goal:** 채널을 부서 (`channels.role`) + 목적 (`channels.purpose`) + 인계 모드 (`channels.handoff_mode`) + 발화 순서 (`channels.drag_order`) 로 확장하고, 부서별 회의 형식 (아이디어 D-B-Light + USER_PICK / 디자인 UX→UI→UX 토론 / 검토 OPINION_GATHERING+TALLY → 기획 자동 분류 / 구현 designated 1명 / 일반 1라운드) 을 land 한다. 사이드바 collapsible + 일반 채널 전역화 + 프로젝트 entry "할 일 작성" + 부서 채널 disabled→enabled + SKILL.md 자동 배치 + 디자인 결과물 웹 스샷 + handoff_mode auto/check 토글.
 
 **Architecture:**
-- **DB**: Migration 018 — `channels` 테이블 ALTER `role TEXT NULL`, `purpose TEXT NULL`, `handoff_mode TEXT NOT NULL DEFAULT 'check'`, `drag_order INTEGER NULL`. Forward-only, chain-level idempotent. system_general 전역화 마이그레이션 (기존 프로젝트 종속 row → 전역 1개 row, projectId NULL).
+- **DB**: Migration 018 — 1 phase 1 마이그레이션 원칙으로 Task 1 + Task 18 통합. `channels` ALTER `role TEXT NULL`, `purpose TEXT NULL`, `handoff_mode TEXT NOT NULL DEFAULT 'check'`. `channel_members` ALTER `drag_order INTEGER NULL` (멤버 단위 발화 순서 — channel 단위 X). `providers` ALTER `is_department_head TEXT NOT NULL DEFAULT '{}'` (RoleId → boolean JSON, 부서장 핀). Forward-only, chain-level idempotent. system_general 전역화 (가장 오래된 row 1개만 project_id NULL, 나머지 DELETE).
 - **Shared types**: `src/shared/channel-role-types.ts` — `ChannelRole = RoleId | null`, `ChannelPurpose ('handoff_target' | 'observation' | 'free' | null)`, `HandoffMode ('check' | 'auto')`. Channel + ChannelMember 인터페이스 확장.
 - **부서 회의 형식 추출**: `src/main/meetings/opinion/opinion-service.ts` — D-B 의 OPINION_GATHERING + OPINION_TALLY 단계를 D-B 풀세트에서 분리한 재사용 가능 service. 부서별 워크플로우가 이 service 의 부분 phase 만 사용 가능.
 - **부서별 워크플로우 매트릭스**:
@@ -27,7 +27,7 @@
 - **디자인 결과물**: design.ui 가 출력한 HTML/CSS → `PlaywrightSnapshotService` (off-screen Chromium) → 1280x720 desktop + 375x812 mobile PNG → `<ArenaRoot>/<projectId>/design/snapshots/round-N-{desktop,mobile}.png` 저장 → 메시지창 미리보기 + 코드 펼치기 토글.
 - **handoff_mode auto/check**: 부서 인계 직전 gate. check (디폴트) = 사용자 confirm 모달 (산출물 미리보기 + "확인하고 인계" / "수정"). auto = 알림 없이 자동 인계. R7 ApprovalService 와 별개 (R7 = 파일 적용 gate, handoff_mode = 부서 인계 gate).
 - **designated worker 디폴트**: (a) 사용자가 직원 편집 모달에서 "부서장" 핀 → 1순위. (b) 핀 없으면 발화 순서 1번 (참여 멤버 드래그 순서 첫 멤버) → 2순위. 분담 알고리즘 자체는 R12-W 까지 보류.
-- **참여 멤버 드래그 순서**: `channels.drag_order` 또는 `channel_members.drag_order` 컬럼 (마이그레이션 018 에서 결정). 사용자가 우측 사이드 패널에서 드래그하면 발화 순서 update.
+- **참여 멤버 드래그 순서**: `channel_members.drag_order` 컬럼. 사용자가 우측 사이드 패널에서 드래그하면 channel-service.reorderMembers IPC → drag_order 업데이트.
 
 **Tech Stack:** TypeScript strict, better-sqlite3 (migration 018), zod (IPC schema), Zustand (renderer state — sidebar accordion / dragOrder / handoffMode), React 19 + Radix Accordion + Radix Tabs + dnd-kit (드래그), Playwright Electron (off-screen snapshot — R6 인프라 재활용), Vitest (unit + integration), eslint-plugin-i18next.
 
