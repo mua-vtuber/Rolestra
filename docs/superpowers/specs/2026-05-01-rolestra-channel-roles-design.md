@@ -125,19 +125,20 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 - `role`: `'idea' | 'planning' | 'design.ui' | 'design.ux' | 'design.character' | 'design.background' | 'implement' | 'review' | 'general' | null`
 - `purpose`: 자유 텍스트 (사용자 작성, optional)
 
-### 부서별 회의 흐름 (사용자 design 확정)
+### 부서별 회의 흐름 (R12-C 결정 매트릭스, 2026-05-02 갱신)
 
-| 부서 (role) | 회의 형태 | 종료 조건 | 결과물 | trigger |
-|------------|----------|----------|--------|---------|
-| **idea (아이디어)** | 자유 brainstorm | no_action 만장일치 OR cap 5 | brainstorm 회의록 | auto-trigger |
-| **planning (기획)** | D-B 구조화 합의 (의견 + vote + 협의) | 모든 의견 합의/거절 처리 | spec 문서 | auto-trigger |
-| **design.ui / design.ux** (디자인 부서, 디폴트) | 시안 제시 → revision loop | 기획 부서 의도 확인 OK | UI + UX 시안 + 가이드 | 인계 only |
-| **design.character / design.background** (옵션 부서, 게임 / 일러스트 한정) | 시안 제시 → revision loop | 기획 부서 의도 확인 OK | 캐릭터 / 배경 시안 + 가이드 | 인계 only |
-| **implement (구현)** | 회의 ❌, 단일 worker AI 작업 | 사용자 승인 게이트 | 코드 변경 | 인계 only |
-| **review (검토)** | 체크리스트 검증 | pass/fail report | 검증 결과 + 재작업 지시 | 인계 only |
-| **general (일반)** | round 5 cap (현재 그대로) | no_action / cap | 잡담 회의록 | auto-trigger |
+| 부서 (role) | 회의 형식 | 종료 조건 | 결과물 | trigger | 구현 phase |
+|------------|----------|----------|--------|---------|-----------|
+| **idea (아이디어)** | D-B-Light (OPINION_GATHERING + OPINION_TALLY) + USER_PICK | 사용자가 카드 선택 + 코멘트 → 기획 부서 인계 | 의견 카드 list → 사용자 선택 | 할 일 큐 entry | R12-C |
+| **planning (기획)** | D-B 풀세트 (§5 — OPINION_GATHERING → OPINION_TALLY → AGREEMENT_VOTE → REVISION_NEGOTIATION) | 모든 의견 합의/거절 처리 | spec markdown | 인계 only | D-B phase |
+| **design.ui + design.ux** (디폴트, 통합) | UX → UI → UX 토론 시퀀스 (3R cap) + Playwright 웹 스샷 | UX 동의 신호 또는 3R cap (사용자 개입 모달) | HTML/CSS + 와이어프레임 + PNG snapshot (desktop 1280x720 + mobile 375x812) | 인계 only | R12-C |
+| **design.character / design.background** (옵션, 게임/일러스트) | 미정 (이미지 생성 phase) | — | 캐릭터/배경 시안 이미지 | 인계 only | R12-D (보류) |
+| **implement (구현)** | designated 1명 spec 받아 작성 (R12-C) → 자원 모델 + worktree+merge (R12-W) | 사용자 승인 + ExecutionService apply | 코드 변경 + git commit | 인계 only | R12-C (1명) → R12-W (분할) |
+| **review (검토)** | OPINION_GATHERING + TALLY → 기획 부서 자동 분류 (의도/수정) → 분류 카드 | 사용자 OK → 수정 group 만 구현 부서 인계 | issue list 분류 결과 + 펼쳐 보기 | 인계 only | R12-C |
+| **general (일반)** | 1라운드 단순 응답 (round 5 fix 보존, 모든 직원 자동 부여) | round 1 응답 후 즉시 종결 | 응답 메시지 | 사용자 입력 즉시 | 기존 (변경 없음) |
 
-→ 채널 역할 = (SSM phase line + prompt template + permission matrix + trigger 방식) 한 묶음.
+→ 채널 역할 = (SSM phase line + prompt template + permission matrix + trigger 방식 + handoff_mode + drag_order) 한 묶음.
+→ R12-C 의 OpinionService 가 D-B 의 처음 2 단계 (OPINION_GATHERING + OPINION_TALLY) 를 분리한 재사용 가능 service 로 land — 아이디어 / 검토 / R12-W 가 부분 phase 만 사용.
 
 ### 사이드바 UX 변경
 
@@ -193,9 +194,13 @@ R12-C 진입 시:
 
 ### Migration
 
-`018-channels-role-purpose.ts`:
-- `role` 컬럼 (TEXT, default 'general' for 'user' kind / null for system 채널).
-- `purpose` 컬럼 (TEXT, nullable).
+`018-channels-role-purpose-handoff.ts` (R12-C 결정으로 컬럼 4개 + system_general 전역화, 2026-05-02 갱신):
+- `role` TEXT NULL (system 채널 = NULL, 부서 채널 = RoleId)
+- `purpose` TEXT NULL (자유 텍스트, 사용자 작성)
+- `handoff_mode` TEXT NOT NULL DEFAULT 'check' (부서 인계 직전 사용자 confirm 모드, 'check' | 'auto'. R7 ApprovalService 와 별개 — R7 = 파일 적용 gate, handoff_mode = 부서 인계 gate)
+- `drag_order` INTEGER NULL (참여 멤버 발화 순서, designated worker 디폴트 알고리즘 fallback)
+- 추가: `providers.is_department_head` TEXT JSON `Record<RoleId, boolean>` — designated worker 부서장 핀 (R12-C Task 18, 마이그레이션 018 통합)
+- system_general 전역화 — 기존 프로젝트 종속 row → 가장 오래된 1 개만 보존 (projectId NULL), 나머지 DELETE.
 - 기존 사용자 user 채널 = role='general' default. 기존 DB 데이터는 wipe (사용자 결정).
 
 ---
@@ -446,6 +451,7 @@ P2:
 **회의 시작 전까지 부서 채널 메시지란 disabled**:
 - 부서 채널은 워크플로우 진입 후에만 메시지란 enabled.
 - 사용자가 회의 시작 전 임의 메시지 입력 불가.
+- **트리거 = 할 일 큐의 할 일 작성란** (R12-C 결정, 2026-05-02). 사용자가 할 일을 작성하면 자동 워크플로우 시작 + 부서 채널 메시지란 enabled. placeholder: "할 일 큐의 할 일 작성으로 시작" (워크플로우 진입 전).
 
 **회의 시작 후**:
 - 메시지란 enabled.
@@ -487,9 +493,15 @@ P2:
 
 | 옵션 | 설명 | 적용 시점 |
 |------|------|----------|
-| 1. **Designated worker (디폴트)** | 한 명만 작업. 부서 만들 때 사용자 선택 또는 자동 (역할 + 능력 score). 다른 AI 는 옵저버. | R12-C |
+| 1. **Designated worker (디폴트)** | 한 명만 작업. 부서 만들 때 사용자 선택 또는 자동 (부서장 핀 / 발화 순서). 다른 AI 는 옵저버. | R12-C |
 | 2. **Pre-batch 사용자 결정** | 누가 할지 매 task 마다 사용자 선택 | R12-C |
-| 3. **병렬 작업 + 머지** | 두 시안 / 두 구현 결과 → 부서 회의에서 선택 / 머지 | R13 (옵션 B 와 결합) |
+| 3. **병렬 작업 + 머지** | 두 시안 / 두 구현 결과 → 부서 회의에서 선택 / 머지 | **R12-W** (구현 부서 worktree+merge phase, 신규) |
+
+**디폴트 알고리즘 (R12-C 결정, 2026-05-02)**:
+1. 사용자가 직원 편집 모달에서 "부서장 핀" 마크 → 1순위
+2. 핀 없으면 참여 멤버 드래그 순서 1번 → 2순위 (`channels.drag_order` 또는 `channel_members.drag_order` 컬럼)
+
+분담 알고리즘 (자원 모델 "내가 X 잘 함" + 사용자 override) 자체는 R12-W 에서 land. 옵션 3 (병렬 작업 + 머지) 가 R12-W 의 정확한 scope — 구현 부서만 worktree+merge 분할. 다른 부서 분할은 R13 별도.
 
 ### 11.7 phase 별 새 task 추가
 
@@ -498,13 +510,23 @@ P2:
 - 회의록 정리 모델 별도 settings (`summaryModelProviderId`) — 디폴트 자동 선택 로직 + 사용자 명시 선택.
 - agestra plugin agent 의 system prompt 를 reference (plugin cache 위치) 하되 한국어로 재작성.
 
-**R12-C (채널 역할)**:
-- 사이드바 collapsible 프로젝트 그룹 (R12-C 추가 task).
-- 일반 채널 전역 분리 + system_general migration.
-- 프로젝트 entry view "할 일 작성" 입력란 + 워크플로우 시작 IPC.
-- 부서 채널 메시지란 disabled / enabled 상태 관리.
+**R12-C (채널 역할)** — 갱신된 task 목록 (2026-05-02):
+- 사이드바 collapsible 프로젝트 그룹 (Radix Accordion + 디폴트 펼침 + zustand persist).
+- 일반 채널 전역 분리 + system_general migration (전역 1 개 row, projectId NULL).
+- 프로젝트 entry view "할 일 작성" 입력란 + 워크플로우 시작 IPC + 디폴트 시작 부서 = 아이디어.
+- 부서 채널 메시지란 disabled / enabled 상태 관리 (할 일 큐 트리거).
 - T7 (pause/resume) 의 일시정지 IPC 우선 implement.
-- Designated worker 선택 UI.
+- Designated worker 선택 UI (부서장 핀 + 드래그 순서).
+- 디자인 부서 워크플로우 (UX → UI → UX 토론 시퀀스, 3R cap).
+- 아이디어 부서 워크플로우 (D-B-Light + USER_PICK + 의견 카드 list UI 다중 선택 + 자유 코멘트 + 추가 라운드).
+- 검토 부서 워크플로우 (OPINION_GATHERING + TALLY → 기획 자동 분류 → 분류 카드 → 수정 group 만 구현 인계).
+- 구현 부서 단순화 (designated 1명 spec 받아 작성, 분할은 R12-W 로 미룸).
+- SKILL.md 자동 배치 (.agents/skills/ + .claude/skills/ — Codex+Gemini+Claude alias 호환) + PromptComposer 스킬 경로 주입 (자기 spec 합리화 방어 로직 frontmatter 동봉).
+- PlaywrightSnapshotService — 디자인 결과물 웹 스샷 PNG (desktop 1280x720 + mobile 375x812, R6 인프라 재활용).
+- handoff_mode auto/check 채널별 옵션 + 인계 모달 (디폴트 check, R7 ApprovalService 와 별개 — R7 = 파일 적용 gate, handoff_mode = 부서 인계 gate).
+- 참여 멤버 드래그 순서 UI (dnd-kit) + designated worker 디폴트 (부서장 핀 우선, 드래그 1번 fallback).
+- OpinionService — D-B 의 OPINION_GATHERING + OPINION_TALLY 재사용 service 추출 (아이디어 / 검토 / R12-W 가 부분 phase 만 사용).
+- general 능력 모든 직원 자동 부여 (디폴트 ON, 사용자 토글 가능).
 
 **R12-H (인계 + 작업 모드 deprecate)**:
 - 옵션 A (세션 진척도 + resume) 통합.
@@ -513,13 +535,107 @@ P2:
 
 ### 11.8 phase 추정 갱신
 
-| Phase | 변경 전 | 변경 후 |
-|-------|--------|--------|
-| R12-S | 5~7 일 | 5~7 일 (변경 없음) |
-| R12-C | 7~10 일 | **10~14 일** (사이드바 collapsible / 일반채널 전역 / 프로젝트 entry / disabled 상태 관리 / designated worker UI 추가) |
+| Phase | 변경 전 (2026-05-01) | 변경 후 (2026-05-02) |
+|-------|---------------------|---------------------|
+| R12-S | 5~7 일 | ✅ 종결 (2026-05-02, main tip `ce1c80c`) |
+| R12-C | 10~14 일 | **14~20 일** (디자인/아이디어/검토 워크플로우 + SKILL.md 자동 배치 + 웹 스샷 + handoff_mode + 드래그 순서 + OpinionService 추출 추가) |
 | D-B | 17~28 일 | 17~28 일 (변경 없음) |
-| R12-H | 10~15 일 | **15~20 일** (옵션 A 세션 resume / 구현 범위 gate / 모든 인계 승인 gate 추가) |
-| **합계** | 40~60 일 | **47~69 일** |
+| **R12-W (신규)** | — | **5~10 일** (구현 부서 worktree + 분할 commit + merge — 자원 모델 "내가 X 잘 함" + 사용자 override) |
+| R12-H | 15~20 일 | 15~20 일 (변경 없음) |
+| **합계** | 47~69 일 | **51~78 일** |
 
-R13 (multi-worker / branch 분할) 별도 — R12 종결 후.
+R12-D (이미지 생성 + ComfyUI/Diffusion) — 보류, 완성 이후 별도 phase (§11.11 참조).
+R13 (multi-worker / branch 분할) — R12-W 가 일부 흡수 (구현 부서). 잔여 (다른 부서 분할 / branch 관리 대규모) 는 R13 별도.
+
+### 11.9 SKILL.md 자동 배치 (R12-C land)
+
+R12-S 의 SKILL_CATALOG (10 능력) 를 프로젝트 폴더에 SKILL.md 로 자동 배치 — 3 provider (Claude / Codex / Gemini) 가 각자 자동 로드.
+
+**경로**:
+- Claude: `<projectRoot>/.claude/skills/<roleId>/SKILL.md` (자동 로드 + 라이브 watch)
+- Codex / Gemini: `<projectRoot>/.agents/skills/<roleId>/SKILL.md` (alias 공통, Gemini 도 `.gemini/skills/` 인식)
+- meeting-summary 는 system 전용 — 배치 X
+
+**양식** (3 provider 공통, Gemini silent skip 방지):
+```yaml
+---
+name: <roleId>
+description: Rolestra <부서명> 부서 — <한 줄 설명>
+---
+
+# <부서명> 부서
+
+[skill-catalog.ts 의 systemPromptKo 본문]
+
+## 자기 spec 합리화 방어 (필수 준수)
+
+- 본인이 작성한 산출물에 대한 검토 의견을 받았을 때, 무조건 "의도임" 으로 분류 금지.
+- 검토 의견의 근거 (코드 / 행동 / 사용자 영향) 를 spec 텍스트와 직접 대조 후 판단.
+- 의도 vs 검토 의견 충돌 시 객관적으로 검토 의견 우선 인정.
+- 의심스러우면 "수정 group" 으로 분류 (false negative 비용 < false positive 비용).
+```
+
+**자동 sync**:
+- 프로젝트 생성 시 자동 배치 (`ProjectSkillSyncService.syncProjectSkills`)
+- 카탈로그 변경 시 IPC `project:syncSkills(projectId, options: { force?: boolean })` 호출 → 두 폴더 재배치
+- 사용자 수정 SKILL.md (mtime 변경 감지) 가 있으면 사용자 confirm 받은 후 덮어쓰기 (force=true 시 무시)
+- PathGuard 가 ArenaRoot 봉인 검증 (junction realpath 비교 — CA-3 TOCTOU)
+
+**PromptComposer 확장**: 부서 회의 진입 시 prompt 끝에 다음 단락 자동 주입:
+```
+[skill 경로] 이번 부서 = <roleId> (<부서명>).
+- Claude: .claude/skills/<roleId>/SKILL.md
+- Codex/Gemini: .agents/skills/<roleId>/SKILL.md
+해당 파일을 읽고 내용을 그대로 따르라.
+```
+
+→ 사용자 의도: "스킬내용은 시스템 구현 후 한번 천천히 다듬을 계획. 필수적으로 들어가야하는 부분을 문서화 해 둘 것" — 양식 + 방어 로직 4 항 frontmatter 동봉이 필수, 본문 systemPromptKo 는 R13+ 에서 사용자가 천천히 다듬음.
+
+### 11.10 R12-W phase 정의 (구현 부서 worktree + 분할 commit + merge, 신규)
+
+**Goal**: 구현 부서가 designated 1명 작성 (R12-C) 에서 → 다수 provider 가 worktree 기반 병렬 commit + merge 까지 확장. 사용자 의견 ("혼자 다 하면 다른 프로바이더가 아까워") 의 정확한 해결책.
+
+**Scope**:
+- OPINION_GATHERING (자원 모드) — 각 AI 가 "내가 어디 / 무엇 잘 함" 자원 ("frontend 잘 함" / "DB 마이그레이션 잘 함" / "테스트 코드 잘 함")
+- OPINION_TALLY — OpinionService (R12-C 에서 추출) 재사용. 시스템 dedup + 충돌 감지 (같은 파일 두 명 자원 시)
+- 충돌 시 vote 라운드 또는 사용자 split
+- 사용자에게 분담표 표시 → 수동 override 가능
+- worktree N개 + branch N개 spawn → 병렬 작업
+- merge — D-B Light (merge conflict 시 부서 회의)
+- shared 파일 lock + dependency graph 우선 sequential (§11.1 의 결정 채택)
+
+**No-go**:
+- 다른 부서 (아이디어 / 기획 / 디자인 / 검토 / 일반) 의 분할 (R12-W 는 구현 부서만)
+- 외부 자원 endpoint 연동 (R12-S slot 만)
+- 이미지 생성 (R12-D 보류)
+
+**의존성**: R12-C 종결 후 진입. D-B 와 R12-H 사이에 위치. R12-C 의 OpinionService + designated-worker-resolver + handoff_mode 인프라 재활용.
+
+**예상 폭**: 5~10 일 (§11.8 phase 추정).
+
+### 11.11 R12-D phase 보류 (이미지 생성 + ComfyUI/Diffusion)
+
+R12 묶음 첫 출시 (R12-S + R12-C + D-B + R12-W + R12-H 종결) 이후 별도 phase. 사용자 결정 (2026-05-02): "컴피UI 또는 디퓨전은 완성 이후 생각해 볼 일로 예정".
+
+**Scope (미래)**:
+- `image-generation` capability 추가 (provider matrix 확장)
+- nano banana (Gemini 플러그인) endpoint 연동
+- Codex image endpoint 연동
+- ComfyUI / Stable Diffusion 외부 endpoint 연동
+- design.character + design.background sub-skill 활성화
+- 이미지 미리보기 UI / 파일 저장 (`.png` / `.svg`) / ExecutionService 이미지 적용
+
+**현재 상태 (R12-C 시점)**:
+- R12-S 에서 4 sub-skill 카탈로그 정의됨 (`design.ui` / `design.ux` / `design.character` / `design.background`)
+- R12-C 에선 `design.ui` + `design.ux` 만 활성화 (HTML/CSS + Playwright 웹 스샷)
+- `design.character` / `design.background` 는 grayed out (provider 가 image-generation capability 없으면 선택 불가)
+- ComfyUI / Stable Diffusion 연동은 R12-D 로 미룸 — 첫 출시 (`v0.2.0` 또는 그 이후) 이후 사용자 dogfooding 결과 보고 진입 결정
+
+---
+
+## 참고 spec / 메모리
+
 - `2026-04-18-rolestra-design.md` (기존 v3 spec — R12-H 후 일부 deprecate 표시)
+- `docs/superpowers/plans/2026-05-01-rolestra-r12-s-persona-skills.md` (R12-S 종결)
+- `docs/superpowers/plans/2026-05-02-rolestra-phase-r12-c.md` (R12-C 진입 plan)
+- 메모리: `rolestra-r12-c-plan-land.md` (R12-C 결정 12 항 + 의문 풀이)
