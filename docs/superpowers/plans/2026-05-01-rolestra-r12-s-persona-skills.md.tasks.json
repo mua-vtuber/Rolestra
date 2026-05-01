@@ -66,7 +66,7 @@
     {
       "id": 9,
       "subject": "Task 9: 회의록 정리 모델 settings + 자동 선택 로직",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** summaryModelProviderId: string | null + resolveSummaryProvider 4단계 (Haiku → Flash → 기타 api/cli → Ollama). IPC settings:setSummaryModel.\n\n**Files:**\n- Create: src/main/llm/summary-model-resolver.ts\n- Create: src/main/llm/__tests__/summary-model-resolver.test.ts\n- Modify: src/main/config/settings-store.ts\n- Modify: src/shared/ipc-types.ts, src/shared/ipc-schemas.ts\n- Modify: src/main/ipc/handlers/settings-handler.ts, src/main/ipc/router.ts\n\n**Verify:** npx vitest run src/main/llm/__tests__/summary-model-resolver.test.ts → 7 PASS\n\n```json:metadata\n{\"files\": [\"src/main/llm/summary-model-resolver.ts\", \"src/main/llm/__tests__/summary-model-resolver.test.ts\", \"src/main/config/settings-store.ts\", \"src/shared/ipc-types.ts\", \"src/shared/ipc-schemas.ts\", \"src/main/ipc/handlers/settings-handler.ts\", \"src/main/ipc/router.ts\"], \"verifyCommand\": \"npx vitest run src/main/llm/__tests__/summary-model-resolver.test.ts\", \"acceptanceCriteria\": [\"summaryModelProviderId 필드\", \"4단계 자동 선택\", \"사용자 명시 우선\", \"IPC settings:setSummaryModel\", \"7 케이스 PASS\"]}\n```"
     },

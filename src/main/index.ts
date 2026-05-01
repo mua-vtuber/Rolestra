@@ -734,6 +734,12 @@ app.whenReady().then(async () => {
     const meetingSummaryService = new MeetingSummaryService({
       providerRegistry,
       costAuditSink: llmCostRepository,
+      // R12-S Task 10: 회의록 정리 모델은 settings 가 결정 (자동 / 사용자 명시).
+      // 매 호출 시 fresh 한 settings 를 받아 hot-swap 즉시 반영.
+      getSummaryModelSettings: () => ({
+        summaryModelProviderId:
+          getConfigService().getSettings().summaryModelProviderId,
+      }),
     });
 
     // R10-Task11: re-arm consensus_decision approval expiry timers from

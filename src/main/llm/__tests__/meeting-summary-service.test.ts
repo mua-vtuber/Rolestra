@@ -393,4 +393,78 @@ describe('MeetingSummaryService', () => {
       expect(sink.append).not.toHaveBeenCalled();
     });
   });
+
+  // ── R12-S Task 10 — 자동 선택 + 카탈로그 prompt + 사용자 명시 throw ───
+  describe('R12-S — getSummaryModelSettings + skill catalog wire', () => {
+    it('auto-selects Anthropic Haiku via resolveSummaryProvider when settings is null', async () => {
+      // Order: gemini-flash 먼저 등록 → haiku 두 번째. 자동 선택은 Haiku 우선.
+      const flash = makeProvider({ id: 'flash' });
+      const haiku = makeProvider({ id: 'haiku' });
+      const registry = makeRegistry([flash, haiku]);
+      // listAll 의 model 필드는 makeRegistry 가 'm' 으로 채우므로
+      // resolver 가 model regex 로 인식하도록 override.
+      const origListAll = registry.listAll;
+      registry.listAll = () =>
+        origListAll().map((info) =>
+          info.id === 'haiku'
+            ? { ...info, model: 'claude-haiku-4-5' }
+            : info.id === 'flash'
+              ? { ...info, model: 'gemini-2.5-flash' }
+              : info,
+        );
+      const svc = new MeetingSummaryService({
+        providerRegistry: registry,
+        getSummaryModelSettings: () => ({ summaryModelProviderId: null }),
+      });
+      const result = await svc.summarize('body');
+      expect(result.providerId).toBe('haiku');
+    });
+
+    it('honours user-specified summary provider over auto-selection', async () => {
+      const haiku = makeProvider({ id: 'haiku' });
+      const flash = makeProvider({ id: 'flash' });
+      const registry = makeRegistry([haiku, flash]);
+      const origListAll = registry.listAll;
+      registry.listAll = () =>
+        origListAll().map((info) =>
+          info.id === 'haiku'
+            ? { ...info, model: 'claude-haiku-4-5' }
+            : { ...info, model: 'gemini-2.5-flash' },
+        );
+      const svc = new MeetingSummaryService({
+        providerRegistry: registry,
+        getSummaryModelSettings: () => ({ summaryModelProviderId: 'flash' }),
+      });
+      const result = await svc.summarize('body');
+      expect(result.providerId).toBe('flash');
+    });
+
+    it('uses the meeting-summary catalog prompt as system prompt', async () => {
+      let capturedMessages: unknown[] = [];
+      const provider = makeProvider({ id: 'p' });
+      vi.spyOn(provider, 'streamCompletion').mockImplementation(
+        function* (msgs: unknown) {
+          capturedMessages = msgs as unknown[];
+          yield 'mocked summary line';
+        } as unknown as BaseProvider['streamCompletion'],
+      );
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([provider]),
+        getSummaryModelSettings: () => ({ summaryModelProviderId: null }),
+      });
+      await svc.summarize('body');
+      const allText = JSON.stringify(capturedMessages);
+      expect(allText).toContain('한 단락');
+      expect(allText).toContain('메타 코멘트나 머리말 없이');
+    });
+
+    it('throws when user-specified provider lacks summarize capability', async () => {
+      const weird = makeProvider({ id: 'weird', capabilities: ['streaming'] });
+      const svc = new MeetingSummaryService({
+        providerRegistry: makeRegistry([weird]),
+        getSummaryModelSettings: () => ({ summaryModelProviderId: 'weird' }),
+      });
+      await expect(svc.summarize('body')).rejects.toThrow(/weird/);
+    });
+  });
 });

@@ -24,6 +24,11 @@ import type {
   ProviderCapability,
   ProviderInfo,
 } from '../../shared/provider-types';
+import {
+  resolveSummaryProvider,
+  type SummaryModelSettings,
+} from './summary-model-resolver';
+import { SKILL_CATALOG } from '../../shared/skill-catalog';
 
 /**
  * R11-Task8: minimum-viable surface of {@link LlmCostRepository} that the
@@ -67,17 +72,18 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 /** Persona shown to the provider when generating the summary. */
 const SUMMARY_PERSONA = '회의록 요약 보조';
 
-/** Korean prompt — matches the R10 messenger language default. */
+/**
+ * R12-S Task 10: 회의록 정리 시스템 prompt 는 카탈로그 (`meeting-summary`)
+ * 의 systemPromptKo 본문 + user 메시지로 회의 내용 그대로 전달. 카탈로그
+ * 본문은 직원 능력과 같은 형식으로 한 곳에서 관리한다.
+ */
 function buildPrompt(content: string): Message[] {
+  const tpl = SKILL_CATALOG['meeting-summary'];
   return [
+    { role: 'system', content: tpl.systemPromptKo },
     {
       role: 'user',
-      content:
-        '다음 회의 내용을 한국어로 한 단락(2~4 문장) 으로 간결하게 요약해라. ' +
-        '메타 코멘트나 머리말 없이 요약 본문만 출력해라.\n\n' +
-        '---\n' +
-        content +
-        '\n---',
+      content: `---\n${content}\n---`,
     },
   ];
 }
@@ -101,6 +107,13 @@ export interface MeetingSummaryServiceDeps {
    * care about cost tracking keep working unchanged.
    */
   costAuditSink?: LlmCostAuditSink;
+  /**
+   * R12-S Task 10: 회의록 정리 모델 settings provider.
+   * Function 형태 — 매 호출 시 fresh 한 settings 를 받기 위함 (사용자가
+   * "자동" → "특정 모델" 토글 시 다음 회의 정리부터 즉시 반영). 미지정
+   * 시 자동 선택 (기존 동작 보존: 첫 ready summarize-capable 후보).
+   */
+  getSummaryModelSettings?: () => SummaryModelSettings;
 }
 
 export class MeetingSummaryService {
@@ -233,9 +246,20 @@ export class MeetingSummaryService {
   }
 
   /**
-   * Pick the first provider that can summarize. Preferred id wins when
-   * supplied AND ready AND has the capability; otherwise the registry is
-   * iterated in registration order.
+   * Pick the provider that should summarize this meeting.
+   *
+   * Priority (R12-S Task 10):
+   *   1. `opts.preferredProviderId` — caller-side override (e.g. test hook
+   *      or one-off summarize call). Must be ready + summarize-capable.
+   *   2. `getSummaryModelSettings().summaryModelProviderId` — user-facing
+   *      settings. `null` = auto, otherwise must be ready + summarize-capable
+   *      (else throw — silent fallback 금지).
+   *   3. Auto: `resolveSummaryProvider` 4-step chain (Haiku → Flash → other
+   *      api/cli → Ollama).
+   *
+   * Throws when the user explicitly named a provider but it is missing,
+   * not ready, or lacks summarize capability — surfacing the misconfig
+   * instead of silently using a different model.
    */
   private pickProvider(preferredId: string | null): BaseProvider | undefined {
     if (preferredId !== null) {
@@ -248,12 +272,35 @@ export class MeetingSummaryService {
         return preferred;
       }
     }
-    for (const info of this.deps.providerRegistry.listAll()) {
-      if (info.status !== 'ready') continue;
-      if (!info.capabilities.includes(SUMMARIZE_CAPABILITY)) continue;
-      const p = this.deps.providerRegistry.get(info.id);
-      if (p !== undefined) return p;
+
+    const settings = this.deps.getSummaryModelSettings?.() ?? {
+      summaryModelProviderId: null,
+    };
+    const all = this.deps.providerRegistry.listAll();
+    const target = resolveSummaryProvider(settings, all);
+
+    if (settings.summaryModelProviderId !== null) {
+      // User explicitly named a provider — fail loud on misconfig.
+      if (target === null) {
+        throw new Error(
+          `[MeetingSummaryService] user-specified summary provider ` +
+            `'${settings.summaryModelProviderId}' is not registered. ` +
+            `Pick a different model in settings or revert to auto.`,
+        );
+      }
+      if (
+        target.status !== 'ready' ||
+        !target.capabilities.includes(SUMMARIZE_CAPABILITY)
+      ) {
+        throw new Error(
+          `[MeetingSummaryService] user-specified summary provider ` +
+            `'${target.id}' is ${target.status} or lacks 'summarize' ` +
+            `capability. Pick a different model in settings.`,
+        );
+      }
     }
-    return undefined;
+
+    if (target === null) return undefined;
+    return this.deps.providerRegistry.get(target.id);
   }
 }
