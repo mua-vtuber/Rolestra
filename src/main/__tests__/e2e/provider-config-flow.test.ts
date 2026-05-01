@@ -28,6 +28,8 @@ class InMemoryProviderRegistry {
       status: 'ready',
       config,
       persona,
+      roles: [],
+      skill_overrides: null,
     };
     this.providers.set(id, info);
     return info;

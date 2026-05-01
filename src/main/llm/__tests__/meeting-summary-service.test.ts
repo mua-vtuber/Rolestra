@@ -76,6 +76,8 @@ function makeRegistry(providers: BaseProvider[]) {
             capabilities: Array.from(p.capabilities) as ProviderInfo['capabilities'],
             status: p.isReady() ? 'ready' : 'not-installed',
             config: { type: 'api' as const, endpoint: '', apiKeyRef: '', model: 'm' },
+            roles: [],
+            skill_overrides: null,
           }) satisfies ProviderInfo,
       ),
   };

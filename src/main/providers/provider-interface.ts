@@ -148,6 +148,10 @@ export abstract class BaseProvider {
       status: this.status,
       config: this.config,
       persona: this.persona || undefined,
+      // R12-S Task 2: 임시 default — Task 5 에서 BaseProvider 가 실제 roles/
+      // skill_overrides 필드를 보유하도록 확장 후 진짜 값으로 교체.
+      roles: [],
+      skill_overrides: null,
     };
   }
 }

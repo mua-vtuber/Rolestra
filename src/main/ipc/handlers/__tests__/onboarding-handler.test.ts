@@ -123,6 +123,8 @@ describe('onboarding-handler — provider:detect', () => {
         hangTimeout: { first: 30_000, subsequent: 60_000 },
         model: 'fixture-model',
       },
+      roles: [],
+      skill_overrides: null,
       ...overrides,
     };
   }
@@ -251,6 +253,8 @@ describe('onboarding-handler — apply-staff-selection (F1)', () => {
         hangTimeout: { first: 30_000, subsequent: 60_000 },
         model: 'fixture-model',
       },
+      roles: [],
+      skill_overrides: null,
       ...overrides,
     };
   }

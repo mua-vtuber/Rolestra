@@ -57,6 +57,8 @@ class MockProvider {
       capabilities: [],
       status: this.status,
       config: { type: 'api', endpoint: 'mock', apiKeyRef: 'mock', model: 'mock' },
+      roles: [],
+      skill_overrides: null,
     };
   }
 }
