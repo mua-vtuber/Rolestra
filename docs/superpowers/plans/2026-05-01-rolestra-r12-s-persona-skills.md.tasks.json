@@ -38,14 +38,14 @@
     {
       "id": 5,
       "subject": "Task 5: ProviderRepository + ProviderService 확장",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [4],
       "description": "**Goal:** saveProvider 시그니처 + loadAllProviders SELECT — roles + skill_overrides 컬럼 read/write. registry parseRoles/parseSkillOverrides — JSON 실패 시 throw (silent fallback 금지). provider-handler add/update 에 SkillService.validateRoles 게이트.\n\n**Files:**\n- Modify: src/main/providers/provider-repository.ts\n- Modify: src/main/providers/registry.ts\n- Modify: src/main/ipc/handlers/provider-handler.ts\n- Modify: src/main/providers/__tests__/provider-repository.test.ts\n\n**Verify:** npx vitest run src/main/providers/ → all PASS, npm run typecheck → 0 error\n\n```json:metadata\n{\"files\": [\"src/main/providers/provider-repository.ts\", \"src/main/providers/registry.ts\", \"src/main/ipc/handlers/provider-handler.ts\", \"src/main/providers/__tests__/provider-repository.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/providers/\", \"acceptanceCriteria\": [\"saveProvider roles+skillOverrides\", \"loadAllProviders SELECT 두 컬럼\", \"JSON parse fail throw\", \"임시 [] / null 제거\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: PromptComposer — persona + skill template 합성",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [5],
       "description": "**Goal:** src/main/skills/prompt-composer.ts — compose({persona, providerRoles, skillOverrides, channelRole, formatInstruction}). providerRoles ∩ channelRole 검증, 빈 단락 생략, toolGrants 한국어 라벨 요약.\n\n**Files:**\n- Create: src/main/skills/prompt-composer.ts\n- Create: src/main/skills/__tests__/prompt-composer.test.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/prompt-composer.test.ts → 6 PASS\n\n```json:metadata\n{\"files\": [\"src/main/skills/prompt-composer.ts\", \"src/main/skills/__tests__/prompt-composer.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/prompt-composer.test.ts\", \"acceptanceCriteria\": [\"compose 합성 출력\", \"persona 빈 단락 생략\", \"providerRoles ∩ channelRole 검증 throw\", \"override 적용\", \"general 권한 없음 라벨\", \"6 케이스 PASS\"]}\n```"
     },

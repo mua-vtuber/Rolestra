@@ -10,6 +10,7 @@
  */
 
 import type { ProviderConfig, ProviderInfo, ProviderType } from './provider-types';
+import type { RoleId, SkillId, SkillTemplate } from './role-types';
 import type { AuditEntry, DiffEntry } from './execution-types';
 import type { StructuredLogEntry } from './log-types';
 import type { MemoryTopic, MemorySearchResult, KnowledgeNode, ExtractionResult, AssembledContext } from './memory-types';
@@ -226,6 +227,24 @@ export type IpcChannelMap = {
   'provider:list-embedding-models': {
     request: { type: ProviderType; key: string; apiKeyRef?: string };
     response: { models: string[] };
+  };
+
+  // ── R12-S Persona / Skill (능력 부여 + 카탈로그 조회) ────────────
+  'skill:list': {
+    request: undefined;
+    response: { skills: SkillTemplate[] };
+  };
+  'skill:getTemplate': {
+    request: { id: SkillId };
+    response: { skill: SkillTemplate };
+  };
+  'provider:updateRoles': {
+    request: {
+      providerId: string;
+      roles: RoleId[];
+      skill_overrides: Partial<Record<RoleId, string>> | null;
+    };
+    response: { provider: ProviderInfo };
   };
 
   // ── Chat / Conversation / Consensus / Session (v2) ──────────────

@@ -13,6 +13,9 @@ import { getEmbeddingModelsForProvider, getModelsForProvider } from '../../provi
 import { resolveOllamaEndpoint } from '../../providers/ollama-endpoint-resolver';
 import { getConfigService } from '../../config/instance';
 import { saveProvider, removeProvider } from '../../providers/provider-repository';
+import { SkillService } from '../../skills/skill-service';
+
+const skillService = new SkillService();
 
 /** Resolve an API key reference to the actual key value. */
 async function resolveApiKey(ref: string): Promise<string> {
@@ -106,6 +109,41 @@ export async function handleProviderListEmbeddingModels(
   }
   const defaultLocalEndpoint = resolveOllamaEndpoint(getConfigService().getSettings());
   return { models: await getEmbeddingModelsForProvider(data.type, data.key, apiKey, defaultLocalEndpoint) };
+}
+
+/**
+ * provider:updateRoles — R12-S 직원 능력 부여 갱신.
+ *
+ * SkillService.validateRoles 로 unknown / system-only 차단 후 saveProvider
+ * 로 upsert. registry 의 in-memory provider 인스턴스 필드도 동기화하여
+ * 다음 listAll() / toInfo() 가 새 값을 반영하도록 한다.
+ */
+export async function handleProviderUpdateRoles(
+  data: IpcRequest<'provider:updateRoles'>,
+): Promise<IpcResponse<'provider:updateRoles'>> {
+  const validatedRoles = skillService.validateRoles(data.roles);
+  const provider = providerRegistry.get(data.providerId);
+  if (!provider) {
+    throw new Error(
+      `[provider:updateRoles] provider not found: ${data.providerId}`,
+    );
+  }
+
+  saveProvider(
+    provider.id,
+    provider.type,
+    provider.displayName,
+    provider.persona,
+    provider.config,
+    validatedRoles,
+    data.skill_overrides,
+  );
+
+  // in-memory 동기화 — registry 재시작 없이 다음 toInfo() 반영.
+  provider.roles = validatedRoles;
+  provider.skill_overrides = data.skill_overrides;
+
+  return { provider: provider.toInfo() };
 }
 
 /**

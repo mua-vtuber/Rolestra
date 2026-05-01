@@ -25,7 +25,12 @@ import {
   handleProviderValidate,
   handleProviderListEmbeddingModels,
   handleProviderListModels,
+  handleProviderUpdateRoles,
 } from './handlers/provider-handler';
+import {
+  handleSkillList,
+  handleSkillGetTemplate,
+} from './handlers/skill-handler';
 import {
   handleExecutionPreview,
   handleExecutionListPending,
@@ -310,6 +315,12 @@ export function registerIpcHandlers(): void {
   handle('provider:detect-cli', isDev, () => handleProviderDetectCli());
   handle('provider:list-models', isDev, (data) => handleProviderListModels(data));
   handle('provider:list-embedding-models', isDev, (data) => handleProviderListEmbeddingModels(data));
+  // R12-S: 능력 부여 갱신 — SkillService 검증 + saveProvider upsert + registry 동기화.
+  handle('provider:updateRoles', isDev, (data) => handleProviderUpdateRoles(data));
+
+  // ── R12-S Skill catalog (read-only) ───────────────────────────────
+  handle('skill:list', isDev, () => handleSkillList());
+  handle('skill:getTemplate', isDev, (data) => handleSkillGetTemplate(data));
 
   // ── Execution ──────────────────────────────────────────────────────
   handle('execution:preview', isDev, (data) => handleExecutionPreview(data));

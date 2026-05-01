@@ -9,6 +9,7 @@
  */
 
 import { z } from 'zod';
+import { ALL_ROLE_IDS } from './role-types';
 
 /** Safe key pattern — alphanumeric, hyphens, underscores, dots. */
 const safeKeyPattern = /^[a-zA-Z0-9_.-]{1,128}$/;
@@ -66,6 +67,27 @@ export const criticalChannelSchemas = {
 
   'provider:remove': z.object({
     id: z.string().min(1).max(128),
+  }),
+
+  // ── R12-S 능력 부여 (페르소나/스킬 분리) ─────────────────────────
+  'skill:getTemplate': z.object({
+    id: z.union([
+      z.enum(ALL_ROLE_IDS as unknown as [string, ...string[]]),
+      z.literal('meeting-summary'),
+    ]),
+  }),
+
+  'provider:updateRoles': z.object({
+    providerId: z.string().min(1).max(128),
+    roles: z.array(
+      z.enum(ALL_ROLE_IDS as unknown as [string, ...string[]]),
+    ),
+    skill_overrides: z
+      .record(
+        z.enum(ALL_ROLE_IDS as unknown as [string, ...string[]]),
+        z.string().max(8192),
+      )
+      .nullable(),
   }),
 } as const;
 
