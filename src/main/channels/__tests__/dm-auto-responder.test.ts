@@ -12,12 +12,16 @@ const dmChannel: Channel = {
   kind: 'dm',
   readOnly: false,
   createdAt: 0,
+  role: null,
+  purpose: null,
+  handoffMode: 'check',
 };
 
 const dmMember: ChannelMember = {
   channelId: 'dm-1',
   projectId: null,
   providerId: 'p-claude',
+  dragOrder: null,
 };
 
 function mkChannelMessage(content: string): ChannelMessage {

@@ -241,6 +241,10 @@ export class ChannelService {
       kind: 'user',
       readOnly: false,
       createdAt: Date.now(),
+      // R12-C — Task 2 임시 default. Task 3 가 본격 (사용자 자유 채널 = role='general' 디폴트).
+      role: null,
+      purpose: null,
+      handoffMode: 'check',
     };
 
     try {
@@ -292,6 +296,10 @@ export class ChannelService {
       // `listByProject` matches the blueprint order even when the three
       // inserts happen within the same millisecond.
       createdAt: createdAt + idx,
+      // R12-C — Task 2 임시 default. system 채널은 role NULL.
+      role: null,
+      purpose: null,
+      handoffMode: 'check',
     }));
 
     try {
@@ -332,6 +340,10 @@ export class ChannelService {
       kind: 'dm',
       readOnly: false,
       createdAt: Date.now(),
+      // R12-C — Task 2 임시 default. DM 은 role NULL (부서 X).
+      role: null,
+      purpose: null,
+      handoffMode: 'check',
     };
 
     try {

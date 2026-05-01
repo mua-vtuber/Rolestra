@@ -8,6 +8,8 @@ import {
   type MeetingAutoTriggerDeps,
 } from '../meeting-auto-trigger';
 
+const R12C_DEFAULTS = { role: null, purpose: null, handoffMode: 'check' as const };
+
 const userChannel: Channel = {
   id: 'c-user',
   projectId: 'p-1',
@@ -15,6 +17,7 @@ const userChannel: Channel = {
   kind: 'user',
   readOnly: false,
   createdAt: 0,
+  ...R12C_DEFAULTS,
 };
 const dmChannel: Channel = {
   id: 'c-dm',
@@ -23,6 +26,7 @@ const dmChannel: Channel = {
   kind: 'dm',
   readOnly: false,
   createdAt: 0,
+  ...R12C_DEFAULTS,
 };
 const sysGeneralChannel: Channel = {
   id: 'c-sys-gen',
@@ -31,6 +35,7 @@ const sysGeneralChannel: Channel = {
   kind: 'system_general',
   readOnly: false,
   createdAt: 0,
+  ...R12C_DEFAULTS,
 };
 const sysApprovalChannel: Channel = {
   id: 'c-sys-app',
@@ -39,6 +44,7 @@ const sysApprovalChannel: Channel = {
   kind: 'system_approval',
   readOnly: true,
   createdAt: 0,
+  ...R12C_DEFAULTS,
 };
 const sysMinutesChannel: Channel = {
   id: 'c-sys-min',
@@ -47,6 +53,7 @@ const sysMinutesChannel: Channel = {
   kind: 'system_minutes',
   readOnly: true,
   createdAt: 0,
+  ...R12C_DEFAULTS,
 };
 
 function mkUserMessage(channelId: string, content: string): Message {

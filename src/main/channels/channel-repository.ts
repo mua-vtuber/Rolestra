@@ -72,6 +72,10 @@ function rowToChannel(row: ChannelRow): Channel {
     kind: row.kind,
     readOnly: row.read_only === 1,
     createdAt: row.created_at,
+    // R12-C — Task 2 임시 default. Task 3 에서 SELECT 가 4 컬럼 read 하도록 본격 갱신.
+    role: null,
+    purpose: null,
+    handoffMode: 'check',
   };
 }
 
@@ -80,6 +84,8 @@ function rowToMember(row: ChannelMemberRow): ChannelMember {
     channelId: row.channel_id,
     projectId: row.project_id,
     providerId: row.provider_id,
+    // R12-C — Task 2 임시 default. Task 3 에서 SELECT drag_order.
+    dragOrder: null,
   };
 }
 
