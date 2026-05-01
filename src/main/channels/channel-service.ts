@@ -47,6 +47,12 @@
 
 import { randomUUID } from 'node:crypto';
 import type { Channel, ChannelKind } from '../../shared/channel-types';
+import type {
+  ChannelPurpose,
+  ChannelRole,
+  HandoffMode,
+} from '../../shared/channel-role-types';
+import { DEFAULT_HANDOFF_MODE } from '../../shared/channel-role-types';
 import type { ProjectMember } from '../../shared/project-types';
 import { ChannelRepository } from './channel-repository';
 
@@ -215,6 +221,12 @@ export interface CreateUserChannelInput {
   projectId: string;
   name: string;
   memberProviderIds?: string[];
+  /** R12-C — 부서 매핑. 사용자 자유 채널 = null (기존), 부서 채널 = RoleId. */
+  role?: ChannelRole;
+  /** R12-C — 사용자 작성 자유 텍스트. */
+  purpose?: ChannelPurpose;
+  /** R12-C — 부서 인계 confirm 모드. 디폴트 'check'. */
+  handoffMode?: HandoffMode;
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -241,10 +253,10 @@ export class ChannelService {
       kind: 'user',
       readOnly: false,
       createdAt: Date.now(),
-      // R12-C — Task 2 임시 default. Task 3 가 본격 (사용자 자유 채널 = role='general' 디폴트).
-      role: null,
-      purpose: null,
-      handoffMode: 'check',
+      // R12-C — input 에 명시 시 우선, 없으면 NULL/check default.
+      role: input.role ?? null,
+      purpose: input.purpose ?? null,
+      handoffMode: input.handoffMode ?? DEFAULT_HANDOFF_MODE,
     };
 
     try {
@@ -487,5 +499,79 @@ export class ChannelService {
   /** Per-channel lookup. Returns `null` when `id` is unknown. */
   get(id: string): Channel | null {
     return this.repo.get(id);
+  }
+
+  // ── R12-C 신규 메서드 ─────────────────────────────────────────────────
+
+  /**
+   * R12-C — Update the channel's `role` field. Used when a user reassigns
+   * a channel to a different department or clears the role on a free user
+   * channel.
+   *
+   * @throws {ChannelNotFoundError} when `id` is unknown.
+   */
+  updateRole(id: string, role: ChannelRole): Channel {
+    const existing = this.repo.get(id);
+    if (!existing) throw new ChannelNotFoundError(id);
+    this.repo.update(id, { role });
+    const next = this.repo.get(id);
+    if (!next) {
+      throw new ChannelError(`updateRole: channel disappeared after update: ${id}`);
+    }
+    return next;
+  }
+
+  /**
+   * R12-C — Update the channel's `handoff_mode`. 'check' (디폴트) shows a
+   * confirm modal before the next department picks up the work; 'auto'
+   * skips confirmation.
+   *
+   * @throws {ChannelNotFoundError} when `id` is unknown.
+   */
+  updateHandoffMode(id: string, handoffMode: HandoffMode): Channel {
+    const existing = this.repo.get(id);
+    if (!existing) throw new ChannelNotFoundError(id);
+    this.repo.update(id, { handoffMode });
+    const next = this.repo.get(id);
+    if (!next) {
+      throw new ChannelError(
+        `updateHandoffMode: channel disappeared after update: ${id}`,
+      );
+    }
+    return next;
+  }
+
+  /**
+   * R12-C — Reorder participating members. `providerOrderedIds[i]` gets
+   * `drag_order = i`. Used as the fallback signal for the designated-worker
+   * resolver when no department-head pin is set.
+   *
+   * @throws {ChannelNotFoundError} when `channelId` is unknown.
+   * @throws Error when any provider in the list is not a current member.
+   */
+  reorderMembers(channelId: string, providerOrderedIds: string[]): void {
+    const existing = this.repo.get(channelId);
+    if (!existing) throw new ChannelNotFoundError(channelId);
+    this.repo.reorderMembers(channelId, providerOrderedIds);
+  }
+
+  /**
+   * R12-C — Returns the global general channel (project_id IS NULL,
+   * kind = 'system_general'). After migration 018 + ProjectService boot
+   * (`ensureGlobalGeneralChannel`) this row always exists.
+   *
+   * Throws when no row exists yet — callers should treat this as a boot
+   * sequencing bug rather than silently fall back to a per-project
+   * channel (would break the R12-C global-general invariant).
+   */
+  getGlobalGeneralChannel(): Channel {
+    const row = this.repo.getGlobalGeneralChannel();
+    if (!row) {
+      throw new ChannelError(
+        'getGlobalGeneralChannel: no global system_general row. ' +
+          'Did ensureGlobalGeneralChannel() run on app boot?',
+      );
+    }
+    return row;
   }
 }

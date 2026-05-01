@@ -498,4 +498,177 @@ describe('ChannelService', () => {
       expect(listed[4]!.id).toBe(uB.id);
     });
   });
+
+  // ── R12-C 신규 메서드 ──────────────────────────────────────────────
+
+  describe('R12-C: create() with role/purpose/handoffMode', () => {
+    it('persists role, purpose, handoff_mode when input includes them', async () => {
+      const project = await projectService.create({
+        name: 'R12C',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const ch = channelService.create({
+        projectId: project.id,
+        name: '기획-부서',
+        role: 'planning',
+        purpose: '기획안 작성 전용',
+        handoffMode: 'auto',
+      });
+      expect(ch.role).toBe('planning');
+      expect(ch.purpose).toBe('기획안 작성 전용');
+      expect(ch.handoffMode).toBe('auto');
+      const reread = channelService.get(ch.id)!;
+      expect(reread.role).toBe('planning');
+      expect(reread.purpose).toBe('기획안 작성 전용');
+      expect(reread.handoffMode).toBe('auto');
+    });
+
+    it('falls back to null role / null purpose / check handoffMode when input omits them', async () => {
+      const project = await projectService.create({
+        name: 'R12C-default',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const ch = channelService.create({
+        projectId: project.id,
+        name: '자유',
+      });
+      expect(ch.role).toBeNull();
+      expect(ch.purpose).toBeNull();
+      expect(ch.handoffMode).toBe('check');
+    });
+  });
+
+  describe('R12-C: updateRole', () => {
+    it('changes the role and returns the updated row', async () => {
+      const project = await projectService.create({
+        name: 'P',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const ch = channelService.create({ projectId: project.id, name: 'c1' });
+      const updated = channelService.updateRole(ch.id, 'idea');
+      expect(updated.role).toBe('idea');
+      const reread = channelService.get(ch.id)!;
+      expect(reread.role).toBe('idea');
+    });
+
+    it('clears the role when null is passed', async () => {
+      const project = await projectService.create({
+        name: 'P',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const ch = channelService.create({
+        projectId: project.id,
+        name: 'c1',
+        role: 'review',
+      });
+      channelService.updateRole(ch.id, null);
+      const reread = channelService.get(ch.id)!;
+      expect(reread.role).toBeNull();
+    });
+
+    it('throws ChannelNotFoundError on unknown id', () => {
+      expect(() => channelService.updateRole('unknown-id', 'idea')).toThrow(
+        ChannelNotFoundError,
+      );
+    });
+  });
+
+  describe('R12-C: updateHandoffMode', () => {
+    it('flips check → auto and back', async () => {
+      const project = await projectService.create({
+        name: 'P',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      const ch = channelService.create({ projectId: project.id, name: 'c1' });
+      expect(ch.handoffMode).toBe('check');
+      const a = channelService.updateHandoffMode(ch.id, 'auto');
+      expect(a.handoffMode).toBe('auto');
+      const b = channelService.updateHandoffMode(ch.id, 'check');
+      expect(b.handoffMode).toBe('check');
+    });
+
+    it('throws ChannelNotFoundError on unknown id', () => {
+      expect(() =>
+        channelService.updateHandoffMode('unknown-id', 'auto'),
+      ).toThrow(ChannelNotFoundError);
+    });
+  });
+
+  describe('R12-C: reorderMembers', () => {
+    it('assigns drag_order = 0..N-1 in the given provider order', async () => {
+      const project = await projectService.create({
+        name: 'P',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      seedProvider(db, 'p-a');
+      seedProvider(db, 'p-b');
+      seedProvider(db, 'p-c');
+      projectService.addMember(project.id, 'p-a');
+      projectService.addMember(project.id, 'p-b');
+      projectService.addMember(project.id, 'p-c');
+      const ch = channelService.create({
+        projectId: project.id,
+        name: 'team',
+        memberProviderIds: ['p-a', 'p-b', 'p-c'],
+      });
+      channelService.reorderMembers(ch.id, ['p-c', 'p-a', 'p-b']);
+      const members = channelService.listMembers(ch.id);
+      // listMembers orders by drag_order ASC then provider_id ASC
+      expect(members.map((m) => m.providerId)).toEqual(['p-c', 'p-a', 'p-b']);
+      expect(members.map((m) => m.dragOrder)).toEqual([0, 1, 2]);
+    });
+
+    it('throws when an id in the order is not a current member', async () => {
+      const project = await projectService.create({
+        name: 'P',
+        kind: 'new',
+        permissionMode: 'hybrid',
+      });
+      seedProvider(db, 'p-a');
+      projectService.addMember(project.id, 'p-a');
+      const ch = channelService.create({
+        projectId: project.id,
+        name: 'team',
+        memberProviderIds: ['p-a'],
+      });
+      expect(() =>
+        channelService.reorderMembers(ch.id, ['p-a', 'p-not-a-member']),
+      ).toThrow(/not a member/);
+    });
+
+    it('throws ChannelNotFoundError on unknown channel id', () => {
+      expect(() =>
+        channelService.reorderMembers('unknown-id', []),
+      ).toThrow(ChannelNotFoundError);
+    });
+  });
+
+  describe('R12-C: getGlobalGeneralChannel', () => {
+    it('throws when no global general row exists yet', () => {
+      // beforeEach ran migration 018 — system_general consolidation deleted
+      // any pre-existing rows. No ensureGlobalGeneralChannel was called.
+      expect(() => channelService.getGlobalGeneralChannel()).toThrow(
+        /no global system_general row/,
+      );
+    });
+
+    it('returns the row after one is inserted with project_id NULL', () => {
+      db.prepare(
+        `INSERT INTO channels
+           (id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode)
+         VALUES (?, NULL, ?, 'system_general', 0, ?, NULL, NULL, 'check')`,
+      ).run('global-general', '#일반', 1700000000000);
+      const ch = channelService.getGlobalGeneralChannel();
+      expect(ch.id).toBe('global-general');
+      expect(ch.projectId).toBeNull();
+      expect(ch.kind).toBe('system_general');
+      expect(ch.handoffMode).toBe('check');
+    });
+  });
 });

@@ -1,6 +1,7 @@
 /**
  * ChannelRepository — thin data-access layer over the `channels` +
- * `channel_members` tables introduced in migration 003-channels.
+ * `channel_members` tables introduced in migration 003-channels +
+ * 018-channels-role-purpose-handoff (R12-C 채널 역할).
  *
  * Responsibilities:
  *   - Map the SQL snake_case columns to the shared camelCase `Channel` /
@@ -9,6 +10,9 @@
  *     atomic transactions. No filesystem work, no policy logic.
  *   - Preserve the `read_only` INTEGER ↔ boolean mapping at the boundary
  *     so the rest of the codebase sees a proper boolean.
+ *   - R12-C: `role` / `purpose` / `handoff_mode` (channels) + `drag_order`
+ *     (channel_members) round-trip + parseRole / parseHandoffMode throw
+ *     on unknown values (silent fallback 금지).
  *
  * Update safety:
  *   `update(id, patch)` whitelists the columns a caller may change. `id` /
@@ -23,6 +27,13 @@ import type {
   ChannelKind,
   ChannelMember,
 } from '../../shared/channel-types';
+import type {
+  ChannelPurpose,
+  ChannelRole,
+  HandoffMode,
+} from '../../shared/channel-role-types';
+import { isHandoffMode } from '../../shared/channel-role-types';
+import { isRoleId } from '../../shared/role-types';
 
 /** Snake-case row shape as returned by better-sqlite3. */
 interface ChannelRow {
@@ -32,19 +43,29 @@ interface ChannelRow {
   kind: ChannelKind;
   read_only: number; // 0|1
   created_at: number;
+  role: string | null;
+  purpose: string | null;
+  handoff_mode: string;
 }
 
 interface ChannelMemberRow {
   channel_id: string;
   project_id: string | null;
   provider_id: string;
+  drag_order: number | null;
 }
 
 /**
  * Columns `update()` is allowed to mutate. Everything else — `id`,
  * `project_id`, `kind`, `created_at` — stays read-only after insertion.
  */
-const _UPDATABLE_COLUMNS = ['name', 'read_only'] as const;
+const _UPDATABLE_COLUMNS = [
+  'name',
+  'read_only',
+  'role',
+  'purpose',
+  'handoff_mode',
+] as const;
 
 type UpdatableColumn = (typeof _UPDATABLE_COLUMNS)[number];
 
@@ -52,17 +73,46 @@ type UpdatableColumn = (typeof _UPDATABLE_COLUMNS)[number];
 export interface ChannelUpdatePatch {
   name?: string;
   readOnly?: boolean;
+  role?: ChannelRole;
+  purpose?: ChannelPurpose;
+  handoffMode?: HandoffMode;
 }
 
 /**
  * camelCase patch key → snake_case column. Kept in sync with
- * `UPDATABLE_COLUMNS`. Any camelCase key not in this map is silently
+ * `_UPDATABLE_COLUMNS`. Any camelCase key not in this map is silently
  * dropped by `update()` — defence in depth if the TS type is bypassed.
  */
 const PATCH_KEY_TO_COLUMN: Record<keyof ChannelUpdatePatch, UpdatableColumn> = {
   name: 'name',
   readOnly: 'read_only',
+  role: 'role',
+  purpose: 'purpose',
+  handoffMode: 'handoff_mode',
 };
+
+/** SELECT projection — keep in sync between get/listByProject/listDms/getDmByProvider/getGlobalGeneralChannel. */
+const CHANNEL_COLUMNS =
+  'id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode';
+
+const MEMBER_COLUMNS = 'channel_id, project_id, provider_id, drag_order';
+
+function parseRole(raw: string | null, channelId: string): ChannelRole {
+  if (raw === null) return null;
+  if (isRoleId(raw)) return raw;
+  throw new Error(
+    `ChannelRepository: unknown role '${raw}' for channel '${channelId}'. ` +
+      `Add to RoleId union or migrate row.`,
+  );
+}
+
+function parseHandoffMode(raw: string, channelId: string): HandoffMode {
+  if (isHandoffMode(raw)) return raw;
+  throw new Error(
+    `ChannelRepository: unknown handoff_mode '${raw}' for channel '${channelId}'. ` +
+      `Allowed: 'check' | 'auto'.`,
+  );
+}
 
 function rowToChannel(row: ChannelRow): Channel {
   return {
@@ -72,10 +122,9 @@ function rowToChannel(row: ChannelRow): Channel {
     kind: row.kind,
     readOnly: row.read_only === 1,
     createdAt: row.created_at,
-    // R12-C — Task 2 임시 default. Task 3 에서 SELECT 가 4 컬럼 read 하도록 본격 갱신.
-    role: null,
-    purpose: null,
-    handoffMode: 'check',
+    role: parseRole(row.role, row.id),
+    purpose: row.purpose,
+    handoffMode: parseHandoffMode(row.handoff_mode, row.id),
   };
 }
 
@@ -84,8 +133,7 @@ function rowToMember(row: ChannelMemberRow): ChannelMember {
     channelId: row.channel_id,
     projectId: row.project_id,
     providerId: row.provider_id,
-    // R12-C — Task 2 임시 default. Task 3 에서 SELECT drag_order.
-    dragOrder: null,
+    dragOrder: row.drag_order,
   };
 }
 
@@ -105,10 +153,7 @@ export class ChannelRepository {
   /** Returns the channel row, or `null` when the id is unknown. */
   get(id: string): Channel | null {
     const row = this.db
-      .prepare(
-        `SELECT id, project_id, name, kind, read_only, created_at
-         FROM channels WHERE id = ?`,
-      )
+      .prepare(`SELECT ${CHANNEL_COLUMNS} FROM channels WHERE id = ?`)
       .get(id) as ChannelRow | undefined;
     return row ? rowToChannel(row) : null;
   }
@@ -124,7 +169,7 @@ export class ChannelRepository {
   listByProject(projectId: string): Channel[] {
     const rows = this.db
       .prepare(
-        `SELECT id, project_id, name, kind, read_only, created_at,
+        `SELECT ${CHANNEL_COLUMNS},
                 CASE kind
                   WHEN 'system_general'  THEN 0
                   WHEN 'system_approval' THEN 1
@@ -144,7 +189,7 @@ export class ChannelRepository {
   listDms(): Channel[] {
     const rows = this.db
       .prepare(
-        `SELECT id, project_id, name, kind, read_only, created_at
+        `SELECT ${CHANNEL_COLUMNS}
          FROM channels
          WHERE project_id IS NULL AND kind = 'dm'
          ORDER BY created_at ASC`,
@@ -161,7 +206,10 @@ export class ChannelRepository {
   getDmByProvider(providerId: string): Channel | null {
     const row = this.db
       .prepare(
-        `SELECT c.id, c.project_id, c.name, c.kind, c.read_only, c.created_at
+        `SELECT ${CHANNEL_COLUMNS
+          .split(', ')
+          .map((c) => `c.${c}`)
+          .join(', ')}
          FROM channels c
          JOIN channel_members cm ON cm.channel_id = c.id
          WHERE c.project_id IS NULL
@@ -169,6 +217,24 @@ export class ChannelRepository {
            AND cm.provider_id = ?`,
       )
       .get(providerId) as ChannelRow | undefined;
+    return row ? rowToChannel(row) : null;
+  }
+
+  /**
+   * R12-C — Returns the global general channel (project_id IS NULL,
+   * kind = 'system_general'). After migration 018 there is at most one
+   * such row. Returns null when none exists yet (app boot before
+   * `ensureGlobalGeneralChannel`).
+   */
+  getGlobalGeneralChannel(): Channel | null {
+    const row = this.db
+      .prepare(
+        `SELECT ${CHANNEL_COLUMNS}
+         FROM channels
+         WHERE project_id IS NULL AND kind = 'system_general'
+         LIMIT 1`,
+      )
+      .get() as ChannelRow | undefined;
     return row ? rowToChannel(row) : null;
   }
 
@@ -181,8 +247,9 @@ export class ChannelRepository {
   insert(channel: Channel): void {
     this.db
       .prepare(
-        `INSERT INTO channels (id, project_id, name, kind, read_only, created_at)
-         VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO channels
+           (id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         channel.id,
@@ -191,6 +258,9 @@ export class ChannelRepository {
         channel.kind,
         channel.readOnly ? 1 : 0,
         channel.createdAt,
+        channel.role,
+        channel.purpose,
+        channel.handoffMode,
       );
   }
 
@@ -275,16 +345,47 @@ export class ChannelRepository {
     return result.changes > 0;
   }
 
-  /** Lists members of `channelId`. Order is by `provider_id` for stability. */
+  /**
+   * Lists members of `channelId`. R12-C: ordered by `drag_order` ASC
+   * with NULLS LAST (unset members go to the bottom), then `provider_id`
+   * for stability. SQLite has no NULLS LAST keyword so we use the
+   * `(drag_order IS NULL) ASC` trick.
+   */
   listMembers(channelId: string): ChannelMember[] {
     const rows = this.db
       .prepare(
-        `SELECT channel_id, project_id, provider_id
+        `SELECT ${MEMBER_COLUMNS}
          FROM channel_members
          WHERE channel_id = ?
-         ORDER BY provider_id ASC`,
+         ORDER BY (drag_order IS NULL) ASC, drag_order ASC, provider_id ASC`,
       )
       .all(channelId) as ChannelMemberRow[];
     return rows.map(rowToMember);
+  }
+
+  /**
+   * R12-C — Reorders members atomically. `providerOrderedIds[i]` gets
+   * `drag_order = i`. Members not in the list have their `drag_order`
+   * left untouched (caller passes the full ordered list).
+   *
+   * Throws when any provider in the list is not a current member of
+   * the channel (prevents silent drift between UI state and DB).
+   */
+  reorderMembers(channelId: string, providerOrderedIds: string[]): void {
+    const stmt = this.db.prepare(
+      `UPDATE channel_members
+          SET drag_order = ?
+        WHERE channel_id = ? AND provider_id = ?`,
+    );
+    this.transaction(() => {
+      providerOrderedIds.forEach((providerId, idx) => {
+        const result = stmt.run(idx, channelId, providerId);
+        if (result.changes === 0) {
+          throw new Error(
+            `ChannelRepository.reorderMembers: provider '${providerId}' is not a member of channel '${channelId}'`,
+          );
+        }
+      });
+    });
   }
 }
