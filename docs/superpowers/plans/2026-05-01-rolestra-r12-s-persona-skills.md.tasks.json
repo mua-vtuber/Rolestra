@@ -4,13 +4,13 @@
     {
       "id": 0,
       "subject": "Task 0: Spec §3 능력 카탈로그 갱신 (5 → 10)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** 사용자 결정 반영 — spec §3 카탈로그 5개 → 10개 (디자인 4분할 + general + system meeting-summary). §11.5 회의록 정리 디폴트 자동 선택 로직 추가, §11.7 R12-S task 항목 추가.\n\n**Files:**\n- Modify: docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md\n\n**Acceptance Criteria:**\n- §3 카탈로그 표 10 행, roles 예시 다중 선택, 부서 템플릿 8개 단락 추가\n- §11.5 자동 선택 4단계 단락 추가\n- §11.7 회의록 정리 모델 + agestra reference 두 항목 추가\n\n**Verify:** git diff --stat 으로 1 file changed, 30~40 insertions 확인\n\n```json:metadata\n{\"files\": [\"docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md\"], \"verifyCommand\": \"git diff --stat docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md\", \"acceptanceCriteria\": [\"§3 카탈로그 10행\", \"§11.5 자동 선택 4단계\", \"§11.7 추가 task 두 줄\"]}\n```"
     },
     {
       "id": 1,
       "subject": "Task 1: DB Migration 017 — providers.roles + skill_overrides",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [0],
       "description": "**Goal:** providers ALTER — roles TEXT NOT NULL DEFAULT '[]' + skill_overrides TEXT NULL. Forward-only, chain-level idempotency.\n\n**Files:**\n- Create: src/main/database/migrations/017-providers-roles-skills.ts\n- Modify: src/main/database/migrations/index.ts\n- Test: src/main/database/__tests__/migrator.test.ts\n\n**Verify:** npx vitest run src/main/database/__tests__/migrator.test.ts → all PASS, PRAGMA table_info 에 두 컬럼 확인\n\n```json:metadata\n{\"files\": [\"src/main/database/migrations/017-providers-roles-skills.ts\", \"src/main/database/migrations/index.ts\", \"src/main/database/__tests__/migrator.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/database/__tests__/migrator.test.ts\", \"acceptanceCriteria\": [\"017 migration export\", \"index 등록\", \"PRAGMA 두 컬럼 확인\", \"INSERT default '[]' / NULL\"]}\n```"
     },
@@ -92,5 +92,5 @@
       "description": "**Goal:** ADR 작성 (결정 5건), 구현-현황.md R12-S 표 추가, 메모리 phase-status / r12-channel-roles-design 갱신, r12-s-completion 메모리 신규 작성. 최종 회귀 + push.\n\n**Files:**\n- Create: docs/아키텍처-결정-기록/r12-s-persona-skills.md\n- Modify: docs/구현-현황.md\n- Modify: ~/.claude/projects/.../memory/rolestra-phase-status.md\n- Modify: ~/.claude/projects/.../memory/rolestra-r12-channel-roles-design.md\n- Create: ~/.claude/projects/.../memory/rolestra-r12-s-completion.md\n\n**Verify:** npm run typecheck && npm run lint && npx vitest run → 모두 통과 + git log oneline 으로 12+ commit 확인 + git push origin main\n\n```json:metadata\n{\"files\": [\"docs/아키텍처-결정-기록/r12-s-persona-skills.md\", \"docs/구현-현황.md\"], \"verifyCommand\": \"npm run typecheck && npm run lint && npx vitest run\", \"acceptanceCriteria\": [\"ADR 결정 5건\", \"구현현황 R12-S 표\", \"phase-status 갱신\", \"r12-s-completion 메모리\", \"R12-C 진입 가이드\", \"전체 회귀 PASS\", \"push 완료\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-01T00:00:00Z"
+  "lastUpdated": "2026-05-01T21:30:00Z"
 }
