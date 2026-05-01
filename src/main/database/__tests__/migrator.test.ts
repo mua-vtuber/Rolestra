@@ -184,4 +184,40 @@ describe('runMigrations (injected DB + chain)', () => {
       .get() as { name: string } | undefined;
     expect(tableRow).toBeUndefined();
   });
+
+  it('migration 017 adds roles + skill_overrides columns with correct defaults', () => {
+    runMigrations(db, liveChain);
+
+    const cols = db.prepare('PRAGMA table_info(providers)').all() as Array<{
+      name: string;
+      dflt_value: string | null;
+      notnull: number;
+    }>;
+    const colNames = cols.map((c) => c.name);
+    expect(colNames).toContain('roles');
+    expect(colNames).toContain('skill_overrides');
+
+    // Verify column constraints
+    const rolesCol = cols.find((c) => c.name === 'roles');
+    const skillCol = cols.find((c) => c.name === 'skill_overrides');
+
+    expect(rolesCol?.dflt_value).toBe("'[]'");
+    expect(rolesCol?.notnull).toBe(1); // NOT NULL
+    expect(skillCol?.notnull).toBe(0); // nullable
+
+    // INSERT and verify default values
+    db.prepare(
+      `INSERT INTO providers (id, display_name, kind, config_json, persona, created_at, updated_at)
+       VALUES ('test-provider-1', 'Test Provider', 'api', '{}', 'Test Persona', unixepoch(), unixepoch())`,
+    ).run();
+
+    const row = db
+      .prepare('SELECT roles, skill_overrides FROM providers WHERE id = ?')
+      .get('test-provider-1') as {
+      roles: string;
+      skill_overrides: string | null;
+    };
+    expect(row.roles).toBe('[]');
+    expect(row.skill_overrides).toBeNull();
+  });
 });
