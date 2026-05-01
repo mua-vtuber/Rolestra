@@ -33,7 +33,7 @@ D-A batch 2 dogfooding 에서 다음 한계가 드러남:
 | Phase | 내용 | 추정 |
 |-------|------|------|
 | **R12-S** | 페르소나 / 스킬 분리 (provider 데이터 모델) | 5~7 일 |
-| **R12-C** | 채널 역할 (idea / plan / design / implement / review / general) | 7~10 일 |
+| **R12-C** | 채널 역할 (idea / planning / design / implement / review / general) | 7~10 일 |
 | **D-B** | 구조화된 합의 (의견 + vote + 협의) — 기획 부서 흐름 | 17~28 일 |
 | **R12-H** | 방 간 인계 (E 작업 통합) — 작업 모드 deprecate 종결 | 10~15 일 |
 | **합계** | | **40~60 일** |
@@ -186,7 +186,7 @@ R12-C 진입 시:
 ### auto-trigger vs 인계 trigger 분기
 
 - **auto-trigger**: 사용자가 채널 메시지 입력 → 회의 자동 시작 (현재 D-A T4/T5 흐름).
-  - 적용: idea, plan, general
+  - 적용: idea, planning, general
 - **인계 trigger**: 다른 부서가 의뢰 → 부서가 받아서 작업 시작.
   - 적용: design.*, implement, review
   - 사용자 직접 트리거 안 됨 (의도된 제약 — 인계 chain 통해서만)
