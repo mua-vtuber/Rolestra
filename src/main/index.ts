@@ -31,7 +31,12 @@ import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
 import { ChannelService } from './channels/channel-service';
 import { ProjectService } from './projects/project-service';
-import { setProjectServiceAccessor } from './ipc/handlers/project-handler';
+import {
+  setProjectServiceAccessor,
+  setProjectSkillSyncAccessor,
+  setProjectHandlerArenaRootAccessor,
+} from './ipc/handlers/project-handler';
+import { ProjectSkillSyncService } from './skills/project-skill-sync-service';
 import {
   setChannelServiceAccessor,
   setMeetingServiceAccessor,
@@ -308,6 +313,11 @@ app.whenReady().then(async () => {
     });
     setProjectServiceAccessor(() => projectService);
     setChannelServiceAccessor(() => channelService);
+
+    // R12-C Task 6 — SKILL.md auto-sync service
+    const projectSkillSyncService = new ProjectSkillSyncService();
+    setProjectSkillSyncAccessor(() => projectSkillSyncService);
+    setProjectHandlerArenaRootAccessor(() => arenaRoot);
     setMeetingServiceAccessor(() => meetingService);
 
     // R7-Task3: ApprovalCliAdapter — single shared instance. Stateless

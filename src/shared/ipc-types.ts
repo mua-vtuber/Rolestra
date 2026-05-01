@@ -484,6 +484,20 @@ export type IpcChannelMap = {
     request: { id: string };
     response: { success: true };
   };
+  /**
+   * R12-C — Materialise SKILL.md files (9 employee roles × 2 roots
+   * `.claude/skills` + `.agents/skills`) under the project directory.
+   * Idempotent — safe to call repeatedly; user-customised files are
+   * skipped unless `force=true`.
+   */
+  'project:syncSkills': {
+    request: { id: string; force?: boolean };
+    response: {
+      written: number;
+      unchanged: number;
+      skipped: number;
+    };
+  };
   'project:open': {
     request: { id: string };
     response: { success: true };

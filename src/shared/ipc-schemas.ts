@@ -195,6 +195,12 @@ export const projectUpdateSchema = z.object({
     }),
 });
 
+/** R12-C — project:syncSkills request schema. */
+export const projectSyncSkillsSchema = z.object({
+  id: z.string().min(1).max(128),
+  force: z.boolean().optional(),
+});
+
 export const projectSetAutonomySchema = z.object({
   id: z.string().min(1).max(128),
   mode: autonomyModeSchema,
@@ -616,6 +622,7 @@ export const v3ChannelSchemas = {
   'project:set-autonomy': projectSetAutonomySchema,
   'project:request-permission-mode-change':
     projectRequestPermissionModeChangeSchema,
+  'project:syncSkills': projectSyncSkillsSchema,
   'channel:create': channelCreateSchema,
   'channel:rename': channelRenameSchema,
   'channel:add-members': channelMembersPatchSchema,

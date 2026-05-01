@@ -22,11 +22,28 @@ import { dialog } from 'electron';
 
 import type { IpcResponse, IpcRequest } from '../../../shared/ipc-types';
 import type { ProjectService } from '../../projects/project-service';
+import type { ProjectSkillSyncService } from '../../skills/project-skill-sync-service';
+import { resolveProjectPaths } from '../../arena/resolve-project-paths';
+import type { ArenaRootService } from '../../arena/arena-root-service';
 
 let projectAccessor: (() => ProjectService) | null = null;
+let skillSyncAccessor: (() => ProjectSkillSyncService) | null = null;
+let arenaRootAccessor: (() => ArenaRootService) | null = null;
 
 export function setProjectServiceAccessor(fn: () => ProjectService): void {
   projectAccessor = fn;
+}
+
+export function setProjectSkillSyncAccessor(
+  fn: () => ProjectSkillSyncService,
+): void {
+  skillSyncAccessor = fn;
+}
+
+export function setProjectHandlerArenaRootAccessor(
+  fn: () => ArenaRootService,
+): void {
+  arenaRootAccessor = fn;
 }
 
 function getService(): ProjectService {
@@ -151,4 +168,38 @@ export function handleProjectRequestPermissionModeChange(
     data.reason,
   );
   return { approval };
+}
+
+/**
+ * R12-C — project:syncSkills — Materialise SKILL.md files for the
+ * project. Resolves projectId → absolute project root via
+ * resolveProjectPaths, then delegates to ProjectSkillSyncService.
+ */
+export async function handleProjectSyncSkills(
+  data: IpcRequest<'project:syncSkills'>,
+): Promise<IpcResponse<'project:syncSkills'>> {
+  if (!skillSyncAccessor) {
+    throw new Error('project handler: skill sync service not initialized');
+  }
+  if (!arenaRootAccessor) {
+    throw new Error('project handler: arena root service not initialized');
+  }
+  const project = getService().get(data.id);
+  if (!project) {
+    throw new Error(`project:syncSkills — unknown project id '${data.id}'`);
+  }
+  const paths = resolveProjectPaths(project, arenaRootAccessor().getPath());
+  // cwdPath = where the user runs Claude Code / Codex / Gemini CLI;
+  // SKILL.md auto-loaders look there.
+  const result = await skillSyncAccessor().syncProjectSkills(
+    paths.cwdPath,
+    {
+      force: data.force ?? false,
+    },
+  );
+  return {
+    written: result.written.length,
+    unchanged: result.unchanged.length,
+    skipped: result.skipped.length,
+  };
 }

@@ -107,6 +107,7 @@ import {
   handleProjectOpen,
   handleProjectSetAutonomy,
   handleProjectRequestPermissionModeChange,
+  handleProjectSyncSkills,
 } from './handlers/project-handler';
 import {
   handleChannelList,
@@ -416,6 +417,7 @@ export function registerIpcHandlers(): void {
     isDev,
     (data) => handleProjectRequestPermissionModeChange(data),
   );
+  handle('project:syncSkills', isDev, (data) => handleProjectSyncSkills(data));
 
   // ── v3: Channel ─────────────────────────────────────────────────
   handle('channel:list', isDev, (data) => handleChannelList(data));
