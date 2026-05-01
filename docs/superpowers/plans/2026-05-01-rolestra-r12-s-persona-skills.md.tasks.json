@@ -80,17 +80,17 @@
     {
       "id": 11,
       "subject": "Task 11: 회의록 정리 모델 설정 UI 카드",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [10],
       "description": "**Goal:** SummaryModelCard — 자동 / 특정 모델 라디오 + 드롭다운 (summarize capable provider 만). use-summary-model hook + IPC settings:getResolvedSummaryModel.\n\n**Files:**\n- Create: src/renderer/features/settings/SummaryModelCard.tsx\n- Create: src/renderer/hooks/use-summary-model.ts\n- Modify: src/renderer/features/settings/SettingsPage.tsx\n- Modify: src/renderer/i18n/locales/ko/settings.json, en/settings.json\n- Modify: src/main/ipc/handlers/settings-handler.ts, src/main/ipc/router.ts (getResolvedSummaryModel 추가)\n\n**Verify:** npm run lint && npm run typecheck → 0 error + manual smoke (라디오 토글 / 드롭다운 선택 / 저장 후 새로고침 유지)\n\n```json:metadata\n{\"files\": [\"src/renderer/features/settings/SummaryModelCard.tsx\", \"src/renderer/hooks/use-summary-model.ts\", \"src/renderer/features/settings/SettingsPage.tsx\", \"src/renderer/i18n/locales/ko/settings.json\", \"src/renderer/i18n/locales/en/settings.json\", \"src/main/ipc/handlers/settings-handler.ts\", \"src/main/ipc/router.ts\"], \"verifyCommand\": \"npm run lint && npm run typecheck\", \"acceptanceCriteria\": [\"SummaryModelCard 컴포넌트\", \"자동 / 특정 라디오\", \"summarize capable 드롭다운\", \"settings:getResolvedSummaryModel IPC\", \"i18n ko/en\", \"manual smoke PASS\"]}\n```"
     },
     {
       "id": 12,
       "subject": "Task 12: ADR + 구현현황 + 메모리 + Closeout",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8, 11],
       "description": "**Goal:** ADR 작성 (결정 5건), 구현-현황.md R12-S 표 추가, 메모리 phase-status / r12-channel-roles-design 갱신, r12-s-completion 메모리 신규 작성. 최종 회귀 + push.\n\n**Files:**\n- Create: docs/아키텍처-결정-기록/r12-s-persona-skills.md\n- Modify: docs/구현-현황.md\n- Modify: ~/.claude/projects/.../memory/rolestra-phase-status.md\n- Modify: ~/.claude/projects/.../memory/rolestra-r12-channel-roles-design.md\n- Create: ~/.claude/projects/.../memory/rolestra-r12-s-completion.md\n\n**Verify:** npm run typecheck && npm run lint && npx vitest run → 모두 통과 + git log oneline 으로 12+ commit 확인 + git push origin main\n\n```json:metadata\n{\"files\": [\"docs/아키텍처-결정-기록/r12-s-persona-skills.md\", \"docs/구현-현황.md\"], \"verifyCommand\": \"npm run typecheck && npm run lint && npx vitest run\", \"acceptanceCriteria\": [\"ADR 결정 5건\", \"구현현황 R12-S 표\", \"phase-status 갱신\", \"r12-s-completion 메모리\", \"R12-C 진입 가이드\", \"전체 회귀 PASS\", \"push 완료\"]}\n```"
     }
   ],
-  "lastUpdated": "2026-05-01T22:25:00Z"
+  "lastUpdated": "2026-05-02T00:42:00Z"
 }
