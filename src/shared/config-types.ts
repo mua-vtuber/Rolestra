@@ -123,6 +123,13 @@ export interface SettingsConfig {
    * Updates flow through `config:update-settings` like any other key.
    */
   llmCostUsdPerMillionTokens: Record<string, number>;
+  /**
+   * R12-S Task 9: 회의록 자동 정리에 사용할 provider id.
+   * - null = 자동 선택 (Haiku → Flash → 기타 summarize-capable api/cli → Ollama).
+   * - 그 외 = 사용자 명시. registry 에 없으면 정리 skip,
+   *   summarize capability 가 없으면 MeetingSummaryService 가 throw (loud).
+   */
+  summaryModelProviderId: string | null;
 }
 
 /** Default settings values. */
@@ -144,6 +151,7 @@ export const DEFAULT_SETTINGS: SettingsConfig = {
   arenaRoot: '',
   ollamaEndpoint: '',
   llmCostUsdPerMillionTokens: {},
+  summaryModelProviderId: null,
 };
 
 // ── Secrets Layer ──────────────────────────────────────────────────

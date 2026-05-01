@@ -57,6 +57,7 @@ import {
   handleConfigDeleteSecret,
   handleConfigListSecretKeys,
   handleConfigTakeStartupDiagnostics,
+  handleSettingsSetSummaryModel,
 } from './handlers/config-handler';
 import {
   handleRecoveryList,
@@ -367,6 +368,8 @@ export function registerIpcHandlers(): void {
   handle('config:delete-secret', isDev, (data) => handleConfigDeleteSecret(data));
   handle('config:list-secret-keys', isDev, () => handleConfigListSecretKeys());
   handle('config:take-startup-diagnostics', isDev, () => handleConfigTakeStartupDiagnostics());
+  // R12-S Task 9: 회의록 자동 정리 모델 명시 갱신.
+  handle('settings:setSummaryModel', isDev, (data) => handleSettingsSetSummaryModel(data));
 
   // ── Recovery ───────────────────────────────────────────────────────
   handle('recovery:list', isDev, () => handleRecoveryList());

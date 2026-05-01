@@ -89,6 +89,10 @@ export const criticalChannelSchemas = {
       )
       .nullable(),
   }),
+
+  'settings:setSummaryModel': z.object({
+    providerId: z.string().min(1).max(128).nullable(),
+  }),
 } as const;
 
 // ──────────────────────────────────────────────────────────────────

@@ -59,7 +59,7 @@
     {
       "id": 8,
       "subject": "Task 8: 직원 편집 모달 캐릭터/역할+스킬 탭 분리",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
       "description": "**Goal:** Radix Tabs 2개 (character / roles-skills). RolesSkillsTab — 9 RoleId chip 다중 선택 + role 별 prompt customize textarea. use-skill-catalog hook (zustand cache + 1회 fetch). 저장 시 provider:update + provider:updateRoles 분리 호출. i18n ko/en.\n\n**Files:**\n- Modify: src/renderer/features/settings/StaffEditModal.tsx\n- Create: src/renderer/features/settings/RolesSkillsTab.tsx\n- Create: src/renderer/hooks/use-skill-catalog.ts\n- Modify: src/renderer/i18n/locales/ko/settings.json, src/renderer/i18n/locales/en/settings.json\n\n**Verify:** npm run lint && npm run typecheck → 0 error / 0 i18next warning + manual smoke (탭 토글 / chip 다중 선택 / customize 저장 / 재오픈 유지)\n\n```json:metadata\n{\"files\": [\"src/renderer/features/settings/StaffEditModal.tsx\", \"src/renderer/features/settings/RolesSkillsTab.tsx\", \"src/renderer/hooks/use-skill-catalog.ts\", \"src/renderer/i18n/locales/ko/settings.json\", \"src/renderer/i18n/locales/en/settings.json\"], \"verifyCommand\": \"npm run lint && npm run typecheck\", \"acceptanceCriteria\": [\"Radix Tabs 2개\", \"RoleId chip 다중 선택\", \"role 별 customize textarea\", \"use-skill-catalog 1회 fetch + cache\", \"provider:updateRoles 호출\", \"i18n ko/en\", \"manual smoke PASS\"]}\n```"
     },

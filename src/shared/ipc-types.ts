@@ -364,6 +364,11 @@ export type IpcChannelMap = {
     request: undefined;
     response: { keys: string[] };
   };
+  // R12-S: 회의록 자동 정리 모델. providerId=null = 자동 선택.
+  'settings:setSummaryModel': {
+    request: { providerId: string | null };
+    response: { settings: SettingsConfig };
+  };
   'config:take-startup-diagnostics': {
     request: undefined;
     response: { settingsCorruption: SettingsCorruptionInfo | null };
