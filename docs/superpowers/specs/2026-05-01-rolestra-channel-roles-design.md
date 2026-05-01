@@ -57,22 +57,33 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 {
   id, type, displayName, model, capabilities, config, status,
   persona      ← 자유 텍스트, 캐릭터 / 말투 / 정체성만
-  roles        ← string[], 예: ['planning', 'design']
+  roles        ← string[], 예: ['planning', 'design.ui', 'design.ux'] (다중 선택 가능)
   skill_overrides ← Record<string, string> | null, 사용자 customize
 }
 ```
 
-### 시스템 정의 스킬 카탈로그
+### 시스템 정의 스킬 카탈로그 (10 능력)
 
-| Role ID | 핵심 스킬 |
-|---------|----------|
-| `planning` | spec 작성 + 사용자 페르소나 분석 + brainstorm 가이드 + 우선순위 매트릭스 + (외부) 시장 조사 |
-| `design` | 시안 제시 + 형태/아트 분리 + 디자인 토큰 추출 + (외부) figma URL 처리 + 색상 추출 |
-| `implement` | 코드 생성 + 파일 쓰기 권한 + 명령 실행 + diff 적용 + 테스트 실행 |
-| `review` | lint / typecheck / 테스트 실행 + 스파게티 / 하드코딩 / 버그 위험 평가 + e2e |
-| `idea` | brainstorm 자유 발산 + 다양성 강조 + 비판 보류 |
+| Role ID | 한국어 라벨 | 핵심 |
+|---------|-------------|------|
+| `idea` | 아이디어 | 자유 brainstorm + 비판 보류 + 다양성 강조 |
+| `planning` | 기획 | spec 작성 + 사용자 페르소나 분석 + 우선순위 매트릭스 + (외부) 시장조사 |
+| `design.ui` | 디자인 (UI / 형태) | UI 형태 / 디자인 토큰 / 컴포넌트 시안 + (외부) 색상 추출 |
+| `design.ux` | 디자인 (UX / 사용감) | 사용 흐름 / 정보 구조 / 사용자 여정 |
+| `design.character` | 디자인 (캐릭터) | 게임 캐릭터 시안 / 모션 컨셉 — 게임 프로젝트만 |
+| `design.background` | 디자인 (배경) | 게임 배경 시안 / 무드 보드 — 게임 프로젝트만 |
+| `implement` | 구현 | 코드 생성 + 파일 쓰기 + 명령 실행 + diff 적용 + 테스트 실행 |
+| `review` | 검토 | lint / typecheck / 테스트 실행 + 스파게티 / 하드코딩 / 버그 위험 평가 + e2e |
+| `general` | 일반 (잡담) | 1라운드 단순 응답, 회의 안 함, 채널 권한 매트릭스 X |
+| (시스템) `meeting-summary` | 회의록 자동 정리 | system 만 호출, 직원 부여 X |
 
 각 스킬 = (system prompt 템플릿 + tool 권한 matrix + 외부 자원 endpoint).
+
+**부서 템플릿 8개 (디폴트 6 + 옵션 2)**:
+- 디폴트 (프로젝트 만들면 자동 생성): 아이디어 / 기획 / 디자인 (UI+UX 묶음) / 구현 / 검토 / 일반
+- 옵션 (사용자 추가): 캐릭터 디자인 / 배경 디자인
+- 디자인 부서 = `[design.ui, design.ux]` 두 능력 묶음 — UI/UX 의논 잦으니 분리하지 않음.
+- 직원 능력은 9 개 중 자유 다중 체크 — 한 직원이 여러 부서에 멤버.
 
 ### 페르소나 prompt 합성
 
@@ -462,6 +473,15 @@ P2:
   - prompt 템플릿 (객관적 / 친근한 톤 / 짧게 / 상세)
 - AI 직원 중 하나가 정리하면 그 직원 캐릭터가 회의록 톤에 영향 — 객관적 정리는 system 이 좋음.
 
+**디폴트 자동 선택 로직 (R12-S)**:
+1. 사용자 등록 provider 중 `summarize` capability + `kind='api'` + Anthropic Haiku 모델 우선
+2. 없으면 `kind='api'` + Gemini Flash 모델
+3. 없으면 `summarize` capability 인 다른 api/cli provider
+4. 마지막 fallback: `kind='local'` Ollama 첫 번째 ready provider
+5. 모두 없으면 정리 skip (회의록 deterministic minutes 만)
+
+사용자가 settings 에서 명시 선택 시 자동 선택 무시.
+
 ### 11.6 부서별 AI 둘 이상 — Designated Worker 디폴트
 
 | 옵션 | 설명 | 적용 시점 |
@@ -474,6 +494,8 @@ P2:
 
 **R12-S (페르소나/스킬)**:
 - 스킬 카탈로그 정의에 "회의록 정리 prompt 템플릿" 옵션 포함 (사용자 customize 위함).
+- 회의록 정리 모델 별도 settings (`summaryModelProviderId`) — 디폴트 자동 선택 로직 + 사용자 명시 선택.
+- agestra plugin (`/home/taniar/.claude/plugins/cache/agestra/agestra/4.13.0/agents/`) 의 system prompt 를 reference 하되 한국어로 재작성.
 
 **R12-C (채널 역할)**:
 - 사이드바 collapsible 프로젝트 그룹 (R12-C 추가 task).
