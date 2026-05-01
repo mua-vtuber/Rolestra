@@ -122,7 +122,7 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 기존 `channels.kind`: `'system_general' | 'system_approval' | 'system_minutes' | 'user' | 'dm'`
 
 새 `channels.kind`: 동일 (마이그레이션 호환). 추가 컬럼:
-- `role`: `'idea' | 'plan' | 'design.art' | 'design.shape' | 'implement' | 'review' | 'general' | null`
+- `role`: `'idea' | 'planning' | 'design.ui' | 'design.ux' | 'design.character' | 'design.background' | 'implement' | 'review' | 'general' | null`
 - `purpose`: 자유 텍스트 (사용자 작성, optional)
 
 ### 부서별 회의 흐름 (사용자 design 확정)
@@ -130,8 +130,9 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 | 부서 (role) | 회의 형태 | 종료 조건 | 결과물 | trigger |
 |------------|----------|----------|--------|---------|
 | **idea (아이디어)** | 자유 brainstorm | no_action 만장일치 OR cap 5 | brainstorm 회의록 | auto-trigger |
-| **plan (기획)** | D-B 구조화 합의 (의견 + vote + 협의) | 모든 의견 합의/거절 처리 | spec 문서 | auto-trigger |
-| **design.art / design.shape** | 시안 제시 → revision loop | 기획 부서 의도 확인 OK | 시안 + 가이드 | 인계 only |
+| **planning (기획)** | D-B 구조화 합의 (의견 + vote + 협의) | 모든 의견 합의/거절 처리 | spec 문서 | auto-trigger |
+| **design.ui / design.ux** (디자인 부서, 디폴트) | 시안 제시 → revision loop | 기획 부서 의도 확인 OK | UI + UX 시안 + 가이드 | 인계 only |
+| **design.character / design.background** (옵션 부서, 게임 / 일러스트 한정) | 시안 제시 → revision loop | 기획 부서 의도 확인 OK | 캐릭터 / 배경 시안 + 가이드 | 인계 only |
 | **implement (구현)** | 회의 ❌, 단일 worker AI 작업 | 사용자 승인 게이트 | 코드 변경 | 인계 only |
 | **review (검토)** | 체크리스트 검증 | pass/fail report | 검증 결과 + 재작업 지시 | 인계 only |
 | **general (일반)** | round 5 cap (현재 그대로) | no_action / cap | 잡담 회의록 | auto-trigger |
@@ -201,7 +202,7 @@ R12-C 진입 시:
 
 ## 5. D-B — 구조화된 합의 (기획 부서)
 
-기획 부서 (role='plan') 의 회의 흐름. 다른 부서는 별도.
+기획 부서 (role='planning') 의 회의 흐름. 다른 부서는 별도.
 
 ### Phase 흐름
 
@@ -312,7 +313,7 @@ prompt 에 의견 표 주입 (markdown 표):
 
 기획 부서가 디자인 / 구현 / 검토 부서 자동 생성:
 - 사용자 승인 게이트 (R7 approval 흐름 활용).
-- 기본 채널 만 1 개 (role 별). 추가 sub-channel (예: design.art vs design.shape) 은 사용자 결정.
+- 기본 채널 만 1 개 (role 별). 추가 sub-channel (예: design.character vs design.background) 은 사용자 결정.
 
 ### 작업 모드 완전 deprecate (R12-H 종결 시)
 
@@ -495,7 +496,7 @@ P2:
 **R12-S (페르소나/스킬)**:
 - 스킬 카탈로그 정의에 "회의록 정리 prompt 템플릿" 옵션 포함 (사용자 customize 위함).
 - 회의록 정리 모델 별도 settings (`summaryModelProviderId`) — 디폴트 자동 선택 로직 + 사용자 명시 선택.
-- agestra plugin (`/home/taniar/.claude/plugins/cache/agestra/agestra/4.13.0/agents/`) 의 system prompt 를 reference 하되 한국어로 재작성.
+- agestra plugin agent 의 system prompt 를 reference (plugin cache 위치) 하되 한국어로 재작성.
 
 **R12-C (채널 역할)**:
 - 사이드바 collapsible 프로젝트 그룹 (R12-C 추가 task).
