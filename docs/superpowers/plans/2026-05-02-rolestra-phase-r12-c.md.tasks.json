@@ -4,147 +4,195 @@
     {
       "id": 0,
       "subject": "Task 0: Spec §4 + §11 갱신 (이번 라운드 결정 반영)",
-      "status": "pending",
+      "status": "completed",
       "description": "**Goal:** 사용자 결정 (2026-05-02) 을 spec 에 반영 — §4 부서 회의 매트릭스 추가, §11.4 부서 채널 disabled 트리거 명시, §11.6 designated worker 디폴트, §11.7 R12-C task 갱신, §11.8 phase 추정 (R12-C 14~20일 + R12-W 5~10일 신규), §11.9 SKILL.md 자동 배치 신규, §11.10 R12-W phase 정의, §11.11 R12-D 보류.\n\n**Files:**\n- Modify: docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md\n\n**Verify:** git diff --stat 으로 100~150 insertions 확인\n\n```json:metadata\n{\"files\": [\"docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md\"], \"verifyCommand\": \"git diff --stat docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md\", \"acceptanceCriteria\": [\"§4 부서 회의 매트릭스 6 행\", \"§11.4 disabled 트리거 명시\", \"§11.6 designated 디폴트 알고리즘\", \"§11.7 R12-C task 갱신\", \"§11.8 phase 추정 R12-W 신규 행\", \"§11.9 SKILL.md 자동 배치\", \"§11.10 R12-W phase 정의\", \"§11.11 R12-D 보류\"]}\n```"
     },
     {
       "id": 1,
       "subject": "Task 1: DB Migration 018 — channels 컬럼 추가 + system_general 전역화",
-      "status": "pending",
-      "blockedBy": [0],
+      "status": "completed",
+      "blockedBy": [
+        0
+      ],
       "description": "**Goal:** channels ALTER 4 컬럼 (role / purpose / handoff_mode / drag_order) + system_general 전역 1개 row 마이그레이션. Forward-only, chain-level idempotent.\n\n**Files:**\n- Create: src/main/database/migrations/018-channels-role-purpose-handoff.ts\n- Modify: src/main/database/migrations/index.ts\n- Test: src/main/database/__tests__/migrator.test.ts\n\n**Verify:** npx vitest run src/main/database/__tests__/migrator.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/database/migrations/018-channels-role-purpose-handoff.ts\", \"src/main/database/migrations/index.ts\", \"src/main/database/__tests__/migrator.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/database/__tests__/migrator.test.ts\", \"acceptanceCriteria\": [\"4 컬럼 ALTER\", \"system_general 전역 1개 row\", \"index 등록\", \"handoff_mode default check\", \"PRAGMA 검증 PASS\"]}\n```"
     },
     {
       "id": 2,
       "subject": "Task 2: Shared Types — ChannelRole / ChannelPurpose / HandoffMode + Channel 인터페이스 확장",
-      "status": "pending",
-      "blockedBy": [1],
+      "status": "completed",
+      "blockedBy": [
+        1
+      ],
       "description": "**Goal:** src/shared/channel-role-types.ts 신규 + Channel + ChannelMember 인터페이스 확장.\n\n**Files:**\n- Create: src/shared/channel-role-types.ts\n- Modify: src/shared/channel-types.ts\n\n**Verify:** npm run typecheck → 0 error (호출지 임시 default 채워 통과)\n\n```json:metadata\n{\"files\": [\"src/shared/channel-role-types.ts\", \"src/shared/channel-types.ts\"], \"verifyCommand\": \"npm run typecheck\", \"acceptanceCriteria\": [\"ChannelRole = RoleId | null\", \"ChannelPurpose 4 종\", \"HandoffMode 'check' | 'auto'\", \"Channel 4 새 필드\", \"ChannelMember.dragOrder 필수\"]}\n```"
     },
     {
       "id": 3,
       "subject": "Task 3: ChannelRepository + ChannelService 확장",
-      "status": "pending",
-      "blockedBy": [2],
+      "status": "completed",
+      "blockedBy": [
+        2
+      ],
       "description": "**Goal:** Repo SELECT/INSERT/UPDATE 4 컬럼 + parseRole throw + Service 신규 메서드 4 (updateRole / updateHandoffMode / reorderMembers / getGlobalGeneralChannel).\n\n**Files:**\n- Modify: src/main/channels/channel-repository.ts\n- Modify: src/main/channels/channel-service.ts\n- Modify: src/main/channels/__tests__/channel-repository.test.ts\n- Modify: src/main/channels/__tests__/channel-service.test.ts\n\n**Verify:** npx vitest run src/main/channels/__tests__/\n\n```json:metadata\n{\"files\": [\"src/main/channels/channel-repository.ts\", \"src/main/channels/channel-service.ts\", \"src/main/channels/__tests__/channel-repository.test.ts\", \"src/main/channels/__tests__/channel-service.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/channels/__tests__/\", \"acceptanceCriteria\": [\"Repo round-trip 4 컬럼\", \"parseRole unknown throw\", \"Service 4 신규 메서드\", \"전역 일반 채널 lookup\", \"6+ 단위 PASS\"]}\n```"
     },
     {
       "id": 4,
       "subject": "Task 4: ProjectService — 5 부서 채널 자동 생성 + 일반 채널 전역 보장",
-      "status": "pending",
-      "blockedBy": [3],
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
       "description": "**Goal:** createProject 가 5 디폴트 부서 채널 + 옵션 2 (캐릭터/배경) 인자. 앱 기동 시 ensureGlobalGeneralChannel.\n\n**Files:**\n- Modify: src/main/projects/project-service.ts\n- Modify: src/main/projects/__tests__/project-service.test.ts\n- Modify: src/main/main.ts\n\n**Verify:** npx vitest run src/main/projects/__tests__/\n\n```json:metadata\n{\"files\": [\"src/main/projects/project-service.ts\", \"src/main/projects/__tests__/project-service.test.ts\", \"src/main/main.ts\"], \"verifyCommand\": \"npx vitest run src/main/projects/__tests__/\", \"acceptanceCriteria\": [\"5 부서 자동 생성\", \"옵션 부서 인자\", \"handoff_mode check 디폴트\", \"전역 일반 채널 보장\", \"기동 시 ensureGlobalGeneralChannel\"]}\n```"
     },
     {
       "id": 5,
       "subject": "Task 5: SKILL.md template + 양식 정의 + 방어 로직 명시",
-      "status": "pending",
-      "blockedBy": [4],
+      "status": "completed",
+      "blockedBy": [
+        4
+      ],
       "description": "**Goal:** renderSkillMd(roleId) — frontmatter (name/description) + 본문 (systemPromptKo + 방어 로직 4 항). Gemini silent skip 양식 준수.\n\n**Files:**\n- Create: src/main/skills/skill-md-template.ts\n- Create: src/main/skills/__tests__/skill-md-template.test.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/skill-md-template.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/skills/skill-md-template.ts\", \"src/main/skills/__tests__/skill-md-template.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/skill-md-template.test.ts\", \"acceptanceCriteria\": [\"frontmatter 양식 정확\", \"방어 로직 4 항\", \"본문 systemPromptKo 포함\", \"4+ 부서 sample\"]}\n```"
     },
     {
       "id": 6,
       "subject": "Task 6: ProjectSkillSyncService — `.agents/skills/` + `.claude/skills/` 자동 배치",
-      "status": "pending",
-      "blockedBy": [5],
+      "status": "completed",
+      "blockedBy": [
+        5
+      ],
       "description": "**Goal:** syncProjectSkills(projectRoot) — 9 부서 능력 두 폴더 작성 + PathGuard 봉인 + 사용자 수정 감지. IPC project:syncSkills.\n\n**Files:**\n- Create: src/main/skills/project-skill-sync-service.ts\n- Create: src/main/skills/__tests__/project-skill-sync-service.test.ts\n- Modify: src/main/ipc/handlers/project-handler.ts\n- Modify: src/shared/ipc-schemas.ts, src/shared/ipc-types.ts, src/preload/index.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/project-skill-sync-service.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/skills/project-skill-sync-service.ts\", \"src/main/skills/__tests__/project-skill-sync-service.test.ts\", \"src/main/ipc/handlers/project-handler.ts\", \"src/shared/ipc-schemas.ts\", \"src/shared/ipc-types.ts\", \"src/preload/index.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/project-skill-sync-service.test.ts\", \"acceptanceCriteria\": [\"9 부서 두 폴더 작성\", \"meeting-summary 제외\", \"PathGuard 봉인\", \"사용자 수정 감지\", \"force 옵션\", \"5+ 단위 PASS\"]}\n```"
     },
     {
       "id": 7,
       "subject": "Task 7: PromptComposer 확장 — 부서별 스킬 경로 prompt 주입",
-      "status": "pending",
-      "blockedBy": [6],
+      "status": "completed",
+      "blockedBy": [
+        6
+      ],
       "description": "**Goal:** compose 옵션에 channelRole 추가 — 부서 회의 진입 시 prompt 끝에 스킬 경로 단락 추가.\n\n**Files:**\n- Modify: src/main/skills/prompt-composer.ts\n- Modify: src/main/skills/__tests__/prompt-composer.test.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/prompt-composer.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/skills/prompt-composer.ts\", \"src/main/skills/__tests__/prompt-composer.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/prompt-composer.test.ts\", \"acceptanceCriteria\": [\"channelRole null skip\", \"channelRole 4 부서 경로 단락\", \"4+ unit PASS\"]}\n```"
     },
     {
       "id": 8,
       "subject": "Task 8: 사이드바 — Radix Accordion + 프로젝트 collapsible + 일반/DM 별도 섹션",
       "status": "pending",
-      "blockedBy": [4],
+      "blockedBy": [
+        4
+      ],
       "description": "**Goal:** Sidebar 3 섹션 layout (general / projects / dm). Radix Accordion + 프로젝트 collapsible (디폴트 펼침, zustand persist).\n\n**Files:**\n- Modify: src/renderer/components/shell/Sidebar.tsx\n- Create: src/renderer/features/sidebar/ProjectAccordion.tsx\n- Create: src/renderer/features/sidebar/GeneralChannelEntry.tsx\n- Create: src/renderer/stores/sidebar-store.ts\n- Modify: src/renderer/i18n/locales/{ko,en}/channel.json\n\n**Verify:** dev 빌드 시각 검증 (펼침 토글 → reload 보존)\n\n```json:metadata\n{\"files\": [\"src/renderer/components/shell/Sidebar.tsx\", \"src/renderer/features/sidebar/ProjectAccordion.tsx\", \"src/renderer/features/sidebar/GeneralChannelEntry.tsx\", \"src/renderer/stores/sidebar-store.ts\", \"src/renderer/i18n/locales/ko/channel.json\", \"src/renderer/i18n/locales/en/channel.json\"], \"verifyCommand\": \"npm run dev\", \"acceptanceCriteria\": [\"3 섹션 layout\", \"디폴트 펼침\", \"zustand persist\", \"i18n 7 부서 라벨\"]}\n```"
     },
     {
       "id": 9,
       "subject": "Task 9: 일반 채널 동작 — 회의 X + \"새 대화 시작\" 버튼",
       "status": "pending",
-      "blockedBy": [4],
+      "blockedBy": [
+        4
+      ],
       "description": "**Goal:** system_general 채널 = MeetingControls hide + auto-trigger X + 새 대화 시작 (archive + clear).\n\n**Files:**\n- Modify: src/renderer/features/messenger/ChatView.tsx\n- Modify: src/renderer/features/messenger/MeetingControls.tsx\n- Modify: src/main/channels/message-service.ts\n- Create: src/renderer/features/general/GeneralChannelControls.tsx\n- Modify: src/main/ipc/handlers/channel-handler.ts\n\n**Verify:** vitest message-service + dev 시각 + e2e smoke\n\n```json:metadata\n{\"files\": [\"src/renderer/features/messenger/ChatView.tsx\", \"src/renderer/features/messenger/MeetingControls.tsx\", \"src/main/channels/message-service.ts\", \"src/renderer/features/general/GeneralChannelControls.tsx\", \"src/main/ipc/handlers/channel-handler.ts\"], \"verifyCommand\": \"npx vitest run src/main/channels/__tests__/message-service.test.ts\", \"acceptanceCriteria\": [\"system_general 회의 X\", \"auto-trigger 분기\", \"새 대화 시작 archive+clear\", \"1라운드 응답 보존\"]}\n```"
     },
     {
       "id": 10,
       "subject": "Task 10: 프로젝트 entry view — \"할 일 작성\" + 디폴트 시작 부서 = 아이디어",
       "status": "pending",
-      "blockedBy": [4],
+      "blockedBy": [
+        4
+      ],
       "description": "**Goal:** ProjectEntryView (textarea + 시작 부서 라디오) + project:startWorkflow IPC + project-service.startWorkflow.\n\n**Files:**\n- Create: src/renderer/features/project/ProjectEntryView.tsx\n- Modify: src/renderer/features/dashboard/ProjectDashboard.tsx\n- Modify: src/main/ipc/handlers/project-handler.ts\n- Modify: src/main/projects/project-service.ts\n\n**Verify:** dev 시각 + e2e smoke\n\n```json:metadata\n{\"files\": [\"src/renderer/features/project/ProjectEntryView.tsx\", \"src/renderer/features/dashboard/ProjectDashboard.tsx\", \"src/main/ipc/handlers/project-handler.ts\", \"src/main/projects/project-service.ts\"], \"verifyCommand\": \"npm run dev\", \"acceptanceCriteria\": [\"entry view textarea + 라디오\", \"startWorkflow IPC\", \"entry 메시지 INSERT\", \"새 워크플로우 archive\"]}\n```"
     },
     {
       "id": 11,
       "subject": "Task 11: 부서 채널 메시지란 disabled / enabled 상태 management",
       "status": "pending",
-      "blockedBy": [10],
+      "blockedBy": [
+        10
+      ],
       "description": "**Goal:** Composer 가 channel.role + workflowActive flag → disabled 분기. 일반/DM/자유 채널은 변경 X.\n\n**Files:**\n- Modify: src/renderer/features/messenger/Composer.tsx\n- Create: src/renderer/hooks/use-channel-disabled-state.ts\n- Modify: src/main/channels/channel-service.ts (workflowActive runtime flag)\n- Modify: src/renderer/i18n/locales/{ko,en}/channel.json\n\n**Verify:** dev 시각 + e2e smoke\n\n```json:metadata\n{\"files\": [\"src/renderer/features/messenger/Composer.tsx\", \"src/renderer/hooks/use-channel-disabled-state.ts\", \"src/main/channels/channel-service.ts\", \"src/renderer/i18n/locales/ko/channel.json\", \"src/renderer/i18n/locales/en/channel.json\"], \"verifyCommand\": \"npm run dev\", \"acceptanceCriteria\": [\"disabled 분기 정확\", \"workflowActive flag\", \"일반/DM/자유 영향 X\", \"placeholder 한국어\"]}\n```"
     },
     {
       "id": 12,
       "subject": "Task 12: OpinionService — D-B 의 OPINION_GATHERING + OPINION_TALLY 분리 service",
       "status": "pending",
-      "blockedBy": [3],
+      "blockedBy": [
+        3
+      ],
       "description": "**Goal:** gatherOpinions / tallyOpinions 추출. 아이디어 / 검토 / R12-W 가 재사용. dedup 1차 = exact match.\n\n**Files:**\n- Create: src/main/meetings/opinion/opinion-service.ts\n- Create: src/main/meetings/opinion/__tests__/opinion-service.test.ts\n\n**Verify:** npx vitest run src/main/meetings/opinion/__tests__/opinion-service.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/meetings/opinion/opinion-service.ts\", \"src/main/meetings/opinion/__tests__/opinion-service.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/meetings/opinion/__tests__/opinion-service.test.ts\", \"acceptanceCriteria\": [\"gather 병렬 호출\", \"tally exact dedup\", \"opinion_id 유일\", \"from 매핑\", \"parse 실패 throw\", \"6+ unit PASS\"]}\n```"
     },
     {
       "id": 13,
       "subject": "Task 13: 아이디어 부서 워크플로우 — D-B-Light + USER_PICK + 의견 카드 list UI",
       "status": "pending",
-      "blockedBy": [12, 10],
+      "blockedBy": [
+        12,
+        10
+      ],
       "description": "**Goal:** startIdeaWorkflow / pickIdea / requestMoreOpinions + IdeaCardList (다중 선택 + 자유 코멘트 + 두 버튼).\n\n**Files:**\n- Create: src/main/meetings/workflows/idea-workflow.ts\n- Create: src/main/meetings/workflows/__tests__/idea-workflow.test.ts\n- Create: src/renderer/features/idea/IdeaCardList.tsx\n- Create: src/renderer/hooks/use-workflow.ts\n- Modify: src/main/ipc/handlers/workflow-handler.ts (Create)\n- Modify: src/renderer/i18n/locales/{ko,en}/workflow.json (Create)\n\n**Verify:** vitest idea-workflow + dev 시각 + e2e smoke\n\n```json:metadata\n{\"files\": [\"src/main/meetings/workflows/idea-workflow.ts\", \"src/main/meetings/workflows/__tests__/idea-workflow.test.ts\", \"src/renderer/features/idea/IdeaCardList.tsx\", \"src/renderer/hooks/use-workflow.ts\", \"src/main/ipc/handlers/workflow-handler.ts\", \"src/renderer/i18n/locales/ko/workflow.json\", \"src/renderer/i18n/locales/en/workflow.json\"], \"verifyCommand\": \"npx vitest run src/main/meetings/workflows/__tests__/idea-workflow.test.ts\", \"acceptanceCriteria\": [\"D-B-Light 흐름\", \"USER_PICK 인계\", \"카드 풀 텍스트 표시\", \"다중 선택 + 코멘트\", \"추가 라운드 prompt 주입\", \"5+ unit PASS\"]}\n```"
     },
     {
       "id": 14,
       "subject": "Task 14: 디자인 부서 워크플로우 — UX → UI → UX 토론 시퀀스 (3R cap)",
       "status": "pending",
-      "blockedBy": [7, 11],
+      "blockedBy": [
+        7,
+        11
+      ],
       "description": "**Goal:** UX/UI 시퀀스 + agree/revise JSON parse + 3R cap 사용자 개입 모달.\n\n**Files:**\n- Create: src/main/meetings/workflows/design-workflow.ts\n- Create: src/main/meetings/workflows/__tests__/design-workflow.test.ts\n- Modify: src/main/ipc/handlers/workflow-handler.ts\n- Modify: src/renderer/i18n/locales/{ko,en}/workflow.json\n\n**Verify:** npx vitest run src/main/meetings/workflows/__tests__/design-workflow.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/meetings/workflows/design-workflow.ts\", \"src/main/meetings/workflows/__tests__/design-workflow.test.ts\", \"src/main/ipc/handlers/workflow-handler.ts\", \"src/renderer/i18n/locales/ko/workflow.json\", \"src/renderer/i18n/locales/en/workflow.json\"], \"verifyCommand\": \"npx vitest run src/main/meetings/workflows/__tests__/design-workflow.test.ts\", \"acceptanceCriteria\": [\"UX→UI→UX 시퀀스\", \"agree/revise parse\", \"3R cap 모달\", \"UX/UI 부재 throw\", \"8+ unit PASS\"]}\n```"
     },
     {
       "id": 15,
       "subject": "Task 15: PlaywrightSnapshotService — HTML/CSS render → PNG + 디자인 결과물 미리보기",
       "status": "pending",
-      "blockedBy": [14],
+      "blockedBy": [
+        14
+      ],
       "description": "**Goal:** off-screen Chromium HTML 렌더 + 두 viewport PNG 저장 + DesignSnapshotPreview UI.\n\n**Files:**\n- Create: src/main/design/playwright-snapshot-service.ts\n- Create: src/main/design/__tests__/playwright-snapshot-service.test.ts\n- Create: src/renderer/features/design/DesignSnapshotPreview.tsx\n- Modify: src/main/files/path-guard.ts\n- Modify: src/renderer/features/messenger/MessageRenderer.tsx\n\n**Verify:** vitest playwright-snapshot smoke + dev 시각\n\n```json:metadata\n{\"files\": [\"src/main/design/playwright-snapshot-service.ts\", \"src/main/design/__tests__/playwright-snapshot-service.test.ts\", \"src/renderer/features/design/DesignSnapshotPreview.tsx\", \"src/main/files/path-guard.ts\", \"src/renderer/features/messenger/MessageRenderer.tsx\"], \"verifyCommand\": \"npx vitest run src/main/design/__tests__/playwright-snapshot-service.test.ts\", \"acceptanceCriteria\": [\"두 viewport PNG\", \"PathGuard 봉인\", \"design-workflow 종결 시 호출\", \"미리보기 두 탭 + 코드 토글\", \"smoke PASS\"]}\n```"
     },
     {
       "id": 16,
       "subject": "Task 16: 검토 부서 워크플로우 — OPINION_GATHERING + TALLY → 기획 자동 분류 + 분류 카드",
       "status": "pending",
-      "blockedBy": [12, 11],
+      "blockedBy": [
+        12,
+        11
+      ],
       "description": "**Goal:** 검토 의견 gather/tally → planning 직원 자동 분류 (의도/수정) → ReviewClassificationCard (1줄 요약 + 펼쳐 보기).\n\n**Files:**\n- Create: src/main/meetings/workflows/review-workflow.ts\n- Create: src/main/meetings/workflows/__tests__/review-workflow.test.ts\n- Create: src/renderer/features/review/ReviewClassificationCard.tsx\n- Modify: src/main/ipc/handlers/workflow-handler.ts\n- Modify: src/renderer/i18n/locales/{ko,en}/workflow.json\n\n**Verify:** npx vitest run src/main/meetings/workflows/__tests__/review-workflow.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/meetings/workflows/review-workflow.ts\", \"src/main/meetings/workflows/__tests__/review-workflow.test.ts\", \"src/renderer/features/review/ReviewClassificationCard.tsx\", \"src/main/ipc/handlers/workflow-handler.ts\", \"src/renderer/i18n/locales/ko/workflow.json\", \"src/renderer/i18n/locales/en/workflow.json\"], \"verifyCommand\": \"npx vitest run src/main/meetings/workflows/__tests__/review-workflow.test.ts\", \"acceptanceCriteria\": [\"gather + tally + classify\", \"분류 prompt 방어 로직\", \"수정 group 만 인계\", \"1줄 카드 + 펼쳐 보기\", \"사용자 toggle\", \"6+ unit PASS\"]}\n```"
     },
     {
       "id": 17,
       "subject": "Task 17: 구현 부서 워크플로우 — designated 1명 spec 받아 작성 (단순화)",
       "status": "pending",
-      "blockedBy": [11, 18],
+      "blockedBy": [
+        11,
+        18
+      ],
       "description": "**Goal:** designated worker 1명에게 spec 전달 → diff → ExecutionService dryRun → 사용자 승인 → atomic apply.\n\n**Files:**\n- Create: src/main/meetings/workflows/implement-workflow.ts\n- Create: src/main/meetings/workflows/__tests__/implement-workflow.test.ts\n- Modify: src/main/ipc/handlers/workflow-handler.ts\n\n**Verify:** npx vitest run src/main/meetings/workflows/__tests__/implement-workflow.test.ts\n\n```json:metadata\n{\"files\": [\"src/main/meetings/workflows/implement-workflow.ts\", \"src/main/meetings/workflows/__tests__/implement-workflow.test.ts\", \"src/main/ipc/handlers/workflow-handler.ts\"], \"verifyCommand\": \"npx vitest run src/main/meetings/workflows/__tests__/implement-workflow.test.ts\", \"acceptanceCriteria\": [\"designated 1명\", \"dryRun + apply\", \"R12-W 미진입\", \"4+ unit PASS\"]}\n```"
     },
     {
       "id": 18,
       "subject": "Task 18: 참여 멤버 드래그 순서 UI + designated worker 디폴트",
       "status": "pending",
-      "blockedBy": [3],
+      "blockedBy": [
+        3
+      ],
       "description": "**Goal:** dnd-kit ChannelMemberOrderPanel + StaffEditModal 부서장 핀 + designated-worker-resolver. providers.is_department_head 컬럼 마이그레이션 018 통합.\n\n**Files:**\n- Modify: src/main/database/migrations/018-channels-role-purpose-handoff.ts (컬럼 추가)\n- Create: src/renderer/features/channel/ChannelMemberOrderPanel.tsx\n- Modify: src/renderer/features/settings/StaffEditModal.tsx\n- Create: src/renderer/hooks/use-channel-members.ts\n- Modify: src/main/channels/channel-service.ts\n- Create: src/main/meetings/designated-worker-resolver.ts\n- Create: src/main/meetings/__tests__/designated-worker-resolver.test.ts\n\n**Verify:** vitest resolver + dev 시각\n\n```json:metadata\n{\"files\": [\"src/main/database/migrations/018-channels-role-purpose-handoff.ts\", \"src/renderer/features/channel/ChannelMemberOrderPanel.tsx\", \"src/renderer/features/settings/StaffEditModal.tsx\", \"src/renderer/hooks/use-channel-members.ts\", \"src/main/channels/channel-service.ts\", \"src/main/meetings/designated-worker-resolver.ts\", \"src/main/meetings/__tests__/designated-worker-resolver.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/meetings/__tests__/designated-worker-resolver.test.ts\", \"acceptanceCriteria\": [\"dnd-kit drag order\", \"부서장 핀 토글\", \"resolver 핀 우선\", \"드래그 1번 fallback\", \"6+ unit PASS\"]}\n```"
     },
     {
       "id": 19,
       "subject": "Task 19: handoff_mode auto/check 토글 + 인계 모달 + 디폴트 check",
       "status": "pending",
-      "blockedBy": [13, 14, 15, 16, 17],
+      "blockedBy": [
+        13,
+        14,
+        15,
+        16,
+        17
+      ],
       "description": "**Goal:** HandoffApprovalModal (kind 별 미리보기) + HandoffModeToggle + 워크플로우 4개 인계 직전 mode 검사.\n\n**Files:**\n- Create: src/renderer/features/handoff/HandoffApprovalModal.tsx\n- Create: src/renderer/features/channel/HandoffModeToggle.tsx\n- Create: src/renderer/hooks/use-handoff.ts\n- Modify: src/main/ipc/handlers/workflow-handler.ts\n- Modify: src/main/meetings/workflows/{idea,design,review,implement}-workflow.ts\n- Modify: src/renderer/i18n/locales/{ko,en}/channel.json\n\n**Verify:** dev 시각 + e2e smoke\n\n```json:metadata\n{\"files\": [\"src/renderer/features/handoff/HandoffApprovalModal.tsx\", \"src/renderer/features/channel/HandoffModeToggle.tsx\", \"src/renderer/hooks/use-handoff.ts\", \"src/main/ipc/handlers/workflow-handler.ts\", \"src/main/meetings/workflows/idea-workflow.ts\", \"src/main/meetings/workflows/design-workflow.ts\", \"src/main/meetings/workflows/review-workflow.ts\", \"src/main/meetings/workflows/implement-workflow.ts\", \"src/renderer/i18n/locales/ko/channel.json\", \"src/renderer/i18n/locales/en/channel.json\"], \"verifyCommand\": \"npm run dev\", \"acceptanceCriteria\": [\"kind 별 미리보기\", \"mode 토글 IPC\", \"check 모달 / auto 자동\", \"디폴트 check\", \"수정 요청 분기\"]}\n```"
     },
     {
       "id": 20,
       "subject": "Task 20: ADR + 구현 현황 + tasks.json + Closeout",
       "status": "pending",
-      "blockedBy": [19],
+      "blockedBy": [
+        19
+      ],
       "description": "**Goal:** ADR 작성 + 구현 현황 R12-C 행 + tasks.json sync + closeout commit + main merge + worktree 정리.\n\n**Files:**\n- Create: docs/아키텍처-결정-기록/r12-c-channel-roles.md\n- Modify: docs/구현-현황.md\n- Modify: docs/superpowers/plans/2026-05-02-rolestra-phase-r12-c.md.tasks.json\n\n**Verify:** typecheck + lint + vitest + e2e 모두 PASS\n\n```json:metadata\n{\"files\": [\"docs/아키텍처-결정-기록/r12-c-channel-roles.md\", \"docs/구현-현황.md\", \"docs/superpowers/plans/2026-05-02-rolestra-phase-r12-c.md.tasks.json\"], \"verifyCommand\": \"npm run typecheck && npm run lint && npx vitest run && npx playwright test tests/e2e/r12-c-channel-roles.spec.ts\", \"acceptanceCriteria\": [\"ADR 결정 11 항\", \"구현 현황 R12-C 행\", \"tasks.json all completed\", \"vitest PASS\", \"typecheck 0 error\", \"lint 0 warning\", \"e2e smoke PASS\", \"closeout commit\", \"main merge + worktree 정리\"]}\n```"
     }
   ]
