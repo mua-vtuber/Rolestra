@@ -44,7 +44,6 @@ import { TasksWidget } from './widgets/TasksWidget';
 import { PeopleWidget } from './widgets/PeopleWidget';
 import { RecentWidget } from './widgets/RecentWidget';
 import { ApprovalsWidget } from './widgets/ApprovalsWidget';
-import { ProjectEntryView } from '../project/ProjectEntryView';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useDashboardKpis } from '../../hooks/use-dashboard-kpis';
 
@@ -135,13 +134,10 @@ export function DashboardPage({
       </section>
 
       {/*
-        R12-C T10: 프로젝트 entry "할 일 작성" 카드. active project 가
-        있을 때 hero 와 widget grid 사이에 노출 — 사용자가 부서 채널을
-        직접 클릭하지 않고도 워크플로우를 시작할 수 있다.
+        R12-C round 2: T10 의 "할 일 작성" 카드는 대시보드에서 제거
+        (사용자 의견 2). 향후 round 에서 메신저 탭의 할 일 큐 패널
+        안으로 시작 부서 라디오와 함께 통합 예정 (의견 4-1).
       */}
-      {activeProjectId !== null ? (
-        <ProjectEntryView projectId={activeProjectId} />
-      ) : null}
 
       {/*
         R4-Task7 — 2×2 widget grid. The CSS `grid-template-areas` encodes

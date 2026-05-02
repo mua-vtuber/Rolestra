@@ -482,9 +482,16 @@ export function App() {
         />
       }
     >
-      {activeProject !== null && (
+      {/*
+        R12-C round 2 fix: 할 일 큐는 메신저 탭에서만 노출. 대시보드는
+        프로젝트 list / KPI 진입점 역할만 갖는다 (사용자 의견 1, 2026-05-02).
+        활성 프로젝트가 있을 때만 패널 mount — 위젯 헤더에 프로젝트명을
+        prefix 로 붙여 사용자가 어느 프로젝트의 큐인지 즉시 식별 (의견 4-4).
+      */}
+      {activeProject !== null && view === 'messenger' && (
         <QueuePanel
           projectId={activeProject.id}
+          projectName={activeProject.name}
           className="mx-4 mt-3"
         />
       )}

@@ -52,6 +52,12 @@ function aggregateCounts(items: ReadonlyArray<QueueItem>): QueueStatBarCounts {
 
 export interface QueuePanelProps {
   projectId: string;
+  /**
+   * R12-C round 2: 사용자가 메신저 탭에서 어느 프로젝트의 큐를 보고
+   * 있는지 즉시 식별할 수 있도록 패널 헤더에 prefix 로 노출 (의견 4-4).
+   * 미지정 시 헤더는 R11 까지의 기본 ("할 일 큐 / Tasks") 만 표시.
+   */
+  projectName?: string | null;
   className?: string;
 }
 
@@ -68,7 +74,11 @@ function reorderLocal(
   return copy;
 }
 
-export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElement {
+export function QueuePanel({
+  projectId,
+  projectName = null,
+  className,
+}: QueuePanelProps): ReactElement {
   const { t } = useTranslation();
   const panelClip = usePanelClipStyle();
   const {
@@ -189,6 +199,14 @@ export function QueuePanel({ projectId, className }: QueuePanelProps): ReactElem
           className="flex items-center gap-2 text-sm font-display font-semibold"
         >
           <span aria-hidden="true">{collapsed ? '▶' : '▼'}</span>
+          {projectName !== null && projectName.length > 0 ? (
+            <span
+              data-testid="queue-panel-project-name"
+              className="text-fg-muted"
+            >
+              {projectName} ·
+            </span>
+          ) : null}
           <span>{t('queue.panel.title', { count: items.length })}</span>
         </button>
         <Button

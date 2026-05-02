@@ -43,6 +43,7 @@ import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
 import { GeneralChannelControls } from '../general/GeneralChannelControls';
 import { useChannelDisabledState } from '../../hooks/use-channel-disabled-state';
+import { useGlobalGeneralChannel } from '../../hooks/use-global-general-channel';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
@@ -50,6 +51,7 @@ import { useChannelMessages } from '../../hooks/use-channel-messages';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
 import { useMeetingStream } from '../../hooks/use-meeting-stream';
+import type { Channel } from '../../../shared/channel-types';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 
 export interface ThreadProps {
@@ -133,15 +135,24 @@ export function Thread({
   const { t, i18n } = useTranslation();
   const { channels } = useChannels(projectId);
   const { dms } = useDms();
-  // Active channel can be a DM (project_id=null) which lives outside
-  // `useChannels(projectId)`. Merge both into the validation list so the
-  // hook's "stored channel not in list" branch doesn't wipe a freshly
-  // selected DM, and so `channels.find` below can resolve the active
-  // DM into a real `Channel` object for the header/composer.
+  // R12-C round 2 fix #2-1: 전역 일반 채널 (system_general, projectId IS NULL)
+  // 도 검증 list 에 포함시켜야 한다. 누락 시 사용자가 사이드바에서 일반
+  // 채널을 클릭하면 useActiveChannel 의 "stored channel not in list"
+  // 분기가 active id 를 즉시 비워버려 본문이 "왼쪽에서 채널 선택" 빈
+  // 화면으로 돌아간다 (round 2 dogfooding 2-1).
+  const { channel: globalGeneralChannel } = useGlobalGeneralChannel();
   const allChannels = useMemo(() => {
-    if (channels === null && dms === null) return null;
-    return [...(channels ?? []), ...(dms ?? [])];
-  }, [channels, dms]);
+    if (
+      channels === null &&
+      dms === null &&
+      globalGeneralChannel === null
+    ) {
+      return null;
+    }
+    const merged: Channel[] = [...(channels ?? []), ...(dms ?? [])];
+    if (globalGeneralChannel !== null) merged.push(globalGeneralChannel);
+    return merged;
+  }, [channels, dms, globalGeneralChannel]);
   const { activeChannelId } = useActiveChannel(projectId, allChannels);
   const { members } = useChannelMembers(activeChannelId, allChannels);
   // R12: meeting start/abort moved to MessengerPage's sidebar control —
