@@ -111,6 +111,7 @@ import {
 } from './handlers/project-handler';
 import {
   handleChannelList,
+  handleChannelGetGlobalGeneral,
   handleChannelCreate,
   handleChannelRename,
   handleChannelDelete,
@@ -421,6 +422,9 @@ export function registerIpcHandlers(): void {
 
   // ── v3: Channel ─────────────────────────────────────────────────
   handle('channel:list', isDev, (data) => handleChannelList(data));
+  handle('channel:get-global-general', isDev, () =>
+    handleChannelGetGlobalGeneral(),
+  );
   handle('channel:create', isDev, (data) => handleChannelCreate(data));
   handle('channel:rename', isDev, (data) => handleChannelRename(data));
   handle('channel:delete', isDev, (data) => handleChannelDelete(data));

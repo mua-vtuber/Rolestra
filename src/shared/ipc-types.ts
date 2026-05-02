@@ -527,6 +527,15 @@ export type IpcChannelMap = {
     request: { projectId: string | null };
     response: { channels: Channel[] };
   };
+  /**
+   * R12-C — 전역 일반 채널 1개 lookup. project_id IS NULL +
+   * kind = 'system_general'. Boot 직후 ensureGlobalGeneralChannel 가
+   * 보장하지만 마이그레이션/boot 비정상 시 null.
+   */
+  'channel:get-global-general': {
+    request: undefined;
+    response: { channel: Channel | null };
+  };
   'channel:create': {
     request: ChannelCreateInput;
     response: { channel: Channel };

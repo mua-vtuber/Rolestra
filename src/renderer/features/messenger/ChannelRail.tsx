@@ -31,6 +31,7 @@ import { ChannelRow } from './ChannelRow';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
+import { useGlobalGeneralChannel } from '../../hooks/use-global-general-channel';
 import { useTheme } from '../../theme/use-theme';
 import type { Channel, ChannelKind } from '../../../shared/channel-types';
 import type { ActiveMeetingSummary } from '../../../shared/meeting-types';
@@ -96,17 +97,19 @@ export function ChannelRail({
 
   const { channels, loading: channelsLoading, error: channelsError } = useChannels(projectId);
   const { dms, loading: dmsLoading, error: dmsError } = useDms();
+  const { channel: globalGeneralChannel } = useGlobalGeneralChannel();
   // `useActiveChannel`'s validation clears the stored channelId when the
-  // current channels list does not contain it. DMs live outside the
-  // project's `useChannels` response (project_id IS NULL — fetched
-  // separately by `useDms`), so without merging the two lists the
-  // validation effect would clear the user's active selection the
-  // moment they pick a DM. Concat instead of merge: ids are unique
-  // across the two surfaces so duplicate suppression isn't needed.
+  // current channels list does not contain it. DMs + 전역 일반 채널은
+  // useChannels(projectId) 의 응답에 없으므로 같이 병합해야 사용자가
+  // 일반 채널 / DM 을 선택했을 때 active selection 이 보존된다.
   const validationChannels = useMemo<Channel[] | null>(() => {
-    if (channels === null && dms === null) return null;
-    return [...(channels ?? []), ...(dms ?? [])];
-  }, [channels, dms]);
+    if (channels === null && dms === null && globalGeneralChannel === null) {
+      return null;
+    }
+    const all: Channel[] = [...(channels ?? []), ...(dms ?? [])];
+    if (globalGeneralChannel !== null) all.push(globalGeneralChannel);
+    return all;
+  }, [channels, dms, globalGeneralChannel]);
   const activeChannel = useActiveChannel(projectId, validationChannels);
 
   const systemChannels = useMemo<Channel[]>(
@@ -145,15 +148,24 @@ export function ChannelRail({
 
   const renderRow = (channel: Channel): ReactElement => {
     const activeMeeting = meetingByChannel?.get(channel.id) ?? null;
-    const rightSlot =
-      meetingControlReady && (channel.kind === 'user' || activeMeeting !== null) ? (
-        <ChannelMeetingControl
-          channel={channel}
-          activeMeeting={activeMeeting}
-          onStartMeeting={onStartMeeting!}
-          onAbortMeeting={onAbortMeeting!}
-        />
-      ) : undefined;
+    // R12-C: 회의 시작 버튼 표시 조건 갱신.
+    // - 부서 채널 (channel.role !== null) = 할 일 큐에서 자동 워크플로우 → 수동 [회의 시작] hide
+    // - system_general (전역 일반 채널) = 1라운드 단순 응답 → hide
+    // - 자유 user 채널 (role === null) = 기존대로 [회의 시작] 버튼 표시
+    // - 진행 중 meeting (activeMeeting != null) = 항상 표시 (abort 가능)
+    const isFreeUserChannel =
+      channel.kind === 'user' && channel.role === null;
+    const showMeetingControl =
+      meetingControlReady &&
+      (activeMeeting !== null || isFreeUserChannel);
+    const rightSlot = showMeetingControl ? (
+      <ChannelMeetingControl
+        channel={channel}
+        activeMeeting={activeMeeting}
+        onStartMeeting={onStartMeeting!}
+        onAbortMeeting={onAbortMeeting!}
+      />
+    ) : undefined;
     return (
       <ChannelRow
         key={channel.id}
@@ -191,12 +203,15 @@ export function ChannelRail({
           </div>
         ) : null}
 
-        {/* System section — 섹션 타이틀 없음. 채널 0개이면 빈 슬롯 생략. */}
+        {/* System section — 섹션 타이틀 없음. 채널 0개이면 빈 슬롯 생략.
+            R12-C: 전역 일반 채널 (projectId=null, kind=system_general) 을
+            맨 위에 prepend. 프로젝트 종속 system_approval/minutes 는 그 뒤. */}
         <section
           data-testid="channel-section-system"
           aria-label={t('messenger.channelRail.sectionAria.system')}
           className="flex flex-col gap-px py-1"
         >
+          {globalGeneralChannel !== null ? renderRow(globalGeneralChannel) : null}
           {systemChannels.map(renderRow)}
         </section>
 

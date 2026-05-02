@@ -81,7 +81,7 @@ function getMeeting(): MeetingService {
   return meetingAccessor();
 }
 
-/** channel:list */
+/** channel:list — R12-C: projectId=null 은 DM 만 (전역 일반 채널은 별도 IPC). */
 export function handleChannelList(
   data: IpcRequest<'channel:list'>,
 ): IpcResponse<'channel:list'> {
@@ -89,6 +89,20 @@ export function handleChannelList(
   const channels =
     data.projectId === null ? svc.listDms() : svc.listByProject(data.projectId);
   return { channels };
+}
+
+/**
+ * R12-C — channel:get-global-general — 전역 일반 채널 1개 lookup.
+ * Boot 직후 ensureGlobalGeneralChannel 가 보장하므로 일반적으로 channel
+ * 객체 반환. 마이그레이션/boot 비정상 시 null.
+ */
+export function handleChannelGetGlobalGeneral(): IpcResponse<'channel:get-global-general'> {
+  const svc = getChannel();
+  try {
+    return { channel: svc.getGlobalGeneralChannel() };
+  } catch {
+    return { channel: null };
+  }
 }
 
 /** channel:create */
