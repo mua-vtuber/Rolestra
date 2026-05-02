@@ -7,6 +7,9 @@ export type { NavRailItem, NavRailProps } from './NavRail';
 export { ProjectRail } from './ProjectRail';
 export type { ProjectRailProps, ProjectRailProject, ProjectRailDm } from './ProjectRail';
 
+export { Sidebar } from './Sidebar';
+export type { SidebarProps } from './Sidebar';
+
 export { ShellTopBar } from './ShellTopBar';
 export type { ShellTopBarProps } from './ShellTopBar';
 

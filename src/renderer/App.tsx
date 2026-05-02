@@ -2,18 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import './i18n';
-import { NavRail, ProjectRail, Shell, ShellTopBar } from './components/shell';
-import type { NavRailItem, ProjectRailProject } from './components/shell';
+import { NavRail, Shell, ShellTopBar, Sidebar } from './components/shell';
+import type { NavRailItem } from './components/shell';
 import { DevThemeSwitcher } from './components/shell/theme-switcher';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { MessengerPage } from './features/messenger/MessengerPage';
-import { DmListView } from './features/dms/DmListView';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
+import { StartMeetingModal } from './features/meetings/StartMeetingModal';
 import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { QueuePanel } from './features/projects/QueuePanel';
 import { MessageSearchView } from './features/search/MessageSearchView';
 import { SettingsView } from './features/settings/SettingsView';
+import { useActiveMeetings } from './hooks/use-active-meetings';
 import { notifyDashboardChanged } from './hooks/dashboard-invalidation-bus';
 import { useActiveProject } from './hooks/use-active-project';
 import { useProjects } from './hooks/use-projects';
@@ -21,6 +22,7 @@ import { useAppViewStore, type AppView } from './stores/app-view-store';
 import { useActiveChannelStore } from './stores/active-channel-store';
 import { invoke } from './ipc/invoke';
 import { notifyError } from './components/ErrorBoundary';
+import type { Channel } from '../shared/channel-types';
 import type {
   PermissionMode,
   Project,
@@ -48,16 +50,6 @@ const NAV_ITEMS: ReadonlyArray<NavRailItem> = [
   { id: 'settings', icon: 'settings', label: 'Settings' },
 ];
 
-/**
- * Map a full `Project` row to the rail-friendly projection. We keep only
- * what `ProjectRail` consumes so the rail never depends on schema-level
- * fields (status, autonomyMode, etc.) that are irrelevant to navigation.
- * Icon defaults to `folder`; R5+ may add per-kind or per-theme icons.
- */
-function toRailProject(project: Project): ProjectRailProject {
-  return { id: project.id, name: project.name, icon: 'folder' };
-}
-
 export function App() {
   const { t } = useTranslation();
   const { projects, createNew, refresh: refreshProjects } = useProjects();
@@ -66,6 +58,44 @@ export function App() {
   const [searchOpen, setSearchOpen] = useState<boolean>(false);
   const view = useAppViewStore((s) => s.view);
   const setView = useAppViewStore((s) => s.setView);
+
+  // R12-C T8: 회의 시작/중단 컨트롤은 사이드바 (자유 user 채널 row) 가
+  // 호스팅한다. 모달 + 활성 회의 list + abort handler 는 App 레벨에서
+  // 들고 있어야 사이드바 / 메신저 양쪽에서 같은 source 를 본다.
+  const [startMeetingChannel, setStartMeetingChannel] =
+    useState<Channel | null>(null);
+  const { meetings: activeMeetings, refresh: refreshActiveMeetings } =
+    useActiveMeetings();
+
+  const handleRequestStartMeeting = useCallback(
+    (channel: Channel): void => setStartMeetingChannel(channel),
+    [],
+  );
+  const handleStartMeetingOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) setStartMeetingChannel(null);
+    },
+    [],
+  );
+  const handleMeetingStarted = useCallback((): void => {
+    setStartMeetingChannel(null);
+    void refreshActiveMeetings();
+  }, [refreshActiveMeetings]);
+  const handleAbortMeeting = useCallback(
+    async (meetingId: string): Promise<void> => {
+      try {
+        await invoke('meeting:abort', { meetingId });
+      } catch (err) {
+        console.warn(
+          '[rolestra] meeting:abort failed',
+          err instanceof Error ? err.message : String(err),
+        );
+      } finally {
+        void refreshActiveMeetings();
+      }
+    },
+    [refreshActiveMeetings],
+  );
 
   // R11-Task6: first-boot auto-enter into the onboarding wizard. We
   // probe `onboarding:get-state` once on mount; if the persisted row
@@ -142,11 +172,6 @@ export function App() {
       }
     },
     [setView],
-  );
-
-  const railProjects = useMemo(
-    () => projects.map(toRailProject),
-    [projects],
   );
 
   // Resolve the active project (name + autonomyMode) from the already-loaded
@@ -393,27 +418,37 @@ export function App() {
         />
       }
       rail={
-        <div className="flex h-full flex-col shrink-0">
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            <ProjectRail
-              projects={railProjects}
-              activeProjectId={activeProjectId ?? undefined}
-              onSelectProject={handleSelectProject}
-              onCreateProject={handleCreateProject}
-              className="h-full border-r-0"
-            />
-          </div>
-          <DmListView
-            activeChannelId={activeChannelId}
-            onSelectDm={(channelId) => {
-              if (activeProjectId !== null) {
-                setActiveChannelIdStore(activeProjectId, channelId);
-              }
-              setView('messenger');
-            }}
-            className="bg-project-bg border-r border-border"
-          />
-        </div>
+        <Sidebar
+          projects={projects}
+          activeProjectId={activeProjectId}
+          activeChannelId={activeChannelId}
+          onActivateProject={handleSelectProject}
+          onSelectChannel={(channel) => {
+            if (channel.projectId !== null) {
+              setActiveChannelIdStore(channel.projectId, channel.id);
+            }
+            setView('messenger');
+          }}
+          onSelectGeneralChannel={(channel) => {
+            // 일반 채널은 projectId === null. active project 가 있는
+            // 사용자가 일반 채널로 와도 active project 자체는 유지하고
+            // 그 active 채널 슬롯만 일반 채널로 전환한다.
+            if (activeProjectId !== null) {
+              setActiveChannelIdStore(activeProjectId, channel.id);
+            }
+            setView('messenger');
+          }}
+          onSelectDm={(channelId) => {
+            if (activeProjectId !== null) {
+              setActiveChannelIdStore(activeProjectId, channelId);
+            }
+            setView('messenger');
+          }}
+          onCreateProject={handleCreateProject}
+          meetings={activeMeetings}
+          onStartMeeting={handleRequestStartMeeting}
+          onAbortMeeting={handleAbortMeeting}
+        />
       }
       topBar={
         <ShellTopBar
@@ -476,6 +511,13 @@ export function App() {
         activeProjectName={activeProjectName}
         activeChannelName={activeChannelName}
         onNavigate={handleSearchNavigate}
+      />
+      <StartMeetingModal
+        open={startMeetingChannel !== null}
+        onOpenChange={handleStartMeetingOpenChange}
+        channelId={startMeetingChannel?.id ?? null}
+        channelName={startMeetingChannel?.name ?? null}
+        onStarted={handleMeetingStarted}
       />
     </Shell>
   );

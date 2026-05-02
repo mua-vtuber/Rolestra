@@ -1157,5 +1157,23 @@
     "switcher": {
       "label": "Theme"
     }
+  },
+  "sidebar": {
+    "aria": "Sidebar",
+    "general": {
+      "header": "General",
+      "label": "General channel",
+      "empty": "Preparing general channel…"
+    },
+    "projects": {
+      "header": "Projects",
+      "create": "New project",
+      "empty": "No projects"
+    },
+    "project": {
+      "systemHeader": "System",
+      "deptHeader": "Departments",
+      "freeChannelsHeader": "Free channels"
+    }
   }
 }

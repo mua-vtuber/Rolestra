@@ -1,45 +1,43 @@
 /**
- * MessengerPage — R5 메신저 뷰 shell.
+ * MessengerPage — R12-C T8 통합 사이드바 land 후 2 pane 메신저.
  *
- * 3 pane 레이아웃(ChannelRail / Thread / MemberPanel) + Task 10 채널 CRUD
- * 모달 3종(ChannelCreateModal / ChannelRenameDialog / ChannelDeleteConfirm)
- * 호스팅.
+ * R5~R11 까지는 3 pane (ChannelRail / Thread / MemberPanel) 이었으나
+ * R12-C T8 에서 좌측 사이드바 (general / projects accordion / DM) 가
+ * Shell rail 자리로 승격되어 ChannelRail 의 채널 list 역할을 흡수했다.
+ * 따라서 이 페이지는 Thread + MemberPanel 두 컬럼만 호스팅한다.
  *
- * 모달 소유권은 MessengerPage 에 둔다:
- * - ChannelRail `+ 새 채널` 버튼 → create modal 오픈
- * - Thread 의 ChannelHeader rename / delete 버튼 → 해당 모달을 `targetChannel`
+ * 모달 소유권은 그대로 MessengerPage 에 둔다:
+ * - ChannelHeader 의 rename / delete 버튼 → 해당 모달을 `targetChannel`
  *   과 함께 오픈 (channelId 만 받아 MessengerPage 가 자체 `useChannels` 인스턴스로
- *   resolve)
- * - CRUD 성공 시 `notifyChannelsChanged()` 를 발화해 ChannelRail/Thread/내부
- *   인스턴스 전원이 refetch 한다(R10 shared cache 이전 단계).
- * - Create 성공 시 새 채널을 active 로 전환, Delete 성공 시 active 였으면 clear.
+ *   resolve).
+ * - StartMeetingModal — 사이드바의 "회의 시작" 컨트롤이 R12-C T9~T11 에서
+ *   채널 종류별 disabled 분기와 함께 정리되기 전까지는 ChannelHeader 도
+ *   여전히 회의 컨트롤을 들고 있을 수 있다.
+ * - CRUD 성공 시 `notifyChannelsChanged()` — Sidebar / Thread / MemberPanel
+ *   전원이 refetch.
  *
- * Empty state: active project 가 없으면 3 pane 을 내리고 안내만 보여준다.
+ * Empty state: active project 가 없으면 안내만 보여준다.
  *
  * 디자인 규약:
- * - hex literal 0 — 색/폰트는 전부 token CSS variable 경유.
- * - 3 pane column grid: 좌 16rem fixed / 가운데 1fr / 우 18rem fixed.
- * - `data-testid`: `messenger-page`, `messenger-empty-state`, `messenger-channel-rail`,
+ * - hex literal 0.
+ * - 2 pane column grid: 가운데 1fr / 우 18rem fixed.
+ * - `data-testid`: `messenger-page`, `messenger-empty-state`,
  *   `messenger-thread`, `messenger-member-panel`.
  */
 import { clsx } from 'clsx';
 import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { ChannelRail } from './ChannelRail';
 import { MemberPanel } from './MemberPanel';
 import { Thread } from './Thread';
 import { ChannelCreateModal } from '../channels/ChannelCreateModal';
 import { ChannelDeleteConfirm } from '../channels/ChannelDeleteConfirm';
 import { ChannelRenameDialog } from '../channels/ChannelRenameDialog';
-import { StartMeetingModal } from '../meetings/StartMeetingModal';
 import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
-import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
 import { useActiveChannelStore } from '../../stores/active-channel-store';
-import { invoke } from '../../ipc/invoke';
 import type { Channel } from '../../../shared/channel-types';
 
 export interface MessengerPageProps {
@@ -101,15 +99,11 @@ function MessengerPageActive({
   }, [channels, dms]);
 
   // Modal state ────────────────────────────────────────────────
+  // R12-C T8: 회의 시작/중단 컨트롤은 App 레벨 Sidebar host 로 승격되어
+  // MessengerPage 는 채널 CRUD 모달만 든다.
   const [createOpen, setCreateOpen] = useState(false);
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
-  // R12: meeting start/abort were promoted from the channel header to
-  // the sidebar (per-row controls). The host owns one
-  // `useActiveMeetings` instance + the start-meeting modal so abort and
-  // start success both refresh the same data source the sidebar reads.
-  const [startMeetingChannel, setStartMeetingChannel] = useState<Channel | null>(null);
-  const { meetings: activeMeetings, refresh: refreshActiveMeetings } = useActiveMeetings();
 
   const renameTarget = useMemo<Channel | null>(
     () =>
@@ -159,42 +153,16 @@ function MessengerPageActive({
   );
 
   // Child callbacks ────────────────────────────────────────────
-  const handleOpenCreate = useCallback((): void => {
-    setCreateOpen(true);
-  }, []);
   const handleOpenRename = useCallback((channelId: string): void => {
     setRenameTargetId(channelId);
   }, []);
   const handleOpenDelete = useCallback((channelId: string): void => {
     setDeleteTargetId(channelId);
   }, []);
-
-  // R12 sidebar meeting controls ────────────────────────────────
-  const handleRequestStartMeeting = useCallback((channel: Channel): void => {
-    setStartMeetingChannel(channel);
-  }, []);
-  const handleStartMeetingOpenChange = useCallback((open: boolean): void => {
-    if (!open) setStartMeetingChannel(null);
-  }, []);
-  const handleStarted = useCallback((): void => {
-    setStartMeetingChannel(null);
-    void refreshActiveMeetings();
-  }, [refreshActiveMeetings]);
-  const handleAbortMeeting = useCallback(
-    async (meetingId: string): Promise<void> => {
-      try {
-        await invoke('meeting:abort', { meetingId });
-      } catch (err) {
-        console.warn(
-          '[MessengerPage] meeting:abort failed',
-          err instanceof Error ? err.message : String(err),
-        );
-      } finally {
-        void refreshActiveMeetings();
-      }
-    },
-    [refreshActiveMeetings],
-  );
+  // R12-C: ChannelCreateModal 트리거가 사이드바 "+ 새 채널" 로 이전되면
+  // setCreateOpen 트리거가 사라진다. T8 단계에서는 사이드바 "+ 새 프로젝트"
+  // 만 land — 채널 create 는 자유 user 채널 흐름이라 T9~T11 까지는 hide.
+  // 모달은 살려두되 create 트리거만 미배치.
 
   return (
     <div
@@ -202,23 +170,9 @@ function MessengerPageActive({
       data-empty="false"
       className={clsx('grid h-full min-h-0', className)}
       style={{
-        gridTemplateColumns: '16rem 1fr 18rem',
+        gridTemplateColumns: '1fr 18rem',
       }}
     >
-      <aside
-        data-testid="messenger-channel-rail"
-        aria-label={t('messenger.pane.channelRail')}
-        className="border-r border-border bg-project-bg min-h-0 overflow-hidden"
-      >
-        <ChannelRail
-          projectId={projectId}
-          meetings={activeMeetings}
-          onStartMeeting={handleRequestStartMeeting}
-          onAbortMeeting={handleAbortMeeting}
-          onCreateChannel={handleOpenCreate}
-        />
-      </aside>
-
       <main
         data-testid="messenger-thread"
         aria-label={t('messenger.pane.thread')}
@@ -260,13 +214,6 @@ function MessengerPageActive({
         }}
         channel={deleteTarget}
         onDeleted={handleDeleted}
-      />
-      <StartMeetingModal
-        open={startMeetingChannel !== null}
-        onOpenChange={handleStartMeetingOpenChange}
-        channelId={startMeetingChannel?.id ?? null}
-        channelName={startMeetingChannel?.name ?? null}
-        onStarted={handleStarted}
       />
     </div>
   );

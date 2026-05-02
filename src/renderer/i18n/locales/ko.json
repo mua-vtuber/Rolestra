@@ -1155,5 +1155,23 @@
     "switcher": {
       "label": "테마"
     }
+  },
+  "sidebar": {
+    "aria": "사이드바",
+    "general": {
+      "header": "일반",
+      "label": "일반 채널",
+      "empty": "일반 채널 준비 중…"
+    },
+    "projects": {
+      "header": "프로젝트",
+      "create": "새 프로젝트",
+      "empty": "프로젝트가 없습니다"
+    },
+    "project": {
+      "systemHeader": "시스템",
+      "deptHeader": "부서",
+      "freeChannelsHeader": "자유 채널"
+    }
   }
 }
