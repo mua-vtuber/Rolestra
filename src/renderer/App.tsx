@@ -28,6 +28,7 @@ import type {
   Project,
   ProjectKind,
 } from '../shared/project-types';
+import type { RoleId } from '../shared/role-types';
 
 /**
  * 현재 마운트할 최상위 뷰. R5에서는 dashboard ↔ messenger 2개만 실제 페이지가
@@ -316,6 +317,7 @@ export function App() {
       slug: string;
       staff: ReadonlyArray<string>;
       roles: Record<string, string>;
+      skillAssignments: Record<string, RoleId[]>;
       permissions: PermissionMode;
     }): void => {
       void (async () => {
@@ -361,6 +363,28 @@ export function App() {
           } catch (reason) {
             console.warn(
               '[rolestra] onboarding member:update-profile failed',
+              { providerId, reason },
+            );
+          }
+        }
+
+        // 2b. R12-C round 2 — provider:updateRoles 로 직원별 능력 (RoleId[])
+        //     영속화. wizard step 3 의 능력 배정 매트릭스가 부서 채널 회의
+        //     PromptComposer 합성 시점의 providerRoles 로 바로 흘러가야
+        //     #3-3 침묵 회귀가 차단된다. skill_overrides 는 wizard 에서
+        //     수집하지 않으므로 null.
+        for (const providerId of input.staff) {
+          if (!eligibleProviderIds.has(providerId)) continue;
+          const roles = input.skillAssignments[providerId] ?? [];
+          try {
+            await invoke('provider:updateRoles', {
+              providerId,
+              roles,
+              skill_overrides: null,
+            });
+          } catch (reason) {
+            console.warn(
+              '[rolestra] onboarding provider:updateRoles failed',
               { providerId, reason },
             );
           }

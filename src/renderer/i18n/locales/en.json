@@ -743,7 +743,11 @@
     "step3": {
       "description": "Give each selected member a one-line role. You can refine the full profile later in Settings → Members.",
       "heading": "Assign roles",
-      "placeholder": "e.g. Thoughtful senior engineer / Detail-oriented QA"
+      "placeholder": "e.g. Thoughtful senior engineer / Detail-oriented QA",
+      "rolesHeader": "Role labels",
+      "skillsHeader": "Skill assignment (each skill needs ≥ 1 staff)",
+      "skillsHint": "Each skill must have at least one staff assigned. One staff can hold multiple skills. Default: only \"general\" is ON.",
+      "skillsMissing": "Unassigned skills: {{labels}} (≥ 1 staff each)"
     },
     "step4": {
       "description": "Choose the default permission mode for new projects. Each project can override this later.",

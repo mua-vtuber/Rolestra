@@ -508,6 +508,14 @@ const onboardingSelectionsSchema = z.object({
   // 빈 문자열을 거부하면 IPC 가 reject 되고 controlled input 이 직전 값으로
   // 되돌아가 backspace 가 먹히지 않는 것처럼 보이므로 value min 은 두지 않는다.
   roles: z.record(z.string().min(1).max(128), z.string().max(200)).optional(),
+  // R12-C round 2 — 직원 능력 배정 매트릭스. providerId → RoleId[].
+  // wizard step 3 의 9 능력 multi-checkbox 가 부분 patch 마다 흐른다.
+  skillAssignments: z
+    .record(
+      z.string().min(1).max(128),
+      z.array(z.enum(ALL_ROLE_IDS as unknown as [string, ...string[]])).max(9),
+    )
+    .optional(),
   permissions: permissionModeSchema.optional(),
   firstProject: z
     .object({

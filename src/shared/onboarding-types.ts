@@ -11,6 +11,7 @@
 
 import type { PermissionMode, ProjectKind } from './project-types';
 import type { ProviderCapability, ProviderType } from './provider-types';
+import type { RoleId } from './role-types';
 
 /** 1=office, 2=staff, 3=roles, 4=permissions, 5=firstProject (data 와 정합). */
 export type OnboardingStep = 1 | 2 | 3 | 4 | 5;
@@ -27,6 +28,16 @@ export type OnboardingStep = 1 | 2 | 3 | 4 | 5;
 export interface OnboardingSelections {
   staff?: string[];
   roles?: Record<string, string>;
+  /**
+   * R12-C round 2 — step 3 에서 직원별로 부여한 부서 능력 list.
+   * key = providerId, value = 그 직원이 가진 RoleId 배열.
+   * Step 3 의 검증: 9 능력 (idea / planning / design.ui / design.ux /
+   * design.character / design.background / implement / review / general)
+   * 각각에 최소 1명 이상 배정되어야 "다음" 버튼이 활성화된다 — 부서
+   * 채널 회의 시작 시 능력 부여된 직원이 없어 PromptComposer fallback
+   * 으로 빠지는 회귀를 wizard 단계에서 차단.
+   */
+  skillAssignments?: Record<string, RoleId[]>;
   permissions?: PermissionMode;
   firstProject?: {
     slug: string;

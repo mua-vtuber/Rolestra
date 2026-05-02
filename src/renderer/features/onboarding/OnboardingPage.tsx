@@ -78,6 +78,7 @@ import type {
   PermissionMode,
   ProjectKind,
 } from '../../../shared/project-types';
+import { ALL_ROLE_IDS, type RoleId } from '../../../shared/role-types';
 
 export interface OnboardingPageProps {
   /** Invoked when the user clicks "나중에 하기" / "이전" / completes step 5. */
@@ -94,6 +95,12 @@ export interface OnboardingPageProps {
     slug: string;
     staff: ReadonlyArray<string>;
     roles: Record<string, string>;
+    /**
+     * R12-C round 2 — wizard step 3 에서 선택된 직원별 능력 배정.
+     * key = providerId, value = RoleId[]. App.tsx 가 onCompleteWithProject
+     * 에서 provider:updateRoles IPC 로 영속화한다.
+     */
+    skillAssignments: Record<string, RoleId[]>;
     permissions: PermissionMode;
   }) => void;
   /**
@@ -289,6 +296,55 @@ function OnboardingWizardBody({
     [selectedStaffIds, state.selections.roles],
   );
 
+  // R12-C round 2 — 능력 배정 매트릭스. 부모가 디폴트 채우기 책임.
+  // 디폴트: `general` 만 모든 직원 ON, 나머지 8 능력은 OFF — 사용자가
+  // 직접 부여해야 부서 채널 회의가 정상 prompt 합성된다.
+  const skillAssignments = useMemo<
+    NonNullable<OnboardingSelections['skillAssignments']>
+  >(() => {
+    const stored = state.selections.skillAssignments ?? {};
+    const next: Record<string, RoleId[]> = {};
+    for (const id of selectedStaffIds) {
+      const existing = stored[id];
+      if (Array.isArray(existing)) {
+        next[id] = existing;
+      } else {
+        next[id] = ['general'];
+      }
+    }
+    return next;
+  }, [selectedStaffIds, state.selections.skillAssignments]);
+
+  // staff 변경 / 디폴트 채우기 결과가 persist 되어 있는 값과 다르면 IPC
+  // 한 번 patch — 새 직원이 선택될 때마다 'general' 디폴트가 자연스럽게
+  // 저장되어 검증 카운트가 즉시 반영된다.
+  const persistedSkillAssignmentsRef = useRef<string>('');
+  useEffect(() => {
+    const serialized = JSON.stringify(skillAssignments);
+    if (serialized === persistedSkillAssignmentsRef.current) return;
+    const stored = JSON.stringify(state.selections.skillAssignments ?? {});
+    if (serialized === stored) {
+      persistedSkillAssignmentsRef.current = serialized;
+      return;
+    }
+    persistedSkillAssignmentsRef.current = serialized;
+    void patchSelections({ skillAssignments });
+  }, [
+    skillAssignments,
+    state.selections.skillAssignments,
+    patchSelections,
+  ]);
+
+  // 9 능력 모두 ≥ 1명이어야 step 3 → 4 진행 허용.
+  const step3SkillsMissing = useMemo<RoleId[]>(() => {
+    return ALL_ROLE_IDS.filter((role) => {
+      for (const id of selectedStaffIds) {
+        if ((skillAssignments[id] ?? []).includes(role)) return false;
+      }
+      return true;
+    });
+  }, [selectedStaffIds, skillAssignments]);
+
   // F1: detection 빈 상태 (감지 0 건) 는 Step2 데이터 부재 — 사용자가
   // 진행할 수 없으므로 "다음" 차단 + empty UI 표시. detectionLoading 일
   // 때는 spinner 와 등가의 메시지만 보이고 "다음" 은 여전히 차단.
@@ -302,10 +358,15 @@ function OnboardingWizardBody({
       case 2:
         return selectedCount >= MIN_STAFF && !detectionEmpty;
       case 3:
-        // every selected provider must have a non-empty trimmed role
+        // every selected provider must have a non-empty trimmed role label
+        // AND every one of the 9 skills must have at least one assignee
+        // (R12-C round 2 — fixes #3-3 침묵 회귀: 능력 분배 안 된 신규
+        // 직원이 부서 채널 진입 시 PromptComposer fallback 으로 빠지는 것을
+        // wizard 단계에서 차단).
         return (
           selectedStaffIds.length > 0 &&
-          selectedStaffIds.every((id) => (roles[id] ?? '').trim().length > 0)
+          selectedStaffIds.every((id) => (roles[id] ?? '').trim().length > 0) &&
+          step3SkillsMissing.length === 0
         );
       case 4:
         return true; // default 'hybrid' always valid
@@ -321,6 +382,7 @@ function OnboardingWizardBody({
     roles,
     firstProjectSlug,
     detectionEmpty,
+    step3SkillsMissing,
   ]);
 
   // ── Handlers ──────────────────────────────────────────────────
@@ -338,6 +400,15 @@ function OnboardingWizardBody({
   const handleRolesChange = useCallback(
     (next: NonNullable<OnboardingSelections['roles']>): void => {
       void patchSelections({ roles: next });
+    },
+    [patchSelections],
+  );
+
+  const handleSkillsChange = useCallback(
+    (
+      next: NonNullable<OnboardingSelections['skillAssignments']>,
+    ): void => {
+      void patchSelections({ skillAssignments: next });
     },
     [patchSelections],
   );
@@ -388,6 +459,7 @@ function OnboardingWizardBody({
           slug: firstProjectSlug.trim(),
           staff: selectedStaffIds,
           roles: { ...roles },
+          skillAssignments: { ...skillAssignments },
           permissions,
         });
       }
@@ -401,6 +473,7 @@ function OnboardingWizardBody({
     onCompleteWithProject,
     onExit,
     firstProjectKind,
+    skillAssignments,
     firstProjectSlug,
     selectedStaffIds,
     roles,
@@ -531,7 +604,9 @@ function OnboardingWizardBody({
             <Step3RoleAssignment
               staff={selectedStaffIds}
               roles={roles}
+              skillAssignments={skillAssignments}
               onChange={handleRolesChange}
+              onSkillsChange={handleSkillsChange}
             />
           </div>
         )}

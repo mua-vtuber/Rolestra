@@ -741,7 +741,11 @@
     "step3": {
       "description": "선택한 직원에게 한 줄 역할을 부여합니다. 이후 Settings → Members 에서 더 자세한 프로필을 편집할 수 있습니다.",
       "heading": "역할 부여",
-      "placeholder": "예: 사려 깊은 시니어 / 꼼꼼한 QA"
+      "placeholder": "예: 사려 깊은 시니어 / 꼼꼼한 QA",
+      "rolesHeader": "역할 칭호",
+      "skillsHeader": "능력 배정 (능력별 1명 이상 필수)",
+      "skillsHint": "각 능력에 최소 1명을 배정해야 합니다. 한 직원이 여러 능력을 가질 수 있습니다. 디폴트는 일반 능력만 ON.",
+      "skillsMissing": "능력 미배정: {{labels}} (각 1명 이상 필요)"
     },
     "step4": {
       "description": "프로젝트의 기본 권한 모드를 선택합니다. 프로젝트별로 나중에 변경할 수 있습니다.",
