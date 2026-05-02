@@ -529,12 +529,17 @@ function OnboardingWizardBody({
 
         {currentStep === 1 && (
           <>
-            <section
-              data-testid="onboarding-step-1"
-              className="mt-6 max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm leading-relaxed text-fg"
+            {/*
+              사용자 요청 (2026-05-03): 안내 카드 wrapper 삭제. 본문은
+              상단 description 아래에 inline 으로 이어 붙여 step 1 의
+              핵심 affordance (ArenaRoot picker) 가 즉시 보이게 한다.
+            */}
+            <p
+              data-testid="onboarding-step-1-body"
+              className="mt-2 text-sm leading-relaxed text-fg-muted max-w-3xl"
             >
               {t('onboarding.step1.body')}
-            </section>
+            </p>
             <Step1ArenaRoot />
           </>
         )}
