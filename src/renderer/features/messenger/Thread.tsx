@@ -42,6 +42,7 @@ import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
 import { GeneralChannelControls } from '../general/GeneralChannelControls';
+import { useChannelDisabledState } from '../../hooks/use-channel-disabled-state';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
@@ -164,6 +165,9 @@ export function Thread({
     if (meetings === null) return null;
     return meetings.find((m) => m.channelId === activeChannelId) ?? null;
   }, [activeChannelId, meetings]);
+
+  // R12-C T11 — 부서 채널 disabled 분기 (워크플로우 미진입 시 잠금).
+  const channelDisabledState = useChannelDisabledState(activeChannel, meetings);
 
   const memberCount = members === null ? null : members.length;
 
@@ -480,6 +484,8 @@ export function Thread({
           <Composer
             channelId={activeChannel.id}
             readOnly={activeChannel.readOnly}
+            workflowDisabled={channelDisabledState.workflowDisabled}
+            disabledPlaceholderKey={channelDisabledState.disabledPlaceholderKey}
             onSendSuccess={handleComposerSendSuccess}
           />
         </>

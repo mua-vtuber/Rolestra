@@ -33,6 +33,17 @@ import { useTheme } from '../../theme/use-theme';
 export interface ComposerProps {
   channelId: string;
   readOnly?: boolean;
+  /**
+   * R12-C T11 — 워크플로우 비활성 상태의 부서 채널을 disabled 표면으로
+   * 잠근다. readOnly 와 별개 — 시스템 채널 readonly 배지와 다른 메시지를
+   * 보여줘야 하므로 분리. true 면 textarea + send 모두 비활성.
+   */
+  workflowDisabled?: boolean;
+  /**
+   * workflowDisabled === true 일 때 표시할 placeholder i18n 키. 미지정
+   * 시 기본 `messenger.composer.placeholder` 가 그대로 노출된다.
+   */
+  disabledPlaceholderKey?: string | null;
   onSendSuccess?: () => void;
   className?: string;
 }
@@ -45,6 +56,8 @@ function toMessage(reason: unknown): string {
 export function Composer({
   channelId,
   readOnly = false,
+  workflowDisabled = false,
+  disabledPlaceholderKey = null,
   onSendSuccess,
   className,
 }: ComposerProps): ReactElement {
@@ -71,7 +84,7 @@ export function Composer({
   const fontClass = isRetro ? 'font-mono' : 'font-sans';
 
   const handleSend = useCallback(async (): Promise<void> => {
-    if (readOnly || submitting) return;
+    if (readOnly || workflowDisabled || submitting) return;
     const content = value.trim();
     if (content.length === 0) return;
 
@@ -87,7 +100,12 @@ export function Composer({
     } finally {
       setSubmitting(false);
     }
-  }, [readOnly, submitting, value, send, onSendSuccess]);
+  }, [readOnly, workflowDisabled, submitting, value, send, onSendSuccess]);
+
+  const placeholderKey =
+    workflowDisabled && disabledPlaceholderKey !== null
+      ? disabledPlaceholderKey
+      : 'messenger.composer.placeholder';
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>): void => {
     if (event.key !== 'Enter') return;
@@ -133,6 +151,7 @@ export function Composer({
       data-testid="composer"
       data-theme-variant={themeKey}
       data-readonly={readOnly ? 'true' : 'false'}
+      data-workflow-disabled={workflowDisabled ? 'true' : 'false'}
       data-channel-id={channelId}
       className={rootClasses}
     >
@@ -142,6 +161,15 @@ export function Composer({
           className={clsx('text-xs font-semibold text-fg-muted', fontClass)}
         >
           {t('messenger.composer.readOnlyBadge')}
+        </div>
+      ) : null}
+
+      {workflowDisabled && !readOnly ? (
+        <div
+          data-testid="composer-workflow-disabled-badge"
+          className={clsx('text-xs font-semibold text-fg-muted', fontClass)}
+        >
+          {t(placeholderKey)}
         </div>
       ) : null}
 
@@ -166,8 +194,8 @@ export function Composer({
           data-testid="composer-textarea"
           value={value}
           rows={1}
-          disabled={readOnly || submitting}
-          placeholder={t('messenger.composer.placeholder')}
+          disabled={readOnly || workflowDisabled || submitting}
+          placeholder={t(placeholderKey)}
           onChange={handleChange}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}

@@ -1192,5 +1192,8 @@
     "archiveAction": "New conversation",
     "archivePending": "Archiving…",
     "archiveConfirm": "Archive the current conversation and clear this channel. Continue?"
+  },
+  "channel": {
+    "deptDisabledPlaceholder": "Start by writing a task in the task queue"
   }
 }
