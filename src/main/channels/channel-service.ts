@@ -57,6 +57,7 @@ import type {
 import { DEFAULT_HANDOFF_MODE } from '../../shared/channel-role-types';
 import type { ProjectMember } from '../../shared/project-types';
 import type { Message } from '../../shared/message-types';
+import { SKILL_CATALOG } from '../../shared/skill-catalog';
 import { ChannelRepository } from './channel-repository';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -469,8 +470,23 @@ export class ChannelService {
       throw new SystemChannelProtectedError(id, existing.kind, 'rename');
     }
 
+    // R12-C round 3 (#1-4) — 사용자가 부서 채널 이름을 모두 지우고 저장하면
+    // SKILL_CATALOG 의 부서 라벨로 자동 복원한다. UNIQUE(project_id, name)
+    // 충돌을 막으면서도 사용자 의도 ("작명을 비우고 라벨만 보기") 와 동일한
+    // 시각 결과 — 사이드바에서 부서 row 가 라벨만 표시하므로 빈 작명은
+    // 의미가 자동 라벨이다.
+    let resolvedName = newName.trim();
+    if (resolvedName.length === 0) {
+      if (existing.role === null) {
+        throw new ChannelError(
+          'rename: 자유 user 채널 이름은 비워둘 수 없습니다.',
+        );
+      }
+      resolvedName = SKILL_CATALOG[existing.role].label.ko;
+    }
+
     try {
-      this.repo.update(id, { name: newName });
+      this.repo.update(id, { name: resolvedName });
     } catch (err) {
       if (isChannelNameUniqueViolation(err)) {
         throw new DuplicateChannelNameError(existing.projectId, newName);

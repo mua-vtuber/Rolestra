@@ -8,7 +8,9 @@ import { DevThemeSwitcher } from './components/shell/theme-switcher';
 import { DashboardPage } from './features/dashboard/DashboardPage';
 import { MessengerPage } from './features/messenger/MessengerPage';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
+import { ChannelCreateModal } from './features/channels/ChannelCreateModal';
 import { StartMeetingModal } from './features/meetings/StartMeetingModal';
+import { notifyChannelsChanged } from './hooks/channel-invalidation-bus';
 import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
 import { QueuePanel } from './features/projects/QueuePanel';
@@ -162,6 +164,38 @@ export function App() {
   );
   const activeChannelId: string | null =
     activeProjectId === null ? null : activeChannelMap[activeProjectId] ?? null;
+
+  // R12-C round 3 (#2): 자유 user 채널 추가 흐름. 사이드바 ProjectAccordion
+  // 의 자유 채널 섹션 끝 "+ 새 채널" 버튼이 onCreateChannel(projectId) 콜백을
+  // 발화하면 createChannelProjectId state 가 set 되어 ChannelCreateModal 이
+  // 열린다. modal 의 projectId 도 같은 state 로 결정.
+  const [createChannelProjectId, setCreateChannelProjectId] = useState<
+    string | null
+  >(null);
+  const handleCreateChannelRequest = useCallback(
+    (forProjectId: string): void => {
+      setCreateChannelProjectId(forProjectId);
+    },
+    [],
+  );
+  const handleChannelCreateOpenChange = useCallback(
+    (open: boolean): void => {
+      if (!open) setCreateChannelProjectId(null);
+    },
+    [],
+  );
+  const handleChannelCreated = useCallback(
+    (channel: Channel): void => {
+      void notifyChannelsChanged().then(() => {
+        if (channel.projectId !== null) {
+          setActiveChannelIdStore(channel.projectId, channel.id);
+        }
+        setCreateChannelProjectId(null);
+        setView('messenger');
+      });
+    },
+    [setActiveChannelIdStore, setView],
+  );
 
   const handleNavSelect = useCallback(
     (id: string): void => {
@@ -469,6 +503,7 @@ export function App() {
             setView('messenger');
           }}
           onCreateProject={handleCreateProject}
+          onCreateChannel={handleCreateChannelRequest}
           meetings={activeMeetings}
           onStartMeeting={handleRequestStartMeeting}
           onAbortMeeting={handleAbortMeeting}
@@ -533,6 +568,12 @@ export function App() {
         open={modalOpen}
         onOpenChange={setModalOpen}
         onCreated={handleProjectCreated}
+      />
+      <ChannelCreateModal
+        open={createChannelProjectId !== null}
+        onOpenChange={handleChannelCreateOpenChange}
+        projectId={createChannelProjectId ?? ''}
+        onCreated={handleChannelCreated}
       />
       <MessageSearchView
         open={searchOpen}

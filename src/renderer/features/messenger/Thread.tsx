@@ -135,24 +135,28 @@ export function Thread({
   const { t, i18n } = useTranslation();
   const { channels } = useChannels(projectId);
   const { dms } = useDms();
-  // R12-C round 2 fix #2-1: 전역 일반 채널 (system_general, projectId IS NULL)
-  // 도 검증 list 에 포함시켜야 한다. 누락 시 사용자가 사이드바에서 일반
-  // 채널을 클릭하면 useActiveChannel 의 "stored channel not in list"
-  // 분기가 active id 를 즉시 비워버려 본문이 "왼쪽에서 채널 선택" 빈
-  // 화면으로 돌아간다 (round 2 dogfooding 2-1).
-  const { channel: globalGeneralChannel } = useGlobalGeneralChannel();
+  // R12-C round 2 fix #2-1 + round 3: 전역 일반 채널 (system_general,
+  // projectId IS NULL) 도 검증 list 에 포함시켜야 한다. 누락 시 사용자가
+  // 사이드바에서 일반 채널을 클릭하면 useActiveChannel 의 "stored channel
+  // not in list" 분기가 active id 를 즉시 비워버려 본문이 "왼쪽에서 채널
+  // 선택" 빈 화면으로 돌아간다.
+  //
+  // round 3 정정: globalGeneralChannel 이 fetch 완료되기 전에 allChannels
+  // 를 부분 list 로 노출하면 useActiveChannel validation 이 일반 채널 id
+  // 를 list 에 없다고 판단해 wipe. globalGeneralChannel 이 loading 인
+  // 동안에는 allChannels 자체를 null 로 유지해 검증 자체를 보류한다.
+  const {
+    channel: globalGeneralChannel,
+    loading: globalGeneralChannelLoading,
+  } = useGlobalGeneralChannel();
   const allChannels = useMemo(() => {
-    if (
-      channels === null &&
-      dms === null &&
-      globalGeneralChannel === null
-    ) {
+    if (channels === null || dms === null || globalGeneralChannelLoading) {
       return null;
     }
-    const merged: Channel[] = [...(channels ?? []), ...(dms ?? [])];
+    const merged: Channel[] = [...channels, ...dms];
     if (globalGeneralChannel !== null) merged.push(globalGeneralChannel);
     return merged;
-  }, [channels, dms, globalGeneralChannel]);
+  }, [channels, dms, globalGeneralChannel, globalGeneralChannelLoading]);
   const { activeChannelId } = useActiveChannel(projectId, allChannels);
   const { members } = useChannelMembers(activeChannelId, allChannels);
   // R12: meeting start/abort moved to MessengerPage's sidebar control —

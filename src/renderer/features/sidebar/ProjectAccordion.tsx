@@ -62,6 +62,11 @@ export interface ProjectAccordionProps {
   activeChannelId: string | null;
   onActivateProject: (projectId: string) => void;
   onSelectChannel: (channel: Channel) => void;
+  /**
+   * R12-C round 3 — 자유 user 채널 추가. 자유 채널 섹션 끝 "+ 새 채널"
+   * 버튼이 발화. App 레벨이 ChannelCreateModal 을 호스팅한다.
+   */
+  onCreateChannel?: (projectId: string) => void;
   /** 활성 회의 list — 자유 user 채널 row 의 회의 컨트롤 표시. `null` = loading. */
   meetings?: ActiveMeetingSummary[] | null;
   onStartMeeting?: (channel: Channel) => void;
@@ -75,6 +80,7 @@ export function ProjectAccordion({
   activeChannelId,
   onActivateProject,
   onSelectChannel,
+  onCreateChannel,
   meetings,
   onStartMeeting,
   onAbortMeeting,
@@ -121,6 +127,7 @@ export function ProjectAccordion({
           projectId={projectId}
           activeChannelId={activeChannelId}
           onSelectChannel={onSelectChannel}
+          onCreateChannel={onCreateChannel}
           meetings={meetings}
           onStartMeeting={onStartMeeting}
           onAbortMeeting={onAbortMeeting}
@@ -136,6 +143,9 @@ export function ProjectAccordion({
             defaultValue: '자유 채널',
           })}
           freeChannelsEmptyLabel={t('messenger.channelRail.userEmpty')}
+          createChannelLabel={t('messenger.channelRail.createChannel', {
+            defaultValue: '새 채널',
+          })}
         />
       ) : null}
     </section>
@@ -146,6 +156,7 @@ interface ProjectAccordionContentProps {
   projectId: string;
   activeChannelId: string | null;
   onSelectChannel: (channel: Channel) => void;
+  onCreateChannel?: (projectId: string) => void;
   meetings?: ActiveMeetingSummary[] | null;
   onStartMeeting?: (channel: Channel) => void;
   onAbortMeeting?: (meetingId: string) => Promise<void> | void;
@@ -155,12 +166,14 @@ interface ProjectAccordionContentProps {
   systemHeaderLabel: string;
   freeChannelsHeaderLabel: string;
   freeChannelsEmptyLabel: string;
+  createChannelLabel: string;
 }
 
 function ProjectAccordionContent({
   projectId,
   activeChannelId,
   onSelectChannel,
+  onCreateChannel,
   meetings,
   onStartMeeting,
   onAbortMeeting,
@@ -170,6 +183,7 @@ function ProjectAccordionContent({
   systemHeaderLabel,
   freeChannelsHeaderLabel,
   freeChannelsEmptyLabel,
+  createChannelLabel,
 }: ProjectAccordionContentProps): ReactElement {
   const { channels, loading, error } = useChannels(projectId);
 
@@ -317,6 +331,17 @@ function ProjectAccordionContent({
         ) : (
           freeUserChannels.map(renderFreeChannel)
         )}
+        {onCreateChannel ? (
+          <button
+            type="button"
+            data-testid={`sidebar-project-create-channel-${projectId}`}
+            onClick={() => onCreateChannel(projectId)}
+            className="mx-1.5 mt-1 flex items-center gap-1.5 rounded-panel px-2.5 py-1 text-left text-xs text-fg-muted hover:bg-sunk hover:text-fg"
+          >
+            <span aria-hidden="true">+</span>
+            <span>{createChannelLabel}</span>
+          </button>
+        ) : null}
       </SidebarSubsection>
     </div>
   );

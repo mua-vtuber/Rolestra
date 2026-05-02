@@ -229,7 +229,10 @@ export const channelCreateSchema = z.object({
 
 export const channelRenameSchema = z.object({
   id: z.string().min(1).max(128),
-  name: z.string().min(1).max(200),
+  // R12-C round 3 — name 빈 문자열 허용. service 는 부서 채널 (role !==
+  // null) 의 빈 입력을 부서 카탈로그 라벨로 자동 복원해 UNIQUE
+  // (project_id, name) 충돌을 막는다 (#1-4 dogfooding).
+  name: z.string().max(200),
 });
 
 export const channelMembersPatchSchema = z.object({

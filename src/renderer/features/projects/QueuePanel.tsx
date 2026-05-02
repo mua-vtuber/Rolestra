@@ -24,6 +24,7 @@ import type { QueueItem } from '../../../shared/queue-types';
 import { QueueActiveSpotlight } from './QueueActiveSpotlight';
 import { QueueStatBar, type QueueStatBarCounts } from './QueueStatBar';
 import { QueueStatusMark } from './QueueStatusMark';
+import { ProjectEntryView } from '../project/ProjectEntryView';
 
 function isFinishedToday(item: QueueItem): boolean {
   if (item.finishedAt === null) return false;
@@ -226,6 +227,19 @@ export function QueuePanel({
         <div className="p-3 space-y-3">
           <QueueStatBar counts={statCounts} />
           <QueueActiveSpotlight item={activeItem} />
+
+          {/*
+            R12-C round 3 (의견 4-1): 메신저 탭의 할 일 큐 패널 안에서
+            바로 부서 워크플로우를 시작할 수 있게 ProjectEntryView 를
+            마운트한다. 사용자는 textarea 에 할 일을 적고 시작 부서
+            (아이디어 / 기획) 라디오를 선택해 "워크플로우 시작" 클릭 →
+            그 부서 채널로 active 전환 + 메시지 send + auto-trigger 회의.
+            아래의 단순 큐 add 영역 (큐 자체 task 등록) 은 보조 흐름으로
+            보존 — 큐 처리 자체가 별도 worker 로 가는 R10 흐름이라
+            워크플로우 시작과 별 의미.
+          */}
+          <ProjectEntryView projectId={projectId} />
+
           <div>
             <textarea
               data-testid="queue-panel-input"

@@ -53,6 +53,12 @@ export interface SidebarProps {
   onSelectDm: (channelId: string) => void;
   onCreateProject?: () => void;
   /**
+   * R12-C round 3 — 자유 user 채널 추가. 사용자가 ProjectAccordion 의
+   * 자유 채널 섹션 끝 "+ 새 채널" 버튼을 클릭하면 그 프로젝트 ID 를
+   * 인자로 전달. App.tsx 가 ChannelCreateModal 을 그 projectId 로 연다.
+   */
+  onCreateChannel?: (projectId: string) => void;
+  /**
    * 활성 회의 list. ProjectAccordion 의 자유 user 채널 row 가 회의
    * 시작/중단 컨트롤을 표시할 때 참조. `null` 은 loading.
    */
@@ -71,6 +77,7 @@ export function Sidebar({
   onSelectGeneralChannel,
   onSelectDm,
   onCreateProject,
+  onCreateChannel,
   meetings,
   onStartMeeting,
   onAbortMeeting,
@@ -147,6 +154,7 @@ export function Sidebar({
                 activeChannelId={activeChannelId}
                 onActivateProject={onActivateProject}
                 onSelectChannel={onSelectChannel}
+                onCreateChannel={onCreateChannel}
                 meetings={meetings}
                 onStartMeeting={onStartMeeting}
                 onAbortMeeting={onAbortMeeting}

@@ -30,7 +30,6 @@ import { useTranslation } from 'react-i18next';
 
 import { MemberPanel } from './MemberPanel';
 import { Thread } from './Thread';
-import { ChannelCreateModal } from '../channels/ChannelCreateModal';
 import { ChannelDeleteConfirm } from '../channels/ChannelDeleteConfirm';
 import { ChannelRenameDialog } from '../channels/ChannelRenameDialog';
 import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
@@ -101,7 +100,9 @@ function MessengerPageActive({
   // Modal state ────────────────────────────────────────────────
   // R12-C T8: 회의 시작/중단 컨트롤은 App 레벨 Sidebar host 로 승격되어
   // MessengerPage 는 채널 CRUD 모달만 든다.
-  const [createOpen, setCreateOpen] = useState(false);
+  // R12-C round 3: ChannelCreateModal 도 App.tsx 로 hoist (사이드바
+  // "+ 새 채널" 버튼이 직접 트리거). MessengerPage 는 rename / delete
+  // 모달만 유지.
   const [renameTargetId, setRenameTargetId] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
@@ -120,20 +121,6 @@ function MessengerPageActive({
     [deleteTargetId, allChannels],
   );
 
-  // Success callbacks ──────────────────────────────────────────
-  // Order matters: refetch FIRST, then flip active. `useActiveChannel`'s
-  // validation effect clears the active id when the stored channel is
-  // not in the channels list — if we set active before the refetch
-  // returns, the stale list still lacks the new channel and the effect
-  // wipes our just-applied selection.
-  const handleCreated = useCallback(
-    (channel: Channel): void => {
-      void notifyChannelsChanged().then(() => {
-        setActiveChannelId(projectId, channel.id);
-      });
-    },
-    [projectId, setActiveChannelId],
-  );
   const handleRenamed = useCallback((): void => {
     setRenameTargetId(null);
     void notifyChannelsChanged();
@@ -193,12 +180,11 @@ function MessengerPageActive({
         <MemberPanel projectId={projectId} />
       </aside>
 
-      <ChannelCreateModal
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        projectId={projectId}
-        onCreated={handleCreated}
-      />
+      {/*
+        R12-C round 3 (#2): ChannelCreateModal 은 App.tsx 로 hoist —
+        Sidebar 의 "+ 새 채널" 트리거가 직접 연다. MessengerPage 는
+        rename / delete 모달만 들고 있다.
+      */}
       <ChannelRenameDialog
         open={renameTargetId !== null}
         onOpenChange={(next) => {
