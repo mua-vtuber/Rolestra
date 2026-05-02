@@ -146,13 +146,15 @@ describe('R2 integration smoke', () => {
 
     const channels = channelService.listByProject(project.id);
     const channelKinds = channels.map((c) => c.kind).sort();
+    // R12-C: system_general 은 전역 1개로 분리 — listByProject 에서 제외.
     expect(channelKinds).toEqual([
       'system_approval',
-      'system_general',
       'system_minutes',
     ]);
 
-    const generalId = channels.find((c) => c.kind === 'system_general')!.id;
+    // R12-C: smoke 메시지를 보낼 채널을 system_approval (read_only=true)
+    // 대신 ensureGlobalGeneralChannel 의 전역 #일반 으로 받는다.
+    const generalId = channelService.ensureGlobalGeneralChannel().id;
 
     // ── 2. Message append fans out through StreamBridge ─────────────
     messageService.append({
