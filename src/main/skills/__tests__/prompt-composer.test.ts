@@ -43,16 +43,25 @@ describe('PromptComposer.compose', () => {
     expect(out).not.toContain('spec 작성');
   });
 
-  it('throws when provider lacks channel role', () => {
-    expect(() =>
-      composer.compose({
-        persona: '',
-        providerRoles: ['idea'],
-        skillOverrides: null,
-        channelRole: 'implement',
-        formatInstruction: '',
-      }),
-    ).toThrow(/idea.*implement/);
+  it('falls back to plain dept-context prompt when provider lacks channel role (R12-C round 2 #3-3)', () => {
+    // 사용자가 직원 능력을 명시적으로 부여하지 않은 신규 환경에서 부서
+    // 채널 회의가 첫 발화에서 침묵하던 회귀 차단. throw 대신 persona +
+    // 부서 안내 + format 만 결합한다 — skill template / 권한 / SKILL.md
+    // 경로 단락은 능력 보증이 없으니 생략.
+    const out = composer.compose({
+      persona: '나는 PM 입니다',
+      providerRoles: ['idea'],
+      skillOverrides: null,
+      channelRole: 'implement',
+      formatInstruction: 'JSON 으로 응답',
+    });
+    expect(out).toContain('나는 PM 입니다');
+    expect(out).toContain('구현 부서');
+    expect(out).toContain('JSON 으로 응답');
+    // skill template 본문 / 권한 / SKILL.md 경로는 들어가지 않아야 함.
+    expect(out).not.toMatch(/\.claude\/skills\//);
+    expect(out).not.toMatch(/\.agents\/skills\//);
+    expect(out).not.toContain('권한:');
   });
 
   it('summarizes tool grants for implement', () => {

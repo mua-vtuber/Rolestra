@@ -5,8 +5,11 @@
  * R12-C: SKILL.md 경로 단락 (provider 가 .claude/skills/ 또는
  * .agents/skills/ 의 SKILL.md 를 자동 로드하도록 안내) 결합.
  *
- * channelRole 이 RoleId 인 경우: providerRoles 에 없으면 throw — 직원
- * ∩ 부서 매칭 사전 검증.
+ * channelRole 이 RoleId 인 경우: providerRoles 에 그 능력이 있으면 정식
+ *   prompt (skill template + 권한 + SKILL.md 경로 + format) 합성. 없으면
+ *   fallback — persona + "이 채널은 X 부서입니다" 안내 + format 만 결합
+ *   (R12-C round 2 dogfooding #3-3 fix: 사용자가 능력 부여 안 한 신규
+ *   직원이 부서 채널에 들어왔을 때 throw 로 회의 침묵하던 회귀 차단).
  * channelRole 이 null 인 경우: 부서 회의 컨텍스트 X — persona +
  * formatInstruction 만 결합 (예: 일반 채널 단순 응답).
  */
@@ -55,19 +58,32 @@ export class PromptComposer {
       return sections.join('\n\n');
     }
 
+    const channelLabel = SKILL_CATALOG[input.channelRole].label.ko;
+
     if (!input.providerRoles.includes(input.channelRole)) {
-      throw new Error(
-        `[PromptComposer] provider roles [${input.providerRoles.join(', ')}] ` +
-          `does not include channel role '${input.channelRole}'. ` +
-          `Cannot compose — provider should not enter this channel.`,
+      // R12-C round 2 fix #3-3 — 사용자가 직원 능력을 명시적으로 부여한
+      // 적이 없는 신규 환경에서는 providerRoles 가 빈 배열이다. 이전에는
+      // 이 시점에 throw 해서 회의 첫 발화자 prompt 가 만들어지지 못해
+      // 회의가 1/12 단계에서 침묵했다 (사용자 dogfooding 보고).
+      //
+      // Fallback — persona + "이 채널은 X 부서입니다" 안내 + format 만
+      // 결합. skill template 본문 / 권한 표 / SKILL.md 경로 단락은 생략
+      // 한다 (직원이 그 능력을 갖고 있다는 보증이 없으니 권한 안내가
+      // 거짓이 됨). 능력 부여 UI (RolesSkillsTab) 흐름이 사용자에게
+      // 정착되면 옵션으로 throw 모드를 다시 강화할 수 있다.
+      sections.push(
+        `이 채널은 ${channelLabel} 부서입니다. 부서의 일반 업무 맥락으로 응답하세요.`,
       );
+      if (input.formatInstruction.trim().length > 0) {
+        sections.push(input.formatInstruction.trim());
+      }
+      return sections.join('\n\n');
     }
 
     const tpl = this.skills.getSkillForRole(
       input.channelRole,
       input.skillOverrides,
     );
-    const channelLabel = SKILL_CATALOG[input.channelRole].label.ko;
 
     sections.push(
       `당신은 ${channelLabel} 부서에서 일하고 있습니다.\n${tpl.systemPromptKo}`,
