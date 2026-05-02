@@ -60,6 +60,13 @@ export interface ThreadProps {
   onRenameChannel?: (channelId: string) => void;
   /** Task 10: Delete confirm 오픈 핸들러. */
   onDeleteChannel?: (channelId: string) => void;
+  /**
+   * R12-C round 4 — MeetingBanner 의 회의 중단 버튼 트리거. App 레벨에서
+   * meeting:abort IPC + activeMeetings refresh. 사용자가 부서 채널 회의를
+   * 명시 중단할 유일한 affordance (사이드바 ChannelMeetingControl 은 자유
+   * user 채널만 표시). 정식 pause/resume 은 spec §11.4 의 T7 — 별도 task.
+   */
+  onAbortMeeting?: (meetingId: string) => Promise<void> | void;
   className?: string;
 }
 
@@ -130,6 +137,7 @@ export function Thread({
   projectId,
   onRenameChannel,
   onDeleteChannel,
+  onAbortMeeting,
   className,
 }: ThreadProps): ReactElement {
   const { t, i18n } = useTranslation();
@@ -358,6 +366,7 @@ export function Thread({
             <MeetingBanner
               meeting={activeMeeting}
               memberCount={memberCount}
+              onAbort={() => onAbortMeeting?.(activeMeeting.id)}
             />
           ) : null}
 

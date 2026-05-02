@@ -555,7 +555,7 @@ export function App() {
         />
       )}
       {view === 'messenger' ? (
-        <MessengerPage />
+        <MessengerPage onAbortMeeting={handleAbortMeeting} />
       ) : view === 'settings' ? (
         <SettingsView />
       ) : (

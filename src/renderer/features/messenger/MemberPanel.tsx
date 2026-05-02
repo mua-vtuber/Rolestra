@@ -24,6 +24,7 @@ import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
+import { useGlobalGeneralChannel } from '../../hooks/use-global-general-channel';
 
 export interface MemberPanelProps {
   projectId: string;
@@ -37,17 +38,31 @@ export function MemberPanel({
   const { t } = useTranslation();
   const { channels } = useChannels(projectId);
   const { dms } = useDms();
-  // Merge project channels + global DMs so the validation effect inside
-  // `useActiveChannel` doesn't clear a freshly selected DM channel
-  // (DMs have project_id=null and never appear in `useChannels`).
-  // `useChannelMembers` also looks the channel up by id in this list,
-  // so the merge is required for both the validation and the metadata
-  // resolution path.
+  // R12-C round 4: 전역 일반 채널까지 검증 list 에 포함 (Thread.tsx 와
+  // 동일한 race 차단 — globalGeneralChannel loading 중에는 allChannels
+  // null 유지해 useActiveChannel validation 이 active id 를 wipe 하지
+  // 못하게).
+  const {
+    channel: globalGeneralChannel,
+    loading: globalGeneralChannelLoading,
+  } = useGlobalGeneralChannel();
   const allChannels = useMemo(() => {
-    if (channels === null && dms === null) return null;
-    return [...(channels ?? []), ...(dms ?? [])];
-  }, [channels, dms]);
+    if (channels === null || dms === null || globalGeneralChannelLoading) {
+      return null;
+    }
+    const merged = [...channels, ...dms];
+    if (globalGeneralChannel !== null) merged.push(globalGeneralChannel);
+    return merged;
+  }, [channels, dms, globalGeneralChannel, globalGeneralChannelLoading]);
   const { activeChannelId } = useActiveChannel(projectId, allChannels);
+
+  // R12-C round 4 (#1-a): 일반 채널 (전역 system_general) 은 회의 X +
+  // 모든 직원 참여 — 우측 panel (참여자 + 합의 상태) 의 의미가 없다.
+  // 전체 panel 을 안내 문구로 대체.
+  const isGeneralChannel =
+    activeChannelId !== null &&
+    globalGeneralChannel !== null &&
+    activeChannelId === globalGeneralChannel.id;
   const { members, loading, error } = useChannelMembers(
     activeChannelId,
     allChannels,
@@ -117,6 +132,32 @@ export function MemberPanel({
       </ul>
     );
   })();
+
+  if (isGeneralChannel) {
+    return (
+      <div
+        data-testid="member-panel"
+        data-general-channel="true"
+        data-project-id={projectId}
+        data-channel-id={activeChannelId ?? ''}
+        className={clsx(
+          'flex h-full min-h-0 flex-col gap-3 p-3',
+          className,
+        )}
+      >
+        <Card data-testid="member-panel-general-info" className="flex flex-col">
+          <CardBody>
+            <p className="text-sm text-fg-muted">
+              {t('messenger.memberPanel.generalChannelHint', {
+                defaultValue:
+                  '일반 채널은 단순 chat 입니다. 참여자 목록 / 합의 상태는 표시하지 않습니다.',
+              })}
+            </p>
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div

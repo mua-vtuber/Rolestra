@@ -40,10 +40,18 @@ import { useActiveChannelStore } from '../../stores/active-channel-store';
 import type { Channel } from '../../../shared/channel-types';
 
 export interface MessengerPageProps {
+  /**
+   * R12-C round 4 — App 레벨 handleAbortMeeting 을 prop drill 받아
+   * Thread 의 MeetingBanner abort 버튼으로 흘려보낸다.
+   */
+  onAbortMeeting?: (meetingId: string) => Promise<void> | void;
   className?: string;
 }
 
-export function MessengerPage({ className }: MessengerPageProps): ReactElement {
+export function MessengerPage({
+  onAbortMeeting,
+  className,
+}: MessengerPageProps): ReactElement {
   const { t } = useTranslation();
   const { activeProjectId } = useActiveProject();
 
@@ -65,6 +73,7 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
     <MessengerPageActive
       key={activeProjectId}
       projectId={activeProjectId}
+      onAbortMeeting={onAbortMeeting}
       className={className}
     />
   );
@@ -77,9 +86,11 @@ export function MessengerPage({ className }: MessengerPageProps): ReactElement {
  */
 function MessengerPageActive({
   projectId,
+  onAbortMeeting,
   className,
 }: {
   projectId: string;
+  onAbortMeeting?: (meetingId: string) => Promise<void> | void;
   className?: string;
 }): ReactElement {
   const { t } = useTranslation();
@@ -169,6 +180,7 @@ function MessengerPageActive({
           projectId={projectId}
           onRenameChannel={handleOpenRename}
           onDeleteChannel={handleOpenDelete}
+          onAbortMeeting={onAbortMeeting}
         />
       </main>
 

@@ -111,7 +111,13 @@ export class MeetingAutoTrigger {
       return;
     }
 
-    if (channel.kind === 'dm') {
+    // R12-C round 4 — DM 과 일반 채널 (전역 system_general) 모두 단일
+    // 턴 dm-auto-responder 로 위임. 일반 채널은 spec §11.3 의 "auto-trigger
+    // X + 1라운드 단순 응답" 을 정확히 구현 — 회의 객체 / SSM / consensus
+    // 모두 X. 이전에는 system_general 도 회의 모델로 진입해 1라운드 회의를
+    // 만들었지만 UI 가 SsmBox / MeetingBanner 를 hide 한 뒤에도 응답 turn
+    // 이 본문에 도달하지 않는 race 가 round 4 dogfooding 으로 보고됐다.
+    if (channel.kind === 'dm' || channel.kind === 'system_general') {
       await this.deps.dmResponder.handle(message, channel);
       return;
     }
@@ -129,7 +135,7 @@ export class MeetingAutoTrigger {
       return;
     }
 
-    // user / system_general — meeting model.
+    // user — meeting model. 부서 / 자유 사용자 채널 모두 회의 객체 + 라운드.
     await this.handleMeetingChannel(message, channel);
   }
 

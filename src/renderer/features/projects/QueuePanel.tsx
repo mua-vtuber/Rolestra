@@ -24,7 +24,25 @@ import type { QueueItem } from '../../../shared/queue-types';
 import { QueueActiveSpotlight } from './QueueActiveSpotlight';
 import { QueueStatBar, type QueueStatBarCounts } from './QueueStatBar';
 import { QueueStatusMark } from './QueueStatusMark';
-import { ProjectEntryView } from '../project/ProjectEntryView';
+import { useChannels } from '../../hooks/use-channels';
+import { useActiveChannelStore } from '../../stores/active-channel-store';
+import { useAppViewStore } from '../../stores/app-view-store';
+import { invoke } from '../../ipc/invoke';
+import { getSkillTemplate } from '../../../shared/skill-catalog';
+import type { Channel } from '../../../shared/channel-types';
+import type { RoleId } from '../../../shared/role-types';
+
+/**
+ * R12-C round 4 (큐 정리): 큐 패널의 input 영역에서 직접 시작 부서를
+ * 선택해 워크플로우를 시작한다. 아이디어 / 기획만 entry 시작 가능 —
+ * 디자인 / 구현 / 검토는 인계 trigger 전용 (spec §4.1).
+ */
+const ENTRY_DEPARTMENTS: ReadonlyArray<RoleId> = ['idea', 'planning'];
+const DEFAULT_ENTRY_DEPARTMENT: RoleId = 'idea';
+const DEPT_ICON: Record<string, string> = {
+  idea: '💡',
+  planning: '📋',
+};
 
 function isFinishedToday(item: QueueItem): boolean {
   if (item.finishedAt === null) return false;
@@ -99,6 +117,24 @@ export function QueuePanel({
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [localItems, setLocalItems] = useState<QueueItem[] | null>(null);
   const [mutationError, setMutationError] = useState<Error | null>(null);
+  // R12-C round 4 (큐 정리) — 시작 부서 선택. addLines 후 그 부서 채널로
+  // 메시지 송신 + active 채널 전환 + 메신저 view 진입까지 하나의 흐름.
+  const [department, setDepartment] = useState<RoleId>(DEFAULT_ENTRY_DEPARTMENT);
+  const { channels: projectChannels } = useChannels(projectId);
+  const setActiveChannelIdStore = useActiveChannelStore(
+    (s) => s.setActiveChannelId,
+  );
+  const setView = useAppViewStore((s) => s.setView);
+  const departmentChannelByRole = (() => {
+    const map = new Map<RoleId, Channel>();
+    if (projectChannels === null) return map;
+    for (const channel of projectChannels) {
+      if (channel.role !== null && channel.role !== 'general') {
+        map.set(channel.role, channel);
+      }
+    }
+    return map;
+  })();
 
   // Use `localItems` only during a drag; otherwise render the authoritative
   // `items` from the hook directly (so stream updates + refresh are visible).
@@ -110,10 +146,35 @@ export function QueuePanel({
   const handleAdd = async (): Promise<void> => {
     const text = input.trim();
     if (text.length === 0) return;
+    setMutationError(null);
+    // 1) 큐에 task 등록 — 기존 동작 보존. 큐 list 가 사용자 누적 기록.
     try {
       await addLines(text);
+    } catch (reason) {
+      setMutationError(
+        reason instanceof Error ? reason : new Error(String(reason)),
+      );
+      return;
+    }
+    // 2) 선택한 부서 채널로 메시지 송신 → meeting-auto-trigger 가
+    //    워크플로우 시작. 채널 active + messenger view 로 라우팅.
+    const channel = departmentChannelByRole.get(department);
+    if (!channel) {
+      setMutationError(
+        new Error(
+          `선택한 부서 채널 (${getSkillTemplate(department).label.ko}) 을 찾을 수 없습니다.`,
+        ),
+      );
+      return;
+    }
+    try {
+      await invoke('message:append', {
+        channelId: channel.id,
+        content: text,
+      });
       setInput('');
-      setMutationError(null);
+      setActiveChannelIdStore(projectId, channel.id);
+      setView('messenger');
     } catch (reason) {
       setMutationError(
         reason instanceof Error ? reason : new Error(String(reason)),
@@ -229,18 +290,16 @@ export function QueuePanel({
           <QueueActiveSpotlight item={activeItem} />
 
           {/*
-            R12-C round 3 (의견 4-1): 메신저 탭의 할 일 큐 패널 안에서
-            바로 부서 워크플로우를 시작할 수 있게 ProjectEntryView 를
-            마운트한다. 사용자는 textarea 에 할 일을 적고 시작 부서
-            (아이디어 / 기획) 라디오를 선택해 "워크플로우 시작" 클릭 →
-            그 부서 채널로 active 전환 + 메시지 send + auto-trigger 회의.
-            아래의 단순 큐 add 영역 (큐 자체 task 등록) 은 보조 흐름으로
-            보존 — 큐 처리 자체가 별도 worker 로 가는 R10 흐름이라
-            워크플로우 시작과 별 의미.
+            R12-C round 4 (큐 정리): 사용자 의견 — "할 일 작성" 과 "할 일
+            큐" 영역 역할이 겹쳤으므로 단일 입력 영역으로 통합. textarea +
+            시작 부서 라디오 + 추가 버튼. 추가 클릭 시:
+              1) 큐 list 에 항목 등록 (기존 동작)
+              2) 선택한 부서 채널로 메시지 send → auto-trigger 회의
+              3) 그 부서 채널 active + messenger view 진입
+            큐 list 가 사용자의 누적 기록을 담당하고, 워크플로우 시작은
+            같은 클릭에 묶여 있다.
           */}
-          <ProjectEntryView projectId={projectId} />
-
-          <div>
+          <div className="space-y-2">
             <textarea
               data-testid="queue-panel-input"
               value={input}
@@ -249,7 +308,47 @@ export function QueuePanel({
               rows={3}
               className="w-full text-sm border border-border-soft rounded-panel px-2 py-1 bg-sunk text-fg"
             />
-            <div className="flex items-center justify-between mt-2">
+            <div
+              role="radiogroup"
+              data-testid="queue-panel-department-radio"
+              className="flex flex-wrap items-center gap-2"
+            >
+              <span className="text-xs text-fg-muted">
+                {t('queue.panel.startDepartmentLabel', {
+                  defaultValue: '시작 부서',
+                })}
+              </span>
+              {ENTRY_DEPARTMENTS.map((role) => {
+                const checked = department === role;
+                const labelKo = getSkillTemplate(role).label.ko;
+                const icon = DEPT_ICON[role] ?? '•';
+                return (
+                  <label
+                    key={role}
+                    data-testid={`queue-panel-department-${role}`}
+                    data-checked={checked ? 'true' : 'false'}
+                    className={clsx(
+                      'inline-flex cursor-pointer items-center gap-1 rounded-panel border px-2 py-0.5 text-xs',
+                      checked
+                        ? 'border-panel-border bg-sunk font-bold text-fg'
+                        : 'border-transparent text-fg-muted hover:bg-sunk',
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="queue-panel-department"
+                      value={role}
+                      checked={checked}
+                      onChange={() => setDepartment(role)}
+                      className="sr-only"
+                    />
+                    <span aria-hidden="true">{icon}</span>
+                    <span>{labelKo}</span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-between">
               <span className="text-xs text-fg-muted">
                 {t('queue.panel.dragHint')}
               </span>

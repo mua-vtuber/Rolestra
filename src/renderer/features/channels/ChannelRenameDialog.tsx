@@ -122,14 +122,22 @@ export function ChannelRenameDialog({
       onOpenChange(false);
       return;
     }
-    if (trimmed.length === 0) {
+    // R12-C round 4 (#1-4): 부서 채널 (role !== null) 은 빈 이름 허용 —
+    // backend 가 SKILL_CATALOG 라벨로 자동 복원한다. 자유 user 채널 / DM 은
+    // 식별 가능한 이름 필요해서 차단 유지.
+    const isDepartmentChannel = channel.role !== null;
+    if (trimmed.length === 0 && !isDepartmentChannel) {
       dispatch({
         type: 'submitError',
         message: t('messenger.channelRename.errors.nameRequired'),
       });
       return;
     }
-    if (trimmed.length < NAME_MIN_LEN) {
+    if (
+      trimmed.length > 0 &&
+      trimmed.length < NAME_MIN_LEN &&
+      !isDepartmentChannel
+    ) {
       dispatch({
         type: 'submitError',
         message: t('messenger.channelRename.errors.nameTooShort', {
