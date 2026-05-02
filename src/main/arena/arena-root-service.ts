@@ -67,7 +67,7 @@ export interface ArenaRootConfigAccessor {
 }
 
 /**
- * Returns the platform-default ArenaRoot location: `<documents>/arena`.
+ * Returns the platform-default ArenaRoot location: `<documents>/Rolestra`.
  *
  * F4-Task6: `documentsPath` is now caller-injected so production code
  * can pass `app.getPath('documents')` (Electron's OS-localized resolver
@@ -76,10 +76,15 @@ export interface ArenaRootConfigAccessor {
  * Tests / non-Electron contexts may omit it to reuse the legacy
  * `os.homedir()/Documents` fallback, which still beats no path at all
  * but is acknowledged as imperfect on non-English systems.
+ *
+ * R12-C round 2 (2026-05-03): 디폴트 폴더 이름을 'arena' → 'Rolestra' 로
+ * 변경. 사용자가 Documents 안에서 폴더 이름만으로 이게 어느 앱의
+ * 데이터인지 즉시 알 수 있게 한다. 기존 사용자는 settings.json 의
+ * arenaRoot 값이 그대로 유지되므로 영향 없음 — 신규 설치만 영향.
  */
 export function getDefaultArenaRoot(documentsPath?: string): string {
   const base = documentsPath ?? path.join(os.homedir(), 'Documents');
-  return path.join(base, 'arena');
+  return path.join(base, 'Rolestra');
 }
 
 /**

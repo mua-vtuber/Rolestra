@@ -126,6 +126,12 @@ function createWindow(): BrowserWindow {
   return mainWindow;
 }
 
+// R12-C round 2 (2026-05-03): app.setName 은 app.whenReady 전에 호출해야
+// app.getPath('userData') 가 올바른 폴더 (`%APPDATA%\Rolestra` 등) 를
+// 반환한다. package.json 의 npm 식별자 ("ai-chat-arena") 는 그대로 두고
+// 런타임 표시 / userData 폴더만 productName 과 일치시킨다.
+app.setName('Rolestra');
+
 app.whenReady().then(async () => {
   try {
     // Initialize ArenaRoot before anything that touches the DB or logs.

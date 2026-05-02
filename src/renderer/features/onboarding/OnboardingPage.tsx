@@ -52,6 +52,7 @@ import { OBStaffCard } from './OBStaffCard';
 import { OBStepper } from './OBStepper';
 import { OBSummaryStrip } from './OBSummaryStrip';
 import { OBTopBar } from './OBTopBar';
+import { Step1ArenaRoot } from './steps/Step1ArenaRoot';
 import { Step3RoleAssignment } from './steps/Step3RoleAssignment';
 import { Step4Permissions } from './steps/Step4Permissions';
 import { Step5FirstProject } from './steps/Step5FirstProject';
@@ -527,12 +528,15 @@ function OnboardingWizardBody({
         </p>
 
         {currentStep === 1 && (
-          <section
-            data-testid="onboarding-step-1"
-            className="mt-6 max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm leading-relaxed text-fg"
-          >
-            {t('onboarding.step1.body')}
-          </section>
+          <>
+            <section
+              data-testid="onboarding-step-1"
+              className="mt-6 max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm leading-relaxed text-fg"
+            >
+              {t('onboarding.step1.body')}
+            </section>
+            <Step1ArenaRoot />
+          </>
         )}
 
         {currentStep === 2 && (

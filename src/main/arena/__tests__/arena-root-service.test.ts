@@ -81,17 +81,17 @@ describe('ArenaRootService', () => {
     const customDocs = path.join(tmpRoot, 'CustomDocs');
     const svc = new ArenaRootService(config, customDocs);
 
-    expect(svc.getPath()).toBe(path.join(customDocs, 'arena'));
+    expect(svc.getPath()).toBe(path.join(customDocs, 'Rolestra'));
   });
 
   it('getDefaultArenaRoot() with documentsPath joins the OS-localized base', () => {
     expect(getDefaultArenaRoot('/home/user/Localized')).toBe(
-      path.join('/home/user/Localized', 'arena'),
+      path.join('/home/user/Localized', 'Rolestra'),
     );
   });
 
   it('getDefaultArenaRoot() without documentsPath retains the legacy ~/Documents fallback', () => {
-    expect(getDefaultArenaRoot()).toBe(path.join(os.homedir(), 'Documents', 'arena'));
+    expect(getDefaultArenaRoot()).toBe(path.join(os.homedir(), 'Documents', 'Rolestra'));
   });
 
   it('configured arenaRoot wins over documentsPath default', () => {

@@ -738,7 +738,15 @@
     "step1": {
       "body": "Rolestra orchestrates multiple AI agents like staff in a single office. The next 5 steps walk you through staff selection, role assignment, permission mode, and your first project.",
       "description": "Quick tour before you start the office.",
-      "heading": "Welcome to your Rolestra office"
+      "heading": "Welcome to your Rolestra office",
+      "arenaRoot": {
+        "header": "Data folder",
+        "hint": "Staff / channels / messages / consensus output / new project folders all live here. Pick a different location (e.g. external SSD) if you want.",
+        "loading": "Resolving path…",
+        "change": "Change",
+        "changing": "Changing…",
+        "restart": "Folder change takes effect after restarting the app. Finish the wizard first, then relaunch."
+      }
     },
     "step3": {
       "description": "Give each selected member a one-line role. You can refine the full profile later in Settings → Members.",
