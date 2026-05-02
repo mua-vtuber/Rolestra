@@ -38,12 +38,11 @@ export function Step4Permissions({
       data-testid="onboarding-step-4"
       className="flex flex-col gap-3"
     >
-      <p
-        data-testid="onboarding-step-4-description"
-        className="text-sm text-fg-muted"
-      >
-        {t('onboarding.step4.description')}
-      </p>
+      {/*
+        R12-C round 2: 상단 OnboardingPage description 과 중복 안내가 두
+        번 노출되던 회귀 (사용자 보고). 이 step 본문은 라디오 그룹부터
+        곧장 시작한다.
+      */}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="sr-only">{t('onboarding.step4.title')}</legend>

@@ -1,23 +1,25 @@
 /**
  * OBStaffCard — single-CLI candidate card in the Onboarding staff grid.
  *
- * Layout (시안 06 기준):
- *   - top row: initial avatar + name + vendor + price + DetectionBadge
- *   - middle: tagline (italic-ish in warm; mono prompt in retro)
- *   - bottom: bestFor keyword line ("검사 매칭")
+ * Layout:
+ *   - top row: initial avatar + name + vendor + DetectionBadge
+ *
+ * R12-C round 2 (2026-05-03 사용자 피드백): 이전 시안의 price / tagline /
+ * bestFor 텍스트는 모두 제거. 가격은 모델 / 요금제가 자주 바뀌어 하드
+ * 코딩이 거짓말이 되고, tagline / bestFor 는 주관적 인상문이라 사용자
+ * 객관성을 해친다. 카드는 감지 여부 / 이름 / 벤더 / 선택 토글만 다룬다.
  *
  * Selection toggle: clicking the card invokes `onToggleSelected(id)` so
  * the parent owns selection state. The card itself is purely visual —
  * `selected` is derived from the candidate prop, never internal state.
  *
  * Theme branching:
- *   - warm: rounded card, brand-tinted bg when selected, sans tagline
+ *   - warm: rounded card, brand-tinted bg when selected
  *   - tactical: clip-path corners + cyan accent line on selected
  *   - retro: ASCII frame `[X] Claude Code` + mono throughout
  */
 import { clsx } from 'clsx';
 import type { ReactElement } from 'react';
-import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../../theme/use-theme';
 import { DetectionBadge } from './DetectionBadge';
@@ -37,7 +39,6 @@ export function OBStaffCard({
   onToggleSelected,
   className,
 }: OBStaffCardProps): ReactElement {
-  const { t } = useTranslation();
   const { themeKey, token } = useTheme();
   const isRetro = themeKey === 'retro';
   const isTactical = themeKey === 'tactical';
@@ -88,15 +89,7 @@ export function OBStaffCard({
             <DetectionBadge state={detection} />
           </span>
         </div>
-        <div className="mt-1 text-xs text-fg-muted">
-          {candidate.vendor} · {candidate.price}
-        </div>
-        <div className="mt-2 text-xs text-fg">
-          {'>'} {candidate.tagline}
-        </div>
-        <div className="mt-1 text-[11px] text-fg-muted">
-          {t('onboarding.cardLabels.bestFor')}: {candidate.bestFor}
-        </div>
+        <div className="mt-1 text-xs text-fg-muted">{candidate.vendor}</div>
       </button>
     );
   }
@@ -138,14 +131,10 @@ export function OBStaffCard({
         <div className="flex-1 min-w-0">
           <div className="font-semibold text-fg truncate">{candidate.name}</div>
           <div className="text-xs text-fg-muted truncate">
-            {candidate.vendor} · {candidate.price}
+            {candidate.vendor}
           </div>
         </div>
         <DetectionBadge state={detection} />
-      </div>
-      <div className="mt-2 text-sm text-fg">{candidate.tagline}</div>
-      <div className="mt-1 text-xs text-fg-muted">
-        {t('onboarding.cardLabels.bestFor')}: {candidate.bestFor}
       </div>
     </button>
   );

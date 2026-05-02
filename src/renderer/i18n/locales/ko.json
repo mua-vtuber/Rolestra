@@ -646,7 +646,7 @@
       "finish": "완료",
       "next": "다음",
       "prev": "← 이전",
-      "rescan": "$ rescan"
+      "rescan": "다시 감지"
     },
     "cardLabels": {
       "alt": "대안",

@@ -122,12 +122,11 @@ export function Step3RoleAssignment({
       data-testid="onboarding-step-3"
       className="flex flex-col gap-4"
     >
-      <p
-        data-testid="onboarding-step-3-description"
-        className="text-sm text-fg-muted"
-      >
-        {t('onboarding.step3.description')}
-      </p>
+      {/*
+        R12-C round 2: 상단 OnboardingPage description 과 중복 안내가 두
+        번 노출되던 회귀 (사용자 보고). step 본문은 역할 칭호 영역부터
+        곧장 시작한다.
+      */}
 
       {/* 역할 칭호 영역 */}
       <div className="flex flex-col gap-2">
