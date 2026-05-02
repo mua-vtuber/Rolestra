@@ -151,6 +151,22 @@ export function handleChannelDelete(
   return { success: true };
 }
 
+/**
+ * R12-C T9 — `channel:archive-conversation` "새 대화 시작" 버튼.
+ *
+ * 일반 채널 (전역 system_general) 의 모든 메시지를 ArenaRoot 의
+ * `conversations-archive/<timestamp>-<channelId>.json` 에 dump 한 뒤
+ * channel_messages 행을 삭제한다. 일반 채널 외 channelId 는 throw — UI 에서
+ * GeneralChannelControls 만 노출되므로 이론상 도달하지 않지만 백엔드 방어.
+ */
+export async function handleChannelArchiveConversation(
+  data: IpcRequest<'channel:archive-conversation'>,
+): Promise<IpcResponse<'channel:archive-conversation'>> {
+  const svc = getChannel();
+  const result = await svc.archiveConversation(data.channelId);
+  return { archivedPath: result.archivedPath, deletedCount: result.deletedCount };
+}
+
 /** channel:add-members */
 export function handleChannelAddMembers(
   data: IpcRequest<'channel:add-members'>,

@@ -1173,5 +1173,11 @@
       "deptHeader": "부서",
       "freeChannelsHeader": "자유 채널"
     }
+  },
+  "general": {
+    "modeHint": "일반 채널은 단순 chat 입니다. 회의는 부서 채널에서 진행합니다.",
+    "archiveAction": "새 대화 시작",
+    "archivePending": "저장 중…",
+    "archiveConfirm": "지금까지의 대화를 보관함에 저장하고 채널을 비웁니다. 계속할까요?"
   }
 }

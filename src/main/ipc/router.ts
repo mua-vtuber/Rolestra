@@ -115,6 +115,7 @@ import {
   handleChannelCreate,
   handleChannelRename,
   handleChannelDelete,
+  handleChannelArchiveConversation,
   handleChannelAddMembers,
   handleChannelRemoveMembers,
   handleChannelStartMeeting,
@@ -428,6 +429,9 @@ export function registerIpcHandlers(): void {
   handle('channel:create', isDev, (data) => handleChannelCreate(data));
   handle('channel:rename', isDev, (data) => handleChannelRename(data));
   handle('channel:delete', isDev, (data) => handleChannelDelete(data));
+  handle('channel:archive-conversation', isDev, (data) =>
+    handleChannelArchiveConversation(data),
+  );
   handle('channel:add-members', isDev, (data) => handleChannelAddMembers(data));
   handle('channel:remove-members', isDev, (data) => handleChannelRemoveMembers(data));
   handle('channel:start-meeting', isDev, (data) => handleChannelStartMeeting(data));

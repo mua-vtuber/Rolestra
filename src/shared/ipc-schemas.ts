@@ -242,6 +242,11 @@ export const channelStartMeetingSchema = z.object({
   topic: z.string().min(1).max(500),
 });
 
+/** R12-C T9 — 일반 채널 "새 대화 시작" archive + clear. */
+export const channelArchiveConversationSchema = z.object({
+  channelId: z.string().min(1).max(128),
+});
+
 export const messageAppendSchema = z.object({
   channelId: z.string().min(1).max(128),
   meetingId: z.string().min(1).max(128).nullable().optional(),
@@ -628,6 +633,7 @@ export const v3ChannelSchemas = {
   'channel:add-members': channelMembersPatchSchema,
   'channel:remove-members': channelMembersPatchSchema,
   'channel:start-meeting': channelStartMeetingSchema,
+  'channel:archive-conversation': channelArchiveConversationSchema,
   'message:append': messageAppendSchema,
   'message:search': messageSearchSchema,
   'message:list-recent': messageListRecentSchema,

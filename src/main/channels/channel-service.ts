@@ -46,6 +46,8 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { promises as fsPromises } from 'node:fs';
+import path from 'node:path';
 import type { Channel, ChannelKind } from '../../shared/channel-types';
 import type {
   ChannelPurpose,
@@ -54,6 +56,7 @@ import type {
 } from '../../shared/channel-role-types';
 import { DEFAULT_HANDOFF_MODE } from '../../shared/channel-role-types';
 import type { ProjectMember } from '../../shared/project-types';
+import type { Message } from '../../shared/message-types';
 import { ChannelRepository } from './channel-repository';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -265,11 +268,41 @@ export interface CreateUserChannelInput {
 
 // ── Service ────────────────────────────────────────────────────────────
 
+/**
+ * R12-C T9 — archive 의존. archiveConversation 를 사용하려면 messages 를
+ * 읽고 지우는 어댑터 + ArenaRoot 경로 helper 가 필요하다. 여기에 직접
+ * MessageRepository / ArenaRootService 를 import 하지 않고 좁은 인터페이스
+ * 두 개로만 받아서 채널 service 의 의존을 최소화한다 (단위 테스트도 가벼움).
+ */
+export interface ArchiveMessageAdapter {
+  /** 채널의 모든 메시지를 oldest-first 로 반환. */
+  listAllByChannel(channelId: string): Message[];
+  /** 채널의 모든 메시지를 삭제. 삭제된 row 수 반환. */
+  deleteByChannel(channelId: string): number;
+}
+
+export interface ArchiveRootProvider {
+  /** ArenaRoot 절대 경로. */
+  getArenaRoot(): string;
+}
+
+export interface ChannelServiceDeps {
+  archiveMessages?: ArchiveMessageAdapter;
+  archiveRoot?: ArchiveRootProvider;
+}
+
 export class ChannelService {
+  private readonly archiveMessages: ArchiveMessageAdapter | null;
+  private readonly archiveRoot: ArchiveRootProvider | null;
+
   constructor(
     private readonly repo: ChannelRepository,
     private readonly projectMembers: ProjectMemberLookup,
-  ) {}
+    deps?: ChannelServiceDeps,
+  ) {
+    this.archiveMessages = deps?.archiveMessages ?? null;
+    this.archiveRoot = deps?.archiveRoot ?? null;
+  }
 
   /**
    * Create a user channel under a project. All inserts happen in a
@@ -611,6 +644,64 @@ export class ChannelService {
       );
     }
     return row;
+  }
+
+  /**
+   * R12-C T9 — 전역 일반 채널 "새 대화 시작": 모든 메시지를 archive 폴더로
+   * dump 한 후 channel_messages 행을 삭제한다.
+   *
+   * 허용 대상:
+   * - kind === 'system_general' 만 (전역 일반 채널). 그 외 channelId 는
+   *   `ChannelError` throw — UI 가 일반 채널 외에는 GeneralChannelControls
+   *   를 보여주지 않으므로 통상 도달하지 않지만 defence-in-depth.
+   *
+   * Archive 위치 = `<ArenaRoot>/conversations-archive/<ISO>-<channelId>.json`.
+   * 빈 메시지 채널이면 dump 파일은 빈 messages 배열로 작성된다 (사용자가
+   * 매 클릭마다 마커가 남는 게 더 안전 — 실수 클릭 시 복구 가능).
+   */
+  async archiveConversation(channelId: string): Promise<{
+    archivedPath: string;
+    deletedCount: number;
+  }> {
+    if (this.archiveMessages === null || this.archiveRoot === null) {
+      throw new ChannelError(
+        'archiveConversation: archive deps not wired. ' +
+          'main/index.ts must construct ChannelService with deps.archiveMessages + deps.archiveRoot.',
+      );
+    }
+    const channel = this.repo.get(channelId);
+    if (!channel) {
+      throw new ChannelNotFoundError(channelId);
+    }
+    if (channel.kind !== 'system_general') {
+      throw new ChannelError(
+        `archiveConversation: 일반 채널 (system_general) 만 archive 가능. 현재 kind=${channel.kind}`,
+      );
+    }
+    const messages = this.archiveMessages.listAllByChannel(channelId);
+    const archiveRootDir = path.join(
+      this.archiveRoot.getArenaRoot(),
+      'conversations-archive',
+    );
+    await fsPromises.mkdir(archiveRootDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `${ts}-${channelId}.json`;
+    const archivedPath = path.join(archiveRootDir, filename);
+    const dump = {
+      channelId: channel.id,
+      channelName: channel.name,
+      channelKind: channel.kind,
+      archivedAt: Date.now(),
+      messageCount: messages.length,
+      messages,
+    };
+    await fsPromises.writeFile(
+      archivedPath,
+      JSON.stringify(dump, null, 2),
+      'utf8',
+    );
+    const deletedCount = this.archiveMessages.deleteByChannel(channelId);
+    return { archivedPath, deletedCount };
   }
 
   /**

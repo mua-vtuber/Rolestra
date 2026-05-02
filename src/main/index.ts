@@ -194,7 +194,11 @@ app.whenReady().then(async () => {
     // stay co-located with dashboardService (all three R4 domains come
     // off the same `db` handle).
     const meetingService = new MeetingService(meetingRepo);
-    const messageService = new MessageService(new MessageRepository(db));
+    // R12-C T9: MessageRepository 를 별도 변수로 들고 ChannelService 의
+    // archiveConversation 에서도 재사용 — 채널 service 가 메시지 archive
+    // 시 listAllByChannel + deleteByChannel 를 호출한다.
+    const messageRepository = new MessageRepository(db);
+    const messageService = new MessageService(messageRepository);
     setMeetingAbortServiceAccessor(() => meetingService);
     setMessageServiceAccessor(() => messageService);
 
@@ -260,7 +264,10 @@ app.whenReady().then(async () => {
     // create flow — keeps `onProjectCreated` additive and leaves DB/FS
     // rollback untouched (system channels are DB-only, no FS side).
     const channelRepo = new ChannelRepository(db);
-    const channelService = new ChannelService(channelRepo, projectRepo);
+    const channelService = new ChannelService(channelRepo, projectRepo, {
+      archiveMessages: messageRepository,
+      archiveRoot: { getArenaRoot: () => arenaRoot.getPath() },
+    });
 
     // R12-C — boot 시점에 전역 일반 채널 1개 보장 (마이그레이션 018 +
     // ensureGlobalGeneralChannel). 사이드바 상단 entry 가 이 row 를

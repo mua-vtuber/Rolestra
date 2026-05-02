@@ -41,6 +41,7 @@ import { Message, type MessageAuthorInfo } from './Message';
 import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
+import { GeneralChannelControls } from '../general/GeneralChannelControls';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
@@ -323,7 +324,18 @@ export function Thread({
         <ApprovalInboxView projectId={projectId} />
       ) : (
         <>
-          {activeMeeting ? (
+          {/* R12-C T9: 일반 채널 (전역 system_general) 은 회의 표면 X.
+              MeetingBanner hide + "새 대화 시작" 컨트롤 노출. */}
+          {activeChannel.kind === 'system_general' ? (
+            <GeneralChannelControls
+              channelId={activeChannel.id}
+              onArchived={() => {
+                void refreshMessages();
+              }}
+            />
+          ) : null}
+
+          {activeChannel.kind !== 'system_general' && activeMeeting ? (
             <MeetingBanner
               meeting={activeMeeting}
               memberCount={memberCount}

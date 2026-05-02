@@ -220,6 +220,35 @@ export class MessageRepository {
   }
 
   /**
+   * R12-C T9 — 채널의 모든 메시지를 oldest-first 로 반환. archive dump
+   * 용도. listByChannel 의 newest-first 페이지네이션과 분리한다.
+   */
+  listAllByChannel(channelId: string): Message[] {
+    const rows = this.db
+      .prepare(
+        `SELECT id, channel_id, meeting_id, author_id, author_kind, role,
+                content, meta_json, created_at
+         FROM messages
+         WHERE channel_id = ?
+         ORDER BY created_at ASC, rowid ASC`,
+      )
+      .all(channelId) as MessageRow[];
+    return rows.map(rowToMessage);
+  }
+
+  /**
+   * R12-C T9 — 채널의 모든 메시지를 삭제. archive dump 후 호출. FTS5
+   * 트리거가 messages_fts 도 동시에 정리한다 (migration 005 트리거).
+   * @returns 삭제된 row 수.
+   */
+  deleteByChannel(channelId: string): number {
+    const result = this.db
+      .prepare('DELETE FROM messages WHERE channel_id = ?')
+      .run(channelId);
+    return Number(result.changes ?? 0);
+  }
+
+  /**
    * Full-text searches messages via FTS5 `MATCH`. See the file header for
    * the bm25 sign convention.
    *

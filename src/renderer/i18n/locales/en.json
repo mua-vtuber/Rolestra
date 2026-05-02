@@ -1175,5 +1175,11 @@
       "deptHeader": "Departments",
       "freeChannelsHeader": "Free channels"
     }
+  },
+  "general": {
+    "modeHint": "General channel is plain chat. Meetings happen in department channels.",
+    "archiveAction": "New conversation",
+    "archivePending": "Archiving…",
+    "archiveConfirm": "Archive the current conversation and clear this channel. Continue?"
   }
 }

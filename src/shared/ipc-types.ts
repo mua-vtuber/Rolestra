@@ -548,6 +548,18 @@ export type IpcChannelMap = {
     request: { id: string };
     response: { success: true };
   };
+  /**
+   * R12-C T9 — 일반 채널 "새 대화 시작" archive + clear.
+   *
+   * 호출 효과: 채널의 모든 메시지를 ArenaRoot/conversations-archive/
+   * `<timestamp>-<channelId>.json` 으로 dump 한 뒤, channel_messages
+   * 행을 모두 삭제한다. 합의 결과 폴더와 별개. 일반 채널 (전역 1개)
+   * 만 허용되며 그 외 channelId 는 throw 한다.
+   */
+  'channel:archive-conversation': {
+    request: { channelId: string };
+    response: { archivedPath: string; deletedCount: number };
+  };
   'channel:add-members': {
     request: { id: string; providerIds: string[] };
     response: { success: true };
