@@ -908,6 +908,17 @@
       "nameRequired": "이름을 입력하세요",
       "nameTooLong": "이름은 200자 이내로 입력하세요",
       "sourcePathRequired": "가져올 폴더를 선택하세요"
+    },
+    "entry": {
+      "title": "할 일 작성",
+      "hint": "여기에 작성한 할 일은 선택한 부서 채널에서 자동으로 워크플로우를 시작합니다.",
+      "placeholder": "예: \"퍼즐 게임 컨셉을 잡아보자\"",
+      "departmentLabel": "시작 부서",
+      "submitAction": "워크플로우 시작",
+      "submitPending": "시작 중…",
+      "errorEmpty": "할 일을 입력하세요.",
+      "errorNoChannel": "선택한 부서 채널을 찾을 수 없습니다. 프로젝트가 부서 채널 자동 생성을 마쳤는지 확인하세요.",
+      "channelsError": "부서 채널 목록을 불러오지 못했습니다."
     }
   },
   "queue": {

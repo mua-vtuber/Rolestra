@@ -44,6 +44,7 @@ import { TasksWidget } from './widgets/TasksWidget';
 import { PeopleWidget } from './widgets/PeopleWidget';
 import { RecentWidget } from './widgets/RecentWidget';
 import { ApprovalsWidget } from './widgets/ApprovalsWidget';
+import { ProjectEntryView } from '../project/ProjectEntryView';
 import { useActiveProject } from '../../hooks/use-active-project';
 import { useDashboardKpis } from '../../hooks/use-dashboard-kpis';
 
@@ -132,6 +133,15 @@ export function DashboardPage({
           onStartMeeting={onRequestStartMeeting}
         />
       </section>
+
+      {/*
+        R12-C T10: 프로젝트 entry "할 일 작성" 카드. active project 가
+        있을 때 hero 와 widget grid 사이에 노출 — 사용자가 부서 채널을
+        직접 클릭하지 않고도 워크플로우를 시작할 수 있다.
+      */}
+      {activeProjectId !== null ? (
+        <ProjectEntryView projectId={activeProjectId} />
+      ) : null}
 
       {/*
         R4-Task7 — 2×2 widget grid. The CSS `grid-template-areas` encodes

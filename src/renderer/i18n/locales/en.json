@@ -910,6 +910,17 @@
       "nameRequired": "Name is required",
       "nameTooLong": "Name must be ≤ 200 characters",
       "sourcePathRequired": "Select a folder to import"
+    },
+    "entry": {
+      "title": "Write a task",
+      "hint": "Tasks written here will start the workflow in the selected department channel.",
+      "placeholder": "e.g. \"Outline a puzzle game concept\"",
+      "departmentLabel": "Start department",
+      "submitAction": "Start workflow",
+      "submitPending": "Starting…",
+      "errorEmpty": "Please enter a task.",
+      "errorNoChannel": "Selected department channel not found. Make sure department channels were auto-created.",
+      "channelsError": "Could not load department channels."
     }
   },
   "queue": {
