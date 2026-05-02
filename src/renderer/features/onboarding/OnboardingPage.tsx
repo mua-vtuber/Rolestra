@@ -536,7 +536,7 @@ function OnboardingWizardBody({
             */}
             <p
               data-testid="onboarding-step-1-body"
-              className="mt-2 text-sm leading-relaxed text-fg-muted max-w-3xl"
+              className="mt-2 text-sm leading-relaxed text-fg-muted max-w-3xl break-keep whitespace-pre-line"
             >
               {t('onboarding.step1.body')}
             </p>

@@ -76,7 +76,7 @@ export function Step1ArenaRoot(): ReactElement {
   return (
     <section
       data-testid="onboarding-step-1-arena-root"
-      className="mx-auto mt-4 w-full max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm text-fg"
+      className="mx-auto mt-12 w-full max-w-2xl rounded-panel border border-border-soft bg-panel-bg p-4 text-sm text-fg"
     >
       <h3 className="text-xs font-bold uppercase tracking-wide text-fg-subtle">
         {t('onboarding.step1.arenaRoot.header', {
