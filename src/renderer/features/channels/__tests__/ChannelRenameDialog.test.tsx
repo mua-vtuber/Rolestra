@@ -75,6 +75,11 @@ const USER_CH: Channel = {
   kind: 'user',
   readOnly: false,
   createdAt: 1_700_000_000_000,
+  // R12-C T2 신규 필드. role 이 undefined 면 production 의 부서 채널 분기
+  // (channel.role !== null) 가 true 로 평가돼 빈 이름 검증이 우회된다.
+  role: null,
+  purpose: null,
+  handoffMode: 'check',
 };
 
 const RENAMED: Channel = { ...USER_CH, name: '새이름' };
@@ -132,7 +137,7 @@ describe('ChannelRenameDialog — open/close', () => {
 });
 
 describe('ChannelRenameDialog — validation', () => {
-  it('empty name → nameRequired', () => {
+  it('empty name → nameRequired', async () => {
     renderWithTheme(
       <ChannelRenameDialog open onOpenChange={() => {}} channel={USER_CH} />,
     );
@@ -140,9 +145,13 @@ describe('ChannelRenameDialog — validation', () => {
       target: { value: '   ' },
     });
     fireEvent.click(screen.getByTestId('channel-rename-submit'));
-    expect(screen.getByTestId('channel-rename-error').textContent).toContain(
-      '채널 이름을 입력하세요',
-    );
+    // submit dispatch 후 state 갱신은 next tick — 동기 expect 가 race 라
+    // waitFor 로 감싼다 (아래 nameTooShort / userChannelSubmit 와 같은 패턴).
+    await waitFor(() => {
+      expect(screen.getByTestId('channel-rename-error').textContent).toContain(
+        '채널 이름을 입력하세요',
+      );
+    });
   });
 
   it('unchanged name → close without IPC', async () => {

@@ -13,9 +13,8 @@
  * - system_*      : `[읽기 전용]` 배지 노출. rename/delete 렌더 + 비활성 +
  *                   title 안내(defence-in-depth — 서비스 레벨 SystemChannelProtectedError 도 존재).
  *
- * R12 dogfooding 변경: 회의 시작 / 회의 중단 버튼은 좌측 채널 사이드바
- * (`ChannelRail` → `ChannelMeetingControl`) 로 이전. 헤더는 채널 메타데이터
- * 와 이름 변경 / 삭제만 다룬다.
+ * 회의 시작 / 회의 중단 버튼은 좌측 사이드바의 ChannelMeetingControl 이
+ * host 한다. 헤더는 채널 메타데이터 + 이름 변경 / 삭제만 다룬다.
  *
  * hex literal 금지 — Tailwind utility + CSS variable 만 사용.
  */
@@ -124,11 +123,6 @@ export function ChannelHeader({
       >
         {memberCountLabel}
       </span>
-
-      {/*
-        R12: 회의 시작 / 중단 버튼은 좌측 사이드바의 ChannelMeetingControl
-        로 이전. 헤더는 채널 메타데이터 + rename/delete 만 담당.
-      */}
 
       {!isDm ? (
         <button
