@@ -28,6 +28,7 @@ import type { Project } from '../../../shared/project-types';
 import {
   PermissionBoundaryError,
   PermissionService,
+  normalizePathForCompare,
   type ProjectLookup,
 } from '../permission-service';
 
@@ -303,5 +304,88 @@ describe('PermissionService v3', () => {
         }
       },
     );
+  });
+});
+
+/**
+ * normalizePathForCompare — pure-string normalisation for the TOCTOU guard.
+ *
+ * Runs on every host (Windows + POSIX) by passing the platform argument
+ * explicitly. Drives the Windows-specific TOCTOU equality on Linux/macOS CI
+ * agents that cannot create real `mklink /J` junctions.
+ */
+describe('normalizePathForCompare (R12-C 정리 #6 — Windows TOCTOU)', () => {
+  describe('platform: win32', () => {
+    it('upper-cases lowercase drive letters', () => {
+      expect(normalizePathForCompare('c:\\foo\\bar', 'win32')).toBe(
+        'C:\\foo\\bar',
+      );
+    });
+
+    it('strips the \\\\?\\ long-path prefix on local drives', () => {
+      expect(
+        normalizePathForCompare('\\\\?\\C:\\Users\\me\\target', 'win32'),
+      ).toBe('C:\\Users\\me\\target');
+    });
+
+    it('preserves the \\\\?\\UNC\\ prefix (different path semantics)', () => {
+      // UNC long-path prefix is *not* the same path as the bare \\server\share
+      // form when passed to fs.realpathSync — stripping it would weaken the
+      // guard. Just ensure it survives normalisation.
+      const out = normalizePathForCompare(
+        '\\\\?\\UNC\\server\\share\\dir',
+        'win32',
+      );
+      expect(out.startsWith('\\\\?\\UNC\\')).toBe(true);
+    });
+
+    it('converts forward slashes to backslashes', () => {
+      expect(normalizePathForCompare('C:/foo/bar', 'win32')).toBe(
+        'C:\\foo\\bar',
+      );
+    });
+
+    it('produces equal output for spellings that mean the same Windows path', () => {
+      // Stored DB form (user-typed lowercase drive) vs realpath form (Node's
+      // upper-case canonical) must compare equal — otherwise every external
+      // project spawn becomes a permanent denial-of-service.
+      const stored = normalizePathForCompare('c:/Projects/repo', 'win32');
+      const real = normalizePathForCompare('C:\\Projects\\repo', 'win32');
+      expect(stored).toBe(real);
+    });
+
+    it('still distinguishes genuinely different paths after normalisation', () => {
+      // The whole point of the TOCTOU guard is to reject swaps. A normalised
+      // benign path must not collide with a normalised swapped path.
+      const benign = normalizePathForCompare('C:\\Users\\me\\real', 'win32');
+      const swapped = normalizePathForCompare('C:\\Users\\me\\decoy', 'win32');
+      expect(benign).not.toBe(swapped);
+    });
+  });
+
+  describe('platform: posix-like (linux/darwin)', () => {
+    it('does NOT case-fold path components on linux', () => {
+      // POSIX filesystems are case-sensitive; case-folding here would weaken
+      // the guard by collapsing two genuinely different filesystem entries.
+      const lower = normalizePathForCompare('/tmp/Foo/Bar', 'linux');
+      const upper = normalizePathForCompare('/tmp/foo/bar', 'linux');
+      expect(lower).not.toBe(upper);
+    });
+
+    it('does NOT strip leading \\\\?\\-like sequences on darwin', () => {
+      // The long-path prefix has no meaning outside Windows; the literal
+      // characters must survive so a pathological POSIX path stays distinct.
+      const out = normalizePathForCompare('/\\\\?\\not-windows', 'darwin');
+      expect(out).toContain('\\\\?\\');
+    });
+
+    it('returns absolute, separator-resolved path identical to path.resolve', () => {
+      // POSIX behaviour intentionally collapses to plain `path.resolve` —
+      // this guards against a future refactor accidentally adding case-folding
+      // or prefix-stripping to the POSIX branch.
+      expect(normalizePathForCompare('/tmp/../tmp/foo', 'linux')).toBe(
+        '/tmp/foo',
+      );
+    });
   });
 });

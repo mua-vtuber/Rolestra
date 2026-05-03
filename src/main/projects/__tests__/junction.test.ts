@@ -100,6 +100,64 @@ describe('junction helpers', () => {
         expect(resolveLink(linkPath)).toBe(targetReal);
       },
     );
+
+    it.skipIf(!isWindows)(
+      'resolves a junction whose target is outside the link parent (R12-C 정리 #6)',
+      async () => {
+        // Mirrors the production scenario: ArenaRoot is one tmp tree, the
+        // user's external project lives in a sibling tmp tree. The junction
+        // sits inside ArenaRoot but its realpath must point at the external
+        // tree — that is exactly what the CA-3 TOCTOU guard reads at every
+        // CLI spawn.
+        const externalTree = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'rolestra-junction-ext-'),
+        );
+        try {
+          const externalTarget = path.join(externalTree, 'real');
+          const linkPath = path.join(tmpBase, 'link');
+          fs.mkdirSync(externalTarget);
+          const externalTargetReal = fs.realpathSync(externalTarget);
+
+          await createLink(linkPath, externalTargetReal);
+
+          expect(resolveLink(linkPath)).toBe(externalTargetReal);
+        } finally {
+          cleanupDir(externalTree);
+        }
+      },
+    );
+
+    it.skipIf(!isWindows)(
+      'reports a different realpath after the junction is swapped (R12-C 정리 #6)',
+      async () => {
+        // Simulates a TOCTOU attack: two distinct external trees, the
+        // junction starts pointing at the first, then is recreated to point
+        // at the second. realpathSync must return distinct, accurate values
+        // both times — that is what allows PermissionService to detect the
+        // swap.
+        const treeA = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'rolestra-junction-a-'),
+        );
+        const treeB = fs.mkdtempSync(
+          path.join(os.tmpdir(), 'rolestra-junction-b-'),
+        );
+        try {
+          const linkPath = path.join(tmpBase, 'link');
+          const realA = fs.realpathSync(treeA);
+          const realB = fs.realpathSync(treeB);
+
+          await createLink(linkPath, realA);
+          expect(resolveLink(linkPath)).toBe(realA);
+
+          await createLink(linkPath, realB);
+          expect(resolveLink(linkPath)).toBe(realB);
+          expect(resolveLink(linkPath)).not.toBe(realA);
+        } finally {
+          cleanupDir(treeA);
+          cleanupDir(treeB);
+        }
+      },
+    );
   });
 
   describe('removeLink', () => {
