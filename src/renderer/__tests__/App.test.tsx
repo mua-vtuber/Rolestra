@@ -60,11 +60,14 @@ if (typeof Element !== 'undefined') {
   if (!proto.scrollIntoView) proto.scrollIntoView = () => {};
 }
 
+import type { Channel } from '../../shared/channel-types';
+import type { DmSummary } from '../../shared/dm-types';
 import type { Project } from '../../shared/project-types';
 import {
   ACTIVE_PROJECT_STORAGE_KEY,
   useActiveProjectStore,
 } from '../stores/active-project-store';
+import { useSidebarStore } from '../stores/sidebar-store';
 import { i18next } from '../i18n';
 
 // --- Hook mocks: keep the dashboard tree lightweight ---------------------
@@ -144,10 +147,24 @@ interface StubBridgeOptions {
   projects?: Project[];
   onOpen?: (id: string) => void;
   openRejection?: Error;
+  /**
+   * R12-C 정리 #8 — 사이드바 ProjectAccordion 디폴트 펼침 상태에서
+   * 각 프로젝트의 `useChannels(projectId)` 가 즉시 `channel:list({projectId})`
+   * 를 호출한다. 미지정 시 빈 배열로 응답해 사이드바가 free-channels-empty
+   * 안내만 띄우게 된다.
+   */
+  channelsByProject?: Record<string, Channel[]>;
+  /** Sidebar 상단 GeneralChannelEntry 가 호출하는 channel:get-global-general 응답. */
+  globalGeneralChannel?: Channel | null;
+  /** Sidebar 하단 DmListView 가 호출하는 dm:list 응답. */
+  dmSummaries?: DmSummary[];
 }
 
 function stubBridge(options: StubBridgeOptions = {}) {
   const projects = options.projects ?? [];
+  const channelsByProject = options.channelsByProject ?? {};
+  const globalGeneralChannel = options.globalGeneralChannel ?? null;
+  const dmSummaries = options.dmSummaries ?? [];
   const invoke = vi.fn(async (channel: string, data: unknown) => {
     switch (channel) {
       case 'project:list':
@@ -158,6 +175,19 @@ function stubBridge(options: StubBridgeOptions = {}) {
         if (options.openRejection) throw options.openRejection;
         return { success: true };
       }
+      case 'channel:get-global-general':
+        return { channel: globalGeneralChannel };
+      case 'channel:list': {
+        // R12-C: useChannels({projectId}) + useDms({projectId:null}) 둘 다
+        // 같은 IPC 채널을 공유. projectId === null 이면 DM 만 (Sidebar 의
+        // useDms 가 호출 — DmListView 는 useDmSummaries 만 쓰지만 useDms 가
+        // MessengerPage 안쪽에서도 호출될 수 있어 안전하게 빈 배열 반환).
+        const projectId = (data as { projectId: string | null }).projectId;
+        if (projectId === null) return { channels: [] };
+        return { channels: channelsByProject[projectId] ?? [] };
+      }
+      case 'dm:list':
+        return { items: dmSummaries };
       default:
         throw new Error(`no mock for channel ${channel}`);
     }
@@ -169,6 +199,9 @@ function stubBridge(options: StubBridgeOptions = {}) {
 function resetActiveStore(): void {
   useActiveProjectStore.setState({ activeProjectId: null });
   localStorage.removeItem(ACTIVE_PROJECT_STORAGE_KEY);
+  // sidebar-store 의 펼침/접힘 토글이 it 간 leak 되지 않도록 리셋. 디폴트
+  // = `projectExpanded: {}` (모든 키 펼침 default).
+  useSidebarStore.setState({ projectExpanded: {} });
 }
 
 beforeEach(() => {
@@ -203,21 +236,20 @@ describe('App — full shell wiring (R4-Task10)', () => {
     ).toBeNull();
   });
 
-  // R12-C 정리 #4 (2026-05-03): R12-C T8 사이드바 land 시점부터 outdated.
-  // ProjectRail (data-testid="project-rail" / "project-rail-create") 가
-  // 사이드바 (data-testid="sidebar" / "sidebar-create-project") 로 흡수됐고
-  // active project marker 도 aria-current="page" → data-active-project="true"
-  // 로 변경. 정리 #8 (통합 테스트 재작성 — 사이드바 기준) 에서 stubBridge IPC
-  // 보강 + testid + active marker 갱신과 함께 통째 재작성한다.
-  it.skip('renders an empty project list + the "+ 새 프로젝트" row without crashing (정리 #8 재작성 대기)', async () => {
+  // R12-C 정리 #8 (2026-05-03): R12-C T8 통합 사이드바 기준 재작성.
+  // 옛 ProjectRail (`project-rail` / `project-rail-create`) 은 정리 #3 에서
+  // 삭제됐고 Sidebar (`sidebar` + `sidebar-create-project` + `sidebar-projects-empty`)
+  // 가 그 자리를 흡수했다.
+  it('renders the sidebar with "+ 새 프로젝트" button + empty notice when there are no projects', async () => {
     stubBridge({ projects: [] });
     render(<App />);
 
     await waitFor(() => {
-      expect(screen.getByTestId('project-rail')).toBeTruthy();
+      expect(screen.getByTestId('sidebar')).toBeTruthy();
     });
 
-    expect(screen.getByTestId('project-rail-create')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-create-project')).toBeTruthy();
+    expect(screen.getByTestId('sidebar-projects-empty')).toBeTruthy();
   });
 
   it('renders every project returned by project:list', async () => {
@@ -250,9 +282,10 @@ describe('App — full shell wiring (R4-Task10)', () => {
     expect(subtitle.getAttribute('data-active-project')).toBeNull();
   });
 
-  // 정리 #4: aria-current="page" → data-active-project="true" outdated.
-  // 정리 #8 통합 재작성 대기.
-  it.skip('clicking a project row calls project:open and updates the subtitle (정리 #8 재작성 대기)', async () => {
+  // R12-C 정리 #8 (2026-05-03): 사이드바 ProjectAccordion 헤더 클릭 흐름.
+  // 옛 ProjectRail row (`button[name=Beta]`) → `sidebar-project-header-${id}` 로 갱신.
+  // Active marker 도 `aria-current="page"` → `data-active-project="true"` 로 변경.
+  it('clicking a project header calls project:open and updates subtitle + sidebar active marker', async () => {
     const invoke = stubBridge({
       projects: [
         makeProject({ id: 'p-a', name: 'Alpha' }),
@@ -261,10 +294,10 @@ describe('App — full shell wiring (R4-Task10)', () => {
     });
     render(<App />);
 
-    const betaRow = await screen.findByRole('button', { name: /Beta/ });
+    const betaHeader = await screen.findByTestId('sidebar-project-header-p-b');
 
     await act(async () => {
-      fireEvent.click(betaRow);
+      fireEvent.click(betaHeader);
     });
 
     await waitFor(() => {
@@ -281,13 +314,13 @@ describe('App — full shell wiring (R4-Task10)', () => {
       expect(subtitle.getAttribute('data-active-project')).toBe('true');
     });
 
-    // Active row carries aria-current="page".
+    // Active project section carries data-active-project='true'.
     await waitFor(() => {
       expect(
         screen
-          .getByRole('button', { name: /Beta/ })
-          .getAttribute('aria-current'),
-      ).toBe('page');
+          .getByTestId('sidebar-project-p-b')
+          .getAttribute('data-active-project'),
+      ).toBe('true');
     });
   });
 
@@ -315,23 +348,51 @@ describe('App — full shell wiring (R4-Task10)', () => {
     expect(useActiveProjectStore.getState().activeProjectId).toBeNull();
   });
 
-  // 정리 #4: project-rail-create testid 가 사이드바의 sidebar-create-project
-  // 로 흡수. 정리 #8 통합 재작성 대기.
-  it.skip('"+ 새 프로젝트" row opens the ProjectCreateModal (정리 #8 재작성 대기)', async () => {
+  // R12-C 정리 #8 (2026-05-03): "+ 새 프로젝트" 버튼이 ProjectRail →
+  // Sidebar 로 hoist (`project-rail-create` → `sidebar-create-project`).
+  it('"+ 새 프로젝트" button opens the ProjectCreateModal', async () => {
     stubBridge({ projects: [] });
     render(<App />);
 
-    const createRow = await screen.findByTestId('project-rail-create');
+    const createBtn = await screen.findByTestId('sidebar-create-project');
 
     // Modal closed initially.
     expect(screen.queryByTestId('project-create-modal')).toBeNull();
 
     await act(async () => {
-      fireEvent.click(createRow);
+      fireEvent.click(createBtn);
     });
 
     await waitFor(() => {
       expect(screen.getByTestId('project-create-modal')).toBeTruthy();
+    });
+  });
+
+  // R12-C 정리 #8 (2026-05-03): MessengerPage.test.tsx line 133 의 옛
+  // "+ 새 채널" 흐름을 사이드바 기준으로 흡수. 트리거가 ChannelRail 의
+  // `channel-rail-create` → ProjectAccordion 의 `sidebar-project-create-channel-${id}`
+  // 로 hoist 됐다 (App.tsx 가 ChannelCreateModal 을 host).
+  it('"+ 새 채널" inside an expanded project opens the ChannelCreateModal', async () => {
+    stubBridge({
+      projects: [makeProject({ id: 'p-a', name: 'Alpha' })],
+      channelsByProject: { 'p-a': [] },
+    });
+    render(<App />);
+
+    // ProjectAccordion 디폴트 = 펼침 → "+ 새 채널" 버튼이 즉시 mount.
+    const createChannelBtn = await screen.findByTestId(
+      'sidebar-project-create-channel-p-a',
+    );
+
+    // Modal closed initially.
+    expect(screen.queryByTestId('channel-create-modal')).toBeNull();
+
+    await act(async () => {
+      fireEvent.click(createChannelBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('channel-create-modal')).toBeTruthy();
     });
   });
 
