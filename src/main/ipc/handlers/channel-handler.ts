@@ -17,11 +17,13 @@
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { ChannelService } from '../../channels/channel-service';
 import type { MeetingService } from '../../meetings/meeting-service';
+import type { MemberProfileService } from '../../members/member-profile-service';
 import type { Meeting } from '../../../shared/meeting-types';
 import type { Participant } from '../../../shared/engine-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
 import type { Channel } from '../../../shared/channel-types';
 import type { DmSummary } from '../../../shared/dm-types';
+import type { MemberView } from '../../../shared/member-profile-types';
 import { providerRegistry } from '../../providers/registry';
 
 /**
@@ -51,6 +53,7 @@ export interface MeetingOrchestratorFactory {
 
 let channelAccessor: (() => ChannelService) | null = null;
 let meetingAccessor: (() => MeetingService) | null = null;
+let memberAccessor: (() => MemberProfileService) | null = null;
 let orchestratorFactory: MeetingOrchestratorFactory | null = null;
 
 export function setChannelServiceAccessor(fn: () => ChannelService): void {
@@ -59,6 +62,19 @@ export function setChannelServiceAccessor(fn: () => ChannelService): void {
 
 export function setMeetingServiceAccessor(fn: () => MeetingService): void {
   meetingAccessor = fn;
+}
+
+/**
+ * R12-C dogfooding round 1 (2026-05-03) — `channel:list-members` IPC 가
+ * channel_members 테이블의 providerId 들을 MemberProfileService.getView 로
+ * fuse 해 MemberView[] 를 반환하기 위해 별도 accessor 를 갖는다. member-handler
+ * 와 cross-handler dependency 를 만들지 않으려고 main/index.ts boot 에서
+ * 같은 service 인스턴스를 두 곳에 wire 한다.
+ */
+export function setChannelMemberServiceAccessor(
+  fn: () => MemberProfileService,
+): void {
+  memberAccessor = fn;
 }
 
 export function setMeetingOrchestratorFactory(
@@ -81,6 +97,13 @@ function getMeeting(): MeetingService {
   return meetingAccessor();
 }
 
+function getMemberSvc(): MemberProfileService {
+  if (!memberAccessor) {
+    throw new Error('channel handler: member service not initialized');
+  }
+  return memberAccessor();
+}
+
 /** channel:list — R12-C: projectId=null 은 DM 만 (전역 일반 채널은 별도 IPC). */
 export function handleChannelList(
   data: IpcRequest<'channel:list'>,
@@ -89,6 +112,31 @@ export function handleChannelList(
   const channels =
     data.projectId === null ? svc.listDms() : svc.listByProject(data.projectId);
   return { channels };
+}
+
+/**
+ * R12-C dogfooding round 1 (2026-05-03) — channel:list-members.
+ *
+ * `channel_members` 테이블의 providerId 들을 drag_order 순으로 가져와
+ * MemberProfileService.getView 로 fuse → MemberView[] 반환. DM 채널은
+ * AI 1명만 들어있고 (migration 003 주석), 자유/시스템 채널은 채널 생성
+ * 시 채널-멤버 매핑된 provider 들만. project-wide member:list 와는 다른
+ * surface (이전 useChannelMembers MVP 의 stale 표시 fix).
+ *
+ * 빈 채널 (channel_members 0행) 은 빈 배열 반환 — UI 에서 "참여자 없음"
+ * 표시. ChannelNotFoundError 같은 분기는 renderer 가 channels list 와
+ * 교차 검증으로 surface (use-channel-members.ts).
+ */
+export function handleChannelListMembers(
+  data: IpcRequest<'channel:list-members'>,
+): IpcResponse<'channel:list-members'> {
+  const channelSvc = getChannel();
+  const memberSvc = getMemberSvc();
+  const channelMembers = channelSvc.listMembers(data.channelId);
+  const members: MemberView[] = channelMembers.map((cm) =>
+    memberSvc.getView(cm.providerId),
+  );
+  return { members };
 }
 
 /**

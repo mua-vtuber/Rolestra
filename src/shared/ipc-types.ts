@@ -528,6 +528,25 @@ export type IpcChannelMap = {
     response: { channels: Channel[] };
   };
   /**
+   * R12-C dogfooding round 1 (2026-05-03) — channel-scoped 멤버 list.
+   *
+   * R5 시점 D6 결정 ("`channel:list-members` 신규 IPC 미도입") 의 reverse.
+   * `useChannelMembers` 가 `useMembers()` 의 project-wide list 를 그대로
+   * 반환해 자유 채널 / DM 의 실제 참여자 수와 표시가 어긋나는 문제 (자유
+   * 채널 2명 추가 → UI 3명 표시, DM 1:1 → UI 3명 표시) 가 표면화. main
+   * 의 `channel_members` 테이블 + `ChannelRepository.listMembers(channelId)`
+   * 는 이미 R12-C T2 에서 drag_order 정렬까지 완비됐으므로 IPC + renderer
+   * fetch 만 새로 wire 한다.
+   *
+   * DM 채널은 `channel_members` 에 AI 1명만 (사용자 참여는 암묵적, migration
+   * 003-channels.ts:42 주석 명시) — 새 IPC 가 자동으로 "DM = 1명" 으로
+   * 정상 표시.
+   */
+  'channel:list-members': {
+    request: { channelId: string };
+    response: { members: MemberView[] };
+  };
+  /**
    * R12-C — 전역 일반 채널 1개 lookup. project_id IS NULL +
    * kind = 'system_general'. Boot 직후 ensureGlobalGeneralChannel 가
    * 보장하지만 마이그레이션/boot 비정상 시 null.

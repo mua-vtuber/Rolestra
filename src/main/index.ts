@@ -39,6 +39,7 @@ import {
 import { ProjectSkillSyncService } from './skills/project-skill-sync-service';
 import {
   setChannelServiceAccessor,
+  setChannelMemberServiceAccessor,
   setMeetingServiceAccessor,
 } from './ipc/handlers/channel-handler';
 import { StreamBridge } from './streams/stream-bridge';
@@ -241,6 +242,10 @@ app.whenReady().then(async () => {
       },
     });
     setMemberProfileServiceAccessor(() => memberProfileService);
+    // R12-C dogfooding round 1 (2026-05-03): channel-handler 의
+    // channel:list-members 가 같은 service 인스턴스를 fuse 에 사용한다.
+    // member-handler 와 cross-handler dependency 회피를 위해 별도 accessor.
+    setChannelMemberServiceAccessor(() => memberProfileService);
 
     // R8-Task5/8: AvatarStore boot — depends on arenaRoot for the
     // <ArenaRoot>/avatars destination. Stateless, safe to share.

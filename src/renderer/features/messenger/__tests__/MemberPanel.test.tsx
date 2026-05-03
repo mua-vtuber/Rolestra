@@ -42,6 +42,10 @@ function makeChannel(overrides: Partial<Channel>): Channel {
     kind: 'user',
     readOnly: false,
     createdAt: 1_700_000_000_000,
+    // R12-C T2 신규 필드 — legacy user 채널은 모두 null/디폴트.
+    role: null,
+    purpose: null,
+    handoffMode: 'check',
     ...overrides,
   };
 }
@@ -79,7 +83,12 @@ function stubBridge(options: StubOptions = {}): void {
         ? { channels: [] }
         : { channels };
     }
+    // R12-C dogfooding round 1: useChannelMembers 가 useMembers wrap →
+    // 자체 channel:list-members 호출로 refactor. test 의 `members` 옵션이
+    // 그대로 channel-scoped roster 로 사용되도록 mock 단순화.
+    if (channel === 'channel:list-members') return { members };
     if (channel === 'member:list') return { members };
+    if (channel === 'channel:get-global-general') return { channel: null };
     if (channel === 'meeting:list-active') return { meetings };
     throw new Error(`no mock for channel ${channel}`);
   });
@@ -184,6 +193,7 @@ describe('MemberPanel — consensus card wires SsmBox to active meeting', () => 
           stateName: 'SYNTHESIZING',
           startedAt: 1_700_000_000_000,
           elapsedMs: 60_000,
+          pausedAt: null,
         },
       ],
     });
