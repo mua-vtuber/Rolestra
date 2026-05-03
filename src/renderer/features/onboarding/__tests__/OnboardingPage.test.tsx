@@ -52,6 +52,7 @@ import type {
   OnboardingState,
   ProviderDetectionSnapshot,
 } from '../../../../shared/onboarding-types';
+import type { RoleId } from '../../../../shared/role-types';
 
 // ── Bridge mock ────────────────────────────────────────────────────
 
@@ -383,6 +384,24 @@ describe('OnboardingPage — step gates', () => {
 });
 
 describe('OnboardingPage — step 3/4/5 surfaces', () => {
+  // R12-C round 2 (commit 80266f3) 부터 step 3 → 4 진행 조건이 강화됐다:
+  //   1) 모든 직원의 역할 칭호 non-empty
+  //   2) 9 능력 (idea / planning / design.ui / design.ux / design.character /
+  //      design.background / implement / review / general) 각각 ≥ 1명 배정
+  // 디폴트 skillAssignments 는 `general` 만 모든 직원 ON, 나머지 8 능력은
+  // 모두 OFF. 따라서 helper 는 첫 번째 직원 (claude) 의 8 능력 체크박스를
+  // 한 번씩 켜면 9 능력 모두 ≥ 1명 충족.
+  const SKILLS_TO_TOGGLE_FOR_CLAUDE: RoleId[] = [
+    'idea',
+    'planning',
+    'design.ui',
+    'design.ux',
+    'design.character',
+    'design.background',
+    'implement',
+    'review',
+  ];
+
   async function advanceToStep(target: 3 | 4 | 5): Promise<void> {
     await waitForStep(1);
     await clickNext();
@@ -399,10 +418,40 @@ describe('OnboardingPage — step 3/4/5 surfaces', () => {
       await waitForStep(3);
     }
     if (target >= 4) {
+      // 1) 역할 칭호 — 모든 직원 non-empty.
       const inputs = screen.getAllByTestId('onboarding-step-3-input');
       inputs.forEach((input) => {
         fireEvent.change(input, { target: { value: '시니어' } });
       });
+      // 2) 능력 매트릭스 — 첫 번째 직원 (claude) 의 8 능력 체크박스를 ON.
+      //    Step3RoleAssignment 의 handleToggleSkill 는 prop 으로 받은
+      //    `skillAssignments` 를 closure 로 캡처해서 현재 값 위에 토글한다.
+      //    sync loop 으로 8 click 을 연속 발화하면 같은 render scope 의 동일
+      //    skillAssignments 를 8 번 읽어 last-write-wins 회귀가 난다 (테스트
+      //    환경의 patchSelections IPC 는 microtask 단위로 비동기).
+      //    각 click 후 해당 role 의 카운트가 1 로 반영될 때까지 await 해서
+      //    React re-render → memo 갱신 → 다음 click closure 가 새 prop 을
+      //    읽도록 한다.
+      for (const role of SKILLS_TO_TOGGLE_FOR_CLAUDE) {
+        const label = screen.getByTestId(
+          `onboarding-step-3-skill-checkbox-${role}-claude`,
+        );
+        const checkbox = label.querySelector<HTMLInputElement>(
+          'input[type="checkbox"]',
+        );
+        if (checkbox === null) {
+          throw new Error(
+            `step 3 helper: missing checkbox for role=${role} provider=claude`,
+          );
+        }
+        fireEvent.click(checkbox);
+        await waitFor(() => {
+          const countEl = screen.getByTestId(
+            `onboarding-step-3-skill-count-${role}`,
+          );
+          expect(countEl.textContent).toContain('(1)');
+        });
+      }
       await waitFor(() => {
         expect(
           screen
@@ -427,13 +476,10 @@ describe('OnboardingPage — step 3/4/5 surfaces', () => {
     expect(rows.length).toBe(KNOWN_AVAILABLE.length);
   });
 
-  // R12-C 정리 #4 (2026-05-03): R12-C round 2 commit 80266f3 (T3 능력
-  // 배정 매트릭스 land) 시점에 step 3 입력 조건이 강화되며 step 3 → 4
-  // 전환 next 활성 조건이 변경됐다. 아래 3 it 는 advanceToStep(4) 의
-  // step 3 next 활성 검증 (line 401-407) 에서 timeout. 정리 #5 (실시간
-  // 갱신 fix + 기타 outdated 갱신) 에서 step 3 능력 매트릭스 입력 helper
-  // 와 함께 갱신한다.
-  it.skip('step 4 defaults to hybrid permission mode (정리 #5 재작성 대기)', async () => {
+  // R12-C 정리 #5 (2026-05-03) 재활성: helper advanceToStep(4) 에 능력
+  // 매트릭스 입력 (첫 번째 직원의 8 능력 체크박스 ON) 추가. 정리 #4 의
+  // skip 사유 (능력 미배정 → step 3 next 비활성 → timeout) 해소.
+  it('step 4 defaults to hybrid permission mode', async () => {
     setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
     await advanceToStep(4);
@@ -443,9 +489,7 @@ describe('OnboardingPage — step 3/4/5 surfaces', () => {
     expect(hybrid?.getAttribute('data-selected')).toBe('true');
   });
 
-  // 정리 #4: 위 동일 root cause (advanceToStep(5) → advanceToStep(4) →
-  // step 3 next 활성 검증 timeout). 정리 #5 위임.
-  it.skip('step 5 next is disabled until slug is non-empty (정리 #5 재작성 대기)', async () => {
+  it('step 5 next is disabled until slug is non-empty', async () => {
     setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     renderPage('warm');
     await advanceToStep(5);
@@ -464,9 +508,7 @@ describe('OnboardingPage — step 3/4/5 surfaces', () => {
     });
   });
 
-  // 정리 #4: advanceToStep(5) 가 step 3 next 활성 검증에서 timeout. 정리
-  // #5 위임 (위 동일 root cause).
-  it.skip('step 5 finish triggers onboarding:complete then onCompleteWithProject (정리 #5 재작성 대기)', async () => {
+  it('step 5 finish triggers onboarding:complete then onCompleteWithProject', async () => {
     const { invoke } = setupArenaBridge({ snapshots: KNOWN_AVAILABLE });
     const { onCompleteWithProject } = renderPage('warm');
     await advanceToStep(5);

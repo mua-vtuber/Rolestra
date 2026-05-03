@@ -17,6 +17,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { notifyChannelsChanged } from './channel-invalidation-bus';
 import { invoke } from '../ipc/invoke';
 import type { ActiveMeetingSummary } from '../../shared/meeting-types';
 import type {
@@ -106,6 +107,13 @@ export function useActiveMeetings(limit?: number): UseActiveMeetingsResult {
       'stream:meeting-state-changed',
       (_payload: StreamMeetingStateChangedPayload) => {
         triggerRefresh();
+        // R12-C 정리 #5 (2026-05-03) — 회의 시작/종료 시 사이드바 채널
+        // 라벨 (회의 진행 중 표시) 과 참여자 목록이 stale 했다. state 가
+        // 바뀔 때마다 channel invalidation 버스를 fan-out 해서 useChannels
+        // / useMembers 가 즉시 refetch 하도록 한다. T7 회의 시스템 재설계
+        // 로 state semantics 가 바뀌어도 안전하도록 state 값 검사 없이
+        // 모든 state-changed 에서 발화 (호출 비용 cheap).
+        void notifyChannelsChanged();
       },
     );
     const offError = onStream(
