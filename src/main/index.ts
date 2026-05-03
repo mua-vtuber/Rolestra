@@ -544,19 +544,17 @@ app.whenReady().then(async () => {
           permissionMode: 'hybrid' as const,
           autonomyMode: 'manual' as const,
         };
-        // dogfooding 2026-05-01 — system_general 채널은 캐주얼 chat
-        // 표면이지 multi-round 합의 회의가 아님. 자동 트리거된 #일반 회의는
-        // 1 라운드 (각 참여자 1 턴씩) 만 진행 후 종료한다. 명시 user 채널은
-        // 기존대로 unlimited (사용자가 본격 회의를 의도한 채널).
-        const roundSetting =
-          channel.kind === 'system_general' ? 1 : 'unlimited';
+        // R12-C round 4 (meeting-auto-trigger.ts:120) 가 system_general /
+        // dm 을 dm-style responder 로 일찍 분기시키므로 이 createAndRun
+        // 경로는 항상 user 채널 (부서 / 자유) — multi-round 회의. round
+        // setting 은 unlimited 로 고정.
         await factory.createAndRun({
           meeting,
           projectId: channel.projectId,
           participants,
           topic,
           ssmCtx,
-          roundSetting,
+          roundSetting: 'unlimited',
         });
         // The orchestrator is now registered; seed the meeting with the
         // user's first message so the AI's first turn sees what the user

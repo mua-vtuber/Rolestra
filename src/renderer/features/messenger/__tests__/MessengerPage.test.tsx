@@ -103,7 +103,13 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     expect(screen.queryByTestId('messenger-member-panel')).toBeNull();
   });
 
-  it('renders all 3 panes when an active project is selected', () => {
+  // R12-C 정리 #3 (2026-05-03): R12-C T8 사이드바 land 후 MessengerPage 는
+  // 2 pane (Thread + MemberPanel) 로 축소되고 ChannelRail 은 사이드바로
+  // 흡수됐다. 아래 두 it 는 옛 3 pane 구조 (`messenger-channel-rail` /
+  // `channel-rail` / `channel-rail-create` testid) 를 검증하므로 새 구조와
+  // 어긋난다. 정리 #8 (MessengerPage 테스트 재작성 — 사이드바 기준) 에서
+  // 새 2 pane 단위 테스트로 통째 재작성한다.
+  it.skip('renders all 3 panes when an active project is selected (Task #8 재작성 대기)', () => {
     stubEmptyChannelBridge();
     useActiveProjectStore.setState({ activeProjectId: 'p-a' });
 
@@ -116,19 +122,20 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     expect(screen.getByTestId('messenger-thread')).toBeTruthy();
     expect(screen.getByTestId('messenger-member-panel')).toBeTruthy();
     expect(screen.queryByTestId('messenger-empty-state')).toBeNull();
-    // Task 4: ChannelRail 이 실제로 마운트되어야 한다.
     expect(screen.getByTestId('channel-rail')).toBeTruthy();
   });
 });
 
 describe('MessengerPage — Task 10 CRUD modal wire-up', () => {
-  it('clicking + 새 채널 opens ChannelCreateModal', async () => {
+  // R12-C 정리 #3 (2026-05-03): "+ 새 채널" 트리거가 사이드바로 hoist 됐다
+  // (App.tsx). MessengerPage 안에는 `channel-rail-create` 가 없다. 정리
+  // #8 에서 사이드바 기반 트리거 테스트로 재작성한다.
+  it.skip('clicking + 새 채널 opens ChannelCreateModal (Task #8 재작성 대기)', async () => {
     stubEmptyChannelBridge();
     useActiveProjectStore.setState({ activeProjectId: 'p-wire' });
 
     render(<MessengerPage />);
 
-    // `+ 새 채널` button lives inside ChannelRail.
     fireEvent.click(screen.getByTestId('channel-rail-create'));
 
     await waitFor(() => {

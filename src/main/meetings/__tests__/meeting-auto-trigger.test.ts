@@ -188,18 +188,16 @@ describe('MeetingAutoTrigger', () => {
     expect(orchestratorFactory.interruptActive).not.toHaveBeenCalled();
   });
 
-  it('treats system_general channel like a user channel (auto-trigger)', async () => {
+  it('delegates system_general messages to DmAutoResponder (R12-C round 4)', async () => {
+    // R12-C round 4 dogfooding: system_general 채널은 캐주얼 chat 표면
+    // 이라 회의 객체를 만들지 않고 DM 처럼 dm-style responder 로 1라운드
+    // 응답만 한다. spec §11.3 의 "auto-trigger X + 1라운드 단순 응답" 그대로.
     channelService.get.mockReturnValue(sysGeneralChannel);
-    meetingService.getActive.mockReturnValue(null);
-    meetingService.start.mockReturnValue({
-      id: 'm-sg',
-      channelId: 'c-sys-gen',
-      topic: 'x',
-      startedAt: 0,
-    });
-    await trigger.onMessage(mkUserMessage('c-sys-gen', 'x'));
-    expect(meetingService.start).toHaveBeenCalled();
-    expect(orchestratorFactory.createAndRun).toHaveBeenCalled();
+    const msg = mkUserMessage('c-sys-gen', 'x');
+    await trigger.onMessage(msg);
+    expect(dmResponder.handle).toHaveBeenCalledWith(msg, sysGeneralChannel);
+    expect(meetingService.start).not.toHaveBeenCalled();
+    expect(orchestratorFactory.createAndRun).not.toHaveBeenCalled();
   });
 
   it('truncates topic to 80 chars with ellipsis', async () => {

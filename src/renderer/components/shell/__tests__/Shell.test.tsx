@@ -4,7 +4,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import '../../../i18n';
-import { NavRail, ProjectRail, Shell, ShellTopBar } from '..';
+import { NavRail, Shell, ShellTopBar } from '..';
 import { DEFAULT_MODE, DEFAULT_THEME, useThemeStore } from '../../../theme/theme-store';
 import { ThemeProvider } from '../../../theme/theme-provider';
 import type { ThemeComboKey } from '../../../theme/theme-tokens';
@@ -18,12 +18,15 @@ const COMBOS: ReadonlyArray<ThemeComboKey> = [
   'retro-dark',
 ];
 
+// R12-C 정리 #3 — Shell 은 슬롯 레이아웃 컴포넌트라 rail 슬롯에 어떤 컴포넌트를
+// 끼워도 layout 책임만 검증된다. 이전 ProjectRail 의존을 stub div 로 대체해
+// Shell 컴포넌트 단위 테스트를 dead-component 정리와 분리한다.
 function renderShell() {
   return render(
     <ThemeProvider>
       <Shell
         nav={<NavRail items={[{ id: 'dashboard', icon: 'dashboard', label: 'Dashboard' }]} activeId="dashboard" />}
-        rail={<ProjectRail projects={[{ id: 'p1', name: 'Demo', unread: 2 }]} activeProjectId="p1" />}
+        rail={<div data-testid="project-rail">stub-rail</div>}
         topBar={<ShellTopBar title="Office" subtitle="Welcome" />}
       >
         <div>main</div>
