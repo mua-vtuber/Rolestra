@@ -44,16 +44,16 @@
     {
       "id": 6,
       "subject": "P1.6 — P2~P8 sub-task 정식 분할 + tasks.json sync + 메모리 갱신",
-      "status": "in_progress",
+      "status": "completed",
       "blockedBy": [2, 3, 4, 5],
-      "description": "**Goal:** P1 spec round 종결 시점에 P2~P8 의 sub-task 30+ 개를 정식 분할해 본 tasks.json 에 추가. plan 본문 phase 별 산출 list 갱신 (P1 결과 반영). 메모리 `rolestra-r12-meeting-system-redesign-2026-05-03.md` 갱신 (P1 정식화 결과 → closed 표기).\n\n**Files:**\n- Modify: docs/superpowers/plans/2026-05-04-rolestra-phase-r12-c2.md (placeholder → sub-task 명세 sync)\n- Modify: docs/superpowers/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json (placeholder T7~T13 → sub-task 30+)\n- Modify: ~/.claude/projects/-mnt-d-Taniar-Documents-Git-Rolestra/memory/rolestra-r12-meeting-system-redesign-2026-05-03.md (P1 정식화 closed 표기)\n- Modify: ~/.claude/projects/-mnt-d-Taniar-Documents-Git-Rolestra/memory/MEMORY.md ⚠️ 다음 세션 첫 작업 갱신"
+      "description": "Land 완료 (commit `420ec9a`). P1 spec round 종결 시점에 P2~P8 의 sub-task 29 개를 정식 분할해 본 tasks.json 에 추가. plan 본문 phase 별 산출 list 갱신 (P1 결과 반영). 메모리 `rolestra-r12-meeting-system-redesign-2026-05-03.md` closed 표기 + `rolestra-r12-c2-p1-completion.md` 신규."
     },
     {
       "id": 7,
       "subject": "P2-1 — migration 019 (opinion + opinion_vote + channels.max_rounds)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [6],
-      "description": "**Goal:** §4 Migration 019 + §5 데이터 모델 정식대로 DB 스키마 추가.\n\n**변경:**\n- `019-opinion-tables.ts` 신규 — `opinion` 테이블 (id UUID + parent_id + meeting_id + channel_id + kind + author_provider_id + author_label + title + content + rationale + status + exclusion_reason + round + timestamps) + `opinion_vote` 테이블 (id + target_id FK + voter_provider_id + vote + comment + round + round_kind + created_at) + `channels.max_rounds` INTEGER NULL\n- 옛 `opinion_revisions` 테이블 (R5 시점 land 됐으면) drop — `opinion.parent_id` + `opinion.kind` 가 흡수\n- 옛 SSM phase 컬럼 (DISCUSSING / PROPOSING / ...) drop 또는 deprecate 마킹 — 결정 필요\n- forward-only / idempotent / 실패 시 앱 시작 차단 (CLAUDE.md migration 규칙)\n\n**Verify:** vitest migration test (idempotent 재실행 + drop 확인) + typecheck 0 + better-sqlite3 native binding 회귀 X"
+      "description": "Land 완료. `019-opinion-tables.ts` 신규 — `opinion` 테이블 (id UUID + parent_id self-FK RESTRICT + meeting_id FK CASCADE + channel_id FK CASCADE + kind 6 enum + author_provider_id FK SET NULL + author_label + title/content/rationale + status 4 enum + exclusion_reason + round + timestamps) + `opinion_vote` 테이블 (id + target_id FK CASCADE + voter_provider_id FK SET NULL + vote 3 enum + comment + round + round_kind 2 enum + created_at) + `channels.max_rounds INTEGER NULL`. 인덱스 6 종 (meeting/channel/parent/status + vote.target/round). 옛 `opinion_revisions` 테이블은 코드 grep 결과 land 된 적 없음 → drop X. 옛 `meetings.state` 컬럼은 새 모델도 사용 (T10 재배선에서 state 문자열만 새로) → drop X. vitest migration-019.test.ts 28 tests + 전체 3516/13/0. typecheck 0."
     },
     {
       "id": 8,
