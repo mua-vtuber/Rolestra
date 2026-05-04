@@ -817,6 +817,129 @@ R12-C 의 single-meeting-per-channel 가드 (`AlreadyActiveMeetingError` + `Chan
 | R12-W | §11.12.1 부서 lock 매트릭스 + §11.12.3 대기 큐 정교화 + §11.12.4 아이디어 부서 사용자 요청 검증 + §11.12.5 변경 규모 분기 UI. |
 | R12-H | §11.12.6 외부 수정 감지 (인계 직전 mtime 가드). |
 
+### 11.13 SsmBox 부서별 layout (R12-C2 P3 land)
+
+회의 진행 본체가 부서마다 흐름이 다른 만큼 우측 SsmBox 도 부서별 variant 5 종으로 분기. 모든 variant 는 같은 backend (`OpinionService` + `MeetingMinutesService`) 데이터 (`opinion` + `opinion_vote`) 를 읽되 표현 layer 만 다름.
+
+| 부서 | layout |
+|------|--------|
+| **idea** | 의견 list (kind='root' 만, 단순) + 옆에 사용자 선택 여부 (체크 마크). 진행 상황 X — step 2 까지만. step 2.5 / 3 / 4 / 5 surface X (D-B-Light) |
+| **planning / review / audit** | 의견 트리 (parent chain 들여쓰기) + 현재 진행 의견 highlight + 각 카드 동의/반대/수정 표시 + 카운터 (예: "2/3 동의") + 회의록 [합의]+[제외] 미리보기 footer |
+| **design** | 토론 round 표시 + UX/UI 시퀀스 (와이어프레임 5 단계 / 디자인 2 단계) + Playwright PNG 미리보기 (별 컴포넌트 — `<DesignPreview>` desktop / mobile 탭) |
+| **implement** | designated AI 표시 + 진행도 게이지 + 작업 중 파일 list (별 컴포넌트 — `<ImplementProgress>`). 회의 X — opinion 트리 / 투표 surface 자체가 없음 |
+| **general** | 카드 누적 list (kind='self-raised' / 'user-raised' 도 표시) + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼. 합의/회의록/인계 surface 모두 X (잡담 정체성 유지) |
+
+→ SsmBox component 의 props 는 `channelId` 1 개만 받고, 내부에서 `channel.role` 보고 variant 결정. 부서별 컴포넌트는 같은 폴더 (`renderer/features/messenger/SsmBox/`) 안에 5 개 파일 분리.
+
+#### 11.13a 채팅창 카드 표시 (R12-C2 P3 land)
+
+회의 안 의견 발화 (`opinion` row 의 root / revise / block / addition kind) 는 *채팅창 메시지 row* + *SsmBox 카드* 둘 다 표시 — 사용자가 채팅 흐름 따라가면서도 회의 진행 한눈에 볼 수 있게.
+
+- 채팅창 = `Card primitive` (R3 시점 land) 활용 + `themeKey` 따라 변형 (브랜드 / 미니멀 / 노블 / 페이퍼 / 시노그래피 / TUI 6 테마 — R5 D3 / R10 D4 결정 그대로).
+- 본문 truncate 금지 (사용자 명시: "잘리지 말고 다 보여 줘"). long content 도 카드 안 scroll 또는 expand 버튼.
+- 카드 안 [선택 / 취소] / [동의 / 반대] 같은 액션 버튼 (kind 별).
+- 발화 ID (`codex_1` / `claude_2`) + 의견 트리 ID (`ITEM_001_01`) 둘 다 카드 헤더에 표시.
+- DM / 일반 채널 / 부서 채널 모두 같은 Card primitive 사용. 부서별 차이는 액션 버튼 종류 + 카드 색상 톤 (themeKey 안 부서별 tint).
+
+→ MessageRenderer 의 *카드 variant* 가 R12-C2 P3 신규 surface (P3-1 sub-task). 옛 plain text 메시지 렌더러는 그대로 유지 (회의 외 채팅용).
+
+### 11.14 channels.max_rounds (R12-C2 P2 land — 회의 종료 조건)
+
+채널 설정 옵션에 두 독립 차원:
+
+```
+[1] 인계 방식 (handoff_mode)
+    ( ) 자동 인계 (auto)
+    (•) 사용자 승인 후 인계 (check)
+
+[2] 회의 종료 조건 (max_rounds)         — R12-C2 신규
+    ( ) 무제한 (합의까지)
+    (•) [N] 라운드 도달 시 사용자 호출
+```
+
+→ 두 차원 독립 — 둘 다 동시 설정 가능.
+
+**구분되는 시스템 default (사용자 설정 X)**:
+- **의견 트리 깊이 cap = 3** (§5) — 의견 트리 (`ITEM_001` → `ITEM_001_01` → `ITEM_001_01_01`) 깊이 cap. 무한 루프 방지.
+- **maxConversationRounds = 5** (D-A round 5 hard cap, 이미 land) — 끝말잇기 같은 자연 무한 주제 안전장치.
+
+DB ALTER = `019-opinion-tables.ts` (P2 backend land 시점, §4 Migration) 안 `channels.max_rounds INTEGER NULL` 통합.
+
+채널 설정 UI = 채널 헤더 우측 ⚙ 버튼 → 모달 안 두 차원 토글 (R12-C2 P3 또는 P6 land — design round 후 결정).
+
+### 11.15 providers.capability_tier (R12-W 진입 시 ALTER, 보류)
+
+R12-W 본격 phase = 구현 부서 분담 + tier system + worktree 분할. 토대 컬럼:
+
+```typescript
+provider {
+  ...
+  capabilityTier: 'frontier' | 'mid' | 'local'   // R12-W 신규
+}
+```
+
+| tier | 작업 |
+|------|------|
+| `frontier` | Claude Opus / GPT-5 / Gemini Ultra — **중요 / 핵심 로직** |
+| `mid` | Claude Sonnet / GPT-4 / Gemini Pro — 일반 / 보일러플레이트 |
+| `local` | Ollama qwen / llama — **쉬운 / 반복 / 리팩토링 / 주석 / 테스트 보일러** |
+
+분배 규칙 (구현 부서장 AI 가 sub-task 마다 tier 보고 배정):
+- 시킬 게 없으면 → 대기 (idle)
+- frontier 작업이 많으면 → mid 가 보조
+- 수동 핀: 사용자가 특정 직원에게 특정 sub-task 강제 가능
+
+DB ALTER = `020-providers-capability-tier.ts` (R12-W 진입 시 land, §4 Migration). **R12-C2 시점에는 ALTER 자체 안 함**.
+
+### 11.16 부서 lock 사이클 R12-C2 정정 (§11.12.1 매트릭스 보강)
+
+§11.12.1 매트릭스 6 행이 R12-C 시점 (옛 review 한 부서) 기준이라 R12-C2 의 review/audit 분리 후 정정:
+
+| 부서 | 한 사이클 | lock 풀림 시점 |
+|------|-----------|----------------|
+| 아이디어 (idea) | 회의 → 기획 인계 | 인계서 보내는 순간 |
+| 기획 (planning) | 회의 → 인계 → 구현 → 검토 (audit) | **검토 OK 까지** (NG 시 다시 잠김) |
+| 디자인 (design) | 회의 → 시안 → 인계 | 인계서 보내는 순간 |
+| 구현 (implement) | 회의 → 작성 → 검토 (audit) 인계 | 검토 인계 보내는 순간 |
+| **리뷰 (review)** (R12-C2 정정) | 회의 → 회의록 → 사용자 자유 발화 | **회의록 작성 직후** (chain 외 — 사용자 후속 작업 발화는 별 task) |
+| **검토 (audit)** (R12-C2 신규) | 회의 → 결과 인계 | 결과 인계 보내는 순간. NG 인계 (기획 부서) 도 인계 시점에 lock 풀림 |
+| 일반 (general) | 단발 chat | lock 없음 |
+
+**핵심 차이 (변경 X)**: 기획만 사이클이 *부서 밖까지* 늘어남 — 자기가 만든 기획서가 검토 OK 까지 살아있는지 책임. 다른 부서는 "내 손 떠난 뒤" 가 끝.
+
+**리뷰 lock 모델 (R12-C2 신규)**: 리뷰는 chain 외라 인계 시점이 없음. 회의록 작성 직후 lock 풀림 — 사용자가 회의록 보고 후속 작업 발화 시 새 task 로 처리 (같은 부서 큐에 다른 user/audit 인계가 와도 차단 X).
+
+본격 land = R12-W (§11.12 의 phase 분담 그대로).
+
+### 11.17 변경 요청 분기 R12-C2 정정 (§11.12.5 위 UI 명시)
+
+§11.12.5 의 변경 요청 규모별 분기 (작은 / 중간 / 큰) 위에 R12-C2 P6 시점 UI 신규:
+
+```
+부서 채널 헤더 우측 [변경 요청] 버튼
+        ↓
+모달 — "변경 요청 규모 선택"
+   ( ) 작은 변경 (텍스트 / 색상 / 사소한 wording)
+       → active 부서에 끼어들기 (D-A T2.5 dispatcher / interruptWithUserMessage 이미 land)
+   (•) 중간 변경 (요구사항 1 개 추가 / 작은 기능 추가)         ← 디폴트
+       → 현재 chain 일시정지 (T7 pause/resume) → 기획 부서로 변경 인계 → 재계획 → 재개
+   ( ) 큰 변경 (다른 기능 / 골격 변경)
+       → 현재 chain 그대로 진행 + 큐에 새 task 등록 (현재 chain 끝나고 처리)
+
+   [변경 내용] textarea
+   [취소]                                           [확인]
+```
+
+→ 규모 선택 후 변경 내용 textarea 입력 + 확인 → 시스템이 분기 따라 처리.
+
+UI surface land = R12-C2 P6 (인계 phase). 본격 backend wire = R12-W phase 안 다른 sub-task 와 동시.
+
+### 11.18 직원 응답 JSON schema (R12-C2 정식)
+
+§5 Message Schema 단락이 reference 한 정식 schema 4 종. 본 §11.18 가 모든 풀세트 부서가 공유하는 단일 schema 정의 — 부서별 차이는 prompt template + workflow 분기로만 표현 (schema 자체는 통일).
+
+T5 (P1.5) sub-task 진입 시 본 §11.18 정식 명시 — 본 P1.4 (T4) 시점에는 *자리만 남김* (의도적). T5 land 후 step 1 / step 2.5 / step 3 / 모더레이터 회의록 4 종 schema 가 본 단락 안에 land 됨.
+
 ---
 
 ## 참고 spec / 메모리
