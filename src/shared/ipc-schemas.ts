@@ -737,6 +737,14 @@ export const opinionFreeDiscussionSchema = z.object({
     .max(32),
 });
 
+/**
+ * meetings:composeMinutes 입력 schema (R12-C2 P2-3).
+ * 단일 식별자 — service 가 회의 history + 의견 트리를 직접 조회한다.
+ */
+export const meetingsComposeMinutesSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
 /** Channel-keyed map of v3 schemas for router/handler wiring. */
 export const v3ChannelSchemas = {
   'arena-root:set': arenaRootSetSchema,
@@ -803,6 +811,8 @@ export const v3ChannelSchemas = {
   'opinion:tally': opinionTallySchema,
   'opinion:quickVote': opinionQuickVoteSchema,
   'opinion:freeDiscussion': opinionFreeDiscussionSchema,
+  // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ─────────────
+  'meetings:composeMinutes': meetingsComposeMinutesSchema,
 } as const;
 
 export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;

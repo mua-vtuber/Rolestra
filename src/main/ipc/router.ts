@@ -140,6 +140,7 @@ import {
   handleOpinionQuickVote,
   handleOpinionFreeDiscussion,
 } from './handlers/opinion-handler';
+import { handleMeetingsComposeMinutes } from './handlers/meetings-minutes-handler';
 import {
   handleMemberList,
   handleMemberGetProfile,
@@ -470,6 +471,11 @@ export function registerIpcHandlers(): void {
   handle('opinion:quickVote', isDev, (data) => handleOpinionQuickVote(data));
   handle('opinion:freeDiscussion', isDev, (data) =>
     handleOpinionFreeDiscussion(data),
+  );
+
+  // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ────────────
+  handle('meetings:composeMinutes', isDev, (data) =>
+    handleMeetingsComposeMinutes(data),
   );
 
   // ── v3: Member Profile ──────────────────────────────────────────

@@ -71,6 +71,7 @@ import type {
   Step25QuickVoteResponse,
   Step3FreeDiscussionResponse,
 } from './opinion-types';
+import type { MeetingMinutesComposeResult } from './meeting-minutes-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -1014,6 +1015,18 @@ export type IpcChannelMap = {
       }>;
     };
     response: { result: OpinionFreeDiscussionResult };
+  };
+
+  /**
+   * R12-C2 P2-3: step 5 — 모더레이터 회의록 작성. 모든 의견 합의 / 제외
+   * 처리 (T8 완료) 후 caller (T10 orchestrator) 가 1 회 호출. 시스템이
+   * 회의 history + 의견 트리 통째 모더레이터에 동봉, truncate 검출 + 1 회
+   * 재요청 + deterministic fallback 까지 보장. minutes.md 는 atomic write
+   * 로 `<ArenaRoot>/consensus/meetings/<meetingId>/` 안 저장. spec §11.18.6.
+   */
+  'meetings:composeMinutes': {
+    request: { meetingId: string };
+    response: { result: MeetingMinutesComposeResult };
   };
 
   // ── R11-Task4: dev hooks (E2E only, gated by ROLESTRA_E2E=1) ────

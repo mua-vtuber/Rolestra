@@ -29,6 +29,8 @@ import { MeetingService } from './meetings/meeting-service';
 import { OpinionRepository } from './meetings/opinion-repository';
 import { OpinionService } from './meetings/opinion-service';
 import { setOpinionServiceAccessor } from './ipc/handlers/opinion-handler';
+import { MeetingMinutesService } from './meetings/meeting-minutes-service';
+import { setMeetingMinutesServiceAccessor } from './ipc/handlers/meetings-minutes-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
 import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
@@ -788,6 +790,21 @@ app.whenReady().then(async () => {
           getConfigService().getSettings().summaryModelProviderId,
       }),
     });
+
+    // R12-C2 P2-3: MeetingMinutesService 부팅. step 5 모더레이터 회의록
+    // 작성 + minutes.md atomic write. T10 재배선 전까지는 dev tools / 테스트
+    // 가 직접 IPC `meetings:composeMinutes` 호출. provider 가 truncate /
+    // 호출 실패 시 deterministic fallback 으로 떨어진다.
+    const meetingMinutesService = new MeetingMinutesService({
+      arenaRoot,
+      meetingRepo,
+      channelRepo,
+      projectRepo,
+      messageRepo: messageRepository,
+      opinionRepo,
+      meetingSummary: meetingSummaryService,
+    });
+    setMeetingMinutesServiceAccessor(() => meetingMinutesService);
 
     // R10-Task11: re-arm consensus_decision approval expiry timers from
     // the persisted approval_items rows (R7 D2 deferred). The original
