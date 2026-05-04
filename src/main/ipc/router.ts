@@ -238,7 +238,7 @@ const registeredChannels: string[] = [];
  * two places drifts more easily than calling a named helper.
  */
 function clearChannelRegistry(): void {
-  clearChannelRegistry();
+  registeredChannels.length = 0;
 }
 
 /**
