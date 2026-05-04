@@ -124,23 +124,70 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 기존 `channels.kind`: `'system_general' | 'system_approval' | 'system_minutes' | 'user' | 'dm'`
 
 새 `channels.kind`: 동일 (마이그레이션 호환). 추가 컬럼:
-- `role`: `'idea' | 'planning' | 'design.ui' | 'design.ux' | 'design.character' | 'design.background' | 'implement' | 'review' | 'general' | null`
+- `role`: `'idea' | 'planning' | 'design.ui' | 'design.ux' | 'design.character' | 'design.background' | 'implement' | 'review' | 'audit' | 'general' | null` (R12-C2 갱신 — `'audit'` 신규 / `'review'` 역할 정정)
 - `purpose`: 자유 텍스트 (사용자 작성, optional)
+- `handoff_mode`: `'check' | 'auto'` (R12-C 018 마이그레이션 land — 부서 인계 직전 사용자 confirm 모드)
+- `drag_order`: INTEGER NULL (R12-C 018 마이그레이션 land — 참여 멤버 발화 순서)
+- `max_rounds`: INTEGER NULL (R12-C2 신규 — 회의 종료 조건. NULL = 무제한 / N 라운드 도달 시 사용자 호출. 본격 land = P2 backend 시점)
 
-### 부서별 회의 흐름 (R12-C 결정 매트릭스, 2026-05-02 갱신)
+### 부서별 회의 흐름 (R12-C2 갱신, 2026-05-04)
+
+옛 R12-C 매트릭스의 `OPINION_GATHERING / OPINION_TALLY / AGREEMENT_VOTE / REVISION_NEGOTIATION` 12 단계 합의 진행 모델은 **R12-C2 시점에 폐기**. 새 모델 = §5 의 5 단계 + 2.5 일괄 투표. 모든 풀세트 부서가 같은 backend (`OpinionService` + `MeetingMinutesService`) 공유 + 부서별 SsmBox layout / workflow 분기.
 
 | 부서 (role) | 회의 형식 | 종료 조건 | 결과물 | trigger | 구현 phase |
 |------------|----------|----------|--------|---------|-----------|
-| **idea (아이디어)** | D-B-Light (OPINION_GATHERING + OPINION_TALLY) + USER_PICK | 사용자가 카드 선택 + 코멘트 → 기획 부서 인계 | 의견 카드 list → 사용자 선택 | 할 일 큐 entry | R12-C |
-| **planning (기획)** | D-B 풀세트 (§5 — OPINION_GATHERING → OPINION_TALLY → AGREEMENT_VOTE → REVISION_NEGOTIATION) | 모든 의견 합의/거절 처리 | spec markdown | 인계 only | D-B phase |
-| **design.ui + design.ux** (디폴트, 통합) | UX → UI → UX 토론 시퀀스 (3R cap) + Playwright 웹 스샷 | UX 동의 신호 또는 3R cap (사용자 개입 모달) | HTML/CSS + 와이어프레임 + PNG snapshot (desktop 1280x720 + mobile 375x812) | 인계 only | R12-C |
+| **idea (아이디어)** | **D-B-Light** — 의견 제시 + 시스템 취합까지만 (자유 토론 skip) + USER_PICK (사용자 카드 선택 + 자유 코멘트) | 사용자가 카드 선택 + 코멘트 → 기획 부서 인계 | 의견 카드 list → 사용자 선택 | 할 일 큐 entry (auto) | R12-C2 P3 |
+| **planning (기획)** | **풀세트** — 의견 제시 → 시스템 취합 → 일괄 동의 투표 → 자유 토론 → 모더레이터 회의록 (§5 정식) | 모든 의견 합의/제외 처리 + 회의록 작성 | 회의록 markdown ([합의]+[제외]) + spec markdown | 인계 only | R12-C2 P3 (R12-C2 simple) → D-B phase (본격) |
+| **design.ui + design.ux** (디폴트, 통합) | **7 단계** — 와이어프레임 5 (시스템→UX 지시 / UX 작성 / 의견 #1 등록 / UI+UX 풀세트 회의 / 합의 시 시스템→UI 수정 지시) + 디자인 2 (시스템→UI HTML/CSS 지시 / 의견 #2 등록 → 풀세트 회의 → 합의 → 인계). Playwright PNG | 두 회의 모두 합의 + Playwright 스냅샷 생성 | HTML/CSS + 와이어프레임 + PNG (desktop 1280x720 + mobile 375x812) | 인계 only | R12-C2 P3 |
 | **design.character / design.background** (옵션, 게임/일러스트) | 미정 (이미지 생성 phase) | — | 캐릭터/배경 시안 이미지 | 인계 only | R12-D (보류) |
-| **implement (구현)** | designated 1명 spec 받아 작성 (R12-C) → 자원 모델 + worktree+merge (R12-W) | 사용자 승인 + ExecutionService apply | 코드 변경 + git commit | 인계 only | R12-C (1명) → R12-W (분할) |
-| **review (검토)** | OPINION_GATHERING + TALLY → 기획 부서 자동 분류 (의도/수정) → 분류 카드 | 사용자 OK → 수정 group 만 구현 부서 인계 | issue list 분류 결과 + 펼쳐 보기 | 인계 only | R12-C |
-| **general (일반)** | 1라운드 단순 응답 (round 5 fix 보존, 모든 직원 자동 부여) | round 1 응답 후 즉시 종결 | 응답 메시지 | 사용자 입력 즉시 | 기존 (변경 없음) |
+| **implement (구현)** | **R12-C2 = simple 1 명** — designated 직원이 spec 받아 작성 (회의 X). **R12-W = 분담 + tier system + worktree 분할** (별 phase) | 사용자 승인 + ExecutionService apply | 코드 변경 + git commit | 인계 only | R12-C2 P5 (1 명) → R12-W (분할) |
+| **review (리뷰)** (R12-C2 라벨 정정) | **풀세트 — 주관 평가 / 개선 제안** (§5 와 같은 5 단계) | 모든 의견 합의/제외 처리 + 회의록 작성 — *후속 자동 인계 X* (사용자가 회의록 보고 자유 발화) | 회의록 markdown (주관 의견 + 개선 제안 정리) | **chain 외** — 두 entry: (a) 사용자 명시 호출 (할 일 큐 entry 부서 라디오 = 리뷰) (b) 검토 인계 결재 모달 안 *"+리뷰 부서도 시작"* 체크박스 / `handoff_mode='auto'` 시 Notification | R12-C2 P3 |
+| **audit (검토)** (R12-C2 신규, 옛 verify 흡수) | **풀세트 — 객관 + 목적 통합** (하드코딩 / 메모리 누수 / 보안 / spec 의도 부합 / 누락 + 추가 감지) | OK → 사용자 승인 게이트 + chain 종료. NG → **기획 부서 자동 인계** (검토는 문제 발견만, 처리는 기획에 위임) | 회의록 markdown ([합의]=문제 + [제외]=논의 후 수용 가능) + 인계 payload (NG 시) | **표준 chain 끝 강제** (구현 후 자동 진입) | R12-C2 P3 |
+| **general (일반)** | **`[##본문]` 강제** — 메시지 안 `[##]` 감싸기로 의견 카드 등록 + 가벼운 동의/반대 카운터. 그 외 메시지 = 일반 채팅 (자동 등록 X). 회의 X / 합의 X / 인계 X | — (chat 흐름 자체가 종료 X, 사용자 자유 발화) | 누적 카드 list (동의/반대 카운터 + 직원 자유 응답) | 사용자 입력 즉시 (auto, 단 자동 의견 등록은 [##] 감싼 본문만) | R12-C2 P1.5 (회귀 차단 land 완료) → P4 (본격 [##] 파서 + 모달 + SsmBox variant) |
 
-→ 채널 역할 = (SSM phase line + prompt template + permission matrix + trigger 방식 + handoff_mode + drag_order) 한 묶음.
-→ R12-C 의 OpinionService 가 D-B 의 처음 2 단계 (OPINION_GATHERING + OPINION_TALLY) 를 분리한 재사용 가능 service 로 land — 아이디어 / 검토 / R12-W 가 부분 phase 만 사용.
+→ 채널 역할 = (workflow + prompt template + permission matrix + trigger 방식 + handoff_mode + drag_order + max_rounds + SsmBox variant) 한 묶음.
+→ R12-C2 의 `OpinionService` + `MeetingMinutesService` 가 의견 제시 / 시스템 취합 / 일괄 투표 / 자유 토론 / 모더레이터 회의록을 *모든 풀세트 부서가 공유하는 토대* 로 land — 부서별 차이는 workflow (시스템 prompt + 종료 조건 + handoff target) 과 SsmBox variant 에 한정. 옛 OPINION_GATHERING / OPINION_TALLY 분리 service 명세는 폐기.
+
+#### 디자인 부서 7 단계 흐름 (R12-C2 정식)
+
+```
+[와이어프레임 단계 — 5 단계]
+1. 시스템 → UX 직원에게 "기획서 받고 와이어프레임 작성" 지시 (개별 task)
+2. UX → 와이어프레임 (구조도) 작성
+3. 시스템 → 그 와이어프레임을 *의견 #1* 로 회의에 등록 (SsmBox 카드)
+4. UI + UX 직원이 풀세트 회의 (의견 + 일괄 투표 + 자유 토론 + 모더레이터 회의록)
+5. 합의 시 → 시스템이 UI 직원에게 "합의 결과대로 와이어프레임 수정" 지시 (개별 task)
+
+[디자인 단계 — 2 단계]
+6. 시스템 → UI 직원에게 "수정된 와이어프레임 받고 디자인 (HTML/CSS) 만들기" 지시 (개별 task)
+7. UI 디자인 → 의견 #2 로 회의 등록 → 풀세트 회의 → 합의 → handoff_mode 따라 인계
+```
+
+→ 두 번의 풀세트 회의 (와이어프레임 + 디자인). 다른 풀세트 부서 (planning / review / audit) 와 흐름 일관.
+→ 결과물 = HTML / CSS + 와이어프레임 + Playwright PNG (desktop 1280x720 + mobile 375x812).
+→ 옛 "UX → UI → UX 3R cap" 모델 폐기 — 새 회의 시스템의 의견 트리 깊이 cap 3 (§5) 으로 자연 대체.
+
+#### 일반 부서 새 정의 (R12-C2 정식)
+
+옛 "1라운드 단순 응답" 흐름 폐기. 새 정의:
+
+- `[##본문]` 감싸기로 의견 카드 등록 — 한 메시지 안 `[##]` 여러 개 가능 (각각 별 카드)
+- 그 외 메시지 = 일반 채팅 (자동 의견 등록 X)
+- 별도 *의견 게시* 버튼 (사용자가 모달에서 제목 + 본문) 도 지원
+- 카드 = 가벼운 동의/반대 카운터 (직원 + 사용자 양쪽 가능) + 직원 자유 응답 누적
+- 회의 X / 합의 X / 인계 X — 잡담 정체성 유지
+- 멤버 = ProviderRegistry 동적 합성 — `channel_members` 테이블 sync X (모든 등록 직원 자동 멤버, R12-C2 P1.5 land)
+- 응답 모델 = N턴 순차 (P1.5 land) — *완성 메시지 단위* 자동 표시 + 멤버별 dragOrder 순서. token-by-token typing indicator + 동시 응답 + 직원 응답 생략은 **P4 본격 land 시 추가**
+
+#### 채널 입력란 enable / disabled 분기
+
+| 채널 종류 | 입력란 상태 |
+|---------|-------------|
+| 부서 채널 (workflow 진입 전) | **disabled** — placeholder "할 일 큐의 할 일 작성으로 시작" |
+| 부서 채널 (workflow 진입 후) | enabled — 메시지 = 끼어들기 (D-A T2.5 dispatcher 활용) |
+| 일반 채널 | 항상 enabled (잡담) |
+| DM | 항상 enabled (개별 지시 방) |
+| 시스템 채널 (`system_general` / `system_approval` / `system_minutes`) | 시스템 정의 분기 — read-only 또는 사용자 입력 (system_general) |
 
 ### 사이드바 UX 변경
 
@@ -157,18 +204,19 @@ DM
   Claude DM
 ```
 
-새 사이드바 (R12-C):
+새 사이드바 (R12-C2 갱신, 2026-05-04):
 ```
 시스템
-  #일반 (general)
+  #일반 (general, 전역)        — §11.3 — 프로젝트 외부 1 개
   #승인-대기 / #회의록
-부서 (프로젝트 기본)
-  💡 아이디어
-  📋 기획
-  🎨 디자인 (아트)
-  📐 디자인 (형태)
-  🔧 구현
-  ✅ 검토
+부서 (프로젝트 기본, R12-C2 매트릭스 따라 7 default)
+  💡 아이디어 (idea)
+  📋 기획 (planning)
+  🎨 디자인 (design.ui + design.ux 통합)
+  🔧 구현 (implement)
+  📝 리뷰 (review)            — chain 외 (사용자 명시 호출)
+  🔍 검토 (audit)             — chain 끝 강제
+  💬 일반 (general)
 사용자 채널 (자유)
   채널A (general)
   ...
@@ -176,27 +224,29 @@ DM
   Claude DM
 ```
 
-→ **부서 = 프로젝트 단위 자동 1 개씩 default**. 사용자 가 추가 자유 채널 만들 수 있지만 default role='general'.
-→ **#일반 (system_general) 은 기존 그대로** — 영향 없음 (round 5 fix 의 1라운드 단순 응답 보존).
+→ **부서 = 프로젝트 단위 자동 1 개씩 default 7 개** (idea / planning / design / implement / review / audit / general). 사용자가 추가 자유 채널 만들 수 있지만 default role='general'.
+→ **#일반 (system_general) 은 프로젝트 외부 전역 1 개** (§11.3 — R12-C 진입 시점에 land).
+→ 옛 "1라운드 단순 응답" 모델 폐기 — `[##]` 강제 + 가벼운 동의 카운터 (R12-C2 P1.5 회귀 차단 + P4 본격).
 
-### 작업 모드 deprecate 시작
+### 작업 모드 deprecate (R12-C2 시점에 SSM 통째 폐기)
 
-R12-C 진입 시:
-- 구현 부서 (role='implement') = 작업 권한 자동 ON. 메시지 = 즉시 작업 (회의 안 거침).
-- 기존 SSM 의 EXECUTING phase 를 구현 부서 default behavior 로 흡수.
-- WORK_DISCUSSING / SYNTHESIZING / VOTING 은 일단 보존 (deprecate 는 R12-H 종결 시).
+- **R12-C 시점**: 구현 부서 (role='implement') = 작업 권한 자동 ON. 메시지 = 즉시 작업 (회의 안 거침). EXECUTING phase 를 구현 부서 default behavior 로 흡수. WORK_DISCUSSING / SYNTHESIZING / VOTING 은 일단 보존.
+- **R12-C2 시점 (2026-05-04 결정)**: SSM 12 단계 (DISCUSSING / PROPOSING / VOTING / WORK_DISCUSSING / SYNTHESIZING / EXECUTING / REVIEWING / ...) **통째 폐기**. `OpinionService` + `MeetingMinutesService` 새 모델로 재배선 (P2 backend land 시점).
+- 옛 SSM 코드 / DB 컬럼은 *forward-only migration* 으로 폐기 — 새 컬럼 (`opinion` / `opinion_vote` 테이블 + author_label + status enum) 추가 + 옛 SSM phase 컬럼 삭제 또는 deprecate 마킹 (P2 migration 019 시점에 결정).
 
-### auto-trigger vs 인계 trigger 분기
+### auto-trigger vs 인계 trigger 분기 (R12-C2 갱신, 2026-05-04)
 
-- **auto-trigger**: 사용자가 채널 메시지 입력 → 회의 자동 시작 (현재 D-A T4/T5 흐름).
-  - 적용: idea, planning, general
-- **인계 trigger**: 다른 부서가 의뢰 → 부서가 받아서 작업 시작.
-  - 적용: design.*, implement, review
-  - 사용자 직접 트리거 안 됨 (의도된 제약 — 인계 chain 통해서만)
+- **auto-trigger** (사용자가 할 일 큐 entry → 회의 자동 시작):
+  - 적용: idea, planning (할 일 큐 entry 의 default 시작 부서). general 은 회의 X — auto-trigger 도 X (P1.5 회귀 차단으로 자동 의견 등록도 X — `[##]` 감싼 본문만 카드 등록)
+- **인계 trigger** (다른 부서가 의뢰 → 부서가 받아서 작업 시작, 사용자 직접 트리거 X):
+  - 적용: design.*, implement, audit (검토는 chain 끝 자동 진입)
+- **사용자 명시 호출 (chain 외)**:
+  - 적용: review (할 일 큐 entry 부서 라디오 = 리뷰 명시 선택)
+  - 추가 entry: audit 인계 결재 모달 안 *"+리뷰 부서도 시작"* 체크박스 / `handoff_mode='auto'` 시 Notification (auto 인계 시 알림 등장)
 
 ### Migration
 
-`018-channels-role-purpose-handoff.ts` (R12-C 결정으로 컬럼 4개 + system_general 전역화, 2026-05-02 갱신):
+`018-channels-role-purpose-handoff.ts` (R12-C 결정으로 컬럼 4개 + system_general 전역화, 2026-05-02 land):
 - `role` TEXT NULL (system 채널 = NULL, 부서 채널 = RoleId)
 - `purpose` TEXT NULL (자유 텍스트, 사용자 작성)
 - `handoff_mode` TEXT NOT NULL DEFAULT 'check' (부서 인계 직전 사용자 confirm 모드, 'check' | 'auto'. R7 ApprovalService 와 별개 — R7 = 파일 적용 gate, handoff_mode = 부서 인계 gate)
@@ -204,6 +254,28 @@ R12-C 진입 시:
 - 추가: `providers.is_department_head` TEXT JSON `Record<RoleId, boolean>` — designated worker 부서장 핀 (R12-C Task 18, 마이그레이션 018 통합)
 - system_general 전역화 — 기존 프로젝트 종속 row → 가장 오래된 1 개만 보존 (projectId NULL), 나머지 DELETE.
 - 기존 사용자 user 채널 = role='general' default. 기존 DB 데이터는 wipe (사용자 결정).
+
+`019-opinion-tables.ts` (R12-C2 P2 backend land 시점, 2026-05-04 결정):
+- `opinion` 테이블 신규:
+  - `id` (UUID PRIMARY KEY)
+  - `parent_id` (UUID NULL, FK opinion.id) — 의견 트리 부모 chain
+  - `meeting_id` / `channel_id`
+  - `kind` TEXT NOT NULL — `'root'` / `'revise'` / `'block'` / `'addition'` / `'self-raised'` / `'user-raised'`
+  - `author_provider_id` TEXT NULL (NULL = `user-raised`)
+  - `author_label` TEXT NOT NULL — 회의 단위 발화 카운터 (예: `codex_1`, 회의 끝나면 리셋)
+  - `title` / `content` / `rationale` (NULL)
+  - `status` TEXT NOT NULL — `'pending'` / `'agreed'` / `'rejected'` / `'excluded'`
+  - `exclusion_reason` TEXT NULL — `status='rejected'`/`'excluded'` 시 회의록 제외 사유
+  - `round` / `created_at` / `updated_at`
+- `opinion_vote` 테이블 신규:
+  - `id` / `target_id` (FK `opinion.id`) / `voter_provider_id` (NULL = 사용자) / `vote` (`'agree'`/`'oppose'`/`'abstain'`) / `comment` (NULL) / `round` / `round_kind` (`'quick_vote'` / `'free_discussion'`) / `created_at`
+- `channels.max_rounds` INTEGER NULL — 회의 종료 조건 (NULL = 무제한 / N 라운드 도달 시 사용자 호출). 본격 land = R12-C2 P2 시점
+
+`020-providers-capability-tier.ts` (R12-W 진입 시점, 보류):
+- `providers.capability_tier` TEXT NOT NULL DEFAULT `'mid'` — `'frontier'` / `'mid'` / `'local'`. 분담 알고리즘 (구현 부서장 AI 가 sub-task 마다 tier 보고 배정) 의 토대. R12-C2 시점에는 ALTER 안 함 — R12-W 진입 시 land.
+
+`021-providers-is-department-head.ts` (R12-C2 P7-2 land 시점, 보류):
+- `providers.is_department_head` 가 R12-C 시점에 JSON 컬럼으로 land 했지만, P7-2 *부서장 핀* surface 진입 시 enum index 또는 NOT NULL 보강 ALTER 추가 가능 — P7-2 진입 design round 후 결정.
 
 ---
 
