@@ -260,6 +260,8 @@ describe('channel + meeting handlers', () => {
     delete: ReturnType<typeof vi.fn>;
     addMember: ReturnType<typeof vi.fn>;
     removeMember: ReturnType<typeof vi.fn>;
+    /** R12-C2 P1.5 — handleChannelStartMeeting 가 channel.kind 가드용으로 호출. */
+    get: ReturnType<typeof vi.fn>;
   };
   let meetingSvc: {
     start: ReturnType<typeof vi.fn>;
@@ -277,6 +279,7 @@ describe('channel + meeting handlers', () => {
       delete: vi.fn(),
       addMember: vi.fn(),
       removeMember: vi.fn(),
+      get: vi.fn().mockReturnValue(mockChannel),
     };
     meetingSvc = {
       start: vi.fn().mockReturnValue(mockMeeting),
@@ -349,6 +352,28 @@ describe('channel + meeting handlers', () => {
 
     handleMeetingAbort({ meetingId: 'm1' });
     expect(meetingSvc.finish).toHaveBeenCalledWith('m1', 'aborted', null);
+  });
+
+  it('start-meeting throws when channel.kind === system_general (R12-C2 P1.5)', () => {
+    // 일반 채널 (#일반) 은 회의 X — spec §11.3 + 메모리 r12-meeting-system
+    // -redesign §3. 회귀 차단: handleChannelStartMeeting 이 회의 row 만들기
+    // 전에 channel.kind 가드를 던져, 잘못된 호출이 SsmBox 1/12 같은
+    // "회의 진행처럼 보이는" surface 를 더 이상 만들지 못한다.
+    channelSvc.get = vi.fn().mockReturnValue({
+      id: 'c-general',
+      projectId: null,
+      name: '일반',
+      kind: 'system_general',
+      readOnly: false,
+      createdAt: 1,
+      role: null,
+      purpose: null,
+      handoffMode: 'check',
+    });
+    expect(() =>
+      handleChannelStartMeeting({ channelId: 'c-general', topic: 't' }),
+    ).toThrow(/일반 채널/);
+    expect(meetingSvc.start).not.toHaveBeenCalled();
   });
 
   it('meeting:list-active forwards optional limit to the service', () => {

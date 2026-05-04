@@ -71,9 +71,13 @@ export function MemberPanel({
 
   const activeMeeting = useMemo(() => {
     if (activeChannelId === null) return null;
+    // R12-C2 P1.5 — 일반 채널 (#일반) 은 회의 X (spec §11.3). 잔존 active
+    // meeting row 가 있어도 SsmBox empty 가 정직. 신규 생성은 backend
+    // 가드로 차단되지만 옛 row 즉시 회복은 frontend 분기.
+    if (isGeneralChannel) return null;
     if (meetings === null) return null;
     return meetings.find((m) => m.channelId === activeChannelId) ?? null;
-  }, [activeChannelId, meetings]);
+  }, [activeChannelId, isGeneralChannel, meetings]);
 
   const participantCount =
     members === null ? null : members.length;
