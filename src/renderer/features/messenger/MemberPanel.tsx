@@ -159,7 +159,7 @@ export function MemberPanel({
       </Card>
 
       {/* R12-C2 P1.5 follow-up — 일반 채널 (전역 system_general) 은 합의
-          상태 카드 hide. *장난식 동의/반대 카운터* + `[##본문]` 카드는 P4
+          상태 카드 hide. *가벼운 동의/반대 카운터* + `[##본문]` 카드는 P4
           본격 흐름 land 시점에 등장하며, 그 사이에는 surface 정의가
           없으므로 카드 자체를 렌더하지 않는다 (R12-C round 4 시점에는
           panel 통째 안내 문구로 대체됐지만, 사용자 dogfooding 결과 멤버
