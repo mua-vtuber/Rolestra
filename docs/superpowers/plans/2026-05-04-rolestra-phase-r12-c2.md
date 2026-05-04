@@ -436,3 +436,54 @@ P8 종결 시:
 - **node_modules**: 새 worktree 라 `npm install` 1 회 필요 (P1.5 또는 P2 진입 직전)
 - **WSL ↔ Windows**: 사용자 dev 빌드 후 native binding (better-sqlite3 + rollup) win32 전환 가능 → vitest 시 `npm rebuild better-sqlite3` + `npm i --no-save @rollup/rollup-linux-x64-gnu` + `git checkout package-lock.json` 복구 절차 필요
 - **메모리**: `rolestra-r12-meeting-system-redesign-2026-05-03.md` + 본 plan = P1 spec round 의 *입력*. 결정사항 정식화 시 그 메모리 + plan 모든 항목 spec 에 반영 후 메모리 갱신
+
+---
+
+## P1 spec round land 결과 (2026-05-04 종결)
+
+P1 spec round (T1~T6) 종결 — spec `2026-05-01-rolestra-channel-roles-design.md` 5 commit + tasks.json + 본 plan 갱신 + 메모리 closed 표기. 코드 변경 0 (게이트). 모든 후속 phase (P2~P8) 의 토대.
+
+### 5 commit 누적 (worktree `feat/r12-c2-meeting-redesign`)
+
+```
+35de0e7  docs(spec): P1.5 — §11.18 JSON schema 정식 (의견 제시 / 일괄 투표 / 자유 토론 / 모더레이터)
+767d310  docs(spec): P1.4 — §11.13~§11.18 신규 (SsmBox layout / max_rounds / capability_tier / 부서 lock R12-C2 / 변경 요청 / JSON schema 자리)
+f46b206  docs(spec): P1.3 — §5 D-B 흐름 갱신 (의견 트리 + 일괄 투표 + 모더레이터 회의록)
+6628abb  docs(spec): P1.2 — §4 부서별 회의 매트릭스 갱신 (디자인 7 단계 / 구현 단계적 / 일반 [##] 강제)
+e082882  docs(spec): P1.1 — §3 부서 카탈로그 갱신 (verify 폐기 / 검토 신규 / 리뷰 라벨 정정)
+```
+
+### spec 갱신 섹션 (5 종)
+
+| commit | spec 섹션 | 핵심 |
+|--------|-----------|------|
+| `e082882` | §3 시스템 정의 스킬 카탈로그 + 부서 템플릿 + §11.9 SKILL_CATALOG 갯수 정정 | 11 능력 (부서 10 + meeting-summary) / 부서 템플릿 9 (디폴트 7 + 옵션 2) / review→리뷰 / audit 신규 |
+| `6628abb` | §4 채널 데이터 모델 변경 + 부서별 회의 흐름 + 디자인 7 단계 + 일반 부서 새 정의 + 채널 입력란 분기 + 사이드바 ASCII + 작업 모드 deprecate + auto/인계/명시 호출 분기 + Migration 019/020/021 | 옛 12 단계 SSM 통째 폐기 명시 / 디자인 7 단계 정식 / 일반 [##] 강제 / review/audit 분리 / 019 opinion + opinion_vote + max_rounds |
+| `f46b206` | §5 D-B 흐름 통째 재작성 (헤더 + Phase 흐름 5 + 2.5 + 데이터 모델 + 의견 ID 저장 vs 화면 분리 + 발화 ID 카운터 + Message Schema reference + 컨텍스트/token + 의견 트리 깊이 cap 3) | 모든 풀세트 부서 공유 토대 / 옛 opinion_revisions 폐기 / 모더레이터 회의록 [합의]+[제외] truncate 금지 |
+| `767d310` | §11.13~§11.18 신규 (SsmBox layout 5 variant + 채팅창 카드 + max_rounds + capability_tier R12-W + 부서 lock R12-C2 정정 + 변경 요청 UI + JSON schema 자리) | 11.16 부서 lock R12-C2 매트릭스 7 행 (review/audit 분리) / 11.17 변경 요청 모달 |
+| `35de0e7` | §11.18 직원 응답 JSON schema 4 종 (의견 제시 / 일괄 투표 / 자유 토론 / 모더레이터 prompt) + schema 검증 + fallback | 발화 ID 카운터 회의 단위 리셋 / 화면 ID ITEM_NNN_NN_NN / 깊이 cap 3 / truncate 의심 검출 1 회 재요청 |
+
+### sub-task 30 분할 (P2~P8)
+
+placeholder T7~T13 (P2~P8) 가 정식 sub-task 29 개로 분할됨 (`tasks.json` 안 task id 7~35):
+
+| Phase | Task ID 범위 | 개수 | 핵심 sub-task |
+|-------|-------------|------|--------------|
+| P2 회의 backend | T7~T12 | 6 | migration 019 / OpinionService / MeetingMinutesService / MeetingOrchestrator 재배선 / 할 일 큐 트리거 / 회의록 chat block |
+| P3 부서 워크플로우 | T13~T18 | 6 | MessageRenderer 카드 variant / idea-workflow / design-workflow + Playwright snapshot / review-workflow / audit-workflow / SsmBox 부서별 5 variant 통합 |
+| P4 일반 [##] 본격 | T19~T21 | 3 | [##] 파서 / 일반 SsmBox final / 의견 게시 모달 |
+| P5 구현 + 검증 | T22~T24 | 3 | implement-workflow / designated-worker-resolver / NG → 기획 인계 분기 |
+| P6 인계 | T25~T29 | 5 | HandoffApprovalModal / HandoffModeToggle / 검토→리뷰 Notification / 부서 lock + 대기 큐 / 변경 요청 모달 |
+| P7 편의 | T30~T34 | 5 | 프로젝트 삭제 / 부서장 핀 / 멤버 드래그 / 스킬 질문 / 대시보드 layout |
+| P8 closeout | T35 | 1 | ADR + 구현현황 + tasks.json sync + main merge |
+
+T0 (P1.5 회귀 차단) + T1~T6 (P1 sub-task) 모두 land 완료. 다음 진입 = T7 (P2-1 migration 019).
+
+### P1 결과 → P2~P8 영향 요약
+
+- **P2 (backend)**: §5 + §11.18 schema 정식 + §4 Migration 019 정확 명세 → P2-1 (migration) + P2-2 (OpinionService) + P2-3 (MeetingMinutesService) 직접 입력
+- **P3 (부서 workflow)**: §11.13 SsmBox layout + §11.13a 채팅창 카드 + §4 부서별 매트릭스 + §4 디자인 7 단계 → P3-2~P3-5 워크플로우 직접 명세
+- **P4 (일반 [##])**: §4 일반 부서 새 정의 + §5 opinion kind enum (`self-raised` / `user-raised`) → P4-1 파서 + P4-2 SsmBox + P4-3 모달 직접 명세
+- **P5 (구현)**: §4 매트릭스 (R12-C2 = simple / R12-W 분담) + §11.15 capability_tier (R12-W ALTER 보류) → P5-1 simple 1 명만 land, P5-2 resolver 의 핀 알고리즘
+- **P6 (인계)**: §11.16 부서 lock 매트릭스 7 행 + §11.17 변경 요청 모달 + §5 handoff_mode 분기 + §3 review chain 외 두 entry → P6-1~P6-5 직접 명세
+- **P7 (편의)**: §11.x 의 max_rounds / capability_tier / 부서 lock 결정사항이 P7-1~P7-5 surface 의 토대. P7-4 (스킬 질문) + P7-5 (대시보드) 는 진입 시 별 design round 필요
