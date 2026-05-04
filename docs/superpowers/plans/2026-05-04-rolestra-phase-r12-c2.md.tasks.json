@@ -65,9 +65,9 @@
     {
       "id": 9,
       "subject": "P2-3 — MeetingMinutesService (모더레이터 회의록 + truncate 금지 prompt)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [8],
-      "description": "**Goal:** step 5 모더레이터 회의록 작성 service. R12-S `MeetingSummaryService` + `getResolvedSummaryModel` 활용.\n\n**변경:**\n- `src/main/meetings/meeting-minutes-service.ts` 신규 — `compose(meetingId)` 1 method:\n  · 회의 history (모든 메시지) + 의견 트리 (`opinion` + `opinion_vote`) 통째 모더레이터 prompt 에 동봉\n  · §11.18.6 prompt 양식 강제 (truncate 금지 / [합의 항목] + [제외 항목] / 결정 사유 모더레이터 작성)\n  · 모더레이터 응답 = markdown 본문 → `<ArenaRoot>/<projectId>/consensus/<meetingId>/minutes.md` 저장 + 채팅창 카드로 표시\n  · truncate 의심 검출 (회의록 본문 길이 ↔ 의견 본문 합 비교 + 임계 1.2 하회 시 1 회 재요청)\n- 옛 `MeetingSummaryService` 의 *deterministic minutes* 자동 정리 mode 는 fallback 으로 보존 (모더레이터 호출 실패 시)\n\n**Verify:** vitest unit + 모더레이터 truncate 검출 회귀 + minutes.md 파일 atomic write + PathGuard 봉인"
+      "description": "Land 완료 (commit `4b3a9ef`). `src/main/meetings/meeting-minutes-service.ts` 신규 — `compose(meetingId)` 1 method + 도메인 에러 2종 (MeetingNotFoundForMinutesError / MinutesPathOutsideConsensusError). 회의 history (`messageRepo.listAllByChannel` + meeting_id 필터) + 의견 트리 (`opinionRepo.listByMeeting` + `listVotesByMeeting` + `buildScreenIdMap`) 통째 spec §11.18.6 prompt 양식으로 모더레이터 (`MeetingSummaryService.summarize`) 에 동봉. truncate 검출 = body.length / Σ(opinion.content + rationale) ≥ 1.2 (의견 본문 합 ≤ 100 자면 검사 skip). 미달 시 1 회 재요청 → 또 미달 / 호출 실패 → deterministic fallback (composeDeterministicFallback — `[합의 항목]` + `[제외 항목]` 양식 + '(모더레이터 작성 불가)' plate). 저장 = `<ArenaRoot>/consensus/meetings/<meetingId>/minutes.md` (코드 invariant `arenaRoot.consensusPath()` + `consensus/meetings/` ensure 따름 — spec informal 표현 보다 실제 구조 우선). atomic write = `<file>.<rand>.tmp` + rename. PathGuard = path.resolve 후 consensusBase prefix 검사 (path traversal 차단). source 필드 (`'moderator' | 'moderator-retry' | 'fallback'`) + truncationDetected 플래그 audit 가능. IPC `meetings:composeMinutes` (zod schema + handler + router + boot wire). vitest 신규 14 tests / 전체 3574/13/0 (baseline 3560 + 14 신규) / typecheck 0."
     },
     {
       "id": 10,
