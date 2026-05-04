@@ -62,7 +62,7 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 }
 ```
 
-### 시스템 정의 스킬 카탈로그 (10 능력)
+### 시스템 정의 스킬 카탈로그 (11 능력 — R12-C2 갱신 2026-05-04)
 
 | Role ID | 한국어 라벨 | 핵심 |
 |---------|-------------|------|
@@ -73,17 +73,19 @@ v0.1 → v0.2 / v0.3 메이저 릴리스급.
 | `design.character` | 디자인 (캐릭터) | 게임 캐릭터 시안 / 모션 컨셉 — 게임 프로젝트만 |
 | `design.background` | 디자인 (배경) | 게임 배경 시안 / 무드 보드 — 게임 프로젝트만 |
 | `implement` | 구현 | 코드 생성 + 파일 쓰기 + 명령 실행 + diff 적용 + 테스트 실행 |
-| `review` | 검토 | lint / typecheck / 테스트 실행 + 스파게티 / 하드코딩 / 버그 위험 평가 + e2e |
-| `general` | 일반 (잡담) | 1라운드 단순 응답, 회의 안 함, 채널 권한 매트릭스 X |
-| (시스템) `meeting-summary` | 회의록 자동 정리 | system 만 호출, 직원 부여 X |
+| `review` | **리뷰** (R12-C2 라벨 정정) | **주관 평가 / 개선 제안** — 결과물 인상 / 누락 시나리오 / 더 나은 안 / 사용자 ergonomics. **chain 외** — 두 entry: (a) 사용자 명시 호출 (할 일 큐 entry 부서 라디오 = 리뷰) (b) 검토 인계 결재 모달 안 *"+리뷰 부서도 시작"* 체크박스 / `handoff_mode='auto'` 시 Notification |
+| `audit` | **검토** (R12-C2 신규, 옛 verify 흡수) | **객관 + 목적 통합** — 하드코딩 / 메모리 누수 / 보안 / 스파게티 / spec 의도 부합 / 누락 + 추가 감지. **표준 chain 끝 강제** (구현 후 자동 진입). NG → 항상 기획 부서로 인계 (검토는 문제 발견만, 처리는 기획에 위임) |
+| `general` | 일반 (잡담) | `[##본문]` 감싸기로 의견 카드 등록 + 가벼운 동의/반대 카운터. 회의 X / 합의 X / 인계 X. R12-C2 정정 — 옛 "1라운드 단순 응답" 폐기. P4 본격 land 까지 P1.5 회귀 차단으로 자동 의견 등록 차단 (§11.3) |
+| (시스템) `meeting-summary` | 회의록 자동 정리 (모더레이터) | system 만 호출, 직원 부여 X. R12-C2 결정 — `[합의 항목]` + `[제외 항목]` 두 섹션 정식화 + truncate 금지 prompt 강제 |
 
 각 스킬 = (system prompt 템플릿 + tool 권한 matrix + 외부 자원 endpoint).
 
-**부서 템플릿 8개 (디폴트 6 + 옵션 2)**:
-- 디폴트 (프로젝트 만들면 자동 생성): 아이디어 / 기획 / 디자인 (UI+UX 묶음) / 구현 / 검토 / 일반
+**부서 템플릿 9개 (디폴트 7 + 옵션 2, R12-C2 갱신)**:
+- 디폴트 (프로젝트 만들면 자동 생성): 아이디어 / 기획 / 디자인 (UI+UX 묶음) / 구현 / **리뷰** / **검토** / 일반
 - 옵션 (사용자 추가): 캐릭터 디자인 / 배경 디자인
 - 디자인 부서 = `[design.ui, design.ux]` 두 능력 묶음 — UI/UX 의논 잦으니 분리하지 않음.
-- 직원 능력은 9 개 중 자유 다중 체크 — 한 직원이 여러 부서에 멤버.
+- 직원 능력은 부서 10 개 (`idea` / `planning` / `design.ui` / `design.ux` / `design.character` / `design.background` / `implement` / `review` / `audit` / `general`) 중 자유 다중 체크 — 한 직원이 여러 부서에 멤버. `meeting-summary` 는 system 전용 (직원 부여 X).
+- **리뷰 vs 검토 (R12-C2 결정)**: 리뷰 = 주관 평가 (chain 외), 검토 = 객관 + 목적 통합 (chain 끝 강제). 옛 `verify` 부서는 신규 `audit` (한국어 "검토") 가 객관 + 목적 통합으로 흡수 — 별도 verify 부서는 R12-C2 시점부터 카탈로그에 추가하지 않음.
 
 ### 페르소나 prompt 합성
 
@@ -549,7 +551,7 @@ R13 (multi-worker / branch 분할) — R12-W 가 일부 흡수 (구현 부서). 
 
 ### 11.9 SKILL.md 자동 배치 (R12-C land)
 
-R12-S 의 SKILL_CATALOG (10 능력) 를 프로젝트 폴더에 SKILL.md 로 자동 배치 — 3 provider (Claude / Codex / Gemini) 가 각자 자동 로드.
+R12-S 의 SKILL_CATALOG (R12-C2 갱신 후 11 능력 = 부서 10 + 시스템 1 `meeting-summary`) 중 *부서 10 개* 를 프로젝트 폴더에 SKILL.md 로 자동 배치 — 3 provider (Claude / Codex / Gemini) 가 각자 자동 로드. `meeting-summary` 는 system 전용이라 배치 X.
 
 **경로**:
 - Claude: `<projectRoot>/.claude/skills/<roleId>/SKILL.md` (자동 로드 + 라이브 watch)
