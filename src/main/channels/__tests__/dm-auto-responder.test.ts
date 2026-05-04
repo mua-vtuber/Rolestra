@@ -15,6 +15,7 @@ const dmChannel: Channel = {
   role: null,
   purpose: null,
   handoffMode: 'check',
+  maxRounds: null,
 };
 
 const dmMember: ChannelMember = {

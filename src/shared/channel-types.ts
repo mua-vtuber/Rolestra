@@ -1,5 +1,6 @@
 /**
- * Channel 도메인 타입 — migrations/003-channels.ts + 018-channels-role-purpose-handoff.ts 컬럼과 1:1 camelCase 매핑.
+ * Channel 도메인 타입 — migrations/003-channels.ts + 018-channels-role-purpose-handoff.ts
+ * + 019-opinion-tables.ts (channels.max_rounds ALTER) 컬럼과 1:1 camelCase 매핑.
  */
 
 import type { ChannelRole, ChannelPurpose, HandoffMode } from './channel-role-types';
@@ -19,6 +20,18 @@ export interface Channel {
   purpose: ChannelPurpose;
   /** R12-C — 부서 인계 직전 confirm 모드. 디폴트 'check'. */
   handoffMode: HandoffMode;
+  /**
+   * R12-C2 (migration 019) — 회의 자유 토론 라운드 cap.
+   *
+   * - `null`     무제한 (사용자가 채널 설정에서 명시적으로 무제한 선택)
+   * - 정수 `N`   N 라운드 도달 시 사용자 호출 (Notification + compose_minutes 점프)
+   *
+   * 사용자 결정 (2026-05-04, ④ 결정): 채널 *생성* 시 디폴트 = 5 (P3 채널 설정
+   * 모달이 디폴트 5 입력). migration 019 가 NULL 허용 + DEFAULT 없음으로 land
+   * 됐기 때문에 *기존* 채널들은 NULL — orchestrator 가 `channel.maxRounds ?? 5`
+   * 로 코드 fallback (`MEETING_DEFAULT_MAX_ROUNDS`).
+   */
+  maxRounds: number | null;
 }
 
 export interface ChannelMember {

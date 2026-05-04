@@ -99,6 +99,18 @@ interface NotificationDictionary {
     rejectionWithComment: string;
     /** LLM summary paragraph header — `provider` interpolation. */
     summaryPrefix: string;
+    /**
+     * R12-C2 T10a — 부서 회의 종료 후 인계 mode='check' 시 OS 알림 (사용자
+     * 승인 필요). `topic` interpolation 으로 회의 주제 안내.
+     */
+    handoffTitle: string;
+    handoffBody: string;
+    /**
+     * R12-C2 T10a — 의견 1 건이 channels.max_rounds 라운드 안 합의 못 이뤄
+     * 사용자 호출 시 알림. `screenId` (의견 화면 ID) + `maxRounds` 보간.
+     */
+    maxRoundsTitle: string;
+    maxRoundsBody: string;
   };
   /**
    * R11-Task11 (D9): main-process labels for the
@@ -220,6 +232,10 @@ const KO: NotificationDictionary = {
     rejection: '회의 합의 거절됨',
     rejectionWithComment: '회의 합의 거절됨 — {{comment}}',
     summaryPrefix: '📝 LLM 요약 ({{provider}}):',
+    handoffTitle: '회의 종료 — 다음 부서 인계 결재',
+    handoffBody: '"{{topic}}" 회의가 끝났습니다. 다음 부서로 인계할지 결재해 주세요.',
+    maxRoundsTitle: '회의 합의 지연 — 사용자 호출',
+    maxRoundsBody: '의견 {{screenId}} 가 {{maxRounds}} 라운드 안 합의에 이르지 못해 사용자 결재가 필요합니다.',
   },
   approvalNotificationBridge: {
     cli_permission: { title: 'CLI 권한 요청', body: '승인 대기' },
@@ -318,6 +334,10 @@ const EN: NotificationDictionary = {
     rejection: 'Consensus rejected',
     rejectionWithComment: 'Consensus rejected — {{comment}}',
     summaryPrefix: '📝 LLM summary ({{provider}}):',
+    handoffTitle: 'Meeting ended — handoff approval',
+    handoffBody: 'Meeting on "{{topic}}" finished. Approve handoff to the next department.',
+    maxRoundsTitle: 'Consensus stalled — user attention',
+    maxRoundsBody: 'Opinion {{screenId}} did not reach consensus within {{maxRounds}} rounds — please review.',
   },
   approvalNotificationBridge: {
     cli_permission: { title: 'CLI permission request', body: 'Awaiting approval' },
@@ -387,6 +407,10 @@ export type NotificationLabelKey =
   | 'meetingMinutes.rejection'
   | 'meetingMinutes.rejectionWithComment'
   | 'meetingMinutes.summaryPrefix'
+  | 'meetingMinutes.handoffTitle'
+  | 'meetingMinutes.handoffBody'
+  | 'meetingMinutes.maxRoundsTitle'
+  | 'meetingMinutes.maxRoundsBody'
   // R11-Task11 (D9): approval-notification-bridge labels.
   | 'approvalNotificationBridge.cli_permission.title'
   | 'approvalNotificationBridge.cli_permission.body'

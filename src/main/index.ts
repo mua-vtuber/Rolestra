@@ -890,6 +890,10 @@ app.whenReady().then(async () => {
           unregisterOrchestrator,
         } = await import('./meetings/engine/meeting-orchestrator-registry');
 
+        // R12-C2 T10a: new MeetingSession dropped `roundSetting` — channels.
+        // max_rounds replaces the per-meeting setting, resolved by the
+        // orchestrator from `Channel.maxRounds` at run-time.
+        void roundSetting;
         const session = new MeetingSession({
           meetingId: meeting.id,
           channelId: meeting.channelId,
@@ -897,7 +901,6 @@ app.whenReady().then(async () => {
           topic,
           participants,
           ssmCtx,
-          ...(roundSetting !== undefined ? { roundSetting } : {}),
         });
 
         const personaPrimedParticipants = new Set<string>();
@@ -928,10 +931,10 @@ app.whenReady().then(async () => {
           meetingService,
           channelService,
           projectService,
-          approvalService,
           notificationService,
           circuitBreaker,
-          meetingSummaryService,
+          opinionService,
+          meetingMinutesService,
           // R9-Task7: autonomy-queue run loop. When the finalised meeting
           // belongs to a project in `queue` mode, complete the owning
           // queue item and advance to the next pending item. Lookups miss

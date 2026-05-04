@@ -56,6 +56,7 @@ function makeChannel(overrides: Partial<Channel> = {}): Channel {
     role: 'planning',
     purpose: null,
     handoffMode: 'check',
+    maxRounds: null,
     ...overrides,
   };
 }

@@ -46,6 +46,8 @@ interface ChannelRow {
   role: string | null;
   purpose: string | null;
   handoff_mode: string;
+  /** R12-C2 (migration 019) — 회의 자유 토론 라운드 cap. NULL = 무제한. */
+  max_rounds: number | null;
 }
 
 interface ChannelMemberRow {
@@ -65,6 +67,7 @@ const _UPDATABLE_COLUMNS = [
   'role',
   'purpose',
   'handoff_mode',
+  'max_rounds',
 ] as const;
 
 type UpdatableColumn = (typeof _UPDATABLE_COLUMNS)[number];
@@ -76,6 +79,11 @@ export interface ChannelUpdatePatch {
   role?: ChannelRole;
   purpose?: ChannelPurpose;
   handoffMode?: HandoffMode;
+  /**
+   * R12-C2 — 회의 라운드 cap. `null` = 무제한, 정수 = N 라운드 cap.
+   * `undefined` 는 patch 에서 누락 (변경 안 함) 의미.
+   */
+  maxRounds?: number | null;
 }
 
 /**
@@ -89,11 +97,12 @@ const PATCH_KEY_TO_COLUMN: Record<keyof ChannelUpdatePatch, UpdatableColumn> = {
   role: 'role',
   purpose: 'purpose',
   handoffMode: 'handoff_mode',
+  maxRounds: 'max_rounds',
 };
 
 /** SELECT projection — keep in sync between get/listByProject/listDms/getDmByProvider/getGlobalGeneralChannel. */
 const CHANNEL_COLUMNS =
-  'id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode';
+  'id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode, max_rounds';
 
 const MEMBER_COLUMNS = 'channel_id, project_id, provider_id, drag_order';
 
@@ -125,6 +134,7 @@ function rowToChannel(row: ChannelRow): Channel {
     role: parseRole(row.role, row.id),
     purpose: row.purpose,
     handoffMode: parseHandoffMode(row.handoff_mode, row.id),
+    maxRounds: row.max_rounds,
   };
 }
 
@@ -248,8 +258,8 @@ export class ChannelRepository {
     this.db
       .prepare(
         `INSERT INTO channels
-           (id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode, max_rounds)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         channel.id,
@@ -261,6 +271,7 @@ export class ChannelRepository {
         channel.role,
         channel.purpose,
         channel.handoffMode,
+        channel.maxRounds,
       );
   }
 

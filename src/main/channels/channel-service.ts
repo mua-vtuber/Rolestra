@@ -55,6 +55,7 @@ import type {
   HandoffMode,
 } from '../../shared/channel-role-types';
 import { DEFAULT_HANDOFF_MODE } from '../../shared/channel-role-types';
+import { MEETING_DEFAULT_MAX_ROUNDS } from '../../shared/meeting-flow-types';
 import type { ProjectMember } from '../../shared/project-types';
 import type { Message } from '../../shared/message-types';
 import { SKILL_CATALOG } from '../../shared/skill-catalog';
@@ -326,6 +327,10 @@ export class ChannelService {
       role: input.role ?? null,
       purpose: input.purpose ?? null,
       handoffMode: input.handoffMode ?? DEFAULT_HANDOFF_MODE,
+      // R12-C2 — 사용자 자유 채널 디폴트 = NULL (잡담 — 회의 X). 사용자가
+      // 명시적으로 부서 role 지정 시 P3 채널 설정 모달이 5 입력. input
+      // 받아도 본 sub-task 시점에서는 별 channel:create input 확장 X — P3.
+      maxRounds: null,
     };
 
     try {
@@ -385,6 +390,8 @@ export class ChannelService {
       role: null,
       purpose: null,
       handoffMode: 'check',
+      // R12-C2 — system 채널은 회의 X (회의록 / 승인 / 일반 모두) 라 NULL.
+      maxRounds: null,
     }));
 
     try {
@@ -429,6 +436,8 @@ export class ChannelService {
       role: null,
       purpose: null,
       handoffMode: 'check',
+      // R12-C2 — DM 은 회의 X (개별 지시 방) 라 NULL.
+      maxRounds: null,
     };
 
     try {
@@ -761,6 +770,8 @@ export class ChannelService {
       role: null,
       purpose: null,
       handoffMode: DEFAULT_HANDOFF_MODE,
+      // R12-C2 — 일반 채널 (system_general, 전역) 은 회의 X (잡담 정체성) 라 NULL.
+      maxRounds: null,
     };
     this.repo.insert(channel);
     return channel;
@@ -802,6 +813,11 @@ export class ChannelService {
       role: spec.role,
       purpose: null,
       handoffMode: DEFAULT_HANDOFF_MODE,
+      // R12-C2 — 부서 채널 default = 5 라운드 (사용자 결정 2026-05-04 ④).
+      // 사용자가 P3 채널 설정 모달에서 무제한 (NULL) 또는 다른 정수로 변경
+      // 가능. 아이디어 부서 (idea) 는 자유 토론 X 라 max_rounds 무의미하지만
+      // 컬럼 자체는 일관성 위해 5 로 채움.
+      maxRounds: MEETING_DEFAULT_MAX_ROUNDS,
     }));
 
     try {
