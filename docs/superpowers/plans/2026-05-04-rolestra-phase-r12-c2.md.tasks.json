@@ -17,239 +17,346 @@
       "id": 2,
       "subject": "P1.2 — spec §4 부서별 회의 매트릭스 갱신",
       "status": "completed",
-      "blockedBy": [1],
+      "blockedBy": [
+        1
+      ],
       "description": "Land 완료 (commit `6628abb`). spec §4 — 채널 데이터 모델 변경 (role enum 'audit' 추가 + max_rounds), 부서별 회의 흐름 표 (R12-C2 갱신), 디자인 7 단계 흐름 sub-section, 일반 부서 새 정의 ([##] 강제), 채널 입력란 enable/disabled 분기, 사이드바 ASCII (R12-C2 7 default), 작업 모드 deprecate (SSM 12 단계 통째 폐기), auto-trigger / 인계 / 사용자 명시 호출 3 분기, Migration 019/020/021."
     },
     {
       "id": 3,
       "subject": "P1.3 — spec §5 D-B 흐름 갱신 (의견 트리 + 일괄 투표 + 모더레이터 회의록)",
       "status": "completed",
-      "blockedBy": [1],
+      "blockedBy": [
+        1
+      ],
       "description": "Land 완료 (commit `f46b206`). spec §5 — 옛 4 phase (OPINION_GATHERING/TALLY/AGREEMENT_VOTE/REVISION_NEGOTIATION) 통째 폐기 → 새 5 단계 + 2.5 일괄 투표 + 모더레이터 회의록. opinion + opinion_vote 데이터 모델 (옛 opinion_revisions 폐기). 발화 ID 회의 단위 카운터 + 의견 트리 깊이 cap 3. 컨텍스트/token 관리 (review/audit 분리 read 권한)."
     },
     {
       "id": 4,
       "subject": "P1.4 — spec §11.13~§11.18 신규 (SsmBox layout / max_rounds / capability_tier / 부서 lock R12-C2 / 변경 요청 / JSON schema 자리)",
       "status": "completed",
-      "blockedBy": [1],
+      "blockedBy": [
+        1
+      ],
       "description": "Land 완료 (commit `767d310`). §11.13 SsmBox 부서별 layout 5 variant + §11.13a 채팅창 카드 표시 (Card primitive truncate X). §11.14 channels.max_rounds (R12-C2 P2 land). §11.15 providers.capability_tier (R12-W ALTER, 보류). §11.16 부서 lock 사이클 R12-C2 정정 (review/audit 분리 매트릭스). §11.17 변경 요청 분기 R12-C2 정정 (UI 모달). §11.18 JSON schema 자리 (T5 에서 본격)."
     },
     {
       "id": 5,
       "subject": "P1.5 — spec JSON schema 정식 (의견 제시 / 일괄 투표 / 자유 토론 / 모더레이터)",
       "status": "completed",
-      "blockedBy": [3],
+      "blockedBy": [
+        3
+      ],
       "description": "Land 완료 (commit `35de0e7`). §11.18 직원 응답 JSON schema 4 종 정식 명시. §11.18.1 발화 ID 카운터 + 의견 트리 ID 형식 (DB UUID / 화면 ITEM_NNN_NN). §11.18.2 step 1 의견 제시 (Step1OpinionGather). §11.18.3 step 2 의견 row (OpinionRow + 화면 ID 부여 알고리즘). §11.18.4 step 2.5 일괄 동의 투표 (Step25QuickVote). §11.18.5 step 3 자유 토론 (Step3FreeDiscussion votes + additions). §11.18.6 step 5 모더레이터 회의록 prompt (truncate 금지). §11.18.7 schema 검증 + fallback (1 회 재요청 + 2 회 실패 시 skip)."
     },
     {
       "id": 6,
       "subject": "P1.6 — P2~P8 sub-task 정식 분할 + tasks.json sync + 메모리 갱신",
       "status": "completed",
-      "blockedBy": [2, 3, 4, 5],
+      "blockedBy": [
+        2,
+        3,
+        4,
+        5
+      ],
       "description": "Land 완료 (commit `420ec9a`). P1 spec round 종결 시점에 P2~P8 의 sub-task 29 개를 정식 분할해 본 tasks.json 에 추가. plan 본문 phase 별 산출 list 갱신 (P1 결과 반영). 메모리 `rolestra-r12-meeting-system-redesign-2026-05-03.md` closed 표기 + `rolestra-r12-c2-p1-completion.md` 신규."
     },
     {
       "id": 7,
       "subject": "P2-1 — migration 019 (opinion + opinion_vote + channels.max_rounds)",
       "status": "completed",
-      "blockedBy": [6],
+      "blockedBy": [
+        6
+      ],
       "description": "Land 완료. `019-opinion-tables.ts` 신규 — `opinion` 테이블 (id UUID + parent_id self-FK RESTRICT + meeting_id FK CASCADE + channel_id FK CASCADE + kind 6 enum + author_provider_id FK SET NULL + author_label + title/content/rationale + status 4 enum + exclusion_reason + round + timestamps) + `opinion_vote` 테이블 (id + target_id FK CASCADE + voter_provider_id FK SET NULL + vote 3 enum + comment + round + round_kind 2 enum + created_at) + `channels.max_rounds INTEGER NULL`. 인덱스 6 종 (meeting/channel/parent/status + vote.target/round). 옛 `opinion_revisions` 테이블은 코드 grep 결과 land 된 적 없음 → drop X. 옛 `meetings.state` 컬럼은 새 모델도 사용 (T10 재배선에서 state 문자열만 새로) → drop X. vitest migration-019.test.ts 28 tests + 전체 3516/13/0. typecheck 0."
     },
     {
       "id": 8,
       "subject": "P2-2 — OpinionService backend (gather / tally / quickVote / freeDiscussionRound)",
       "status": "completed",
-      "blockedBy": [7],
+      "blockedBy": [
+        7
+      ],
       "description": "Land 완료. `src/main/meetings/opinion-service.ts` 신규 — 4 method (gather / tally / quickVote / freeDiscussionRound) + 깊이 cap 3 강제 (OpinionDepthCapError) + 만장일치 → status='agreed' 즉시 갱신 + UnknownScreenIdError / OpinionNotFoundError 도메인 에러. `opinion-repository.ts` 신규 (opinion + opinion_vote CRUD + countDistinctLabelsByAuthor). `screen-id.ts` 신규 (buildScreenIdMap depth-first ITEM_NNN/_NN/_NN). 발화 ID 카운터 = `nextLabelHint` 헬퍼 (DB aggregate). IPC 4 channel (opinion:gather / tally / quickVote / freeDiscussion) + ipc-schemas.ts zod 검증 + opinion-handler.ts + router/index.ts boot. 기존 OpinionService = grep 결과 placeholder 주석만 → 신규 작성으로 충족. vitest 신규 44 tests (screen-id 9 + repository 10 + service 17 + handler 6 + 헬퍼 2) + 전체 3560/13/0 (baseline 3516 + 44 신규). typecheck 0."
     },
     {
       "id": 9,
       "subject": "P2-3 — MeetingMinutesService (모더레이터 회의록 + truncate 금지 prompt)",
       "status": "completed",
-      "blockedBy": [8],
+      "blockedBy": [
+        8
+      ],
       "description": "Land 완료 (commit `4b3a9ef`). `src/main/meetings/meeting-minutes-service.ts` 신규 — `compose(meetingId)` 1 method + 도메인 에러 2종 (MeetingNotFoundForMinutesError / MinutesPathOutsideConsensusError). 회의 history (`messageRepo.listAllByChannel` + meeting_id 필터) + 의견 트리 (`opinionRepo.listByMeeting` + `listVotesByMeeting` + `buildScreenIdMap`) 통째 spec §11.18.6 prompt 양식으로 모더레이터 (`MeetingSummaryService.summarize`) 에 동봉. truncate 검출 = body.length / Σ(opinion.content + rationale) ≥ 1.2 (의견 본문 합 ≤ 100 자면 검사 skip). 미달 시 1 회 재요청 → 또 미달 / 호출 실패 → deterministic fallback (composeDeterministicFallback — `[합의 항목]` + `[제외 항목]` 양식 + '(모더레이터 작성 불가)' plate). 저장 = `<ArenaRoot>/consensus/meetings/<meetingId>/minutes.md` (코드 invariant `arenaRoot.consensusPath()` + `consensus/meetings/` ensure 따름 — spec informal 표현 보다 실제 구조 우선). atomic write = `<file>.<rand>.tmp` + rename. PathGuard = path.resolve 후 consensusBase prefix 검사 (path traversal 차단). source 필드 (`'moderator' | 'moderator-retry' | 'fallback'`) + truncationDetected 플래그 audit 가능. IPC `meetings:composeMinutes` (zod schema + handler + router + boot wire). vitest 신규 14 tests / 전체 3574/13/0 (baseline 3560 + 14 신규) / typecheck 0."
     },
     {
       "id": 10,
-      "subject": "P2-4 — MeetingOrchestrator 새 모델 재배선 (12 단계 SSM 폐기)",
+      "subject": "P2-4a — MeetingOrchestrator 새 backend skeleton + 새 IPC + phase loop",
       "status": "pending",
-      "blockedBy": [8, 9],
-      "description": "**Goal:** 옛 `ConsensusStateMachine` 12 단계 SSM 폐기 + 새 5 단계 + 2.5 모델로 `MeetingOrchestrator` 통째 재배선.\n\n**변경:**\n- `src/main/meetings/engine/meeting-orchestrator.ts` 통째 재작성 — phase 흐름 = step 1 → 2 → 2.5 → 3 (loop until 합의/cap) → 5 → handoff\n- 옛 `consensus-state-machine.ts` (DISCUSSING / PROPOSING / VOTING / WORK_DISCUSSING / SYNTHESIZING / EXECUTING / REVIEWING) 통째 deprecate 또는 삭제\n- 옛 `aggregator-strategy.ts` 4 종 (consensus / democracy / weighted / first-pass) — 새 모델에 맞춰 재정의 또는 폐기\n- TurnManager — 발화 ID 회의 단위 카운터 통합\n- IPC `meeting:start` / `meeting:advance` / `meeting:abort` 시그니처 새 phase 모델 따라 갱신\n\n**Verify:** vitest e2e (회의 1 round 통째 simulate) + typecheck 0 + 옛 SSM 코드 잔존 X (grep 결과)"
+      "blockedBy": [
+        8,
+        9
+      ],
+      "description": "**Goal:** 새 5+2.5 단계 회의 흐름이 `OpinionService` + `MeetingMinutesService` 위에서 동작하도록 새 backend skeleton land. 옛 `ConsensusStateMachine` 호출 X (옛 파일은 보존 — 본 sub-task 끝 시점에 dead code).\n\n**컨텍스트 (2026-05-04 사용자 결정):**\n- 풀세트 3 부서 (기획 / 리뷰 / 검토) backend 토대 = 본 sub-task. 아이디어 = D-B-Light (P3), 디자인 = 7 단계 (P3), 구현 = 회의 X (P5).\n- 옛 IPC 통로 통째 정리 (사용자 답 Q4=A) — 새 통로 = `meeting:start` + `meeting:abort` 2 종.\n- 화면 박스 (SsmBox) 는 P3 책임 (사용자 답 Q5=A) — 본 sub-task 는 backend + StreamBridge phase 이벤트만.\n- 자유 토론 진행 = 라운드 누적 (의견 1 개씩 prompt → 합의 / 깊이 cap 3 / max_rounds 도달).\n\n**변경 (신규 / 재작성):**\n- `src/main/meetings/engine/meeting-orchestrator.ts` 통째 재작성 — 새 5+2.5 phase loop (phase enum: `'gather' | 'tally' | 'quick_vote' | 'free_discussion' | 'compose_minutes' | 'handoff'`)\n- `src/main/meetings/engine/meeting-turn-executor.ts` 통째 재작성 — 단순화 (옛 WORK_DISCUSSING / EXECUTING / REVIEWING 분기 폐기)\n- `src/main/meetings/engine/meeting-session.ts` 통째 재작성 — 새 phase enum + 발화 ID 회의 단위 카운터 통합\n- `src/shared/meeting-flow-types.ts` 신규 — Phase enum + StreamBridge phase 이벤트 페이로드\n- `src/shared/ipc-types.ts` 갱신 — 새 IPC 통로 시그니처 (`meeting:start` + `meeting:abort` 만)\n- `src/shared/ipc-schemas.ts` 갱신 — 새 zod schema\n- `src/main/ipc/handlers/meeting-handler.ts` 통째 재작성\n- `src/main/ipc/router.ts` — 새 통로 등록 (옛 통로 호출은 일시적으로 graceful no-op, T10b 에서 통로 자체 삭제)\n- 새 흐름 단위 테스트 land (vitest)\n\n**Verify:**\n- vitest 새 흐름 단위 테스트 PASS (의견 제시 / 시스템 취합 / 일괄 투표 만장일치 / 자유 토론 라운드 누적 / 회의록 호출 / abort)\n- typecheck 0\n- 새 orchestrator 가 옛 SSM 호출 X — `grep -rn 'ConsensusStateMachine\\|sessionMachine\\|SessionState' src/main/meetings/engine/meeting-orchestrator.ts` 결과 0\n- 옛 SSM 파일은 살아있음 (T10b 책임)"
     },
     {
       "id": 11,
       "subject": "P2-5 — 할 일 큐 textarea → 부서 회의 자동 트리거 wire (T10 reverted 재구현)",
       "status": "pending",
-      "blockedBy": [10],
+      "blockedBy": [
+        37
+      ],
       "description": "**Goal:** R12-C T10 (ProjectEntryView) reverted 의 재구현. 사용자 prefer 흐름 = 프로젝트 진입 → 할 일 큐 textarea → 부서 회의 자동 시작.\n\n**변경:**\n- 프로젝트 진입 화면 = 할 일 큐 + textarea (R12-C T11 시점에 disabled placeholder 만 land 됐던 부서 채널 입력란 위)\n- textarea 입력 → IPC `queue:add(taskText, opts: { startingDepartment? })` — default starting = idea\n- queue runner 의 `meeting-starter` 가 새 `MeetingOrchestrator` 호출 → 부서 채널 입력란 enable + 회의 자동 시작\n- 부서 채널 메시지란 enable 분기 wire (T11 disabled 토대 위 — workflow 진입 후만 enable)\n\n**Verify:** vitest integration (할 일 등록 → 회의 시작 → 부서 채널 입력란 enable) + Windows dogfooding"
     },
     {
       "id": 12,
       "subject": "P2-6 — 회의록 chat block (Card primitive variant + truncate X)",
       "status": "pending",
-      "blockedBy": [9],
+      "blockedBy": [
+        9
+      ],
       "description": "**Goal:** §11.13a 채팅창 카드 표시 정식. 회의록 + opinion kind 메시지를 채팅창 안 *Card primitive 변형* 으로 렌더.\n\n**변경:**\n- `src/renderer/features/messenger/MessageRenderer/CardVariant.tsx` 신규 — opinion kind 메시지 (root / revise / block / addition / self-raised / user-raised) + 회의록 메시지 (kind='meeting-minutes') 렌더\n- Card primitive (R3 시점 land) + themeKey 따라 변형\n- 본문 truncate X (long content 도 카드 안 scroll 또는 expand 버튼)\n- 헤더 = 발화 ID (`codex_1`) + 의견 트리 ID (`ITEM_001_01`)\n- 액션 버튼 — kind 별 ([선택/취소] / [동의/반대] / [수정안 제시])\n- 6 테마 (브랜드 / 미니멀 / 노블 / 페이퍼 / 시노그래피 / TUI) 모두 변형 land — themeKey 안 부서별 tint\n\n**Verify:** vitest snapshot (6 테마 × 6 kind) + Playwright e2e (Windows dogfooding)"
     },
     {
       "id": 13,
       "subject": "P3-1 — MessageRenderer 카드 variant + opinion kind 분기",
       "status": "pending",
-      "blockedBy": [12],
+      "blockedBy": [
+        12
+      ],
       "description": "**Goal:** P2-6 카드 variant 위에 MessageRenderer 분기 land — opinion kind 메시지를 카드 variant, 그 외는 plain text.\n\n**변경:**\n- `src/renderer/features/messenger/MessageRenderer/index.tsx` — message.kind 따라 분기:\n  · plain text → 기존 PlainTextRenderer\n  · opinion kind / meeting-minutes → CardVariant (P2-6)\n- 채팅 흐름 일관성 — 카드 + plain text 혼재해도 시각 깨끗\n\n**Verify:** vitest snapshot + Playwright e2e (회의 진행 중 카드 + 끼어들기 plain text 혼재 시 시각 일관)"
     },
     {
       "id": 14,
       "subject": "P3-2 — idea-workflow + IdeaCardList SsmBox variant",
       "status": "pending",
-      "blockedBy": [13],
+      "blockedBy": [
+        13
+      ],
       "description": "**Goal:** 아이디어 부서 워크플로우 정식 land. D-B-Light (의견 제시 + 시스템 취합까지만) + USER_PICK.\n\n**변경:**\n- `src/main/meetings/workflows/idea-workflow.ts` 신규 — D-B-Light + USER_PICK 흐름. step 1 → step 2 까지만 진행 (step 2.5 / 3 / 4 / 5 surface X)\n- `src/renderer/features/messenger/SsmBox/IdeaVariant.tsx` 신규 — 의견 list (kind='root' 만) + 사용자 선택 체크 마크 + [선택 / 취소] 버튼\n- 사용자 카드 선택 + 자유 코멘트 → 기획 부서 자동 인계 IPC\n\n**Verify:** vitest unit + Playwright e2e (할 일 등록 → 아이디어 회의 → 카드 선택 → 기획 인계)"
     },
     {
       "id": 15,
       "subject": "P3-3 — design-workflow (와이어프레임 5 + 디자인 2) + Playwright snapshot service",
       "status": "pending",
-      "blockedBy": [13],
+      "blockedBy": [
+        13
+      ],
       "description": "**Goal:** 디자인 부서 7 단계 흐름 (§4 디자인 7 단계 흐름 정식) land.\n\n**변경:**\n- `src/main/meetings/workflows/design-workflow.ts` 신규 — 7 단계 (와이어프레임 5 + 디자인 2). 시스템→UX/UI 직원 지시 + 의견 #1 / #2 등록 + 풀세트 회의 (P2-2 OpinionService 활용)\n- `src/main/design/playwright-snapshot-service.ts` 신규 — HTML/CSS off-screen Chromium → desktop 1280x720 + mobile 375x812 PNG. PathGuard 봉인 (junction realpath 비교)\n- `src/renderer/features/messenger/SsmBox/DesignVariant.tsx` 신규 — 토론 round 표시 + UX/UI 시퀀스 + Playwright PNG 미리보기 탭\n- `src/renderer/components/DesignPreview.tsx` 신규 — desktop / mobile 탭\n\n**Verify:** vitest integration + Playwright e2e (디자인 회의 7 단계 통째 simulate + PNG 생성 확인)"
     },
     {
       "id": 16,
       "subject": "P3-4 — review-workflow (chain 외, 두 entry)",
       "status": "pending",
-      "blockedBy": [13],
+      "blockedBy": [
+        13
+      ],
       "description": "**Goal:** 리뷰 부서 워크플로우 정식 land. 풀세트 회의 + chain 외 + 두 entry.\n\n**변경:**\n- `src/main/meetings/workflows/review-workflow.ts` 신규 — 풀세트 (P2-2 OpinionService + P2-3 MeetingMinutesService). 회의록 작성 직후 lock 풀림 (자동 인계 X — 사용자 자유 발화)\n- 두 entry wire:\n  · entry (a) 사용자 명시 호출 — 할 일 큐 entry 부서 라디오 = 리뷰 (P2-5 textarea 위에)\n  · entry (b) 검토 인계 결재 모달 안 *+리뷰 부서도 시작* 체크박스 (P6 HandoffApprovalModal 와 wire) / `handoff_mode='auto'` 시 Notification\n- `src/renderer/features/messenger/SsmBox/ReviewVariant.tsx` — planning/audit 와 같은 트리 + 카운터 + 회의록 footer (공유 컴포넌트 활용)\n\n**Verify:** vitest unit + Playwright e2e (사용자 명시 호출 + 검토 결재 체크박스 두 entry 모두)"
     },
     {
       "id": 17,
       "subject": "P3-5 — audit-workflow (chain 끝, NG → 기획 인계)",
       "status": "pending",
-      "blockedBy": [13],
+      "blockedBy": [
+        13
+      ],
       "description": "**Goal:** 검토 부서 워크플로우 정식 land. 풀세트 회의 + chain 끝 강제 + NG → 기획 인계.\n\n**변경:**\n- `src/main/meetings/workflows/audit-workflow.ts` 신규 — 풀세트 (P2-2 OpinionService). 객관 + 목적 통합 (하드코딩 / 메모리 누수 / 보안 / spec 의도 부합 / 누락 + 추가 감지)\n- 종료 분기:\n  · OK → 사용자 승인 게이트 (P6 HandoffApprovalModal) + chain 종료\n  · NG → 기획 부서 자동 인계 (검토는 문제 발견만, 처리는 기획에 위임)\n- 표준 chain 끝 강제 (구현 후 자동 진입) — handoff target 'audit' 강제\n- `src/renderer/features/messenger/SsmBox/AuditVariant.tsx` — review 와 같은 공유 컴포넌트 활용 (트리 + 카운터 + 회의록 footer)\n\n**Verify:** vitest integration (구현 → 검토 자동 진입 + NG → 기획 인계 분기) + Playwright e2e"
     },
     {
       "id": 18,
       "subject": "P3-6 — SsmBox 부서별 variant 5 종 통합 + channel.role 분기",
       "status": "pending",
-      "blockedBy": [14, 15, 16, 17],
+      "blockedBy": [
+        14,
+        15,
+        16,
+        17
+      ],
       "description": "**Goal:** P3-2 ~ P3-5 로 land 된 SsmBox variant + planning + general variant 통합. SsmBox 컴포넌트 가 channelId 받아 channel.role 따라 variant 결정.\n\n**변경:**\n- `src/renderer/features/messenger/SsmBox/index.tsx` 신규 — props `{ channelId }` 만. 내부에서 channel.role 분기 → 5 variant (idea / planning(=review/audit 공유) / design / implement(=별 컴포넌트 P5) / general)\n- `src/renderer/features/messenger/SsmBox/PlanningVariant.tsx` 신규 — 의견 트리 + 동의/반대/수정 카운터 + 회의록 footer (review / audit 와 공유)\n- `src/renderer/features/messenger/SsmBox/GeneralVariant.tsx` 신규 — 카드 누적 list + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼 (P4 land 때 final)\n- 옛 SsmBox 통합 컴포넌트 폐기 — channel.role 분기 X 였던 R6 시점 모델\n\n**Verify:** vitest snapshot 5 variant + Playwright e2e (부서 채널 전환 시 SsmBox variant 전환)"
     },
     {
       "id": 19,
       "subject": "P4-1 — 일반 채널 [##본문] 파서 (kind self-raised / user-raised)",
       "status": "pending",
-      "blockedBy": [8, 0],
+      "blockedBy": [
+        8,
+        0
+      ],
       "description": "**Goal:** 일반 채널 메시지 [##본문] 감싸기 → 의견 카드 등록 본격 land. P1.5 회귀 차단 (자동 의견 등록 차단) 위에 [##] 파서 + 의견 row 생성.\n\n**변경:**\n- `src/main/general/general-message-parser.ts` 신규 — 메시지 안 `[##본문]` 모두 추출 (한 메시지 안 여러 개 가능). regex `\\[##([^\\]]+)\\]`\n- 채팅 메시지는 그대로 보존 + `[##]` 본문 = `opinion` row 생성 (kind='self-raised' 직원 발화 / 'user-raised' 사용자 발화)\n- `general-channel-flow.ts` (P1.5 회귀 차단 장소) 안에서 파서 호출 wire\n\n**Verify:** vitest unit (한 메시지 안 [##] 1/2/0 개 + 중첩 [[##]] / [##안에 [중괄호]] 등 edge) + integration (직원 응답 [##] + 사용자 [##])"
     },
     {
       "id": 20,
       "subject": "P4-2 — 일반 채널용 SsmBox variant (가벼운 동의/반대 카운터)",
       "status": "pending",
-      "blockedBy": [18, 19],
+      "blockedBy": [
+        18,
+        19
+      ],
       "description": "**Goal:** P3-6 GeneralVariant 의 final land. 카드 누적 list + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼.\n\n**변경:**\n- `src/renderer/features/messenger/SsmBox/GeneralVariant.tsx` final — opinion (kind='self-raised'/'user-raised') 누적 list + 카드별 동의/반대 카운터 (직원 + 사용자 양쪽)\n- 동의/반대 카운터 IPC `opinion:lightVote(opinionId, vote)` — `opinion_vote` row 생성 (round_kind='light' 신규 enum 값 또는 별 테이블 결정)\n- 카드별 직원 자유 응답 누적 — `comment` field 활용\n- 합의/회의록/인계 surface 모두 X (잡담 정체성)\n\n**Verify:** vitest snapshot + Playwright e2e ([##] 게시 → 카드 등장 → 동의/반대 카운터 + 자유 응답 누적)"
     },
     {
       "id": 21,
       "subject": "P4-3 — 일반 채널 별 entry button + 의견 게시 모달",
       "status": "pending",
-      "blockedBy": [19, 20],
+      "blockedBy": [
+        19,
+        20
+      ],
       "description": "**Goal:** [##] 감싸기 외 *별 entry* — 의견 게시 버튼 + 모달 (제목 + 본문).\n\n**변경:**\n- 일반 채널 헤더 우측 [의견 게시] 버튼 신규\n- `src/renderer/features/messenger/general/PostOpinionModal.tsx` 신규 — 제목 + 본문 textarea + [게시 / 취소]\n- 게시 = `opinion:create(channelId, kind='user-raised', title, content)` IPC → `opinion` row 생성 + GeneralVariant SsmBox 카드 등장\n\n**Verify:** vitest unit + Playwright e2e (모달 열기 + 게시 + 카드 등장)"
     },
     {
       "id": 22,
       "subject": "P5-1 — implement-workflow (designated 1 명 simple)",
       "status": "pending",
-      "blockedBy": [18],
+      "blockedBy": [
+        18
+      ],
       "description": "**Goal:** 구현 부서 워크플로우 simple 1 명 land. R12-C2 = simple / R12-W = 분담 + tier (별 phase).\n\n**변경:**\n- `src/main/meetings/workflows/implement-workflow.ts` 신규 — designated 1 명 직원이 spec 받아 코드 작성 (회의 X). spec = 인계 payload (이전 부서 회의록)\n- 작성 흐름 — 직원 prompt + tool 권한 (file write + command exec) + ExecutionService dryRun → 사용자 승인 → atomic apply → rollback (R7 흐름 그대로)\n- 적용 후 검토 (audit) 부서 자동 인계 (chain 끝)\n- `src/renderer/features/messenger/SsmBox/ImplementVariant.tsx` 신규 — designated AI 표시 + 진행도 게이지 + 작업 중 파일 list\n\n**Verify:** vitest integration (인계 받음 → designated 작성 → ExecutionService → 검토 자동 인계) + Playwright e2e"
     },
     {
       "id": 23,
       "subject": "P5-2 — designated-worker-resolver (부서장 핀 / drag_order / fallback)",
       "status": "pending",
-      "blockedBy": [22],
+      "blockedBy": [
+        22
+      ],
       "description": "**Goal:** designated 직원 자동 선정 알고리즘 (사용자 결정 2026-05-02).\n\n**변경:**\n- `src/main/meetings/designated-worker-resolver.ts` 신규 — 우선순위:\n  1. `providers.is_department_head` 핀 (R12-C 시점 컬럼 land) — 1 순위\n  2. `channel_members.drag_order` 1 번 (R12-C 시점 컬럼 land) — 2 순위\n  3. fallback — 부서 멤버 중 첫 번째 ready provider\n- 부서장 핀 자체는 P7-2 에서 UI land — 본 P5-2 는 알고리즘만 land (resolver 가 핀 column 읽음)\n\n**Verify:** vitest unit (3 우선순위 분기 + 모든 핀/순서 X 시 fallback)"
     },
     {
       "id": 24,
       "subject": "P5-3 — 검증 NG → 기획 인계 분기",
       "status": "pending",
-      "blockedBy": [22, 17],
+      "blockedBy": [
+        22,
+        17
+      ],
       "description": "**Goal:** P3-5 audit-workflow 의 NG → 기획 인계 분기 정식 wire.\n\n**변경:**\n- audit-workflow 종결 시 결과 분류 (의견 트리에서 status='agreed' = 문제 / status='excluded' = 논의 후 수용 가능)\n- 문제 1 개 이상 → 기획 부서 자동 인계 (handoff target = 'planning'). 인계 payload = audit 회의록 ([합의]+[제외] 둘 다)\n- 기획 부서가 받아 새 회의 시작 (재기획) → 다시 chain 진입\n\n**Verify:** vitest integration (audit NG → 기획 회의 자동 시작) + Playwright e2e"
     },
     {
       "id": 25,
       "subject": "P6-1 — HandoffApprovalModal (kind 별 미리보기 + +리뷰 체크박스)",
       "status": "pending",
-      "blockedBy": [10, 16, 17],
+      "blockedBy": [
+        37,
+        16,
+        17
+      ],
       "description": "**Goal:** 부서 인계 결재 모달 정식 land. handoff_mode='check' 시 표시.\n\n**변경:**\n- `src/renderer/features/handoff/HandoffApprovalModal.tsx` 신규 — kind 별 미리보기 (회의록 markdown) + 다음 부서 + 인계 사유 + 확인 버튼\n- **검토 → 기획 인계 시 모달 안 *+리뷰 부서도 시작* 체크박스** (P3-4 review-workflow entry b 와 wire)\n- 디자인 → 기획 / 기획 → 구현 / 구현 → 검토 / 검토 → 기획 모든 transition 분기\n\n**Verify:** vitest snapshot + Playwright e2e (검토 → 기획 + +리뷰 체크박스 → 두 부서 동시 시작)"
     },
     {
       "id": 26,
       "subject": "P6-2 — HandoffModeToggle (채널 설정 + 사이드바)",
       "status": "pending",
-      "blockedBy": [25],
+      "blockedBy": [
+        25
+      ],
       "description": "**Goal:** handoff_mode (auto / check) 토글 UI + 사이드바.\n\n**변경:**\n- 채널 헤더 우측 ⚙ 버튼 → 모달 안 두 차원 토글:\n  · 인계 방식 (handoff_mode auto / check)\n  · 회의 종료 조건 (max_rounds NULL / N) — §11.14\n- 사이드바 부서 row 옆 mode 인디케이터 (auto / check 표시)\n- `channels.handoff_mode` + `channels.max_rounds` UPDATE IPC\n\n**Verify:** vitest snapshot + Playwright e2e (토글 변경 → DB 반영 + 다음 인계 시 동작 변화)"
     },
     {
       "id": 27,
       "subject": "P6-3 — 검토→리뷰 Notification (handoff_mode='auto' 시)",
       "status": "pending",
-      "blockedBy": [25],
+      "blockedBy": [
+        25
+      ],
       "description": "**Goal:** P3-4 review-workflow entry (b) 의 auto 분기. handoff_mode='auto' 시 모달 X → Notification 등장.\n\n**변경:**\n- 검토 → 기획 인계 시 (handoff_mode='auto') Notification 등장 — \"리뷰 부서 진행할까요?\" 액션 버튼 [예 / 아니오]\n- [예] → review-workflow 자동 시작 / [아니오] → 그대로 진행\n- 기존 NotificationService (R8 시점 land) 활용 + notification-labels.ts dictionary 확장\n\n**Verify:** vitest unit + Playwright e2e (auto 인계 시 Notification + [예] 시 review 회의 시작)"
     },
     {
       "id": 28,
       "subject": "P6-4 — 부서 lock 매트릭스 + 대기 큐 frontend",
       "status": "pending",
-      "blockedBy": [26],
+      "blockedBy": [
+        26
+      ],
       "description": "**Goal:** §11.16 부서 lock 사이클 R12-C2 정정 + §11.12.3 대기 큐 frontend land.\n\n**변경:**\n- queue runner (R10-Task7 시점 land) 위에 R12-C2 매트릭스 (review = 회의록 작성 직후 lock 풀림 / audit = 결과 인계 시점) 정확 반영\n- 대기 큐 UI — 부서 잠긴 동안 새 할 일 = pending 큐 + UI \"회의 종료 후 시작\" 표시. 사이클 lock 풀림 시 자동 startNext\n- 검증 NG 시 기획 다시 잠김 (대기 중 새 기획 할 일은 더 기다림)\n\n**Verify:** vitest integration (lock 매트릭스 7 행 모두 + 대기 큐 자동 startNext) + Playwright e2e"
     },
     {
       "id": 29,
       "subject": "P6-5 — 변경 요청 모달 (작은 / 중간 / 큰 분기)",
       "status": "pending",
-      "blockedBy": [28],
+      "blockedBy": [
+        28
+      ],
       "description": "**Goal:** §11.17 변경 요청 분기 R12-C2 정정 의 UI 모달 land.\n\n**변경:**\n- 부서 채널 헤더 [변경 요청] 버튼 신규\n- `src/renderer/features/handoff/ChangeRequestModal.tsx` 신규 — 모달 안 3 분기 (작은 / 중간(디폴트) / 큰) + 변경 내용 textarea + [취소 / 확인]\n- 작은 → D-A T2.5 dispatcher (interruptWithUserMessage) 활용 (이미 land)\n- 중간 → 현재 chain 일시정지 (T7 pause/resume — R12-C 시점 land 필요한지 확인) → 기획 부서 변경 인계 → 재계획 → 재개\n- 큰 → 큐에 새 task 등록 → 현재 chain 끝나고 처리\n\n**Verify:** vitest unit + Playwright e2e (3 분기 모두 동작 검증)"
     },
     {
       "id": 30,
       "subject": "P7-1 — 프로젝트 삭제 (가장 시급)",
       "status": "pending",
-      "blockedBy": [18],
+      "blockedBy": [
+        18
+      ],
       "description": "**Goal:** 사용자 우선순위 1. 프로젝트 보관 / 영구삭제 surface.\n\n**변경:**\n- 프로젝트 대시보드 상단 [삭제] 버튼 신규\n- 사이드바 프로젝트 row 옆 X 버튼 신규\n- 둘 다 누르면 → 모달 [보관 / 영구삭제 / 취소] 3 버튼\n- 보관 = `projects.archived_at` 컬럼 (migration 022 신규) UPDATE — list 에서 숨김 + 데이터 보존\n- 영구삭제 = projects.id + 종속 (channels / channel_members / opinions / messages / queue_items / consensus 폴더 / SKILL.md 폴더) 모두 cascade DELETE + ArenaRoot 폴더 rmrf (PathGuard 봉인)\n- 보관함 메뉴 (사이드바 하단 또는 시스템 채널 sub-menu) — archived 프로젝트 list + [복구 / 영구삭제]\n\n**Verify:** vitest integration (보관 → list 숨김 + 복구 / 영구삭제 → DB row + 폴더 모두 삭제) + Playwright e2e"
     },
     {
       "id": 31,
       "subject": "P7-2 — 부서장 핀 (구현 부서 작동 의존)",
       "status": "pending",
-      "blockedBy": [22],
+      "blockedBy": [
+        22
+      ],
       "description": "**Goal:** 사용자 우선순위 2. 직원 부서장 핀 토글 — P5-2 designated-worker-resolver 의 1 순위 입력.\n\n**변경:**\n- `StaffEditModal` 안 직원 row 마다 부서별 핀 토글 (multi-role 직원이면 부서 N 개 토글)\n- `providers.is_department_head` 컬럼 (R12-C 시점 JSON 컬럼 land — `Record<RoleId, boolean>`) — UPDATE IPC `provider:setDepartmentHead(providerId, roleId, pinned)`\n- 한 부서 = 부서장 1 명만 (UNIQUE 제약 또는 application 단 enforce). 새 핀 시 옛 부서장 자동 unpin\n- 부서장 표시 = StaffEditModal + ChannelMemberPanel + 사이드바 부서 row 우측 작은 마크 (📌)\n\n**Verify:** vitest unit + Playwright e2e (핀 토글 → 새 designated 선정)"
     },
     {
       "id": 32,
       "subject": "P7-3 — 멤버 발화 순서 드래그",
       "status": "pending",
-      "blockedBy": [18],
+      "blockedBy": [
+        18
+      ],
       "description": "**Goal:** 사용자 우선순위 3. 채널 멤버 발화 순서 드래그 — P5-2 designated-worker-resolver 의 2 순위 입력.\n\n**변경:**\n- `src/renderer/features/messenger/MemberPanel/ChannelMemberOrderPanel.tsx` 신규 — dnd-kit 드래그\n- 드래그 결과 = `channel_members.drag_order` 영구 보관 (R12-C T1 시점 컬럼 land)\n- 드래그 1 번 직원 = designated worker fallback (P5-2 2 순위)\n- 부서장 (P7-2) 핀 있으면 드래그 결과 무시 (1 순위 우선)\n\n**Verify:** vitest unit + Playwright e2e (드래그 → DB 반영 + designated 선정 변화)"
     },
     {
       "id": 33,
       "subject": "P7-4 — 스킬 질문 시스템 (제일 마지막)",
       "status": "pending",
-      "blockedBy": [22],
+      "blockedBy": [
+        22
+      ],
       "description": "**Goal:** 사용자 우선순위 4. 시스템 (LLM 호출 X 일반 코드) 이 SKILL.md / 다른 자료 정보 추출 + 취합 → 정리 문서 prompt 로 직원에게 전달.\n\n**변경:**\n- *진입 design round 필요* (Agestra 참고 + 사용자 + 디자인 시안 짧은 라운드) — sub-task 진입 직전 결정\n- backend `SkillQuestionService` 신규 — 직원 prompt 안 SKILL.md 통째 동봉 X / 시스템이 SKILL.md 가공 후 압축 prompt 동봉\n- *Agestra 참고*: 시스템 코드 (LLM X) 가 SKILL.md 의 frontmatter + 본문 일부 추출 + 회의 주제 ↔ skill 관련성 매핑 + 결과 단락만 prompt 에 넣음\n\n**Verify:** vitest unit + Playwright e2e (직원 응답 안 SKILL.md 직접 인용 X + 가공 단락 인용 ✅)"
     },
     {
       "id": 34,
       "subject": "P7-5 — 프로젝트 대시보드 layout (별 design round)",
       "status": "pending",
-      "blockedBy": [30],
+      "blockedBy": [
+        30
+      ],
       "description": "**Goal:** 사용자 우선순위 5. 프로젝트 헤더 클릭 시 메신저 X / 그 프로젝트 대시보드 진입.\n\n**변경:**\n- *진입 design round 필요* (사용자 + 디자인 시안 짧은 라운드) — 위젯 layout 결정\n- 위젯 5 종 — active 회의 / 부서별 진행도 / 큐 상태 / 멤버 상태 / 최근 회의록\n- 디자인 회의 안에서 layout 결정 후 land\n\n**Verify:** vitest snapshot + Playwright e2e (프로젝트 헤더 클릭 → 대시보드 + 위젯 5 종 표시)"
     },
     {
       "id": 35,
       "subject": "P8 — closeout (ADR + 구현현황 + tasks.json sync + main merge)",
       "status": "pending",
-      "blockedBy": [21, 24, 27, 29, 31, 32, 33, 34],
+      "blockedBy": [
+        21,
+        24,
+        27,
+        29,
+        31,
+        32,
+        33,
+        34
+      ],
       "description": "**Acceptance:**\n- tasks.json sync (T0~T34 모두 completed)\n- docs/구현-현황.md R12-C2 행 추가 (한글, 사무실 메타포)\n- docs/아키텍처-결정-기록/r12-c2-meeting-redesign.md ADR 신규 (회의 진행 재설계 통째 + 부서 매트릭스 + 인계 흐름 + 편의 surface)\n- main fast-forward merge (`feat/r12-c2-meeting-redesign` → `main`)\n- worktree 정리 (Rolestra-r12c2 → 제거 + branch 삭제)\n- 다음 phase (R12-W / R12-H) 진입 준비\n\n**검증 게이트:**\n- vitest 전체 PASS\n- typecheck 0 error\n- lint baseline 유지\n- 사용자 dogfooding round 회귀 0\n- ADR + 구현현황 갱신 / 메모리 + MEMORY.md ⚠️ 항목 갱신"
+    },
+    {
+      "id": 36,
+      "subject": "P2-4b — 옛 SSM + 옛 IPC + 옛 SsmBox 통째 정리",
+      "status": "pending",
+      "blockedBy": [
+        10
+      ],
+      "description": "**Goal:** 옛 SSM (12 단계) 코드 + 옛 IPC 통로 + 옛 SsmBox 통째 정리. spec verify 조건 \"옛 SSM 코드 잔존 X\" 충족.\n\n**의존:** T10a land 후. 새 흐름이 동작 검증된 상태에서 옛 코드 제거.\n\n**삭제:**\n- `src/main/engine/consensus-machine.ts`\n- `src/main/engine/session-state-machine.ts`\n- `src/main/engine/consensus-evaluator.ts`\n- `src/main/engine/decision-collector.ts`\n- `src/main/engine/v3-side-effects.ts` (옛 SSM 분기 — 새 흐름이 자체 emit)\n- `src/main/meetings/engine/meeting-minutes-composer.ts` (옛 — T9 service 가 대체)\n- 옛 테스트: `consensus-machine.test.ts` / `consensus-evaluator.test.ts` / `consensus-execution-integration.test.ts` / `decision-collector.test.ts` (있으면) / `session-state-machine.test.ts` (있으면) / 옛 `meeting-minutes-composer.test.ts` 2 종\n\n**재정의:**\n- `src/shared/consensus-types.ts` — 옛 12 상태 union 제거 + `AggregatorStrategy` 등 옛 타입 정리\n- `src/shared/session-state-types.ts` — 옛 `SessionState` 12 상태 통째 정리 또는 파일 자체 삭제\n- `src/shared/constants.ts` — 옛 진행 list (CONVERSATION → ... → DONE) 정리\n- 옛 IPC 통로 (`meeting:advance` 등) + consensus_decision approval 흐름 통째 삭제 (`approval-types.ts` 의 `ConsensusDecisionApprovalPayload` 등)\n- 렌더러 옛 `SsmBox` 컴포넌트 비활성 — placeholder 컴포넌트 (P3 새 layout 자리)\n- 렌더러 옛 stream 구독 hook (mode-transition / worker-selection / consensus-decision 등) 정리\n\n**Verify:**\n- grep `ConsensusStateMachine\\|OPINION_GATHERING\\|OPINION_TALLY\\|AGREEMENT_VOTE\\|REVISION_NEGOTIATION\\|WORK_DISCUSSING\\|SYNTHESIZING\\|VOTING\\|EXECUTING\\|REVIEWING` 결과 0 (renderer 비활성 placeholder 문자열 제외)\n- typecheck 0\n- vitest 0 fail (T10c 가 새 e2e 추가 — 본 sub-task 는 회귀 0)"
+    },
+    {
+      "id": 37,
+      "subject": "P2-4c — 회의 1 round 시뮬레이션 e2e + T10 closeout",
+      "status": "pending",
+      "blockedBy": [
+        36
+      ],
+      "description": "**Goal:** 회의 1 round 시뮬레이션 e2e 테스트 + 통합 검증. T10 closeout.\n\n**의존:** T10b land 후 (옛 코드 정리 끝나야 e2e 가 새 흐름만 검증).\n\n**변경 (신규):**\n- vitest 통합 테스트 신규 — fake provider 3 명 + 풀 시나리오:\n  - **만장일치 시나리오**: step1 의견 2 개 → step2 시스템 취합 → step2.5 만장일치 → 자유 토론 skip → step5 회의록 → handoff\n  - **자유 토론 시나리오**: step1 의견 1 개 → step2.5 비만장일치 → step3 라운드 누적 (3 라운드 토론 → 깊이 cap 3 자식 의견 추가 → 합의 도달) → step5 회의록\n  - **max_rounds 도달 시나리오**: step3 자유 토론 5 라운드 진행 → 합의 미도달 → 사용자 호출 (회의 일시 정지 + Notification)\n  - **abort 시나리오**: step3 진행 중 `meeting:abort` 호출 → 회의 즉시 중단 + 회의록 미생성 + 회의 row outcome='aborted'\n- 옛 흐름 의존 테스트 정리 (T10b 에서 못 지운 잔재 — 옛 minutes-composer.test 잔여 등)\n\n**Verify:**\n- vitest 통합 시나리오 4 종 PASS\n- 4 게이트 [4] spec 부합 검토 acceptance 통째 확인 (§5 phase 흐름 + §11.18 schema 4 종 + 의견 트리 깊이 cap 3 + 발화 ID 회의 단위 카운터 + 회의록 truncate 금지 + handoff_mode 분기)\n- typecheck 0\n- T10 closeout — tasks.json T10a/b/c 모두 status='completed' + 메모리 land summary"
     }
-  ]
+  ],
+  "lastUpdated": "2026-05-04T12:11:41.731Z"
 }
