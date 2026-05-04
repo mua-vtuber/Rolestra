@@ -279,81 +279,127 @@ DM
 
 ---
 
-## 5. D-B — 구조화된 합의 (기획 부서)
+## 5. D-B — 구조화된 합의 (모든 풀세트 부서 공유 토대, R12-C2 갱신)
 
-기획 부서 (role='planning') 의 회의 흐름. 다른 부서는 별도.
+> **R12-C2 정정 (2026-05-04)**: 옛 12 단계 SSM 합의 진행 모델 (`OPINION_GATHERING` / `OPINION_TALLY` / `AGREEMENT_VOTE` / `REVISION_NEGOTIATION` 등) **통째 폐기**. 새 모델 = 5 단계 + 2.5 일괄 투표 + 모더레이터 회의록. 본 §5 가 기획 부서만이 아니라 모든 풀세트 부서 (planning / design / review / audit) 가 공유하는 backend 토대 — 부서별 차이는 `OpinionService` + `MeetingMinutesService` 위에 얹는 workflow 분기로만 표현.
 
-### Phase 흐름
+### Phase 흐름 (R12-C2 정식)
 
 ```
-[OPINION_GATHERING]   각 AI 가 주제에 대한 의견 제시 (자연어, R1)
-   ↓
-[OPINION_TALLY]       시스템 취합 + opinion_id 부여 (안 보임)
-   ↓
-[AGREEMENT_VOTE]      모든 AI 가 각 의견 동의 여부 응답 (안 보임)
-   ↓
-[합의 결과 표시]       시스템 메시지: 합의 N개 / 미합의 M개 카드
-   ↓
-[REVISION_NEGOTIATION] 미합의 의견 1개씩 협의
-   ↓ 합의 도달
-[모든 의견 처리 완료]   → DONE → 회의록 (= spec 문서)
+1. 의견 제시 (화면 보임)
+   직원이 JSON 양식으로 의견 작성 — 같은 직원이 회의 안에서 여러 의견 제시 가능.
+   발화 ID 부여: codex_1 / codex_2 / claude_1 / gemini_1 / ...
+   → 회의 단위 카운터 (회의 끝나면 리셋. 다음 회의에서 다시 codex_1 부터)
+   화면에 발화 ID 표시 (사용자가 어느 의견을 누가 제시했는지 한눈에)
+
+2. 시스템 취합 + 의견 ID 부여 (화면 안 보임 / SsmBox 에 의견 list 등장)
+   시스템이 모은 의견에 트리 ID 매김:
+       ITEM_001, ITEM_002, ITEM_003 ... (root 의견)
+       ITEM_001_01, ITEM_001_02 ...    (수정 / 반대 / 추가 의견 = ITEM_001 의 자식)
+       ITEM_001_01_01 ...                  (자식의 자식, 깊이 cap = 3 / 디폴트 3)
+   → DB 저장은 단순 (id UUID + parent_id) / 화면 표시는 시스템이 parent chain 따라
+      ITEM_NNN_NN_NN 형식 가공.
+
+★ 2.5 일괄 동의 투표 (보임, SsmBox 에 vote 진행 표시)
+   모든 직원에게 의견 list 보내고 *한꺼번에 동의 여부* 응답.
+   - 만장일치 의견 → 즉시 합의 반영 (자유 토론 skip)
+   - 만장일치 못 받은 의견만 step 3 으로
+   - 동의하면서 코멘트 가능 (optional)
+
+3. 자유 토론 (화면 보임, SsmBox 반영)
+   시스템이 의견 1 개씩 제시 → 직원들이 형식 갖춰 자유 발언 + 동의/반대/수정/추가.
+   - 동의 / 반대 / 보류
+   - 수정 의견 / 반대 의견 / 추가 의견 = 자체 의견 카드로 등록 (트리 자식)
+       예: ITEM_001 의 수정 의견 → ITEM_001_01
+       그 수정 의견의 또 다른 수정 → ITEM_001_01_01 (cap 3 도달)
+   - 다음 라운드에서 다른 직원들이 다시 투표 가능
+
+4. 합의되면 시스템이 *다음 의견* 으로 넘어가서 제시 → step 3 반복
+
+5. 모두 합의 / 제외 처리 → 모더레이터 회의록 작성
+   ★ 회의록 정리 모델 = R12-S MeetingSummaryService + getResolvedSummaryModel
+     (시스템 = 모더레이터 직원 X, system 호출). 회의 통째 발화 history + 의견 트리
+     받아 정리. 시스템 자동 정리는 deterministic 합의 list 만 만들고 본문 작성은
+     모더레이터.
+   ★ 회의록만 보고도 이해 가능한 *상세 설명* (요약 X / 축약 X)
+     - 의견 본문 통째 보존 (truncate 금지 prompt 강제)
+     - 근거 통째 보존
+     - 결정 사유 (왜 합의 / 왜 제외) 모더레이터 작성
+   두 섹션:
+     [합의 항목]  — 합의된 의견 + 통째 본문 + 결정 (X 명 동의)
+     [제외 항목]  — 제외된 의견 + 통째 본문 + 제외 사유
+                     ☞ 사용자가 회의록 보고 "회의록 X — 제외 항목 #2 다시 진행"
+                       같은 발화로 작업 재발화 가능 (정보 손실 방지)
+
+6. handoff_mode 따라 다음 부서 인계 (§6 R12-H 참조)
+   'auto'  = 자동 인계 (단 검토 → 리뷰 entry 시 *Notification* 등장)
+   'check' = 사용자 결재 모달 (회의록 미리보기 + 인계 사유 + 확인 버튼)
+             검토 → 기획 인계 시 모달 안 *"+리뷰 부서도 시작"* 체크박스 (chain 외 entry)
 ```
 
-### 데이터 모델 (D-B)
+### 데이터 모델 (R12-C2 — opinion 트리 + opinion_vote)
 
-`opinions`:
-- id (UUID), meeting_id, author_provider_id, content, round, status
+`opinion` (R12-C2 P2 land — migration 019, §4 Migration 정식):
+- `id` UUID PRIMARY KEY
+- `parent_id` UUID NULL FK `opinion.id` — 트리 부모 chain (NULL = root)
+- `meeting_id` / `channel_id`
+- `kind` TEXT NOT NULL — `'root'` / `'revise'` / `'block'` / `'addition'` / `'self-raised'` / `'user-raised'`
+- `author_provider_id` TEXT NULL (NULL = `user-raised`)
+- `author_label` TEXT NOT NULL — 회의 단위 발화 카운터 (예: `codex_1`)
+- `title` / `content` / `rationale` (NULL)
+- `status` TEXT NOT NULL — `'pending'` / `'agreed'` / `'rejected'` / `'excluded'`
+- `exclusion_reason` TEXT NULL — `status='rejected'`/`'excluded'` 시 회의록 제외 사유
+- `round` / `created_at` / `updated_at`
 
-`opinion_votes`:
-- opinion_id, voter_provider_id, agree (bool), round
+`opinion_vote` (R12-C2 P2 land — migration 019):
+- `id` / `target_id` (FK `opinion.id`) / `voter_provider_id` (NULL = 사용자) / `vote` (`'agree'` / `'oppose'` / `'abstain'`) / `comment` (NULL) / `round` / `round_kind` (`'quick_vote'` / `'free_discussion'`) / `created_at`
 
-`opinion_revisions`:
-- parent_opinion_id, child_opinion_id, proposer_provider_id, kind ('revise' | 'block'), round
+→ 옛 `opinion_revisions` 테이블 폐기 — `opinion.parent_id` + `opinion.kind` 가 트리 + revision 정보 통째 흡수.
 
-### Message Schema (D-B)
+### 의견 ID — 저장 vs 화면 표시 분리
 
-**OPINION_GATHERING (R1)**:
-```json
-{ "name": "Claude", "opinion": "...", "rationale": "..." }
-```
+| 영역 | 형식 |
+|------|------|
+| DB 저장 | `id` (UUID) + `parent_id` (UUID 또는 NULL) — 단순 |
+| 화면 표시 (SsmBox / 채팅창 카드) | 시스템이 parent chain 따라 가공 — `ITEM_001` / `ITEM_001_01` / `ITEM_001_01_01` |
 
-**AGREEMENT_VOTE** (system → AI):
-```
-prompt 에 의견 표 주입 (markdown 표):
-| id | author | content |
-응답 schema:
-{ "name": "Claude", "votes": [{"opinion_id": 1, "agree": true}, ...] }
-```
+깊이 cap = 3 (의견 트리 무한 루프 방지, 사용자 결정).
 
-**REVISION_NEGOTIATION**:
-```json
-{
-  "name": "Codex",
-  "opinion_id": 2,
-  "stance": "revise" | "block" | "agree",
-  "revision": "...",
-  "rationale": "..."
-}
-```
+### 발화 ID 카운터 (회의 단위 리셋)
 
-### 컨텍스트 / token 관리 (사용자 우려 해결)
+- 한 회의 안에서 직원 (provider) 별 카운터: `codex_1` → `codex_2` → ...
+- 회의 끝나면 리셋. 다음 회의에서 다시 `codex_1` 부터.
+- `opinion.author_label` 컬럼 (회의 단위 카운터 결과) 저장.
+
+### Message Schema (R12-C2)
+
+직원 응답 JSON schema 정식 명시는 §11.18 (R12-C2 P1.5 sub-task — JSON schema 단락) 참조. 4 종 schema:
+- step 1 의견 제시 (`{ name, label, opinions: [...] }`)
+- step 2.5 일괄 동의 투표 (`{ name, label, quick_votes: [...] }`)
+- step 3 자유 토론 (`{ name, label, votes: [...], additions: [...] }`)
+- 모더레이터 회의록 prompt 양식 (truncate 금지)
+
+### 컨텍스트 / token 관리 (R12-C2 정식)
 
 | 의견 수 | 전달 방식 |
 |--------|----------|
-| ≤ 5 | prompt 직접 |
-| > 5 | `<ArenaRoot>/<projectId>/consensus/opinions.md` 파일 작성 + read 권한 부여 |
-| 누적 R3+ | 직전 회의록 markdown 만 prompt + 자세한 history 는 파일 read |
-| 인계 시 | 회의록 + 합의 결과만. 자세한 내용은 인계받은 채널이 필요 시 read |
+| ≤ 5 | prompt 직접 (markdown 표) |
+| > 5 | `<ArenaRoot>/<projectId>/consensus/<meetingId>/opinions.md` 파일 작성 + read 권한 부여 |
+| 회의 종료 후 | DB → 회의록 markdown ([합의] + [제외] 두 섹션, truncate 금지) |
+| 다음 회의 / 인계 | 회의록 markdown 만 prompt + 자세한 history 는 파일 read |
+
+→ DB = 진실 source. RAM 만 사용 X (앱 재시작 시 회의 진행 상태 잃음).
 
 추가:
 - **Anthropic API prompt caching** — 재사용 부분 (스킬 템플릿, 페르소나) cache.
-- **검토 부서**: 코드 + spec 만 read. 전체 대화 안 봄.
+- **검토 (audit) 부서**: 코드 + spec 만 read (전체 대화 안 봄). **리뷰 (review) 부서**: 회의 history + 결과물 둘 다 read (주관 평가 위해 맥락 필요).
 - **메모리 시스템 (R12-M, future)** 진입 시 working memory 압축 (bara_system 의 hybrid search 응용).
 
-### Revision cap
+### 의견 트리 깊이 cap (옛 revision cap 폐기)
 
-- per-opinion revision 최대 3 R 후 강제 reject + 다음 의견 진행.
-- prompt 에 명시: "수정 지시 N회 제한이니 정확한 지시 작성하라".
+- 옛 "per-opinion revision 최대 3 R 강제 reject" 폐기 — 의견 트리 자체로 자연 대체.
+- 새 모델: **의견 트리 깊이 cap 3** — `ITEM_001` (root) → `ITEM_001_01` (자식) → `ITEM_001_01_01` (손자) 까지. 더 깊은 자식 의견 = 시스템이 거부 + "더 깊은 수정은 새 root 의견으로 다시 제시하라" prompt.
+- 같은 의견 위에 새 자식 의견이 무한 누적되는 것은 prompt + cap 3 으로 막음. token 폭발 / 끝말잇기 같은 자연 무한 안전장치 = §11.x channels.max_rounds (회의 종료 조건) + D-A round 5 의 maxConversationRounds=5 hard cap (이미 land).
 
 ---
 
