@@ -26,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useThrowToBoundary } from '../components/ErrorBoundary';
 import { invoke } from '../ipc/invoke';
 import { USER_AUTHOR_LITERAL, type Message } from '../../shared/message-types';
+import type { StreamChannelMessagePayload } from '../../shared/stream-events';
 
 export interface UseChannelMessagesOptions {
   /** 서버쪽 기본값이 우선이지만 원하면 override 가능(spec §6). */
@@ -132,6 +133,38 @@ export function useChannelMessages(
     },
     [channelId, limit, beforeCreatedAt],
   );
+
+  // R12-C2 P1.5 follow-up — stream:channel-message 구독으로 AI 응답이
+  // 다른 surface (예: dm-auto-responder) 에서 append 될 때 자동 표시.
+  // 이전에는 useChannelMessages 가 invalidation/stream 모두 X — 사용자가
+  // 다른 탭 다녀와야 응답 메시지가 보였다 (dogfooding round 1 보고 #2).
+  // user 메시지는 send() 의 optimistic + invoke resolve reconcile 에 맡기고
+  // 본 stream 에서는 skip — server 가 meta.clientId 를 echo 안 하므로
+  // stream payload 만으로는 임시 row 와 매칭할 키가 없어 중복 노출 위험.
+  // P4 본격 일반 채널 흐름 land 시 토큰 단위 stream (typing indicator)
+  // surface 정의 — 그 전까지는 *완성 메시지 단위* 자동 표시가 minimal.
+  useEffect(() => {
+    if (channelId === null) return;
+    const bridge = typeof window !== 'undefined' ? window.arena : undefined;
+    const onStream = bridge?.onStream;
+    if (!onStream) return;
+
+    const off = onStream(
+      'stream:channel-message',
+      (payload: StreamChannelMessagePayload) => {
+        if (!mountedRef.current) return;
+        const incoming = payload.message;
+        if (incoming.channelId !== channelId) return;
+        if (incoming.authorKind === 'user') return;
+        setMessages((prev) => {
+          if (prev === null) return [incoming];
+          if (prev.some((m) => m.id === incoming.id)) return prev;
+          return [...prev, incoming];
+        });
+      },
+    );
+    return off;
+  }, [channelId]);
 
   useEffect(() => {
     mountedRef.current = true;

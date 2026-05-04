@@ -49,10 +49,38 @@ export class DmAutoResponder {
       });
       return;
     }
-    // DMs hold exactly one member by construction (createDm + the partial
-    // unique index `idx_dm_unique_per_provider`).
-    const member: ChannelMember = members[0]!;
 
+    // R12-C2 P1.5 follow-up — 일반 채널 (전역 system_general) 은 N 턴 응답
+    // (모든 등록 직원 순차 1 턴씩). 사용자 vision = 여러 직원 자유 응답
+    // (spec §11.3 + 메모리 r12-meeting-system-redesign §3). 본격 모델
+    // (가벼운 동의/반대 카운터 + `[##본문]` 카드 + 직원이 응답 *생략* 결정
+    // 가능 + 동시 응답) 은 P4 land 시점에 등장. 현재는 *모든 멤버 1턴씩
+    // 순차*가 minimal — 각 응답마다 messageService.append → backend
+    // stream:channel-message emit → renderer 자동 표시 (1명씩 차례로
+    // 등장하는 게 자연스러운 진행 표시 역할).
+    //
+    // DM 은 1 턴 응답 (1:1 정체성 — partial unique index
+    // `idx_dm_unique_per_provider` 가 channel_members.length === 1 보장).
+    if (channel.kind === 'system_general') {
+      for (const member of members) {
+        await this.respondAs(channel, member);
+      }
+      return;
+    }
+
+    await this.respondAs(channel, members[0]!);
+  }
+
+  /**
+   * 단일 직원의 1 턴 응답 — provider lookup → persistent context reset →
+   * stream completion → message append. 실패 시 system error 메시지로
+   * surface (silent fallback 금지). 멤버별로 독립 — 한 명 실패가 다음 멤버
+   * 응답 흐름을 막지 않는다.
+   */
+  private async respondAs(
+    channel: Channel,
+    member: ChannelMember,
+  ): Promise<void> {
     const provider = this.deps.providerLookup.get(member.providerId);
     if (!provider) {
       this.appendSystemError(
@@ -66,17 +94,14 @@ export class DmAutoResponder {
     const providerMessages = this.buildProviderMessages(channel.id);
 
     // D-A T6 dogfooding (#7) — clear any persistent CLI session so the
-    // DM does not inherit meeting-mode format instructions (e.g.
-    // `mode_judgment` JSON wrapper) from a previous `--resume`-able
-    // exchange. Stateless API providers see this as a no-op.
+    // DM/일반 채널 응답이 meeting-mode format instructions (e.g.
+    // `mode_judgment` JSON wrapper) 을 이전 `--resume`-able exchange 에서
+    // 상속받지 않게 한다. Stateless API providers 는 no-op.
     provider.resetConversationContext();
 
-    // DM is a single-turn chat — no SSM, no consensus format, no
-    // permission rules. Pass an empty persona so the meeting-mode
-    // identity / permission text the user customized for meetings does
-    // not flow into the DM reply. (User-visible per-DM persona belongs
-    // to a future feature; until then DM uses the model's default
-    // assistant behavior.)
+    // 단일 턴 chat — no SSM, no consensus format, no permission rules.
+    // 빈 persona — 회의 mode 의 identity / permission text 가 대화 응답에
+    // 흘러들어가지 않게. 사용자별 per-channel persona 는 추후 feature.
     const dmPersona = '';
 
     let fullContent = '';
@@ -100,9 +125,8 @@ export class DmAutoResponder {
     }
 
     if (fullContent.length === 0) {
-      // A provider returning no tokens at all is an empty success — we
-      // log it but do not append a blank message (would just confuse the
-      // user). Effectively a no-op response.
+      // A provider returning no tokens at all is an empty success — log it
+      // but do not append a blank message (would just confuse the user).
       tryGetLogger()?.warn({
         component: 'dm-auto-responder',
         action: 'empty-response',
