@@ -58,6 +58,7 @@ import { DEFAULT_HANDOFF_MODE } from '../../shared/channel-role-types';
 import type { ProjectMember } from '../../shared/project-types';
 import type { Message } from '../../shared/message-types';
 import { SKILL_CATALOG } from '../../shared/skill-catalog';
+import { providerRegistry } from '../providers/registry';
 import { ChannelRepository } from './channel-repository';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -567,6 +568,22 @@ export class ChannelService {
 
   /** Returns channel-members for `channelId` ordered by provider id. */
   listMembers(channelId: string) {
+    // R12-C2 P1.5 follow-up — 일반 채널 (전역 system_general) 은 모든
+    // 등록 직원이 자동 멤버. spec §11.3 + 메모리 r12-meeting-system
+    // -redesign §3 결정: "general 능력 모든 직원 자동 부여 / 모든 직원이
+    // 일반 능력 자동 부여". channel_members 테이블 sync (boot reconcile +
+    // 직원 등록/삭제 hook) 대신 ProviderRegistry 동적 합성 — DB write 0
+    // + 직원 등록 시점에 hook 불필요 + 직원 삭제 시 cleanup 불필요. 일반
+    // 채널의 *프로젝트 외부 전역 1개* 정체성과 일치.
+    const channel = this.repo.get(channelId);
+    if (channel?.kind === 'system_general') {
+      return providerRegistry.listAll().map((p, idx) => ({
+        channelId,
+        projectId: null,
+        providerId: p.id,
+        dragOrder: idx,
+      }));
+    }
     return this.repo.listMembers(channelId);
   }
 
