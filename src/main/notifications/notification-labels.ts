@@ -126,7 +126,6 @@ interface NotificationDictionary {
   approvalNotificationBridge: {
     cli_permission: { title: string; body: string };
     mode_transition: { title: string; body: string };
-    consensus_decision: { title: string; body: string };
     review_outcome: { title: string; body: string };
     failure_report: { title: string; body: string };
     circuit_breaker: { title: string; body: string };
@@ -148,7 +147,6 @@ interface NotificationDictionary {
   autonomyGate: {
     label: {
       mode_transition: string;
-      consensus_decision: string;
       review_outcome: string;
       cli_permission: string;
       failure_report: string;
@@ -240,7 +238,6 @@ const KO: NotificationDictionary = {
   approvalNotificationBridge: {
     cli_permission: { title: 'CLI 권한 요청', body: '승인 대기' },
     mode_transition: { title: '권한 모드 변경 요청', body: '권한 모드 변경 대기' },
-    consensus_decision: { title: '합의 결과 승인 요청', body: '합의 결과 승인 대기' },
     review_outcome: { title: '리뷰 결과 승인', body: '리뷰 결과를 확인해 주세요.' },
     failure_report: { title: '실패 리포트', body: '자동 실행 실패가 보고되었습니다.' },
     circuit_breaker: {
@@ -251,7 +248,6 @@ const KO: NotificationDictionary = {
   autonomyGate: {
     label: {
       mode_transition: '모드 전환',
-      consensus_decision: '합의 결과',
       review_outcome: '리뷰 결과',
       cli_permission: 'CLI 권한',
       failure_report: '실패 리포트',
@@ -342,7 +338,6 @@ const EN: NotificationDictionary = {
   approvalNotificationBridge: {
     cli_permission: { title: 'CLI permission request', body: 'Awaiting approval' },
     mode_transition: { title: 'Permission mode change request', body: 'Awaiting permission mode change' },
-    consensus_decision: { title: 'Consensus approval request', body: 'Awaiting consensus approval' },
     review_outcome: { title: 'Review outcome approval', body: 'Please review the outcome.' },
     failure_report: { title: 'Failure report', body: 'An automated run failed.' },
     circuit_breaker: {
@@ -353,7 +348,6 @@ const EN: NotificationDictionary = {
   autonomyGate: {
     label: {
       mode_transition: 'Mode transition',
-      consensus_decision: 'Consensus result',
       review_outcome: 'Review outcome',
       cli_permission: 'CLI permission',
       failure_report: 'Failure report',
@@ -416,8 +410,6 @@ export type NotificationLabelKey =
   | 'approvalNotificationBridge.cli_permission.body'
   | 'approvalNotificationBridge.mode_transition.title'
   | 'approvalNotificationBridge.mode_transition.body'
-  | 'approvalNotificationBridge.consensus_decision.title'
-  | 'approvalNotificationBridge.consensus_decision.body'
   | 'approvalNotificationBridge.review_outcome.title'
   | 'approvalNotificationBridge.review_outcome.body'
   | 'approvalNotificationBridge.failure_report.title'
@@ -426,7 +418,6 @@ export type NotificationLabelKey =
   | 'approvalNotificationBridge.circuit_breaker.body'
   // R11-Task11 (D9): autonomy-gate labels.
   | 'autonomyGate.label.mode_transition'
-  | 'autonomyGate.label.consensus_decision'
   | 'autonomyGate.label.review_outcome'
   | 'autonomyGate.label.cli_permission'
   | 'autonomyGate.label.failure_report'

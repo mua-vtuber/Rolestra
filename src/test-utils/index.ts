@@ -1,7 +1,7 @@
 /**
  * Central barrel export for integration test utilities.
  *
- * Usage: import { createTestDb, makeVote, sseStream } from '../../test-utils';
+ * Usage: import { createTestDb, sseStream } from '../../test-utils';
  */
 
 export { createTmpDir, removeTmpDir, delay, makeIpcMeta } from './integration-helpers';
@@ -41,7 +41,6 @@ export {
   CLI_CONFIG_CLAUDE,
   LOCAL_CONFIG_OLLAMA,
   SAMPLE_MESSAGES,
-  makeVote,
   makePatchSet,
   makePatchEntry,
   makeAuditEntry,

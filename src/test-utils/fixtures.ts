@@ -13,7 +13,6 @@ import type {
   LocalProviderConfig,
   Message,
 } from '../shared/provider-types';
-import type { VoteRecord } from '../shared/consensus-types';
 import type { PatchSet, PatchEntry, AuditEntry } from '../shared/execution-types';
 import type { MessageInsert } from '../main/database/conversation-repository';
 
@@ -85,20 +84,9 @@ export const SAMPLE_MESSAGES: Message[] = [
 
 // ── Builder functions ─────────────────────────────────────────────────
 
-/** Build a VoteRecord with sensible defaults. */
-export function makeVote(
-  participantId: string,
-  vote: 'agree' | 'disagree' | 'block' | 'abstain',
-  comment?: string,
-): VoteRecord {
-  return {
-    participantId,
-    participantName: participantId,
-    vote,
-    comment,
-    timestamp: Date.now(),
-  };
-}
+// R12-C2 T10b: 옛 makeVote (SSM VoteRecord builder) 제거 — 새 의견 모델은
+// opinion_vote 테이블을 따로 가지며 빌더는 도메인 안 (`opinion-repository`
+// 테스트가 자체 makeVote 헬퍼를 둔다).
 
 /** Build a PatchSet with sensible defaults. */
 export function makePatchSet(overrides: Partial<PatchSet> = {}): PatchSet {

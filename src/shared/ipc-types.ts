@@ -58,7 +58,6 @@ import type {
 import type { LlmCostSummary } from './llm-cost-types';
 import type {
   ApprovalDetail,
-  ApprovalConsensusContext,
   ApprovalImpactedFile,
   ApprovalDiffPreview,
 } from './approval-detail-types';
@@ -944,15 +943,9 @@ export type IpcChannelMap = {
     request: { approvalId: string };
     response: { detail: ApprovalDetail };
   };
-  /**
-   * R11-Task5/7: 패널의 "회의 맥락" 카드 — 합의 turn 의 투표 결과를 따로
-   * 조회하기 위한 별도 채널. detail-fetch 로도 받아오지만 갱신 시 부분
-   * refresh 가 가능하도록 분리.
-   */
-  'meeting:voting-history': {
-    request: { meetingId: string };
-    response: { context: ApprovalConsensusContext };
-  };
+  // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거 — SSM 투표 snapshot
+  // 흐름이 폐기되어 데이터 소스가 사라졌다. 새 의견 모델 표결 surface 는
+  // P3/R12-H 에서 별도 IPC 로 재정의 예정.
 
   // ── R12-C2 P2-2: Opinion (의견 트리 + 투표 backend) ─────────────
   /**

@@ -83,11 +83,6 @@ function formatContent(item: ApprovalItem): string {
       const head = `권한 모드 변경: ${from} → ${to}`;
       return reason === null ? head : `${head}\n이유: ${reason}`;
     }
-    if (item.kind === 'consensus_decision') {
-      const finalText =
-        typeof p.finalText === 'string' ? p.finalText : '';
-      return finalText.length > 0 ? finalText : '(합의본 없음)';
-    }
   }
   try {
     return JSON.stringify(payload);
@@ -132,8 +127,6 @@ function kindLabel(
       return t('approval.kind.cli_permission');
     case 'mode_transition':
       return t('approval.kind.mode_transition');
-    case 'consensus_decision':
-      return t('approval.kind.consensus_decision');
     case 'review_outcome':
       return t('approval.kind.review_outcome');
     case 'failure_report':

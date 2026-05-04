@@ -41,17 +41,22 @@ import type {
   MeetingKind,
   MeetingOutcome,
 } from '../../shared/meeting-types';
-import type { SessionState } from '../../shared/session-state-types';
 import { MeetingRepository } from './meeting-repository';
 
 // ── Constants ──────────────────────────────────────────────────────────
 
 /**
- * The SessionState a newly-started meeting begins in. SSM starts at
- * CONVERSATION by default — tie the meeting row's initial state to that
- * literal so the first `updateState` call on transition out is explicit.
+ * The phase string a newly-started meeting begins in.
+ *
+ * R12-C2 T10a + T10b: 옛 SSM 12-state 모델 폐기. 새 모델은 8 phase
+ * (`gather → tally → quick_vote → free_discussion → compose_minutes →
+ *  handoff → done | aborted`) 로 진행하며, 첫 phase 는 항상 `gather`.
+ *
+ * `meetings.state` 컬럼은 자유 문자열이라 phase enum 그대로 저장한다.
+ * 본 상수는 string literal 로 가지며, MeetingOrchestrator 가 첫 phase
+ * 진입 시 phase enum 값으로 즉시 덮어 쓴다.
  */
-export const INITIAL_MEETING_STATE: SessionState = 'CONVERSATION';
+export const INITIAL_MEETING_STATE = 'gather';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
 

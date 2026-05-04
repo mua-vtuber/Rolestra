@@ -71,7 +71,6 @@ const KIND_BODY_BUILDERS: Readonly<
 > = Object.freeze({
   cli_permission: (item) => summariseCliPermission(item),
   mode_transition: (item) => summariseModeTransition(item),
-  consensus_decision: (item) => summariseConsensus(item),
   review_outcome: () => null,
   failure_report: () => null,
   // R9-Task6: `circuit_breaker` is emitted by v3-side-effects when an
@@ -102,13 +101,6 @@ function summariseModeTransition(item: ApprovalItem): string | null {
     | null;
   if (!p) return null;
   return `${p.currentMode ?? '?'} → ${p.targetMode ?? '?'}`;
-}
-
-function summariseConsensus(item: ApprovalItem): string | null {
-  const p = item.payload as { finalText?: string } | null;
-  const text = typeof p?.finalText === 'string' ? p.finalText.trim() : '';
-  if (text.length === 0) return null;
-  return text.length > 80 ? `${text.slice(0, 80)}…` : text;
 }
 
 /** Compose the dotted dictionary key for an approval kind label leaf. */

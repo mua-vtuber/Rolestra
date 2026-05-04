@@ -77,10 +77,10 @@ describe('ApvDetailHeader (R11-Task7)', () => {
   });
 
   it('renders correct kind labels for each approval kind', () => {
+    // R12-C2 T10b: consensus_decision kind 제거 — 5 kind 만 남음.
     const kinds = [
       'cli_permission',
       'mode_transition',
-      'consensus_decision',
       'review_outcome',
       'failure_report',
       'circuit_breaker',

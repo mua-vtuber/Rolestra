@@ -590,12 +590,8 @@ export const approvalDetailFetchSchema = z.object({
   approvalId: z.string().min(1).max(128),
 });
 
-/**
- * R11-Task5/7: `meeting:voting-history` — meetingId 1건 조회.
- */
-export const meetingVotingHistorySchema = z.object({
-  meetingId: z.string().min(1).max(128),
-});
+// R12-C2 T10b: 옛 `meeting:voting-history` 스키마 제거 — IPC 채널이 같은
+// commit 안에서 ipc-types/router 에서도 제거됨.
 
 /**
  * R11-Task4: `dev:trip-circuit-breaker` — discriminated by `tripwire`.
@@ -805,7 +801,7 @@ export const v3ChannelSchemas = {
   'llm:cost-summary': llmCostSummarySchema,
   'execution:dry-run-preview': executionDryRunPreviewSchema,
   'approval:detail-fetch': approvalDetailFetchSchema,
-  'meeting:voting-history': meetingVotingHistorySchema,
+  // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거됨.
   // ── R12-C2 P2-2: Opinion (의견 트리 + 투표 backend) ─────────────
   'opinion:gather': opinionGatherSchema,
   'opinion:tally': opinionTallySchema,

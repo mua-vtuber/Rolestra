@@ -8,14 +8,12 @@ import {
   approvalKindSchema,
   approvalPayloadSchema,
   cliPermissionPayloadSchema,
-  consensusDecisionPayloadSchema,
   modeTransitionPayloadSchema,
   streamApprovalCreatedSchema,
   streamApprovalDecidedSchema,
 } from '../approval-stream-events';
 import type {
   CliPermissionApprovalPayload,
-  ConsensusDecisionApprovalPayload,
   ModeTransitionApprovalPayload,
   TypedApprovalItem,
 } from '../approval-types';
@@ -37,19 +35,12 @@ const modePayload: ModeTransitionApprovalPayload = {
   reason: 'Senior review requested',
 };
 
-const consensusPayload: ConsensusDecisionApprovalPayload = {
-  kind: 'consensus_decision',
-  snapshotHash: 'a1b2c3d4',
-  finalText: 'The team agrees to ship v1.0 behind a feature flag.',
-  votes: { yes: 3, no: 0, pending: 1 },
-};
-
 describe('approval-stream-events / kind schema', () => {
-  it('accepts all 5 kinds (R7 3 + R8+ 2 reserved)', () => {
+  // R12-C2 T10b: consensus_decision 제거 — 4 kind 만 남음 (R8+ reserved 2 + R7 2).
+  it('accepts all 4 kinds (R7 2 + R8+ 2 reserved)', () => {
     for (const k of [
       'cli_permission',
       'mode_transition',
-      'consensus_decision',
       'review_outcome',
       'failure_report',
     ] as const) {
@@ -74,13 +65,6 @@ describe('approval-stream-events / payload union', () => {
     expect(approvalPayloadSchema.parse(minimal)).toEqual(minimal);
   });
 
-  it('round-trips consensus_decision payload', () => {
-    expect(consensusDecisionPayloadSchema.parse(consensusPayload)).toEqual(
-      consensusPayload,
-    );
-    expect(approvalPayloadSchema.parse(consensusPayload)).toEqual(consensusPayload);
-  });
-
   it('rejects payload with wrong kind literal', () => {
     expect(() =>
       approvalPayloadSchema.parse({ ...cliPayload, kind: 'mode_transition' }),
@@ -90,15 +74,6 @@ describe('approval-stream-events / payload union', () => {
   it('rejects payload missing required field', () => {
     const { cliRequestId: _omit, ...broken } = cliPayload;
     expect(() => approvalPayloadSchema.parse(broken)).toThrow();
-  });
-
-  it('rejects consensus payload with negative vote count', () => {
-    expect(() =>
-      approvalPayloadSchema.parse({
-        ...consensusPayload,
-        votes: { yes: -1, no: 0, pending: 0 },
-      }),
-    ).toThrow();
   });
 });
 
@@ -160,12 +135,12 @@ describe('approval-stream-events / ApprovalItem schema', () => {
 describe('approval-stream-events / stream:approval-* payloads', () => {
   const sampleItem = {
     id: 'apr-3',
-    kind: 'consensus_decision' as const,
+    kind: 'cli_permission' as const,
     projectId: 'prj-1',
     channelId: 'ch-1',
     meetingId: 'mtg-1',
     requesterId: null,
-    payload: consensusPayload,
+    payload: cliPayload,
     status: 'pending' as const,
     decisionComment: null,
     createdAt: 1_700_000_000_000,

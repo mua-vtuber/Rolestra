@@ -169,7 +169,7 @@ describe('DashboardService', () => {
 
     it('pendingApprovals counts only status=pending', () => {
       approvalService.create({ kind: 'cli_permission', payload: {} });
-      approvalService.create({ kind: 'consensus_decision', payload: {} });
+      approvalService.create({ kind: 'review_outcome', payload: {} });
       const decided = approvalService.create({
         kind: 'mode_transition',
         payload: {},

@@ -4,10 +4,14 @@
  * R7-Task1: kind 별 payload discriminated union (`ApprovalPayload`) 추가.
  *   - `cli_permission`      — MeetingTurnExecutor 의 CLI 권한 중재(§7.6, §7.7)
  *   - `mode_transition`     — 프로젝트 permission_mode 변경 게이팅(§7.3 CB-3)
- *   - `consensus_decision`  — SSM DONE 합의 결과 사용자 sign-off(§7.5)
  *
  * `review_outcome` / `failure_report` 는 R8+ autonomy 도입 시점에 payload 타입을
  * 정의한다. 현재는 kind enum 만 존재하고 발사 지점 0 (R7 Decision Log D5).
+ *
+ * R12-C2 T10b: `consensus_decision` kind 제거 — 옛 SSM DONE 합의 sign-off 흐름이
+ * 새 phase loop 모델(§5 D-B 구조화된 합의)로 대체되며 더 이상 발사 지점이 없다.
+ * DB CHECK constraint 의 enum 값은 forward-only migration 원칙에 따라 그대로 두며,
+ * 새 row 는 코드에서 더 이상 만들어지지 않는다.
  *
  * `ApprovalItem.payload` 는 여전히 `unknown` 이다. 이유: repository 가 JSON 을
  * 그대로 round-trip 하고, 기존 row 와의 호환을 위해 타입 파서를 강제하지 않기 때문.
@@ -19,7 +23,6 @@ import type { PermissionMode } from './project-types';
 export type ApprovalKind =
   | 'cli_permission'
   | 'mode_transition'
-  | 'consensus_decision'
   | 'review_outcome'
   | 'failure_report'
   | 'circuit_breaker';
@@ -73,31 +76,15 @@ export interface ModeTransitionApprovalPayload {
 }
 
 /**
- * 합의 결과(SSM=DONE) 사용자 sign-off payload. R7 부터 MinutesComposer 포스팅
- * 직전에 이 approval 이 끼어들며, `snapshotHash` 는 SSM snapshot 의 content
- * hash 로 중복 발사 방지에 쓴다. `finalText` 는 합의본 원문(메타 헤더 제외).
- *
- * `votes` 는 참여자별 찬반 집계의 요약 — 상세 조회는 snapshot 을 통해.
- */
-export interface ConsensusDecisionApprovalPayload {
-  kind: 'consensus_decision';
-  snapshotHash: string;
-  finalText: string;
-  votes: {
-    yes: number;
-    no: number;
-    pending: number;
-  };
-}
-
-/**
  * R7 범위 discriminated union. R8+ 에서 `review_outcome` / `failure_report`
  * payload 가 추가되면 이 union 에 합친다.
+ *
+ * R12-C2 T10b: `ConsensusDecisionApprovalPayload` 제거 — 새 phase loop 모델이
+ * 옛 SSM DONE 합의 sign-off 를 폐기.
  */
 export type ApprovalPayload =
   | CliPermissionApprovalPayload
-  | ModeTransitionApprovalPayload
-  | ConsensusDecisionApprovalPayload;
+  | ModeTransitionApprovalPayload;
 
 /**
  * `ApprovalItem` 에서 payload 를 특정 kind 로 narrowing 한 편의 타입.

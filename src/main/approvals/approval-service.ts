@@ -56,7 +56,6 @@ import type {
   ApprovalStatus,
 } from '../../shared/approval-types';
 import { ApprovalRepository } from './approval-repository';
-import { CONSENSUS_DECISION_TTL_MS as SHARED_CONSENSUS_DECISION_TTL_MS } from '../../shared/timeouts';
 import { tryGetLogger } from '../log/logger-accessor';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -160,140 +159,9 @@ function decisionToStatus(decision: ApprovalDecision): ApprovalStatus {
   }
 }
 
-/**
- * Default consensus_decision approval TTL (24h). Re-exports the shared
- * timeout so the orchestrator and the rehydrate path see the same wall-
- * clock value — a rehydrated row aged from before app restart still
- * expires at the same instant the original meeting timer would have.
- */
-export const CONSENSUS_DECISION_TTL_MS = SHARED_CONSENSUS_DECISION_TTL_MS;
-
-/**
- * Result of {@link ApprovalService.rehydrateConsensusTimers}. Returned for
- * observability — boot logs use it to assert the rehydrated count, tests
- * assert it directly.
- */
-export interface ConsensusRehydrateResult {
-  /** Rows whose remaining TTL > 0 — a setTimeout was rescheduled. */
-  rehydrated: number;
-  /** Rows whose deadline passed during downtime — expired immediately. */
-  expired: number;
-}
-
 export class ApprovalService extends EventEmitter {
-  /**
-   * Rehydrated consensus expiry timers, keyed by approval id. Populated
-   * by {@link rehydrateConsensusTimers} and cleared either when the timer
-   * fires, when the matching `'decided'` event arrives (cancelling the
-   * timer to avoid overwriting a user's decision), or via
-   * {@link disposeRehydratedConsensusTimers}.
-   */
-  private rehydratedConsensusTimers = new Map<string, NodeJS.Timeout>();
-  /** Listener installed by {@link rehydrateConsensusTimers}; removed on dispose. */
-  private rehydratedConsensusDecidedListener:
-    | ((payload: ApprovalDecidedPayload) => void)
-    | null = null;
-
   constructor(private readonly repo: ApprovalRepository) {
     super();
-  }
-
-  /**
-   * Boot helper — re-arms expiry setTimeout for every pending
-   * `consensus_decision` approval after a process restart (R7 D2 / R10
-   * Task 11). Without this, an approval row created moments before a
-   * crash would stay `pending` forever because its in-memory timer was
-   * owned by the now-gone {@link MeetingOrchestrator} instance.
-   *
-   * Behaviour:
-   *   - Rows with `now >= createdAt + ttl` expire immediately. The
-   *     in-memory state has already drifted past the original deadline,
-   *     so we honour the wall-clock contract instead of granting a fresh
-   *     24h window.
-   *   - Rows with `now < createdAt + ttl` get a fresh setTimeout for the
-   *     remaining slack. The timer cross-checks the row's status before
-   *     calling `expire` (a user's decision via IPC clears the timer
-   *     through the listener below, but a race with the timer firing is
-   *     possible — we never want to overwrite a recorded decision).
-   *
-   * Idempotent: calling this twice cancels the prior batch first. Tests
-   * inject `nowMs` to assert deterministically; production passes neither
-   * `ttlMs` nor `nowMs` and gets the 24h default + Date.now().
-   */
-  rehydrateConsensusTimers(opts: {
-    ttlMs?: number;
-    nowMs?: number;
-  } = {}): ConsensusRehydrateResult {
-    const ttl = opts.ttlMs ?? CONSENSUS_DECISION_TTL_MS;
-    const now = opts.nowMs ?? Date.now();
-
-    this.disposeRehydratedConsensusTimers();
-
-    const pending = this.repo.list({ status: 'pending' });
-    let rehydrated = 0;
-    let expired = 0;
-    for (const item of pending) {
-      if (item.kind !== 'consensus_decision') continue;
-      const expireAt = item.createdAt + ttl;
-      if (expireAt <= now) {
-        try {
-          this.expire(item.id);
-          expired += 1;
-        } catch {
-          // Row already retired by another caller in a tight race —
-          // safe to swallow; the audit row is unchanged either way.
-        }
-        continue;
-      }
-      const remaining = expireAt - now;
-      const timer = setTimeout(() => {
-        this.rehydratedConsensusTimers.delete(item.id);
-        // Re-read status: a user's decision (via the 'decided' event
-        // listener installed below) cancels the timer eagerly, but a
-        // race with the timer dispatch is still possible.
-        const current = this.repo.get(item.id);
-        if (current === null || current.status !== 'pending') return;
-        try {
-          this.expire(item.id);
-        } catch {
-          // Race — already settled.
-        }
-      }, remaining);
-      if (typeof timer.unref === 'function') timer.unref();
-      this.rehydratedConsensusTimers.set(item.id, timer);
-      rehydrated += 1;
-    }
-
-    // Hook 'decided' so the rehydrated timer never overwrites a recorded
-    // user decision. The listener is removed (and timers cleared) by
-    // disposeRehydratedConsensusTimers().
-    const onDecided = (payload: ApprovalDecidedPayload): void => {
-      const t = this.rehydratedConsensusTimers.get(payload.item.id);
-      if (t === undefined) return;
-      clearTimeout(t);
-      this.rehydratedConsensusTimers.delete(payload.item.id);
-    };
-    this.on(APPROVAL_DECIDED_EVENT, onDecided);
-    this.rehydratedConsensusDecidedListener = onDecided;
-
-    return { rehydrated, expired };
-  }
-
-  /**
-   * Cancel all rehydrated consensus timers and detach the 'decided'
-   * listener installed by {@link rehydrateConsensusTimers}. Call from app
-   * shutdown to keep tests / repeated boots tidy. Safe to call when no
-   * timers are pending (no-op).
-   */
-  disposeRehydratedConsensusTimers(): void {
-    for (const timer of this.rehydratedConsensusTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.rehydratedConsensusTimers.clear();
-    if (this.rehydratedConsensusDecidedListener !== null) {
-      this.off(APPROVAL_DECIDED_EVENT, this.rehydratedConsensusDecidedListener);
-      this.rehydratedConsensusDecidedListener = null;
-    }
   }
 
   /**

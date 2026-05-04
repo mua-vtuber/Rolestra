@@ -61,20 +61,3 @@ export const KILL_GRACE_PERIOD_MS = 3000;
  * Lets renderer subscribers settle before the next `stream:turn` event.
  */
 export const INTER_TURN_DELAY_MS = 2000;
-
-/**
- * Default TTL for a `consensus_decision` approval — 24 hours. Picks the
- * longer side of the two original sources (`approval-service` and
- * `meeting-orchestrator`) so neither callsite changes behaviour.
- */
-export const CONSENSUS_DECISION_TTL_MS = 24 * 60 * 60 * 1000;
-
-// ── State-machine bounds ─────────────────────────────────────────────
-
-/**
- * Maximum SSM / consensus snapshots retained in memory before the
- * ring-buffer overwrites the oldest. Previously duplicated as a local
- * `MAX_SNAPSHOTS = 100` in `consensus-machine` and
- * `session-state-machine`.
- */
-export const MAX_SNAPSHOTS = 100;

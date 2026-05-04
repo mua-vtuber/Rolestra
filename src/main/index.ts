@@ -806,24 +806,9 @@ app.whenReady().then(async () => {
     });
     setMeetingMinutesServiceAccessor(() => meetingMinutesService);
 
-    // R10-Task11: re-arm consensus_decision approval expiry timers from
-    // the persisted approval_items rows (R7 D2 deferred). The original
-    // setTimeout was owned by the now-gone MeetingOrchestrator instance,
-    // so without rehydration a row created moments before a crash would
-    // sit `pending` forever. The helper expires aged-out rows
-    // immediately and reschedules the rest.
-    try {
-      const rehydrate = approvalService.rehydrateConsensusTimers();
-      console.info(
-        '[rolestra.approvals] consensus rehydrate',
-        rehydrate,
-      );
-    } catch (err) {
-      console.warn(
-        '[rolestra.approvals] consensus rehydrate failed',
-        err instanceof Error ? err.message : String(err),
-      );
-    }
+    // R12-C2 T10b: 옛 consensus_decision rehydrate 흐름 제거 — 새 phase loop
+    // 모델은 SSM DONE sign-off approval 자체를 발사하지 않으므로 boot 시점에
+    // 재무장할 row 가 없다.
 
     // R6-Task1 + R7-Task2 + R7-Task11: StreamBridge — central Main →
     // Renderer v3 push hub. `connect({ notifications })` wires
