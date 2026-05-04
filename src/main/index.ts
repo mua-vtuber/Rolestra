@@ -26,6 +26,9 @@ import { setDashboardServiceAccessor } from './ipc/handlers/dashboard-handler';
 import { MessageRepository } from './channels/message-repository';
 import { MessageService } from './channels/message-service';
 import { MeetingService } from './meetings/meeting-service';
+import { OpinionRepository } from './meetings/opinion-repository';
+import { OpinionService } from './meetings/opinion-service';
+import { setOpinionServiceAccessor } from './ipc/handlers/opinion-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
 import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
@@ -208,6 +211,15 @@ app.whenReady().then(async () => {
     const messageService = new MessageService(messageRepository);
     setMeetingAbortServiceAccessor(() => meetingService);
     setMessageServiceAccessor(() => messageService);
+
+    // R12-C2 P2-2: OpinionService 부팅. opinion + opinion_vote 두 테이블의
+    // 4 method (gather / tally / quickVote / freeDiscussionRound) 을 IPC
+    // surface (opinion:*) 에 노출. T10 MeetingOrchestrator 재배선이 본
+    // accessor 를 통해 service 를 호출하게 된다 — 그 전까지는 일반 채널
+    // [##] flow / 테스트 / dev tools 가 직접 호출.
+    const opinionRepo = new OpinionRepository(db);
+    const opinionService = new OpinionService(opinionRepo);
+    setOpinionServiceAccessor(() => opinionService);
 
     // D-A T2.5 / spec §5.5 — 채널에 user 메시지가 들어오면 활성 회의의
     // orchestrator 로 전달해 다음 AI turn 의 prompt 에 합류시킨다. 이전에는

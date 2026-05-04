@@ -58,9 +58,9 @@
     {
       "id": 8,
       "subject": "P2-2 — OpinionService backend (gather / tally / quickVote / freeDiscussionRound)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [7],
-      "description": "**Goal:** 새 회의 모델의 backend 본체. 모든 풀세트 부서가 공유.\n\n**변경:**\n- `src/main/meetings/opinion-service.ts` 신규 — 4 method:\n  · `gather(meetingId, schemaResponses)` — step 1 직원 응답 수집 + opinion row 생성\n  · `tally(meetingId)` — step 2 시스템 취합 + 화면 ID (ITEM_NNN/ITEM_NNN_NN) 부여 알고리즘 (parent chain depth-first)\n  · `quickVote(meetingId, voteResponses)` — step 2.5 일괄 동의 투표 + 만장일치 의견 즉시 status='agreed' + opinion_vote row 생성\n  · `freeDiscussionRound(meetingId, opinionId, voteResponses, additions)` — step 3 자유 토론 + 자식 의견 추가 + 깊이 cap 3 강제\n- 발화 ID (`author_label`) 회의 단위 카운터 — `MeetingService` 안 카운터 map 또는 DB 집계\n- IPC: `opinion:gather` / `opinion:tally` / `opinion:quickVote` / `opinion:freeDiscussion` (typedInvoke + zod)\n- 기존 `OpinionService` (R12-C 시점 OPINION_GATHERING + OPINION_TALLY 분리) — *통째 교체* (옛 service 삭제 + 새 service 로 명세 통일)\n\n**Verify:** vitest unit (4 method × 통상 + edge) + IPC 검증 + 깊이 cap 3 강제 + schema 검증 fallback (1 회 재요청 + 2 회 skip)"
+      "description": "Land 완료. `src/main/meetings/opinion-service.ts` 신규 — 4 method (gather / tally / quickVote / freeDiscussionRound) + 깊이 cap 3 강제 (OpinionDepthCapError) + 만장일치 → status='agreed' 즉시 갱신 + UnknownScreenIdError / OpinionNotFoundError 도메인 에러. `opinion-repository.ts` 신규 (opinion + opinion_vote CRUD + countDistinctLabelsByAuthor). `screen-id.ts` 신규 (buildScreenIdMap depth-first ITEM_NNN/_NN/_NN). 발화 ID 카운터 = `nextLabelHint` 헬퍼 (DB aggregate). IPC 4 channel (opinion:gather / tally / quickVote / freeDiscussion) + ipc-schemas.ts zod 검증 + opinion-handler.ts + router/index.ts boot. 기존 OpinionService = grep 결과 placeholder 주석만 → 신규 작성으로 충족. vitest 신규 44 tests (screen-id 9 + repository 10 + service 17 + handler 6 + 헬퍼 2) + 전체 3560/13/0 (baseline 3516 + 44 신규). typecheck 0."
     },
     {
       "id": 9,

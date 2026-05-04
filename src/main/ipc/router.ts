@@ -135,6 +135,12 @@ import {
   handleMeetingVotingHistory,
 } from './handlers/meeting-handler';
 import {
+  handleOpinionGather,
+  handleOpinionTally,
+  handleOpinionQuickVote,
+  handleOpinionFreeDiscussion,
+} from './handlers/opinion-handler';
+import {
   handleMemberList,
   handleMemberGetProfile,
   handleMemberUpdateProfile,
@@ -456,6 +462,14 @@ export function registerIpcHandlers(): void {
   // the panel can still render headers.
   handle('meeting:voting-history', isDev, (data) =>
     handleMeetingVotingHistory(data),
+  );
+
+  // ── R12-C2 P2-2: Opinion (의견 트리 + 투표 backend) ──────────────
+  handle('opinion:gather', isDev, (data) => handleOpinionGather(data));
+  handle('opinion:tally', isDev, (data) => handleOpinionTally(data));
+  handle('opinion:quickVote', isDev, (data) => handleOpinionQuickVote(data));
+  handle('opinion:freeDiscussion', isDev, (data) =>
+    handleOpinionFreeDiscussion(data),
   );
 
   // ── v3: Member Profile ──────────────────────────────────────────

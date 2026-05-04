@@ -62,6 +62,15 @@ import type {
   ApprovalImpactedFile,
   ApprovalDiffPreview,
 } from './approval-detail-types';
+import type {
+  OpinionFreeDiscussionResult,
+  OpinionGatherResult,
+  OpinionQuickVoteResult,
+  OpinionTallyResult,
+  Step1OpinionGatherResponse,
+  Step25QuickVoteResponse,
+  Step3FreeDiscussionResponse,
+} from './opinion-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -942,6 +951,69 @@ export type IpcChannelMap = {
   'meeting:voting-history': {
     request: { meetingId: string };
     response: { context: ApprovalConsensusContext };
+  };
+
+  // ── R12-C2 P2-2: Opinion (의견 트리 + 투표 backend) ─────────────
+  /**
+   * R12-C2 P2-2: step 1 — 직원 의견 제시 (Step1OpinionGather schema 4 종 중
+   * 첫 번째). caller 가 한 round 의 모든 직원 응답을 모아 한 번에 호출하면
+   * service 가 각 응답의 opinions 배열을 그대로 opinion row (kind='root',
+   * status='pending') 로 insert. spec §11.18.2.
+   */
+  'opinion:gather': {
+    request: {
+      meetingId: string;
+      channelId: string;
+      round: number;
+      responses: Array<{
+        providerId: string;
+        payload: Step1OpinionGatherResponse;
+      }>;
+    };
+    response: { result: OpinionGatherResult };
+  };
+  /**
+   * R12-C2 P2-2: step 2 — 시스템 취합. DB 안 의견 통째 읽어 화면 ID
+   * (`ITEM_NNN` / `ITEM_NNN_NN` / `ITEM_NNN_NN_NN`) 부여 + 트리 빌드. 순수
+   * projection — DB 쓰기 없음. spec §11.18.3.
+   */
+  'opinion:tally': {
+    request: { meetingId: string };
+    response: { result: OpinionTallyResult };
+  };
+  /**
+   * R12-C2 P2-2: step 2.5 — 일괄 동의 투표. 모든 직원 응답을 받아
+   * `opinion_vote` row (`roundKind='quick_vote'`) 생성 + 의견별 만장일치
+   * (모두 'agree') 도달 시 `opinion.status='agreed'` 즉시 갱신. spec
+   * §11.18.4.
+   */
+  'opinion:quickVote': {
+    request: {
+      meetingId: string;
+      round: number;
+      responses: Array<{
+        providerId: string;
+        payload: Step25QuickVoteResponse;
+      }>;
+    };
+    response: { result: OpinionQuickVoteResult };
+  };
+  /**
+   * R12-C2 P2-2: step 3 — 자유 토론 round (의견 1 건씩). 직원 응답에서
+   * votes / additions 동시 처리. 깊이 cap 3 강제 (spec §5) — depth 2 (손자)
+   * 의견에 자식 추가 시 service 가 throw. spec §11.18.5.
+   */
+  'opinion:freeDiscussion': {
+    request: {
+      meetingId: string;
+      opinionId: string;
+      round: number;
+      responses: Array<{
+        providerId: string;
+        payload: Step3FreeDiscussionResponse;
+      }>;
+    };
+    response: { result: OpinionFreeDiscussionResult };
   };
 
   // ── R11-Task4: dev hooks (E2E only, gated by ROLESTRA_E2E=1) ────
