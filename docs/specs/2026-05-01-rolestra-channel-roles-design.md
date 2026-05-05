@@ -1154,6 +1154,347 @@ step 4 (모든 의견 합의/제외) 후 시스템이 모더레이터 (R12-S `Me
 - 직원 응답이 schema 부합 안 하면 시스템이 1 회 재요청 (prompt 안 schema 양식 다시 동봉). 2 회 실패 시 *해당 직원 응답 skip + 다음 직원 진행* — 회의 자체는 멈추지 않음.
 - 모더레이터 응답이 truncate / 요약 의심 시 시스템이 회의록 본문 길이 ↔ 의견 본문 합 비교 + 임계 (회의록 ≥ 의견 본문 합 × 1.2) 하회 시 1 회 재요청. 사용자 결정 (2026-05-04): "잘리지 말고 다 보여 줘".
 
+#### 11.18.8 B1 NextStep 카드 분류 (R12-C2 round 2 정식)
+
+발화 직후 시스템이 직원 응답 본문을 분류 → 7 카드 중 하나로 매핑. 카드는 *그 발언 후 한 턴 동안의 다음 동작* 만 통제 (회의 라이프사이클 / 자율 모드 / handoff_mode 와는 다른 레이어 — §11.18.8d 인터락 참조).
+
+##### 11.18.8a 카드 7 종 — 안전군 / 결과 전파군 분류
+
+| # | 카드 | 분류 | 의미 | B1 자동 정책 |
+|---|------|------|------|-------------|
+| 1 | **계속 발언** | 안전군 | 같은 회의 안 다음 의견 / 자유 토론 진행 | **자동** (사용자 확인 X) |
+| 2 | **대기** | 안전군 | 다음 직원 발언 차례까지 idle | **자동** |
+| 3 | **결재** | 결과 전파군 | ApprovalService 결정 요청 (파일 / 명령 / 합의 결과 등) | 사용자 확인 모달 |
+| 4 | **도구** | 결과 전파군 | ExecutionService 통해 외부 도구 호출 (파일 read / write / 명령 실행) | 사용자 확인 모달 |
+| 5 | **인계** | 결과 전파군 | 다음 부서 채널로 회의록 + 컨텍스트 전달 | handoff_mode 우회 룰 (§11.18.8c) |
+| 6 | **회의록 정리** | 결과 전파군 | 모더레이터 호출 → minutes.md 작성 (§11.18.6) | 사용자 확인 모달 (회의록 미리보기) |
+| 7 | **회의 종료** | 결과 전파군 | 회의 라이프사이클 종결 + lock 풀림 | 사용자 확인 모달 (단 maxRounds cap 도달 시 강제 — §11.18.8d) |
+
+**안전군 (1, 2)**: 결과가 회의 *안* 에서 끝남. 회의록 / 파일 / 다른 부서 / 큐 어느 것도 변경 X. 자동 진행 안전.
+
+**결과 전파군 (3~7)**: 회의 *밖* 결과 발생 (파일 변경 / approval 결정 / 다른 부서 진입 / 회의록 fix / 큐 진행). **항상 사용자 확인 필수** — 절대 위반 금지 규칙 #3 (승인 없는 파일 반영 금지) 정합.
+
+##### 11.18.8b 분류 규칙 (시스템 → 카드)
+
+직원 응답 본문 + 발화 컨텍스트로 시스템이 결정. 우선순위 높은 순:
+
+```
+1. 응답 schema 안 additions 가 있고 의견 트리 깊이 cap (3) 미도달 → "계속 발언"
+2. 응답이 명시 결정 요청 (예: "이 코드 수정해도 될까?") → "결재"
+3. 응답이 명시 도구 호출 (예: "파일 X 를 읽어보자") → "도구"
+4. 모든 의견 status='agreed'/'rejected'/'excluded' (회의 합의 도달) → "회의록 정리"
+5. 회의록 작성 직후 + 다음 부서 chain 정의됨 → "인계"
+6. maxRounds cap 도달 / 모든 의견 처리 완료 + 다음 chain 없음 → "회의 종료"
+7. 그 외 (모호 / 빈 응답) → "대기" (안전 fallback — fall-through)
+```
+
+분류기 위치: `src/main/meetings/engine/next-step-classifier.ts` (R12-C2 P2 신규). schema = `NextStepCard` discriminated union (kind: 'continue' | 'wait' | 'approve' | 'tool' | 'handoff' | 'minutes' | 'end').
+
+##### 11.18.8c handoff_mode 우회 룰 (B1 「인계」 카드 → 채널 정책 적용)
+
+「인계」카드 발생 시 시스템이 *받는 부서 채널의 `handoff_mode`* 보고 분기:
+
+| 받는 부서 channel.handoff_mode | B1 동작 |
+|--------------------------------|---------|
+| `'check'` (디폴트) | **사용자 확인 모달** 등장 (`HandoffApprovalModal` — §11.16/§11.17 위에 P6 land). 모달 안 회의록 미리보기 + 인계 사유 + [확인 / 취소] |
+| `'auto'` (부서별 명시 opt-in) | **사용자 확인 X — 자동 인계**. 받는 부서로 회의 컨텍스트 전달 + 첫 화면 인계 패키지 (§11.22) 표시. 검토 → 리뷰 인계 같은 chain 외 entry 는 *Notification* 만 등장 (모달 X) |
+
+→ 절대 위반 금지 규칙 #3 와 정합: handoff_mode='auto' 는 *사용자가 명시 켠* 부서별 opt-in 이므로 사용자 의도가 1 회 명시된 자동 진행. handoff_mode='check' 디폴트는 항상 사용자 확인.
+
+##### 11.18.8d maxRounds cap 인터락
+
+`channels.max_rounds` (§11.14) 가 N 으로 설정된 채널에서 회의 라운드 카운터 N 도달 시:
+
+- 「계속 발언」 카드가 자동 분류돼도 시스템이 *override* → 「회의 종료」 카드 강제 발행
+- 「회의 종료」 = 결과 전파군이라 디폴트 사용자 확인 모달인데, *maxRounds cap 도달은 시스템 강제* → 모달 skip + 자동 회의 lock 풀림 + 사용자 호출 Notification 발송
+
+이유: maxRounds 설정 자체가 사용자가 *"N 라운드 도달 시 호출"* 의도를 1 회 명시 → 그 시점에 다시 모달로 묻는 건 중복.
+
+##### 11.18.8e 자율 모드 / 회의 라이프사이클 / handoff_mode / B1 4 레이어 정리
+
+| 레이어 | surface | 결정 시점 | B1 와 관계 |
+|--------|--------|-----------|-----------|
+| 자율 모드 (manual / auto_toggle / queue) | 회의 *시작* / 큐 진행 | 회의 *전* | **독립** — B1 = 회의 *내부* 분류. 자율 모드 = 회의 *외부* 시작 게이트 |
+| 회의 라이프사이클 cap (max_rounds) | 회의 *종료* 조건 | 회의 *진행 중* | **인터락** — cap 도달 시 「계속 발언」 자동을 「회의 종료」 강제로 override |
+| handoff_mode (channels) | 부서 *인계* gate | 회의 *종결 후* | **인터락** — 「인계」 카드 → 채널 handoff_mode 따라 자동 / 모달 분기 |
+| B1 NextStep 카드 (의견-단위) | 발언 *직후* 동작 | 발언 *직후* | **본 레이어** — 안전군 자동 / 결과 전파군 모달 |
+
+→ 4 레이어 모두 *살아있고 공존*. B1 도입으로 사라지는 정책 없음. handoff_mode='auto' 의 의미만 *명시 opt-in 우회 (B1 디폴트 위에서)* 로 좁아짐.
+
+---
+
+### 11.19 A. RunStep 영속 기록부 (R12-C2 cross-cutting)
+
+회의 안 모든 turn 의 의도 / 입력 / 출력 / 사이드이펙트 / 분류 결과를 영속 저장하는 *진행 일지* 레이어. 회의록 (`minutes.md` — 모더레이터 작성, 의견 단위) 과 별개 — RunStep 은 *시스템 단계 단위* 로 누적.
+
+#### 11.19.1 사무실 메타포
+
+회의록 = "회의 끝나고 정리한 결정 기록" (사람이 읽는 자료, 의견 + 결정 사유).
+RunStep = "회의 진행 중 *누가 언제 무엇을 했는지* 단계별 일지" (시스템이 읽는 자료, 발언 turn / 분류 / 카드 / 영향 범위).
+
+회의록은 사람을 위한 *결정 기록*, RunStep 은 시스템을 위한 *추적 기록*. 두 surface 정보가 다르므로 *공존* — 중복 X.
+
+#### 11.19.2 데이터 모델 (`run_step` 테이블, P2 migration 020 신규)
+
+```typescript
+type RunStep = {
+  id: string;                           // UUID v4
+  meeting_id: string;                   // FK meetings.id
+  channel_id: string;                   // FK channels.id (편의 — meeting 통해 join 가능하나 자주 query)
+  round: number;                        // 회의 라운드 카운터 (max_rounds 와 정렬)
+  turn_index: number;                   // 회의 안 turn 순서 (0 부터)
+  actor_kind: 'system' | 'employee' | 'moderator' | 'user';
+  actor_id: string | null;              // employee = provider_id, system/moderator = NULL, user = NULL
+  step_kind:
+    | 'opinion_gather'                  // step 1 — 직원 의견 제시
+    | 'opinion_tally'                   // step 2 — 시스템 취합
+    | 'quick_vote'                      // step 2.5
+    | 'free_discussion'                 // step 3
+    | 'minutes_compose'                 // step 5 — 모더레이터 회의록
+    | 'next_step_classify'              // B1 분류기 결정
+    | 'handoff_dispatch'                // 인계 실행
+    | 'tool_invoke'                     // 도구 호출 (ExecutionService 경유)
+    | 'approval_request'                // 결재 요청
+    | 'inspector_check';                // F 검사관 결과
+  input_json: string;                   // JSON — step 입력 (prompt / schema / 컨텍스트)
+  output_json: string;                  // JSON — step 출력 (응답 / 분류 결과 / 영향 범위)
+  next_step_card:                       // B1 분류 결과 (step_kind='next_step_classify' 만)
+    | 'continue' | 'wait' | 'approve' | 'tool'
+    | 'handoff' | 'minutes' | 'end' | null;
+  side_effect_summary: string | null;   // 1-line 요약 ("opinion_vote 3 row 작성" / "handoff → audit 채널")
+  duration_ms: number;                  // step 소요 시간
+  created_at: string;                   // ISO 8601
+};
+```
+
+#### 11.19.3 활용처 (다른 후보 의존)
+
+- **B (NextStep 분류)**: `step_kind='next_step_classify'` row 가 분류 결과 영속 — 디버깅 / 회의 재현
+- **F (검사관)**: `step_kind='inspector_check'` row 가 위반 검출 결과 영속 — 6 헌법 위반 감사 추적
+- **H (진행률)**: 부서별 RunStep count + step_kind 분포 → 진행률 산출 (§11.21 H1)
+- **회의 재현**: meeting_id 기준 RunStep 정렬 → turn-by-turn replay 가능 (디버깅 + 회귀 분석)
+
+#### 11.19.4 저장 정책
+
+- **모든 turn = 1 row 이상** — opinion_gather (직원 발언) → next_step_classify (B1 분류) → optional side_effect (handoff/tool/approval) → 다음 turn
+- **truncate 금지** — input_json / output_json 통째 보존. long content 는 row 분할 X (단일 row 안 JSON blob 그대로). DB row size 한계 (SQLite 1GB / row) 까지 안전.
+- **atomic write** — 한 turn 의 RunStep row 들은 transaction 묶음 (부분 실패 시 rollback)
+- **append-only** — RunStep row 는 update / delete X (감사 추적 보장)
+
+#### 11.19.5 cross-cutting 위치
+
+RunStep 은 *모든 풀세트 부서가 공유하는 토대* (§5 의 opinion 트리와 병렬 layer). 부서별 차이는 step_kind 분포만 다름 (예: 일반 부서 = `opinion_gather` 만 / 디자인 부서 = `tool_invoke` 추가 — Playwright snapshot).
+
+본격 land = R12-C2 P2 (`OpinionService` + `MeetingOrchestrator` 신규 backend 와 함께). cross-cutting 정식화는 R12-C2 종결 시 `decisions/cross-cutting.md` C8 으로 추가.
+
+---
+
+### 11.20 F. 6 헌법 + 검사관 catalog (R12-C2 cross-cutting)
+
+코드가 6 헌법 (SSoT / SoC / Consistency / Atomicity / Idempotency / NoSilentFallback) 을 준수하는지 검출하는 *검사관* (inspector) 룰 set. F2 단계적 fail-closed 정책 — 안전 경계만 빌드 강제, 비안전 영역은 report-only 유지.
+
+#### 11.20.1 6 헌법 정의
+
+| # | 헌법 | 의미 | 위반 예시 |
+|---|------|------|----------|
+| 1 | **SSoT** (Single Source of Truth) | 한 정보의 권위 source 1 곳 | 같은 설정값이 코드 + DB + config 파일 3 곳 분산 |
+| 2 | **SoC** (Separation of Concerns) | 레이어 / 도메인 경계 명확 | renderer 가 main API 직접 호출 (IPC 우회) |
+| 3 | **Consistency** | 같은 surface 같은 동작 | 메시지 전송이 채널마다 다른 schema |
+| 4 | **Atomicity** | 부분 실패 = 전체 rollback | 파일 5 개 쓰는 중 3 개째 실패 → 1, 2 보존 (불일치) |
+| 5 | **Idempotency** | 같은 입력 = 같은 결과 (재실행 안전) | migration 재실행 시 컬럼 중복 추가 / 실패 |
+| 6 | **NoSilentFallback** | 실패 시 명시 throw — fallback 금지 | 설정 누락 시 빈 list 반환 (사용자가 인지 못함) |
+
+→ 6 헌법은 **CLAUDE.md 의 *절대 위반 금지 규칙* 7 항** 의 *코드 표현*. 절대 규칙은 사람이 읽는 룰, 6 헌법은 검사관이 읽는 룰.
+
+#### 11.20.2 검사관 catalog (룰 set)
+
+검사관 룰은 *카테고리* 별로 묶고, 카테고리마다 *안전 경계 / 비안전 영역* 분류:
+
+```
+[안전 경계 — F2 phase 2 fail-closed]
+- secrets-plaintext            : safeStorage 우회 평문 저장 (NoSilentFallback / SoC)
+- exec-shell-string            : ExecutionService 우회 + shell 문자열 실행 (Atomicity / SoC)
+- mig-non-idempotent           : migration 안 비-idempotent 작업 (Idempotency)
+- mig-non-forward-only         : migration revert / column drop (SSoT / Atomicity)
+- ipc-untyped-invoke           : typedInvoke 우회 + 문자열 채널 (SoC / Consistency)
+- approval-bypass              : ApprovalService 우회 + 직접 fs.write (NoSilentFallback)
+- path-guard-bypass            : PathGuard 우회 + ArenaRoot 밖 write (NoSilentFallback / SoC)
+
+[비안전 영역 — F2 phase 1 + phase 2 모두 report-only]
+- ui-string-hardcoded          : t() 함수 우회 + 평문 한글 (Consistency)
+- mock-fixture-import          : production code 가 test fixture import (NoSilentFallback)
+- magic-number                 : 코드 안 매직넘버 (SSoT)
+- duplicate-constant           : 같은 상수 여러 곳 정의 (SSoT)
+- unused-export                : export 됐으나 import 0 건 (SoC)
+```
+
+→ 카테고리별 룰은 `tools/inspectors/<category>.ts` 파일 분리. 한 룰 = AST 패턴 검출 + 메시지 + severity (`safety-error` / `report` 두 단계).
+
+#### 11.20.3 F2 단계적 fail-closed 정책
+
+**Phase 1 — report-only (R12-C2 안 안전 경계 룰 도입 직후)**:
+- 모든 카테고리 = report-only. CI 빌드 통과.
+- 보고서 = `tools/inspectors/report.json` (위반 list + 위치 + severity).
+- 목적: false positive 정리 — 룰 정확도 검증. *모든* 안전 경계 룰이 1 주 이상 false positive 0 건 확인 후 phase 2 진입.
+
+**Phase 2 — 안전 경계 fail-closed (R12-C2 P5+P6 안 land)**:
+- 안전 경계 카테고리 (위 7 종) = **빌드 실패** (`safety-error` = exit 1).
+- 비안전 영역 (5 종) = report-only 유지.
+- 회피: `// inspector-disable-next-line <category> <이유>` 주석 — 단 안전 경계는 PR review 에서 회피 사유 검증 강제.
+
+**phase 1 → phase 2 전환 게이트**:
+- 모든 안전 경계 룰의 false positive 0 건 + 사용자 명시 승인 (R12-C2 plan 안 별 sub-task).
+
+#### 11.20.4 위치 + CI 통합
+
+- 룰 본체: `tools/inspectors/<category>.ts` (R12-C2 P2 시점 신규)
+- 실행 엔트리: `tools/inspectors/run.ts` (`npm run inspect` — 전체 실행) + `npm run inspect:safety` (안전 경계만)
+- CI hook:
+  - **pre-commit**: 변경 파일 한정 inspector 실행 (전체 X — 빠른 피드백)
+  - **pre-push**: 전체 inspector 실행 (전체 안전 경계 fail-closed)
+- 보고서: `tools/inspectors/report.json` (gitignore + CI artifact 만)
+
+→ ESLint / typecheck 와 분리 — ESLint 는 *문법 / 스타일*, inspector 는 *6 헌법 + 도메인 invariant*. 둘 다 통과해야 빌드 PASS.
+
+#### 11.20.5 cross-cutting 위치
+
+F 검사관 = *전체 코드베이스* 가 6 헌법 준수하는지 점검 → R12-C2 안 모든 후보 (A/B/C/D/E/G/H) 의 평가 기준. F 가 가장 먼저 land 되어야 다른 후보의 코드 품질이 *검출 가능*.
+
+본격 land = R12-C2 *기반층 sub-task 1 호* (A 보다 먼저 — 진입 우선순위 §A2 메모리 그대로). cross-cutting 정식화는 R12-C2 종결 시 `decisions/cross-cutting.md` C9 로 추가.
+
+---
+
+### 11.21 H1. 대시보드 진행률 패널 (R12-C2 P5~P8 안에서 land)
+
+프로젝트 *전체* 진행률을 한눈에 보여주는 합계 surface. RunStep ledger (§11.19) 집계 결과를 dashboard primary surface 에 띄움.
+
+#### 11.21.1 위치
+
+프로젝트 대시보드 (P7-5 layout 결정 시점에 통합) 의 메인 영역 상단. R3 시점 land 된 `InsightStrip` 패턴을 R12-C2 의 새 정보 (회의 진행 / chain 위치 / lock 부서) 로 교체.
+
+#### 11.21.2 표시 항목
+
+```
+[프로젝트 진행률 — Rolestra v3]
+┌───────────────────────────────────────────┐
+│ Chain  : 아이디어 ✓ → 기획 ✓ → 디자인 ●진행중│  ← 부서 chain 시각화
+│           → 구현 ⋯대기 → 검토 ⋯대기         │
+│                                            │
+│ 부서별 │ 아이디어  ✓ done   (3 의견)        │
+│        │ 기획      ✓ done   (5 의견 / 합의 4)│
+│        │ 디자인    ● 진행중 (round 2/5)     │  ← 현재 lock 부서
+│        │ 구현      ⋯ 대기                   │
+│        │ 검토      ⋯ 대기                   │
+│        │ 리뷰      — chain 외               │
+│        │ 일반      — 잡담 (카드 12)         │
+│                                            │
+│ 큐     : 대기 task 2 건 (보류 변경 1 + 새   │
+│           기능 1)                           │
+│                                            │
+│ 최근 회의록: 기획 부서 — "WebView2 단일 ..." │  ← 클릭 → 회의록 모달
+│ (2 분 전)                                   │
+└───────────────────────────────────────────┘
+```
+
+#### 11.21.3 데이터 source
+
+- **부서별 상태**: `meetings.state` (현재 lock 부서) + `run_step` 집계 (`step_kind` 분포)
+- **chain 위치**: `meetings` row 의 `handoff_chain_position` (P6 신규 컬럼)
+- **큐 길이**: `queue_items` (정리 #7 §11.12 기존 컬럼)
+- **최근 회의록**: `meetings` ORDER BY `closed_at` DESC LIMIT 3
+
+→ 모든 데이터 = main backend 기존 테이블 + R12-C2 P2 추가 (`run_step`). 별 집계 테이블 X — query-time 산출 (캐싱은 zustand 1 분 TTL).
+
+#### 11.21.4 갱신 정책
+
+- A RunStep 새 row 작성 시점에 `dashboard:progress-changed` IPC stream event 발송 (P2 신규)
+- renderer 의 zustand store 가 event 받으면 invalidate → re-fetch
+- 첫 mount 시 1 회 fetch + 이후 stream 구독 (R10 D8 Optimistic UI 패턴 재사용)
+
+#### 11.21.5 surface 구분 (H2 와 비중복)
+
+H1 = **프로젝트 합계** ("전체가 어디까지 왔나"). 항상 dashboard 메인.
+H2 = **부서별 컨텍스트** ("이 부서가 무슨 패키지를 받았나"). 부서 채널 진입 첫 surface.
+
+두 surface 가 *서로 다른 정보* — 사용자의 두 질문에 1:1 대응. 중복 X.
+
+---
+
+### 11.22 H2. 받는 부서 첫 화면 인계 패키지 (R12-C2 P6 안에서 land)
+
+「인계」 카드 → 사용자 확인 → 받는 부서 채널 진입 시 *첫 surface* = 보낸 부서로부터 받은 인계 패키지 카드.
+
+#### 11.22.1 위치
+
+부서 채널 메인 영역의 *최초 진입 시* 회의 시작 전 / 의견 list 보기 전 *맨 위* 표시. 같은 채널 두 번째 진입부터는 SsmBox 일반 layout 으로 fallback (인계 패키지는 채널 archive 에 보존 — 사용자가 [패키지 다시 보기] 클릭 시 재표시).
+
+#### 11.22.2 표시 항목
+
+```
+[새 인계 — 기획 부서로부터 도착]
+┌───────────────────────────────────────────┐
+│ 보낸 부서 : 기획                           │
+│ 보낸 시각 : 2 분 전                        │
+│ 인계 사유 : "디자인 단계 진입 — UX 와이어  │
+│              프레임 작성 부탁드립니다"      │
+│                                            │
+│ 회의록 미리보기:                            │
+│ ┌──────────────────────────────────────┐ │
+│ │ # 기획 회의 — 2026-05-05               │ │
+│ │ ## 합의 항목                           │ │
+│ │ - 의견 ITEM_001: WebView2 단일 ...    │ │
+│ │   본문: ... (truncate X)              │ │
+│ │ ...                                   │ │
+│ └──────────────────────────────────────┘ │
+│ [회의록 통째 보기]  ← 클릭 → 모달          │
+│                                            │
+│ 받는 부서가 처리할 작업:                   │
+│ - UX 와이어프레임 작성                     │
+│ - UI 직원과 디자인 회의                    │
+│ - Playwright snapshot 미리보기 생성        │
+│                                            │
+│        [의견 모아 회의 시작]   [닫기]       │
+└───────────────────────────────────────────┘
+```
+
+#### 11.22.3 데이터 source
+
+- **인계 record**: `handoff_dispatch` 테이블 (P6 신규 — meeting_id / from_channel_id / to_channel_id / reason / minutes_id / dispatched_at / opened_at)
+- **회의록 본문**: `<ArenaRoot>/<projectId>/consensus/<meetingId>/minutes.md` (§11.18.6) — Card primitive 안 truncate X scroll
+- **받는 부서 작업 list**: 보낸 부서의 모더레이터 회의록 안 *"## 다음 단계"* 단락 (자동 추출)
+
+#### 11.22.4 컨텍스트 주입
+
+[의견 모아 회의 시작] 클릭 시 받는 부서 회의가 step 1 (의견 제시) 부터 시작 — *인계 회의록 통째* 가 step 1 prompt 안 컨텍스트로 동봉:
+
+```
+[보낸 부서 회의록]
+{minutes.md 본문 통째}
+
+[당신이 처리할 작업]
+{받는 부서 작업 list}
+
+당신은 {받는 부서} 직원입니다. 위 인계 회의록 + 작업 list 보고
+의견을 제시하세요. 응답 schema: {Step1OpinionGather}
+```
+
+→ 받는 부서 직원이 *맥락 잃지 않고* 회의 진입. R12-C2 P6 핵심 acceptance.
+
+#### 11.22.5 닫기 후 동작
+
+[닫기] 또는 [의견 모아 회의 시작] 후:
+- 패키지 카드 = SsmBox top 에서 archive 영역으로 이동 (collapsed)
+- 채널 메인 = SsmBox 일반 layout (의견 list / 회의 진행)
+- 사용자 [패키지 다시 보기] 버튼 (channel 헤더) → 카드 재표시
+
+#### 11.22.6 chain 외 부서 (review) 의 H2 surface
+
+리뷰 부서 (chain 외, §11.16) 도 H2 surface 가짐. 두 entry 별 첫 surface:
+- (a) 사용자 명시 호출 → "사용자 호출" 문구 + 컨텍스트 비움 (사용자가 직접 의견 제시)
+- (b) 검토 인계 결재 모달 안 *"+리뷰 부서도 시작"* 체크박스 → 검토 회의록 통째 인계 패키지
+
+→ 인계 패키지 surface 는 *모든 부서 공통* — chain 위치 무관.
+
 ---
 
 ---

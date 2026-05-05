@@ -11,3 +11,6 @@ R11 D8 결정에 따라 phase 별 단일 markdown 파일로 통합 (개별 ADR-N
 | [R10-decisions.md](R10-decisions.md) | R10 polish (DM/Search/Settings/themes/Optimistic UI/Circuit Breaker persist) | 형태 토큰 fidelity, Optimistic UI 3 hook 한정, 마이그레이션 012 |
 | [R11-decisions.md](R11-decisions.md) | R11 레거시 청소 + 패키징 + 문서 v3 | electron-builder 채택, mig 013/014, ADR phase 묶음 D8, locale 분기 D9 |
 | [cross-cutting.md](cross-cutting.md) | phase 무관 핵심 invariant | ConsensusStateMachine, Provider Capability Registry, ExecutionService 경계, IPC TypedInvoke, secrets safeStorage, path-guard, i18n dictionary |
+| [r12-s-persona-skills.md](r12-s-persona-skills.md) | R12-S 페르소나 / 스킬 분리 | SkillService 카탈로그, providers ALTER, PromptComposer 합성, 직원 모달 탭 분리 |
+| [r12-c-channel-roles.md](r12-c-channel-roles.md) | R12-C 1차 채널 역할 + 사이드바 통합 | 부서 채널 5 자동 생성, 사이드바 3 섹션, 일반 채널 1 라운드, SKILL.md 자동 배치, 멤버 패널 정확화, R12-C2 분할 |
+| [r12-c2-reference-projects-absorb.md](r12-c2-reference-projects-absorb.md) | R12-C2 round 2 참고 프로젝트 8 후보 흡수 | R1 전체 재분해, B1 안전 카드만 자동, H1+H2 합계+컨텍스트, F2 단계적 fail-closed, A RunStep, C/D/E/G plan-level acceptance |
