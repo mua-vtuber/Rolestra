@@ -128,12 +128,12 @@
     {
       "id": 14,
       "subject": "T13 — B. NextStep classifier + Orchestrator wire (RunStep 영속 포함)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         12,
         13
       ],
-      "description": "**Round 2 진입 3 호 (기반층 마무리)**. 발화 직후 7 카드 분류기 + Orchestrator 가 매 turn 분류 결과 따라 진행 + RunStep 영속 통합.\n\n**산출:**\n- `src/main/meetings/engine/next-step-classifier.ts` 신규 — NextStepCard discriminated union (kind: 'continue' | 'wait' | 'approve' | 'tool' | 'handoff' | 'minutes' | 'end'). spec §11.18.8b 7 우선순위 분류 규칙. fall-through fallback = 'wait'.\n- `MeetingOrchestrator` wire — 매 turn 후 분류기 호출 → RunStepService 영속 (`step_kind='next_step_classify'`) → 안전군 ('continue'/'wait') 자동 진행 / 결과 전파군 ('approve'/'tool'/'handoff'/'minutes'/'end') 사용자 확인 모달 등장\n- 분류 결과 stream IPC `stream:next-step-classified` → renderer 모달 표시 (모달 본체는 'approve'/'tool' = R7 ApprovalModal 재사용 / 'handoff' = T28 HandoffApprovalModal — 본 sub-task 는 stream + placeholder modal)\n- maxRounds cap 인터락 — cap 도달 시 'continue' 자동 분류를 'end' 강제 override (사용자 확인 모달 skip + 자동 회의 종료 + Notification 발송)\n\n**Verify:** spec §11.18.8 부합 — 7 카드 분류 정확 (안전 2 / 결과 전파 5) + handoff_mode 우회 룰 placeholder (T28 wire) + maxRounds cap 인터락 동작. vitest +N (classifier unit + orchestrator wire integration) / typecheck 0.\n\n**Spec reference:** §11.18.8 [후보 B + A]"
+      "description": "**Round 2 진입 3 호 (기반층 마무리)**. 발화 직후 7 카드 분류기 + Orchestrator 가 매 turn 분류 결과 따라 진행 + RunStep 영속 통합.\n\n**완료 내용:**\n- src/main/meetings/engine/next-step-classifier.ts 신규 — NextStepCard discriminated union (kind: continue | wait | approve | tool | handoff | minutes | end). spec §11.18.8b 7 우선순위 분류 규칙. fall-through fallback = wait. classifyNextStep + classifyNextStepWithDetails 2 entry point. NextStepClassifierInputError 도메인 에러 (silent fallback 금지).\n- MeetingOrchestrator wire — 매 turn 후 분류기 호출 → RunStepService.appendOne (step_kind=next_step_classify) → emitNextStepClassified. gather/quick_vote/free_discussion 3 phase + compose_minutes boundary 4 곳에서 호출. classifyAndPersistTurn helper + snapshotTreeFlags helper.\n- 분류 결과 stream IPC stream:next-step-classified (StreamNextStepClassifiedPayload) → renderer 모달 표시 placeholder. shape validator + KNOWN_EVENT_TYPES + emit helper 통째 wire.\n- maxRounds cap 인터락 — applyMaxRoundsInterlock(natural, context). natural=continue + cap 도달 시 end 강제 override + capOverride flag 영속.\n- isAllResolved tree 검사 helper 추가.\n\n**검증:** typecheck:node + typecheck:web 0. vitest 3282 PASS / 13 skip / 0 fail (T12 baseline 3250 + 32 신규 = 29 classifier unit + 3 orchestrator wire integration). inspect:safety 95 (T12 와 동일 — T13 가 추가한 위반 0).\n\n**T13 = signal layer.** 결과 전파군 카드 (approve/tool/handoff/minutes/end) 의 모달 / pause / 회의 자동 종결 등 behavior change 는 placeholder — T28+ HandoffApprovalModal land 시 wire."
     },
     {
       "id": 15,

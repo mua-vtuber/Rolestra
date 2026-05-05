@@ -50,6 +50,7 @@ import type {
   StreamProjectUpdatedPayload,
   StreamMeetingStateChangedPayload,
   StreamMeetingPhaseChangedPayload,
+  StreamNextStepClassifiedPayload,
   StreamMeetingTurnStartPayload,
   StreamMeetingTurnTokenPayload,
   StreamMeetingTurnDonePayload,
@@ -87,6 +88,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:project-updated',
   'stream:meeting-state-changed',
   'stream:meeting-phase-changed',
+  'stream:next-step-classified',
   'stream:meeting-turn-start',
   'stream:meeting-turn-token',
   'stream:meeting-turn-done',
@@ -366,6 +368,17 @@ export class StreamBridge {
     this.emit({ type: 'stream:meeting-phase-changed', payload });
   }
 
+  /**
+   * R12-C2 T13 — B1 NextStep 카드 분류 결과 통지. orchestrator 가 매 turn
+   * (그리고 phase 경계) 호출 후 발사. payload.capOverride 가 true 면 §11.18.8d
+   * cap interlock 발동 — renderer 가 사용자 호출 Notification + auto-end UX.
+   */
+  emitNextStepClassified(
+    payload: StreamNextStepClassifiedPayload,
+  ): void {
+    this.emit({ type: 'stream:next-step-classified', payload });
+  }
+
   emitMeetingTurnStart(payload: StreamMeetingTurnStartPayload): void {
     this.emit({ type: 'stream:meeting-turn-start', payload });
   }
@@ -504,6 +517,17 @@ export class StreamBridge {
           typeof payload.round === 'number' &&
           (payload.currentOpinionScreenId === null ||
             typeof payload.currentOpinionScreenId === 'string')
+        );
+      case 'stream:next-step-classified':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          typeof payload.runStepId === 'string' &&
+          typeof payload.phase === 'string' &&
+          typeof payload.round === 'number' &&
+          typeof payload.turnIndex === 'number' &&
+          typeof payload.card === 'string' &&
+          typeof payload.capOverride === 'boolean'
         );
       case 'stream:meeting-turn-start':
         return (

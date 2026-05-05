@@ -40,6 +40,9 @@
 import type { Channel } from '../../../shared/channel-types';
 import type {
   MeetingPhase,
+  Step1OpinionGatherSchemaType,
+  Step25QuickVoteSchemaType,
+  Step3FreeDiscussionSchemaType,
 } from '../../../shared/meeting-flow-types';
 import type {
   Opinion,
@@ -47,6 +50,8 @@ import type {
   OpinionTallyResult,
   OpinionQuickVoteResult,
 } from '../../../shared/opinion-types';
+import type { Participant } from '../../../shared/engine-types';
+import type { NewRunStep, NextStepCard } from '../../../shared/run-step-types';
 import type { MeetingService } from '../meeting-service';
 import type { MessageService } from '../../channels/message-service';
 import type { ChannelService } from '../../channels/channel-service';
@@ -56,6 +61,7 @@ import type { NotificationService } from '../../notifications/notification-servi
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
 import type { OpinionService } from '../opinion-service';
 import type { MeetingMinutesService } from '../meeting-minutes-service';
+import type { RunStepService } from '../run-step/run-step-service';
 import { OPINION_DEPTH_CAP } from '../screen-id';
 import { tryGetLogger } from '../../log/logger-accessor';
 import type { MeetingSession } from './meeting-session';
@@ -63,6 +69,10 @@ import type { ParticipantMessage } from '../../engine/history';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import { resolveNotificationLabel } from '../../notifications/notification-labels';
 import { INTER_TURN_DELAY_MS } from '../../../shared/timeouts';
+import {
+  classifyNextStepWithDetails,
+  type NextStepClassifierContext,
+} from './next-step-classifier';
 
 export interface MeetingOrchestratorDeps {
   session: MeetingSession;
@@ -83,6 +93,12 @@ export interface MeetingOrchestratorDeps {
   opinionService: OpinionService;
   /** R12-C2 P2-3 — step 5 모더레이터 회의록 service. */
   meetingMinutesService: MeetingMinutesService;
+  /**
+   * R12-C2 T13 — 회의 turn 진행 일지 영속 service. orchestrator 가 매 turn
+   * 후 (그리고 phase 경계 시스템 호출 시) NextStep 분류 결과를
+   * `step_kind='next_step_classify'` row 로 적층. spec §11.18.8 + §11.19.
+   */
+  runStepService: RunStepService;
   /** Opt-out hook for tests — disables the inter-turn delay. */
   interTurnDelayMs?: number;
   /**
@@ -179,6 +195,25 @@ function collectDepthCapReached(tree: OpinionTreeNode[]): string[] {
   return result;
 }
 
+/**
+ * 트리 통째 검사: 모든 의견의 status 가 `'pending'` 외 (즉 agreed/rejected/excluded).
+ * spec §11.18.8b 룰 4 의 입력. 빈 트리는 caller 가 미리 분기 — 본 함수는 비공개
+ * 호출자가 *non-empty 트리* 만 넘긴다고 가정.
+ */
+function isAllResolved(tree: OpinionTreeNode[]): boolean {
+  const walk = (node: OpinionTreeNode): boolean => {
+    if (node.opinion.status === 'pending') return false;
+    for (const child of node.children) {
+      if (!walk(child)) return false;
+    }
+    return true;
+  };
+  for (const root of tree) {
+    if (!walk(root)) return false;
+  }
+  return true;
+}
+
 /** tally 결과의 전체 트리에서 노드 1 개를 UUID 로 검색. */
 function findNodeByUuid(
   tree: OpinionTreeNode[],
@@ -207,12 +242,19 @@ export class MeetingOrchestrator {
   private readonly notificationService: NotificationService;
   private readonly opinionService: OpinionService;
   private readonly meetingMinutesService: MeetingMinutesService;
+  private readonly runStepService: RunStepService;
   private readonly interTurnDelayMs: number;
   private readonly onFinalized?: MeetingOrchestratorDeps['onFinalized'];
 
   private running = false;
   private terminalHandled = false;
   private paused = false;
+  /**
+   * R12-C2 T13 — 회의 안 turn 순서 카운터. 첫 NextStep 분류 호출 = 0,
+   * 매 호출마다 +1. RunStep.turnIndex 와 stream payload 의 turnIndex 에 들어감.
+   * 회의 한 번 (orchestrator instance 한 번) 의 lifetime.
+   */
+  private turnIndexCounter = 0;
 
   constructor(deps: MeetingOrchestratorDeps) {
     this.session = deps.session;
@@ -225,6 +267,7 @@ export class MeetingOrchestrator {
     this.notificationService = deps.notificationService;
     this.opinionService = deps.opinionService;
     this.meetingMinutesService = deps.meetingMinutesService;
+    this.runStepService = deps.runStepService;
     this.interTurnDelayMs = deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
     this.onFinalized = deps.onFinalized;
   }
@@ -240,6 +283,7 @@ export class MeetingOrchestrator {
     this.running = true;
     this.terminalHandled = false;
     this.paused = false;
+    this.turnIndexCounter = 0;
 
     const runStartedAt = Date.now();
     tryGetLogger()?.info({
@@ -368,6 +412,130 @@ export class MeetingOrchestrator {
     this.session.appendUserMessage(message);
   }
 
+  // ── R12-C2 T13: NextStep 분류 + RunStep 영속 + stream emit ───────────
+
+  /**
+   * 한 turn (직원 발화 또는 phase 경계 시스템 호출) 의 분류 + 영속 + 통지.
+   * spec §11.18.8 + §11.19.
+   *
+   * 본 helper 는 *signal layer* — 결과 카드의 모달 등장 / 회의 자동 종결 등
+   * behavior change 는 적용 안. orchestrator 의 phase loop 은 본 helper 호출
+   * 후에도 평소대로 진행 (T28+ 가 결과 전파군 카드의 실제 후행 동작 wire).
+   *
+   * 실패는 *조용히 로깅만* — 분류 / 영속 / emit 어느 단계가 throw 해도 회의
+   * 흐름은 멈추지 않는다 (RunStep 일지의 부재가 회의 진행을 막아서는 안 됨).
+   */
+  private classifyAndPersistTurn(args: {
+    phase: MeetingPhase;
+    /** 'employee' = 직원 발화, 'moderator' = 모더레이터 boundary, 'system' = 시스템 boundary. */
+    actorKind: 'employee' | 'moderator' | 'system';
+    /** `actorKind='employee'` 일 때만 채워야 함 — actorId 의 진실원천. */
+    speaker: Participant | null;
+    response:
+      | Step1OpinionGatherSchemaType
+      | Step25QuickVoteSchemaType
+      | Step3FreeDiscussionSchemaType
+      | null;
+    context: NextStepClassifierContext;
+    /** turn 시작 ~ 분류 호출 시점까지의 ms. 없으면 0. */
+    durationMs: number;
+  }): NextStepCard | null {
+    const { phase, actorKind, speaker, response, context, durationMs } = args;
+
+    let detail: ReturnType<typeof classifyNextStepWithDetails>;
+    try {
+      detail = classifyNextStepWithDetails({ phase, response, context });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] classifyNextStepWithDetails threw',
+        errorPayload(err),
+      );
+      return null;
+    }
+
+    const turnIndex = this.turnIndexCounter;
+    this.turnIndexCounter += 1;
+
+    const actorId = actorKind === 'employee' ? speaker?.id ?? null : null;
+
+    const newRow: NewRunStep = {
+      meetingId: this.session.meetingId,
+      channelId: this.session.channelId,
+      round: context.currentRound,
+      turnIndex,
+      actorKind,
+      actorId,
+      stepKind: 'next_step_classify',
+      // truncate 금지 (spec §11.19.4) — caller 가 넘긴 response 통째 직렬화.
+      inputJson: JSON.stringify({ phase, response, context }),
+      outputJson: JSON.stringify({
+        card: detail.card,
+        natural: detail.natural,
+        capOverride: detail.capOverride,
+      }),
+      nextStepCard: detail.card,
+      sideEffectSummary: null,
+      durationMs,
+    };
+
+    let persisted: ReturnType<RunStepService['appendOne']>;
+    try {
+      persisted = this.runStepService.appendOne(newRow);
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] runStepService.appendOne threw',
+        errorPayload(err),
+      );
+      return detail.card;
+    }
+
+    try {
+      this.streamBridge.emitNextStepClassified({
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        runStepId: persisted.id,
+        phase,
+        round: context.currentRound,
+        turnIndex,
+        card: detail.card,
+        capOverride: detail.capOverride,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] emitNextStepClassified threw',
+        errorPayload(err),
+      );
+    }
+
+    return detail.card;
+  }
+
+  /**
+   * 자유 토론 시점의 트리 스냅샷에서 *전체 트리* 가 모두 resolved 인지 +
+   * 어딘가 깊이 cap 도달했는지 산출. classifier context 의 핵심 입력.
+   */
+  private snapshotTreeFlags(): {
+    allOpinionsResolved: boolean;
+    depthCapReached: boolean;
+  } {
+    let allOpinionsResolved = false;
+    let depthCapReached = false;
+    try {
+      const tally = this.opinionService.tally(this.session.meetingId);
+      // 빈 트리 = "없음" — resolved 도 unresolved 도 아님. classifier 룰 4 미발동.
+      if (tally.tree.length > 0) {
+        allOpinionsResolved = isAllResolved(tally.tree);
+      }
+      depthCapReached = collectDepthCapReached(tally.tree).length > 0;
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] snapshotTreeFlags tally threw',
+        errorPayload(err),
+      );
+    }
+    return { allOpinionsResolved, depthCapReached };
+  }
+
   // ── phase 별 본체 ────────────────────────────────────────────────────
 
   private async runGatherPhase(): Promise<void> {
@@ -376,18 +544,41 @@ export class MeetingOrchestrator {
       providerId: string;
       payload: import('../../../shared/meeting-flow-types').Step1OpinionGatherSchemaType;
     }> = [];
+    const channel = this.lookupChannel();
+    const maxRounds = resolveMaxRounds(channel);
 
     for (const speaker of this.session.aiParticipants) {
       if (this.session.aborted) return;
       await this.waitWhilePaused();
       const suggestedLabel = this.session.nextLabel(speaker.id);
+      const turnStartedAt = Date.now();
       const turnResult = await this.turnExecutor.requestOpinionGather(speaker, {
         suggestedLabel,
       });
+      const turnEndedAt = Date.now();
       if (turnResult.kind === 'ok') {
         responses.push({
           providerId: speaker.id,
           payload: turnResult.payload,
+        });
+        // R12-C2 T13 — 발화 직후 NextStep 분류 + RunStep 영속 + stream emit.
+        // gather phase 트리는 본 발화가 막 들어가기 *전* 상태 (orchestrator 가
+        // 모든 응답 모은 후 한 번에 opinionService.gather 호출). classifier 는
+        // 빈/부분 트리 위에서 동작 — 룰 1 (additions) 미적용 phase 라 대부분
+        // 'wait' 분류.
+        this.classifyAndPersistTurn({
+          phase: 'gather',
+          actorKind: 'employee',
+          speaker,
+          response: turnResult.payload,
+          context: {
+            ...this.snapshotTreeFlags(),
+            currentRound: 0,
+            maxRounds,
+            hasNextChain: false,
+            minutesComposed: false,
+          },
+          durationMs: turnEndedAt - turnStartedAt,
         });
       }
       await this.delay(this.interTurnDelayMs);
@@ -412,6 +603,8 @@ export class MeetingOrchestrator {
     this.transitionToPhase('quick_vote');
     const tally = this.opinionService.tally(this.session.meetingId);
     const opinionsMarkdown = renderOpinionsMarkdown(tally.tree);
+    const channel = this.lookupChannel();
+    const maxRounds = resolveMaxRounds(channel);
 
     const responses: Array<{
       providerId: string;
@@ -422,14 +615,34 @@ export class MeetingOrchestrator {
       if (this.session.aborted) return emptyQuickVoteResult(this.session.meetingId);
       await this.waitWhilePaused();
       const suggestedLabel = this.session.nextLabel(speaker.id);
+      const turnStartedAt = Date.now();
       const turnResult = await this.turnExecutor.requestQuickVote(speaker, {
         suggestedLabel,
         opinionsMarkdown,
       });
+      const turnEndedAt = Date.now();
       if (turnResult.kind === 'ok') {
         responses.push({
           providerId: speaker.id,
           payload: turnResult.payload,
+        });
+        // R12-C2 T13 — quick_vote 직원 응답 직후 분류. 만장일치 / 분기 결정은
+        // 모든 응답 모은 후 opinionService.quickVote 가 처리하므로, 본 발화
+        // 시점의 classifier 컨텍스트는 *직전 트리* 기준. 대부분 'wait' 분류
+        // (Rule 4 발동은 quickVote 결과 반영 후 free_discussion 진입 시점).
+        this.classifyAndPersistTurn({
+          phase: 'quick_vote',
+          actorKind: 'employee',
+          speaker,
+          response: turnResult.payload,
+          context: {
+            ...this.snapshotTreeFlags(),
+            currentRound: 1,
+            maxRounds,
+            hasNextChain: false,
+            minutesComposed: false,
+          },
+          durationMs: turnEndedAt - turnStartedAt,
         });
       }
       await this.delay(this.interTurnDelayMs);
@@ -514,6 +727,7 @@ export class MeetingOrchestrator {
           if (this.session.aborted) return;
           await this.waitWhilePaused();
           const suggestedLabel = this.session.nextLabel(speaker.id);
+          const turnStartedAt = Date.now();
           const turnResult = await this.turnExecutor.requestFreeDiscussion(
             speaker,
             {
@@ -523,10 +737,28 @@ export class MeetingOrchestrator {
               depthCapReachedScreenIds,
             },
           );
+          const turnEndedAt = Date.now();
           if (turnResult.kind === 'ok') {
             responses.push({
               providerId: speaker.id,
               payload: turnResult.payload,
+            });
+            // R12-C2 T13 — free_discussion 발화 직후 분류 + cap interlock 발동
+            // 가능 위치 (§11.18.8d). additions 있고 cap 미도달이면 'continue';
+            // additions 있어도 opinionRound >= maxRounds 면 interlock 으로 'end'.
+            this.classifyAndPersistTurn({
+              phase: 'free_discussion',
+              actorKind: 'employee',
+              speaker,
+              response: turnResult.payload,
+              context: {
+                ...this.snapshotTreeFlags(),
+                currentRound: opinionRound,
+                maxRounds,
+                hasNextChain: false,
+                minutesComposed: false,
+              },
+              durationMs: turnEndedAt - turnStartedAt,
             });
           }
           await this.delay(this.interTurnDelayMs);
@@ -582,10 +814,15 @@ export class MeetingOrchestrator {
 
   private async runComposeMinutesPhase(): Promise<void> {
     this.transitionToPhase('compose_minutes');
+    const channel = this.lookupChannel();
+    const maxRounds = resolveMaxRounds(channel);
+    const composeStartedAt = Date.now();
+    let composed = false;
     try {
       const result = await this.meetingMinutesService.compose({
         meetingId: this.session.meetingId,
       });
+      composed = true;
       // 채팅창 회의록 카드 — meta.minutesPath / meta.minutesSource 로 renderer 가
       // 카드 컴포넌트 (T12) 와 매핑. 본 sub-task 는 system message 1 건.
       try {
@@ -613,6 +850,27 @@ export class MeetingOrchestrator {
         '[MeetingOrchestrator] minutes compose threw',
         errorPayload(err),
       );
+    }
+
+    // R12-C2 T13 — minutes 작성 직후 boundary 분류. minutesComposed=true 로
+    // §11.18.8b 룰 5 / 6 분기 (chain 정의 → handoff / 미정의 → end). 본 sub-task
+    // 의 hasNextChain 은 항상 false (chain DB 컬럼 미land — T28+ 작업).
+    if (composed) {
+      const composeEndedAt = Date.now();
+      this.classifyAndPersistTurn({
+        phase: 'compose_minutes',
+        actorKind: 'moderator',
+        speaker: null,
+        response: null,
+        context: {
+          ...this.snapshotTreeFlags(),
+          currentRound: 0,
+          maxRounds,
+          hasNextChain: false,
+          minutesComposed: true,
+        },
+        durationMs: composeEndedAt - composeStartedAt,
+      });
     }
   }
 

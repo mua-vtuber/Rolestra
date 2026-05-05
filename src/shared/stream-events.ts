@@ -27,6 +27,7 @@ import type { Project, AutonomyMode } from './project-types';
 import type { MemberView, WorkStatus } from './member-profile-types';
 import type { NotificationKind, NotificationPrefs } from './notification-types';
 import type { MeetingOutcome } from './meeting-types';
+import type { NextStepCard } from './run-step-types';
 
 export interface StreamChannelMessagePayload {
   message: Message;
@@ -109,6 +110,42 @@ export interface StreamMeetingPhaseChangedPayload {
    * 다른 phase 에서는 null.
    */
   currentOpinionScreenId: string | null;
+}
+
+/**
+ * R12-C2 T13 — B1 NextStep 카드 분류 결과 신호. orchestrator 가 매 turn 직후
+ * (그리고 phase 경계 시스템 호출 시) classifier 호출 → 결과를 RunStep 에
+ * 영속하면서 본 신호 발사. renderer 는 카드 종류 따라 모달 / Notification /
+ * 진행률 갱신 등 UI 분기.
+ *
+ * spec docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md
+ *  §11.18.8a  카드 7 종 (안전군 2 / 결과 전파군 5)
+ *
+ * 본 sub-task (T13) 의 renderer 응답: 안전군 ('continue'/'wait') 은 무시 / 진행
+ * 표시만. 결과 전파군 ('approve'/'tool'/'handoff'/'minutes'/'end') 은 placeholder
+ * — 실제 모달은 T28+ HandoffApprovalModal 등이 land 시 wire.
+ */
+export interface StreamNextStepClassifiedPayload {
+  meetingId: string;
+  channelId: string;
+  /**
+   * RunStep row id (UUID v4) — renderer 가 IPC `meeting:list-run-steps` 로
+   * 자세한 input/output JSON 조회 시 키.
+   */
+  runStepId: string;
+  /** 분류기 호출 시점의 phase. */
+  phase: string;
+  /** 자유 토론 라운드 카운터 (다른 phase 에서는 0). */
+  round: number;
+  /** 회의 안 turn 순서 (0 부터). */
+  turnIndex: number;
+  /** B1 분류 결과 — 7 카드 중 하나. */
+  card: NextStepCard;
+  /**
+   * cap interlock 으로 자연 분류 'continue' 가 'end' 로 override 됐는지.
+   * renderer 는 이 flag 가 true 면 사용자 호출 Notification + auto-end UX 분기.
+   */
+  capOverride: boolean;
 }
 
 export interface StreamNotificationPayload {
@@ -267,6 +304,10 @@ export type StreamEvent =
   | {
       type: 'stream:meeting-phase-changed';
       payload: StreamMeetingPhaseChangedPayload;
+    }
+  | {
+      type: 'stream:next-step-classified';
+      payload: StreamNextStepClassifiedPayload;
     }
   | {
       type: 'stream:meeting-turn-start';
