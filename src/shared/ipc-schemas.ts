@@ -487,6 +487,26 @@ export const meetingLlmSummarizeSchema = z.object({
   providerId: z.string().min(1).max(128).optional(),
 });
 
+/**
+ * R12-C2 T15: `meeting:idea-finalize-selection` — idea-workflow USER_PICK
+ * commit 입력. spec §5.1.
+ *
+ * `selectedScreenIds` 빈 배열 + `userComment` 비거나 미지정인 경우는
+ * schema 단계가 아니라 핸들러 단계에서 거부 (`ok: false, reason: 'idea_pick_validation'`)
+ * — UI 측 [기획 부서로 보내기] 버튼 비활성화 invariant 와 일관 (사용자
+ * 결정 2026-05-05).
+ *
+ * 화면 ID 형식 (`ITEM_NNN_*`) 자체는 service 가 검증 — schema 는 length
+ * 제약만. screenId 길이 32자 cap (실제 ITEM_NNN_NN_NN = 14자 max).
+ */
+export const meetingIdeaFinalizeSelectionSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  selectedScreenIds: z
+    .array(z.string().min(1).max(32))
+    .max(200, 'selectedScreenIds: too many entries (cap 200 / one meeting)'),
+  userComment: z.string().max(10_000).optional(),
+});
+
 // ── R11-Task5 신규 zod schemas ─────────────────────────────────────
 
 /**
@@ -813,6 +833,7 @@ export const v3ChannelSchemas = {
   'dm:create': dmCreateSchema,
   'permission:dry-run-flags': permissionDryRunFlagsSchema,
   'meeting:llm-summarize': meetingLlmSummarizeSchema,
+  'meeting:idea-finalize-selection': meetingIdeaFinalizeSelectionSchema,
   // R11-Task4: dev hook (ROLESTRA_E2E=1 only — registration in router.ts
   // is gated, but the schema entry is unconditional so the dev-mode zod
   // round-trip catches malformed payloads when the handler IS registered).

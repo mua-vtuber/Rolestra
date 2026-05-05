@@ -219,3 +219,56 @@ export interface OpinionFreeDiscussionResult {
   /** 이번 round 에 insert 된 opinion_vote row 개수. */
   votesInserted: number;
 }
+
+// ── idea-workflow USER_PICK (T15 land — spec §5.1) ─────────────────────
+
+/**
+ * `meetings:idea-finalize-selection` IPC 입력 — 사용자가 awaiting_user_pick
+ * phase 안 카드 선택 + 자유 코멘트 commit. spec §5.1.
+ *
+ * 입력 검증 룰 (사용자 결정 2026-05-05, T15):
+ *   - `selectedScreenIds.length === 0 && (userComment ?? '').trim().length === 0`
+ *     → IdeaPickValidationError throw (UI 측 [기획 부서로 보내기] 버튼 비활성화로 차단)
+ *   - 화면 ID 1 개라도 선택했거나 코멘트 ≥ 1 char 면 통과
+ */
+export interface IdeaFinalizeSelectionInput {
+  /** 회의 UUID. */
+  meetingId: string;
+  /** 선택된 카드의 *화면 ID* list (예: ['ITEM_001', 'ITEM_003']). UUID X. 빈 배열 허용. */
+  selectedScreenIds: string[];
+  /** 사용자 자유 코멘트 (예: "ITEM_002 는 다음 분기에 다시 검토"). 빈 문자열 / undefined 허용. */
+  userComment?: string;
+}
+
+/**
+ * `stream:idea-pick-snapshot` 의 카드 row — orchestrator 가 awaiting_user_pick
+ * phase 진입 시 UI 측에 push. SsmBox idea variant (T18) 가 카드 list 표시.
+ *
+ * `title` / `content` / `rationale` 은 Opinion row 와 달리 non-null 보장 —
+ * gather 단계에서 직원이 schema (Step1OpinionGatherSchema) min(1) 검증 통과
+ * 한 데이터만 들어오므로. 본 snapshot 은 UI 가 카드 헤더 / 본문 / 근거 모두
+ * 표시하므로 null 은 의미 없음 (gather 성공 = 모두 ≥ 1 char).
+ */
+export interface IdeaPickCard {
+  screenId: string;
+  uuid: string;
+  title: string;
+  content: string;
+  rationale: string;
+  authorLabel: string;
+  authorProviderId: string | null;
+}
+
+/**
+ * `OpinionService.finalizeIdeaSelection` 결과 — orchestrator 가 awaiting_user_pick
+ * phase 안 사용자 commit 후 다음 phase (compose_minutes) 진입 시 활용.
+ */
+export interface IdeaFinalizeSelectionResult {
+  meetingId: string;
+  /** status='agreed' 로 갱신된 카드 UUID list (사용자 선택 결과). */
+  agreedIds: string[];
+  /** status='excluded' 로 갱신된 카드 UUID list (사용자 미선택). exclusionReason='user_not_picked'. */
+  excludedIds: string[];
+  /** 사용자 자유 코멘트로 insert 된 신규 opinion row (kind='user-raised'). 코멘트 0 자 면 null. */
+  userOpinion: Opinion | null;
+}

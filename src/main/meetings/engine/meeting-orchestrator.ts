@@ -73,6 +73,16 @@ import {
   classifyNextStepWithDetails,
   type NextStepClassifierContext,
 } from './next-step-classifier';
+import {
+  IdeaUserPickPending,
+  type IdeaPickSnapshot,
+  type IdeaUserPickAbortReason,
+  type IdeaWorkflowResult,
+} from '../workflows/idea-workflow';
+import type {
+  IdeaFinalizeSelectionInput,
+  IdeaFinalizeSelectionResult,
+} from '../../../shared/opinion-types';
 
 export interface MeetingOrchestratorDeps {
   session: MeetingSession;
@@ -256,6 +266,15 @@ export class MeetingOrchestrator {
    */
   private turnIndexCounter = 0;
 
+  /**
+   * R12-C2 T15 — idea-workflow awaiting_user_pick phase 진입 시 set, IPC
+   * `meetings:idea-finalize-selection` 응답 시 commit / orchestrator.stop()
+   * 시 cancel. NULL = 진입 X 또는 settled 후 cleanup.
+   *
+   * 한 회의 lifetime 안에서 idea-workflow 는 1 회만 진입하므로 단발 instance.
+   */
+  private ideaPending: IdeaUserPickPending | null = null;
+
   constructor(deps: MeetingOrchestratorDeps) {
     this.session = deps.session;
     this.turnExecutor = deps.turnExecutor;
@@ -310,17 +329,28 @@ export class MeetingOrchestrator {
       // ── phase 2: tally (no provider call) ────────────────────────────
       this.transitionToPhase('tally');
 
-      // ── phase 2.5: quick_vote ────────────────────────────────────────
-      const quickResult = await this.runQuickVotePhase();
-      if (this.session.aborted) return await this.finalize('aborted');
-
-      // ── phase 3: free_discussion (선택) ──────────────────────────────
-      if (quickResult.unresolved.length > 0) {
-        await this.runFreeDiscussionPhase(quickResult.unresolved);
+      // ── R12-C2 T15: idea-workflow 분기 (D-B-Light + USER_PICK) ──────
+      const channel = this.lookupChannel();
+      if (channel?.role === 'idea') {
+        const ideaResult = await this.runAwaitingUserPickPhase();
         if (this.session.aborted) return await this.finalize('aborted');
+        if (ideaResult.outcome === 'aborted') {
+          return await this.finalize('aborted');
+        }
+        // idea variant: quick_vote / free_discussion skip → 바로 compose_minutes
+      } else {
+        // ── phase 2.5: quick_vote (풀세트만) ───────────────────────────
+        const quickResult = await this.runQuickVotePhase();
+        if (this.session.aborted) return await this.finalize('aborted');
+
+        // ── phase 3: free_discussion (선택, 풀세트만) ─────────────────
+        if (quickResult.unresolved.length > 0) {
+          await this.runFreeDiscussionPhase(quickResult.unresolved);
+          if (this.session.aborted) return await this.finalize('aborted');
+        }
       }
 
-      // ── phase 5: compose_minutes ────────────────────────────────────
+      // ── phase 5: compose_minutes (모든 부서 공통) ──────────────────
       await this.runComposeMinutesPhase();
       if (this.session.aborted) return await this.finalize('aborted');
 
@@ -360,6 +390,50 @@ export class MeetingOrchestrator {
     if (!this.running) return;
     this.session.abort();
     this.turnExecutor.abort();
+    // T15: idea-workflow awaiting_user_pick suspend 가 있으면 reject —
+    // phase loop 이 IdeaUserPickPending.wait() 에서 풀려나 finalize 진입.
+    if (this.ideaPending && this.ideaPending.isWaiting) {
+      this.ideaPending.cancel({ kind: 'aborted' });
+    }
+  }
+
+  /**
+   * R12-C2 T15 — IPC `meeting:idea-finalize-selection` 핸들러가 외부에서
+   * 호출. awaiting_user_pick phase 진입한 회의에서 사용자 commit 받아 두
+   * 작업을 단일 동기 호출로 처리:
+   *
+   *   1. OpinionService.finalizeIdeaSelection 호출 — DB 영속
+   *      (selected → agreed / unselected → excluded / userComment → user-raised)
+   *   2. ideaPending.commit(input) — phase loop wait() 풀어 compose_minutes 진입
+   *
+   * (1) 이 throw 시 (2) 호출 X — pending 은 wait 상태 유지, UI 가 입력 보정
+   * 후 재 commit 가능 (단, 본 sub-task 의 IdeaUserPickPending 은 single-use
+   * 라 throw 후에는 별 instance 가 필요. 이 한정은 IPC 핸들러 측 zod schema
+   * 검증으로 거의 차단됨 — 0+0 은 schema X / handler 측 추가 검증).
+   *
+   * 호출자 (IPC 핸들러) 가 IdeaPickValidationError / UnknownScreenIdError
+   * 를 catch 해 IPC 응답의 reason 으로 매핑.
+   */
+  submitIdeaPick(
+    input: IdeaFinalizeSelectionInput,
+  ): IdeaFinalizeSelectionResult {
+    if (!this.running) {
+      throw new Error(
+        `[MeetingOrchestrator] submitIdeaPick: meeting "${this.session.meetingId}" is not running`,
+      );
+    }
+    if (!this.ideaPending || !this.ideaPending.isWaiting) {
+      throw new Error(
+        `[MeetingOrchestrator] submitIdeaPick: meeting "${this.session.meetingId}" ` +
+          `is not in awaiting_user_pick phase (current=${this.session.currentPhase})`,
+      );
+    }
+    // (1) OpinionService.finalizeIdeaSelection — throw 시 caller 가 catch.
+    //     pending 은 wait 상태 유지 (single-use 한정 위반 가능성은 caller 책임).
+    const result = this.opinionService.finalizeIdeaSelection(input);
+    // (2) phase loop wait() 풀기. 이후 phase loop 가 compose_minutes 진입.
+    this.ideaPending.commit(input);
+    return result;
   }
 
   pause(): void {
@@ -810,6 +884,81 @@ export class MeetingOrchestrator {
       // 의견 1 개 종료 — opinion screen id 비움 (다음 의견 진입 시 재할당).
       this.session.setCurrentOpinionScreenId(null);
     }
+  }
+
+  /**
+   * R12-C2 T15 — idea-workflow awaiting_user_pick phase 본체.
+   *
+   * 흐름:
+   *   1. tally 결과로 IdeaPickSnapshot 생성 (root 카드만)
+   *   2. transitionToPhase('awaiting_user_pick') — DB / stream 갱신
+   *   3. emitIdeaPickSnapshot(snapshot) — UI 측 카드 list + 버튼 활성화
+   *   4. IdeaUserPickPending 생성 + wait() — IPC 응답까지 정지
+   *   5a. commit 응답 도착 → OpinionService.finalizeIdeaSelection 호출 +
+   *       compose_minutes 진입 (caller 측)
+   *   5b. abort (stop() 또는 cancel) → outcome='aborted' 반환
+   *
+   * IdeaPickValidationError (0+0 입력) 가 finalizeIdeaSelection 에서 throw
+   * 시 caller (IPC 핸들러) 가 직접 받아 IPC 응답으로 반환. 본 메서드는 그
+   * 경우 pending 을 다시 wait() — UI 가 추가 입력 후 재 commit. 단, 본
+   * sub-task 는 single-use pending 이라 재시도 X — IPC 핸들러가 throw 후
+   * 사용자가 UI 측에서 input 보정 후 재 commit. 즉 IPC 핸들러 측 검증만
+   * 사실상 활용. 본 메서드는 한 번 commit 받으면 finalize 진행.
+   */
+  private async runAwaitingUserPickPhase(): Promise<IdeaWorkflowResult> {
+    this.transitionToPhase('awaiting_user_pick');
+
+    // tally 결과로 카드 list (root 만) snapshot 구성. gather schema 가 min(1)
+    // 강제하므로 title/content/rationale 은 ≥ 1 char 보장 — 그래도 DB 가 nullable
+    // 라 defensive coalesce.
+    const tally = this.opinionService.tally(this.session.meetingId);
+    const snapshot: IdeaPickSnapshot = {
+      meetingId: this.session.meetingId,
+      channelId: this.session.channelId,
+      cards: tally.tree.map((node) => ({
+        screenId: node.screenId,
+        uuid: node.opinion.id,
+        title: node.opinion.title ?? '',
+        content: node.opinion.content ?? '',
+        rationale: node.opinion.rationale ?? '',
+        authorLabel: node.opinion.authorLabel,
+        authorProviderId: node.opinion.authorProviderId,
+      })),
+    };
+    try {
+      this.streamBridge.emitIdeaPickSnapshot(snapshot);
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] emitIdeaPickSnapshot threw',
+        errorPayload(err),
+      );
+    }
+
+    // suspend until IPC commit / cancel. submitIdeaPick 가 OpinionService
+    // 의 finalizeIdeaSelection 까지 동기 호출 후 commit — 본 wait() 가 풀린
+    // 시점엔 이미 DB 가 갱신된 상태. phase loop 는 그저 다음 phase 로 진행.
+    const pending = new IdeaUserPickPending();
+    this.ideaPending = pending;
+    try {
+      await pending.wait();
+    } catch (reason) {
+      this.ideaPending = null;
+      const abortReason =
+        typeof reason === 'object' && reason !== null && 'kind' in reason
+          ? (reason as IdeaUserPickAbortReason)
+          : ({ kind: 'aborted' } as IdeaUserPickAbortReason);
+      return {
+        meetingId: this.session.meetingId,
+        outcome: 'aborted',
+        abortReason,
+      };
+    }
+    this.ideaPending = null;
+
+    return {
+      meetingId: this.session.meetingId,
+      outcome: 'committed',
+    };
   }
 
   private async runComposeMinutesPhase(): Promise<void> {

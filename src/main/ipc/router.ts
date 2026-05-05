@@ -132,6 +132,7 @@ import {
 import {
   handleMeetingAbort,
   handleMeetingListActive,
+  handleMeetingIdeaFinalizeSelection,
 } from './handlers/meeting-handler';
 import {
   handleOpinionGather,
@@ -458,6 +459,10 @@ export function registerIpcHandlers(): void {
   // ── v3: Meeting ─────────────────────────────────────────────────
   handle('meeting:abort', isDev, (data) => handleMeetingAbort(data));
   handle('meeting:list-active', isDev, (data) => handleMeetingListActive(data));
+  // R12-C2 T15: idea-workflow USER_PICK commit (spec §5.1).
+  handle('meeting:idea-finalize-selection', isDev, (data) =>
+    handleMeetingIdeaFinalizeSelection(data),
+  );
   // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거 — SSM 투표 snapshot
   // 흐름이 폐기되어 데이터 소스가 사라졌다. 새 의견 모델 표결 surface 는
   // P3/R12-H 에서 별도 IPC 로 재정의.

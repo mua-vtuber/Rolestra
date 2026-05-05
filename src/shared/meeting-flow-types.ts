@@ -7,8 +7,9 @@
  *
  *   1.  gather             직원 의견 제시
  *   2.  tally              시스템 취합 + 화면 ID 부여 (no-network)
- *   2.5 quick_vote         일괄 동의 투표 — 만장일치 시 자유 토론 skip
- *   3.  free_discussion    자유 토론 (의견 1 건씩 라운드 누적)
+ *   2'. awaiting_user_pick 사용자 카드 선택 + 자유 코멘트 입력 대기 (idea 만, §5.1)
+ *   2.5 quick_vote         일괄 동의 투표 — 만장일치 시 자유 토론 skip (풀세트만)
+ *   3.  free_discussion    자유 토론 (의견 1 건씩 라운드 누적, 풀세트만)
  *   5.  compose_minutes    모더레이터 회의록 작성
  *   6.  handoff            인계 — handoff_mode='auto' 즉시 / 'check' Notification
  *
@@ -16,12 +17,16 @@
  *
  * 모든 풀세트 부서 (planning / design.* / review / audit) 가 같은 phase loop
  * 공유. 부서별 차이는 prompt template + handoff target 분기로만. 아이디어
- * 부서 (D-B-Light) 는 `gather` → `tally` → `handoff` 3 phase 만 사용.
+ * 부서 (D-B-Light, T15 land) 는 `gather → tally → awaiting_user_pick →
+ * compose_minutes → handoff` 5 phase 만 사용 — quick_vote / free_discussion
+ * surface X.
  *
  * spec docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md
  *  - §5    D-B 흐름 (의견 트리 + 깊이 cap 3 + 발화 ID 카운터)
+ *  - §5.1  아이디어 부서 D-B-Light + USER_PICK (T15)
  *  - §11.14 channels.max_rounds (회의 종료 조건)
  *  - §11.18 직원 응답 JSON schema 4 종
+ *  - §11.18.7 awaiting_user_pick 은 직원 응답 X (사용자 IPC 입력만)
  */
 
 import { z } from 'zod';
@@ -29,15 +34,20 @@ import { z } from 'zod';
 // ── Phase enum ───────────────────────────────────────────────────────────
 
 /**
- * 새 5+2.5 phase + 종료 2 phase. 8 종.
+ * 새 5+2.5 phase + idea-workflow USER_PICK + 종료 2 phase. 9 종.
  *
  * `meetings.state` 컬럼에 phase 문자열 그대로 저장 — 옛 SSM state 문자열
  * (`OPINION_GATHERING` 등) 자리에 phase 가 들어감 (migration 019 의 정식
  * — 컬럼 자체는 유지, 값만 교체).
+ *
+ * `awaiting_user_pick` (T15 land) 은 idea-workflow 만 진입하는 사용자 입력
+ * 대기 phase — 직원 응답 X (PHASE_RESPONSE_SCHEMAS 미매핑) / 사용자 IPC
+ * `meetings:idea-finalize-selection` 응답 시 compose_minutes 로 전이.
  */
 export type MeetingPhase =
   | 'gather'
   | 'tally'
+  | 'awaiting_user_pick'
   | 'quick_vote'
   | 'free_discussion'
   | 'compose_minutes'
@@ -45,10 +55,14 @@ export type MeetingPhase =
   | 'aborted'
   | 'done';
 
-/** 진행 중 phase 4 종 (gather / tally / quick_vote / free_discussion / compose_minutes / handoff). */
+/**
+ * 진행 중 phase 7 종 (gather / tally / awaiting_user_pick / quick_vote /
+ * free_discussion / compose_minutes / handoff).
+ */
 export const ACTIVE_MEETING_PHASES: ReadonlyArray<MeetingPhase> = [
   'gather',
   'tally',
+  'awaiting_user_pick',
   'quick_vote',
   'free_discussion',
   'compose_minutes',
@@ -63,13 +77,14 @@ export const TERMINAL_MEETING_PHASES: ReadonlyArray<MeetingPhase> = [
 
 /**
  * Phase 진행 순서 — 진행도 게이지 (0..N) 산출용. quick_vote 만장일치 시
- * free_discussion skip 가능, 아이디어 부서는 quick_vote / free_discussion /
- * compose_minutes 모두 skip — 본 배열은 "정상 풀세트 흐름" 의 ordinal 표현
- * 일 뿐이라 실제 phase 진입은 orchestrator 분기에 따른다.
+ * free_discussion skip 가능, 아이디어 부서는 quick_vote / free_discussion 대신
+ * awaiting_user_pick 거침 — 본 배열은 두 흐름 모두를 ordinal 표현 일 뿐이라
+ * 실제 phase 진입은 orchestrator + workflow 분기에 따른다.
  */
 export const MEETING_PHASE_ORDER: ReadonlyArray<MeetingPhase> = [
   'gather',
   'tally',
+  'awaiting_user_pick',
   'quick_vote',
   'free_discussion',
   'compose_minutes',
@@ -82,6 +97,7 @@ export function isMeetingPhase(value: string): value is MeetingPhase {
   return (
     value === 'gather' ||
     value === 'tally' ||
+    value === 'awaiting_user_pick' ||
     value === 'quick_vote' ||
     value === 'free_discussion' ||
     value === 'compose_minutes' ||

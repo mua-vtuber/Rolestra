@@ -337,6 +337,31 @@ DM
              검토 → 기획 인계 시 모달 안 *"+리뷰 부서도 시작"* 체크박스 (chain 외 entry)
 ```
 
+#### 5.1 아이디어 부서 D-B-Light + USER_PICK (R12-C2 P3 정식, T15)
+
+아이디어 부서는 풀세트 5+2.5 단계 중 **step 1 / step 2 / step 5 / step 6 만** 사용 + step 2 와 step 5 사이에 *사용자 선택 입력 대기* 단계 (`awaiting_user_pick`) 가 들어간다. step 2.5 (일괄 동의 투표) / step 3 (자유 토론) / step 4 (반복) 는 surface X (직원 발화 자체가 step 1 에서 끝나고, 의견 처리 권한은 사용자 단독).
+
+```
+1. gather             — 직원 의견 제시 (풀세트와 동일)
+2. tally              — 시스템 취합 + 화면 ID 부여 (풀세트와 동일)
+2'. awaiting_user_pick — 사용자 카드 선택 + 자유 코멘트 입력 대기 (idea 만 사용)
+                         · 카드 list (kind='root') 가 SsmBox 에 등장
+                         · 사용자가 0..N 카드 체크 + 자유 코멘트 textarea
+                         · [기획 부서로 보내기] 버튼: 0 pick + 0 comment 시 비활성화
+                         · 사용자 commit → IPC `meetings:idea-finalize-selection`
+                           - 선택 카드 → status='agreed'
+                           - 미선택 카드 → status='excluded' + exclusionReason='user_not_picked'
+                           - 자유 코멘트 ≥ 1 char → 새 opinion (kind='user-raised',
+                             authorProviderId=null, authorLabel='user_1', status='agreed') insert
+                           - 0+0 입력 시 ValidationError throw (UI 측은 버튼 비활성화로 차단)
+5. compose_minutes    — 회의록 [합의]+[제외] 두 섹션 (풀세트와 동일 양식)
+6. handoff            — 기획 부서 인계 (handoff_mode 따라 분기, 풀세트와 동일)
+```
+
+→ MeetingPhase enum 9 종 (gather / tally / **awaiting_user_pick** / quick_vote / free_discussion / compose_minutes / handoff / aborted / done) — `awaiting_user_pick` 은 idea-workflow 만 진입.
+→ SsmBox idea variant (T18 통합) 가 phase=`awaiting_user_pick` 일 때 카드 list + 선택 체크 + textarea + 버튼 surface 활성화.
+→ orchestrator 는 awaiting_user_pick 진입 시 *직원 발화 X / suspend* — 사용자 IPC 응답까지 phase loop 정지. 사용자 commit 후 compose_minutes → handoff 자동 진행.
+
 ### 데이터 모델 (R12-C2 — opinion 트리 + opinion_vote)
 
 `opinion` (R12-C2 P2 land — migration 019, §4 Migration 정식):
@@ -1153,6 +1178,7 @@ step 4 (모든 의견 합의/제외) 후 시스템이 모더레이터 (R12-S `Me
 
 - 직원 응답이 schema 부합 안 하면 시스템이 1 회 재요청 (prompt 안 schema 양식 다시 동봉). 2 회 실패 시 *해당 직원 응답 skip + 다음 직원 진행* — 회의 자체는 멈추지 않음.
 - 모더레이터 응답이 truncate / 요약 의심 시 시스템이 회의록 본문 길이 ↔ 의견 본문 합 비교 + 임계 (회의록 ≥ 의견 본문 합 × 1.2) 하회 시 1 회 재요청. 사용자 결정 (2026-05-04): "잘리지 말고 다 보여 줘".
+- **`awaiting_user_pick` (idea-workflow only, §5.1) 은 직원 응답 X / 사용자 IPC 입력만 받음** — `meetings:idea-finalize-selection` zod schema 가 입력 검증 (`selectedScreenIds: string[]` + `userComment?: string`, 0+0 ValidationError throw). schema fallback 룰 미적용 (재요청 X — 사용자 입력은 UI 측에서 강제, 버튼 비활성화로 차단).
 
 #### 11.18.8 B1 NextStep 카드 분류 (R12-C2 round 2 정식)
 

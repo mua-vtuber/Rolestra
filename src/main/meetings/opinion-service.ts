@@ -38,6 +38,8 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
+  IdeaFinalizeSelectionInput,
+  IdeaFinalizeSelectionResult,
   Opinion,
   OpinionFreeDiscussionResult,
   OpinionGatherResult,
@@ -50,6 +52,22 @@ import type {
 } from '../../shared/opinion-types';
 import type { OpinionRepository } from './opinion-repository';
 import { OPINION_DEPTH_CAP, buildScreenIdMap, mapToRecord } from './screen-id';
+
+// ── idea-workflow USER_PICK 상수 (T15 land — spec §5.1) ────────────────
+
+/**
+ * 사용자가 카드 0 개 선택 + 자유 코멘트 0 자 입력 시 IPC 측에서 throw 되는
+ * exclusionReason 은 *미선택* 만 의미. 사용자가 명시 거부 (rejected) 와
+ * 구분 — UI 가 해당 카드 색상 / 회의록 분기 처리에 활용.
+ */
+export const IDEA_USER_NOT_PICKED_REASON = 'user_not_picked';
+
+/**
+ * 사용자 자유 코멘트로 insert 되는 opinion row 의 authorLabel — 회의 단위
+ * 카운터 1 회만 발급 (사용자가 한 번만 commit 하므로). 발화 ID 형식은
+ * `<author>_<n>` (§11.18.1) — 사용자 = `user`.
+ */
+export const IDEA_USER_OPINION_AUTHOR_LABEL = 'user_1';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
 
@@ -97,6 +115,23 @@ export class OpinionNotFoundError extends OpinionError {
   constructor(opinionId: string) {
     super(`OpinionService: opinion not found: ${opinionId}`);
     this.name = 'OpinionNotFoundError';
+  }
+}
+
+/**
+ * idea-workflow USER_PICK commit 시 0 카드 + 0 코멘트 입력은 거부 (T15,
+ * 사용자 결정 2026-05-05). UI 측에서 [기획 부서로 보내기] 버튼이 비활성화
+ * 되지만 IPC 호출이 직접 들어와도 backend 에서 추가 차단.
+ */
+export class IdeaPickValidationError extends OpinionError {
+  constructor(meetingId: string) {
+    super(
+      `OpinionService.finalizeIdeaSelection: meeting "${meetingId}" — ` +
+        `must pick at least 1 card or write a non-empty user comment ` +
+        `(0 picks + 0 comment is rejected — UI must keep the handoff ` +
+        `button disabled in this state)`,
+    );
+    this.name = 'IdeaPickValidationError';
   }
 }
 
@@ -391,6 +426,140 @@ export class OpinionService {
       additions,
       votesInserted,
     };
+  }
+
+  // ── idea-workflow USER_PICK (T15 land — spec §5.1) ─────────────────
+
+  /**
+   * 사용자가 awaiting_user_pick phase 안 카드 선택 + 자유 코멘트 commit 시
+   * 호출. 4 작업을 단일 단계로 처리:
+   *
+   *   1. 화면 ID list → UUID 매핑 (UnknownScreenIdError on miss)
+   *   2. 선택된 카드 → status='agreed' (이미 root 만 awaiting_user_pick 대상)
+   *   3. 미선택 root 카드 → status='excluded' + exclusionReason='user_not_picked'
+   *   4. 자유 코멘트 ≥ 1 char → 새 opinion (kind='user-raised',
+   *      authorProviderId=null, authorLabel='user_1', status='agreed') insert
+   *
+   * 0 pick + 0 comment 입력 시 IdeaPickValidationError throw — UI 측
+   * [기획 부서로 보내기] 버튼 비활성화 invariant 정합 (사용자 결정
+   * 2026-05-05).
+   *
+   * caller (orchestrator idea-workflow helper) 가 본 호출 후 다음 phase
+   * (compose_minutes) 진입. 본 service 는 phase 전환 X / DB 영속만 책임.
+   *
+   * 깊이 cap / parent_id 검사는 root 카드 (parent_id=null) 만 대상이라
+   * 적용 X — 사용자 코멘트 opinion 도 root 로 insert.
+   */
+  finalizeIdeaSelection(
+    input: IdeaFinalizeSelectionInput,
+  ): IdeaFinalizeSelectionResult {
+    const { meetingId, selectedScreenIds, userComment } = input;
+    const trimmedComment = (userComment ?? '').trim();
+    if (selectedScreenIds.length === 0 && trimmedComment.length === 0) {
+      throw new IdeaPickValidationError(meetingId);
+    }
+
+    const opinions = this.repo.listByMeeting(meetingId);
+    const map = buildScreenIdMap(opinions);
+
+    // 화면 ID → UUID 매핑 검증 (alien ID 가 들어오면 즉시 throw — silent
+    // skip 금지).
+    const selectedUuids: string[] = [];
+    for (const screenId of selectedScreenIds) {
+      const uuid = map.screenToUuid.get(screenId);
+      if (!uuid) {
+        throw new UnknownScreenIdError(meetingId, screenId);
+      }
+      selectedUuids.push(uuid);
+    }
+
+    const selectedSet = new Set(selectedUuids);
+    const rootIds = opinions
+      .filter((o) => o.parentId === null)
+      .map((o) => o.id);
+
+    const baseNow = Date.now();
+    let ordinal = 0;
+
+    // 선택된 root → status='agreed'.
+    const agreedIds: string[] = [];
+    for (const uuid of selectedUuids) {
+      const ts = baseNow + ordinal;
+      ordinal += 1;
+      const ok = this.repo.updateStatus(uuid, 'agreed', null, ts);
+      if (!ok) throw new OpinionNotFoundError(uuid);
+      agreedIds.push(uuid);
+    }
+
+    // 미선택 root → status='excluded' + exclusionReason.
+    const excludedIds: string[] = [];
+    for (const id of rootIds) {
+      if (selectedSet.has(id)) continue;
+      const ts = baseNow + ordinal;
+      ordinal += 1;
+      const ok = this.repo.updateStatus(
+        id,
+        'excluded',
+        IDEA_USER_NOT_PICKED_REASON,
+        ts,
+      );
+      if (!ok) throw new OpinionNotFoundError(id);
+      excludedIds.push(id);
+    }
+
+    // 자유 코멘트 ≥ 1 char → user-raised opinion insert.
+    let userOpinion: Opinion | null = null;
+    if (trimmedComment.length > 0) {
+      // channelId 추정 — 모든 opinion 이 같은 회의에 속하므로 첫 row 의
+      // channel_id 사용. 빈 회의 (의견 0 건 + 코멘트만 1 건) 에서는 caller
+      // 가 channelId 를 IPC 입력에 추가해야 하지만, awaiting_user_pick 진입
+      // 자체가 gather 후라 의견 ≥ 0 보장. 0 인 케이스는 향후 IPC schema
+      // 측에서 channelId 추가하는 선택지 — 본 sub-task 는 회의에 root 의견
+      // 1 건 이상 보장 가정.
+      const channelId =
+        opinions.length > 0
+          ? opinions[0]!.channelId
+          : null;
+      if (channelId === null) {
+        throw new OpinionError(
+          `OpinionService.finalizeIdeaSelection: meeting "${meetingId}" ` +
+            `has 0 opinion rows — cannot derive channelId for user comment. ` +
+            `idea-workflow must run gather phase before awaiting_user_pick.`,
+        );
+      }
+      const ts = baseNow + ordinal;
+      ordinal += 1;
+      userOpinion = {
+        id: randomUUID(),
+        parentId: null,
+        meetingId,
+        channelId,
+        kind: 'user-raised',
+        authorProviderId: null,
+        authorLabel: IDEA_USER_OPINION_AUTHOR_LABEL,
+        title: this.deriveUserCommentTitle(trimmedComment),
+        content: trimmedComment,
+        rationale: '',
+        status: 'agreed',
+        exclusionReason: null,
+        round: 0,
+        createdAt: ts,
+        updatedAt: ts,
+      };
+      this.repo.insert(userOpinion);
+    }
+
+    return { meetingId, agreedIds, excludedIds, userOpinion };
+  }
+
+  /**
+   * 사용자 자유 코멘트 본문에서 제목 derive — 첫 줄 또는 80 자 cut. 사용자가
+   * 별도 제목 입력 안 하므로 카드 헤더용으로 자동 생성.
+   */
+  private deriveUserCommentTitle(comment: string): string {
+    const firstLine = comment.split(/\r?\n/, 1)[0] ?? comment;
+    if (firstLine.length <= 80) return firstLine;
+    return firstLine.slice(0, 77) + '...';
   }
 
   // ── 헬퍼 ──────────────────────────────────────────────────────────

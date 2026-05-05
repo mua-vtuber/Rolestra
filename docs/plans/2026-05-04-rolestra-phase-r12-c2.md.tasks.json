@@ -147,11 +147,11 @@
     {
       "id": 16,
       "subject": "T15 — idea-workflow (D-B-Light + USER_PICK)",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         14
       ],
-      "description": "**P3 진입 2 호.** 아이디어 부서 = 의견 모으기 (step 1~2) + 사용자 카드 선택 + 자유 코멘트 → 기획 인계.\n\n**산출:**\n- `src/main/meetings/workflows/idea-workflow.ts` 신규 — D-B-Light 흐름 (step 2.5 / 3 / 4 / 5 surface X)\n- IdeaCardList (SsmBox 우측 — T18 안에서 통합) — 카드 list (kind='root') + 선택 체크 + [기획 부서로 보내기] 버튼\n\n**Verify:** vitest unit + integration (할 일 → idea 회의 → 카드 선택 → 기획 인계). spec §4 부서별 회의 흐름 부합."
+      "description": "**P3 진입 2 호 (T15 — D-B-Light + USER_PICK).** 아이디어 부서 = 의견 모으기 (gather + tally) + 사용자 카드 선택 + 자유 코멘트 → 기획 인계.\n\n**완료 내용:**\n- src/shared/meeting-flow-types.ts — MeetingPhase union 9 종 (gather / tally / **awaiting_user_pick** / quick_vote / free_discussion / compose_minutes / handoff / aborted / done). isMeetingPhase / ACTIVE_MEETING_PHASES / MEETING_PHASE_ORDER 갱신.\n- src/shared/opinion-types.ts — IdeaFinalizeSelectionInput / IdeaFinalizeSelectionResult / IdeaPickCard 타입 신규.\n- src/shared/stream-events.ts — StreamIdeaPickSnapshotPayload 신규 + StreamEvent union + KNOWN_EVENT_TYPES 등록.\n- src/main/streams/stream-bridge.ts — emitIdeaPickSnapshot helper 추가.\n- src/main/meetings/opinion-service.ts — finalizeIdeaSelection 메서드 + IdeaPickValidationError + IDEA_USER_NOT_PICKED_REASON / IDEA_USER_OPINION_AUTHOR_LABEL 상수. 0 pick + 0 comment throw + 미선택 → status=excluded + 사용자 코멘트 → kind=user-raised opinion 신규 insert.\n- src/main/meetings/workflows/idea-workflow.ts 신규 — IdeaUserPickPending (single-use Promise holder) + IdeaPickSnapshot / IdeaWorkflowResult / IdeaUserPickAbortReason 타입.\n- src/main/meetings/engine/meeting-orchestrator.ts — channel.role==='idea' 분기 (run() 안 phase loop) + runAwaitingUserPickPhase 메서드 본체 (suspend wait promise) + submitIdeaPick 외부 surface (동기 finalize + commit) + stop() abort wire.\n- src/shared/ipc-types.ts — meeting:idea-finalize-selection IPC channel 신규 (4 reason discriminated response).\n- src/shared/ipc-schemas.ts — meetingIdeaFinalizeSelectionSchema (zod) 등록.\n- src/main/ipc/handlers/meeting-handler.ts — handleMeetingIdeaFinalizeSelection 핸들러 (orchestrator lookup + submitIdeaPick 호출 + Error → reason 매핑).\n- src/main/ipc/router.ts — 채널 등록.\n- docs/specs/2026-05-01-rolestra-channel-roles-design.md — §5.1 아이디어 부서 D-B-Light + USER_PICK + §11.18.7 awaiting_user_pick 직원 응답 X 추가.\n\n**검증:** typecheck:node + typecheck:web 0. vitest 3369 PASS / 13 skip / 0 fail (T14 baseline 3351 + 18 신규 = finalizeIdeaSelection 8 + IdeaUserPickPending 10). 회귀 1 fix (meeting-service ordinal: quick_vote=2 → 3). inspect:safety 95 (T14 baseline 동일 — T15 추가 위반 0).\n\n**T15 = backend + IPC only.** 채팅창 카드 (T14 land) + idea SsmBox variant (T18 통합) 가 stream:idea-pick-snapshot 구독 시 사용자 측 surface 활성화. 본 sub-task 는 frontend UI 자체 X — IPC 호출은 dev console 에서 직접 호출 가능."
     },
     {
       "id": 17,
@@ -451,5 +451,5 @@
       "description": "**P8 R12-C2 종결.**\n\n**산출:**\n- tasks.json sync (T0~T41 모두 completed)\n- `docs/구현-현황.md` R12-C2 행 추가 (한글, 사무실 메타포)\n- ADR `r12-c2-reference-projects-absorb.md` 갱신 (실제 land 결과 + cross-cutting C8/C9 link)\n- `decisions/cross-cutting.md` 에 C8 (A RunStep) + C9 (F 검사관) 추가\n- main fast-forward merge (`feat/r12-c2-redesign-r2` → main)\n- worktree 정리 (Rolestra-r12c2-r2 제거 + branch 삭제)\n- 다음 phase (R12-W / R12-H) 진입 준비 + 메모리 ⚠️ 갱신\n\n**검증 게이트:** vitest 전체 PASS + typecheck 0 + lint baseline + Windows dogfooding 회귀 0."
     }
   ],
-  "lastUpdated": "2026-05-05T09:01:22.770490Z"
+  "lastUpdated": "2026-05-05"
 }

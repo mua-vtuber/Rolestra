@@ -62,6 +62,7 @@ import type {
   StreamNotificationClickedPayload,
   StreamNotificationPrefsChangedPayload,
   StreamAutonomyModeChangedPayload,
+  StreamIdeaPickSnapshotPayload,
 } from '../../shared/stream-events';
 
 /** Renderer-delivery hook. */
@@ -99,6 +100,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:notification-clicked',
   'stream:notification-prefs-changed',
   'stream:autonomy-mode-changed',
+  'stream:idea-pick-snapshot',
 ]);
 
 interface FailureState {
@@ -421,6 +423,17 @@ export class StreamBridge {
     payload: StreamAutonomyModeChangedPayload,
   ): void {
     this.emit({ type: 'stream:autonomy-mode-changed', payload });
+  }
+
+  /**
+   * R12-C2 T15 — idea-workflow awaiting_user_pick phase 진입 시 1 회 push.
+   * UI (renderer SsmBox idea variant — T18) 가 카드 list + 선택 체크 +
+   * 코멘트 textarea 활성화. spec §11.13 / §5.1.
+   */
+  emitIdeaPickSnapshot(
+    payload: StreamIdeaPickSnapshotPayload,
+  ): void {
+    this.emit({ type: 'stream:idea-pick-snapshot', payload });
   }
 
   // ── Introspection (tests / diagnostics) ───────────────────────────

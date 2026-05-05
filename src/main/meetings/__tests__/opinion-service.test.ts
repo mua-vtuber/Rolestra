@@ -38,6 +38,9 @@ import { MeetingRepository } from '../meeting-repository';
 import { MeetingService } from '../meeting-service';
 import { OpinionRepository } from '../opinion-repository';
 import {
+  IDEA_USER_NOT_PICKED_REASON,
+  IDEA_USER_OPINION_AUTHOR_LABEL,
+  IdeaPickValidationError,
   OpinionDepthCapError,
   OpinionNotFoundError,
   OpinionService,
@@ -669,6 +672,202 @@ describe('OpinionService', () => {
         ],
       });
       expect(svc.nextLabelHint(meetingId, 'pv-codex')).toBe(3);
+    });
+  });
+
+  // ── finalizeIdeaSelection (T15 — spec §5.1) ─────────────────────────
+
+  describe('finalizeIdeaSelection', () => {
+    function gatherThree(): {
+      ids: string[];
+      screen: Record<string, string>;
+    } {
+      const r = svc.gather({
+        meetingId,
+        channelId,
+        round: 0,
+        responses: [
+          {
+            providerId: 'pv-codex',
+            payload: {
+              name: 'Codex',
+              label: 'codex_1',
+              opinions: [
+                { title: 'A 하자', content: 'A 본문', rationale: 'A 근거' },
+                { title: 'B 하자', content: 'B 본문', rationale: 'B 근거' },
+              ],
+            },
+          },
+          {
+            providerId: 'pv-claude',
+            payload: {
+              name: 'Claude',
+              label: 'claude_1',
+              opinions: [
+                { title: 'C 하자', content: 'C 본문', rationale: 'C 근거' },
+              ],
+            },
+          },
+        ],
+      });
+      const tally = svc.tally(meetingId);
+      return {
+        ids: r.inserted.map((o) => o.id),
+        screen: tally.screenToUuid,
+      };
+    }
+
+    it('selected → status=agreed, unselected → status=excluded with user_not_picked reason', () => {
+      gatherThree();
+
+      const result = svc.finalizeIdeaSelection({
+        meetingId,
+        selectedScreenIds: ['ITEM_001', 'ITEM_003'],
+        userComment: undefined,
+      });
+
+      expect(result.agreedIds).toHaveLength(2);
+      expect(result.excludedIds).toHaveLength(1);
+      expect(result.userOpinion).toBeNull();
+
+      // DB 갱신 검증.
+      const all = repo.listByMeeting(meetingId);
+      const byScreen = svc.tally(meetingId);
+      const agreedSet = new Set(result.agreedIds);
+      const excludedSet = new Set(result.excludedIds);
+      for (const op of all) {
+        if (agreedSet.has(op.id)) {
+          expect(op.status).toBe('agreed');
+          expect(op.exclusionReason).toBeNull();
+        } else if (excludedSet.has(op.id)) {
+          expect(op.status).toBe('excluded');
+          expect(op.exclusionReason).toBe(IDEA_USER_NOT_PICKED_REASON);
+        }
+      }
+      // 화면 ID 매핑이 안정적 — ITEM_002 가 미선택 set 에 들어감.
+      expect(excludedSet.has(byScreen.screenToUuid['ITEM_002']!)).toBe(true);
+    });
+
+    it('userComment alone (zero picks) inserts a user-raised opinion as agreed and excludes all root cards', () => {
+      gatherThree();
+
+      const result = svc.finalizeIdeaSelection({
+        meetingId,
+        selectedScreenIds: [],
+        userComment: '카드 다 별로예요 — 다음 회의에서 다시 해주세요.',
+      });
+
+      expect(result.agreedIds).toHaveLength(0);
+      expect(result.excludedIds).toHaveLength(3);
+      expect(result.userOpinion).not.toBeNull();
+      expect(result.userOpinion!.kind).toBe('user-raised');
+      expect(result.userOpinion!.authorProviderId).toBeNull();
+      expect(result.userOpinion!.authorLabel).toBe(
+        IDEA_USER_OPINION_AUTHOR_LABEL,
+      );
+      expect(result.userOpinion!.status).toBe('agreed');
+      expect(result.userOpinion!.parentId).toBeNull();
+      expect(result.userOpinion!.content).toContain('카드 다 별로예요');
+
+      // DB persist 확인 — opinion row 4 개 (gather 3 + user comment 1).
+      expect(repo.listByMeeting(meetingId)).toHaveLength(4);
+    });
+
+    it('combination — selected cards + user comment work together', () => {
+      gatherThree();
+
+      const result = svc.finalizeIdeaSelection({
+        meetingId,
+        selectedScreenIds: ['ITEM_002'],
+        userComment: 'ITEM_001 은 다음 분기에 다시 검토',
+      });
+
+      expect(result.agreedIds).toHaveLength(1);
+      expect(result.excludedIds).toHaveLength(2);
+      expect(result.userOpinion).not.toBeNull();
+      expect(result.userOpinion!.title).toContain('ITEM_001');
+    });
+
+    it('throws IdeaPickValidationError on 0 picks + 0 (or whitespace) comment', () => {
+      gatherThree();
+
+      expect(() =>
+        svc.finalizeIdeaSelection({
+          meetingId,
+          selectedScreenIds: [],
+          userComment: undefined,
+        }),
+      ).toThrow(IdeaPickValidationError);
+
+      expect(() =>
+        svc.finalizeIdeaSelection({
+          meetingId,
+          selectedScreenIds: [],
+          userComment: '   \n\t  ',
+        }),
+      ).toThrow(IdeaPickValidationError);
+
+      // DB 변동 없음 — 위 두 throw 후 status='pending' 유지.
+      const rows = repo.listByMeeting(meetingId);
+      expect(rows).toHaveLength(3);
+      expect(rows.every((o) => o.status === 'pending')).toBe(true);
+    });
+
+    it('throws UnknownScreenIdError on alien screen id (e.g. ITEM_999)', () => {
+      gatherThree();
+
+      expect(() =>
+        svc.finalizeIdeaSelection({
+          meetingId,
+          selectedScreenIds: ['ITEM_999'],
+          userComment: 'whatever',
+        }),
+      ).toThrow(UnknownScreenIdError);
+
+      // DB 변동 없음.
+      const rows = repo.listByMeeting(meetingId);
+      expect(rows.every((o) => o.status === 'pending')).toBe(true);
+    });
+
+    it('long user comment derives an 80-char title (truncate with ellipsis)', () => {
+      gatherThree();
+      const longLine = 'a'.repeat(100); // 100 chars on the first line.
+
+      const result = svc.finalizeIdeaSelection({
+        meetingId,
+        selectedScreenIds: [],
+        userComment: longLine,
+      });
+
+      expect(result.userOpinion!.title).toHaveLength(80);
+      expect(result.userOpinion!.title!.endsWith('...')).toBe(true);
+      expect(result.userOpinion!.content).toBe(longLine); // 본문은 truncate 없음.
+    });
+
+    it('multiline comment derives the first line as title', () => {
+      gatherThree();
+
+      const result = svc.finalizeIdeaSelection({
+        meetingId,
+        selectedScreenIds: [],
+        userComment: '제목 줄\n둘째 줄 본문\n셋째 줄',
+      });
+
+      expect(result.userOpinion!.title).toBe('제목 줄');
+      expect(result.userOpinion!.content).toContain('둘째 줄 본문');
+    });
+
+    it('idempotent-ish — calling on a meeting with 0 root cards but userComment ≥ 1 throws (no channelId derive)', () => {
+      // gather 안 한 빈 회의 — finalizeIdeaSelection 가 channelId 추정 못 해서
+      // OpinionError throw (silent fallback 금지). caller (orchestrator) 가
+      // gather 직후 호출 보장.
+      expect(() =>
+        svc.finalizeIdeaSelection({
+          meetingId,
+          selectedScreenIds: [],
+          userComment: 'hello',
+        }),
+      ).toThrow(/0 opinion rows/);
     });
   });
 });

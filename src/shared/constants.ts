@@ -11,14 +11,16 @@ export const APP_VERSION = '0.1.0';
 /**
  * Ordered list of meeting phase strings.
  *
- * R12-C2 T10b: 옛 SSM 12-state 모델 폐기 — 새 phase loop (8 phase) 로
- * 진행. 본 상수는 dashboard widgets (R4 TasksWidget), MeetingBanner,
+ * R12-C2 T10b: 옛 SSM 12-state 모델 폐기 — 새 phase loop (T15 land 후 9 phase)
+ * 로 진행. 본 상수는 dashboard widgets (R4 TasksWidget), MeetingBanner,
  * 옛 SsmBox placeholder 가 stateIndex / SESSION_STATE_COUNT 로 progress
  * gauge 를 그릴 때 reference. 진실 원천은 `meeting-flow-types.ts` 의
  * {@link MEETING_PHASE_ORDER}.
  *
- * 진행: gather → tally → quick_vote → free_discussion → compose_minutes →
- *       handoff → done | aborted
+ * 진행 (풀세트): gather → tally → quick_vote → free_discussion →
+ *               compose_minutes → handoff → done | aborted
+ * 진행 (idea):   gather → tally → awaiting_user_pick → compose_minutes →
+ *               handoff → done | aborted (T15 land)
  *
  * P3/R12-H 에서 SsmBox 재설계 시 본 상수를 phase 기반 progress 표현으로
  * 새로 사용한다.

@@ -287,6 +287,34 @@ export interface StreamAutonomyModeChangedPayload {
   reason?: 'user' | 'circuit_breaker' | 'autonomy_gate_fail';
 }
 
+// ── idea-workflow USER_PICK (T15 land — spec §5.1) ─────────────────
+
+/**
+ * `stream:idea-pick-snapshot` 페이로드 — orchestrator 가 awaiting_user_pick
+ * phase 진입 시 1 회 push. UI (renderer SsmBox idea variant — T18) 가
+ * 받아 카드 list + 선택 체크 + 코멘트 textarea + [기획 부서로 보내기] 버튼
+ * surface 활성화.
+ *
+ * spec §11.13 idea variant SsmBox layout: 의견 list (kind='root' 만, 단순)
+ * + 사용자 선택 여부 체크 마크. 진행 상황 X — step 2 까지만.
+ */
+export interface StreamIdeaPickSnapshotPayload {
+  meetingId: string;
+  channelId: string;
+  cards: Array<{
+    /** 화면 ID (예: `ITEM_001`). UI 가 IPC 응답 selectedScreenIds 로 사용. */
+    screenId: string;
+    /** UUID — UI 가 매핑 추적 시 reference. */
+    uuid: string;
+    title: string;
+    content: string;
+    rationale: string;
+    authorLabel: string;
+    /** provider id (예: 'codex' / 'claude' / 'gemini'). UI 가 발의자 표시. */
+    authorProviderId: string | null;
+  }>;
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -339,6 +367,10 @@ export type StreamEvent =
   | {
       type: 'stream:autonomy-mode-changed';
       payload: StreamAutonomyModeChangedPayload;
+    }
+  | {
+      type: 'stream:idea-pick-snapshot';
+      payload: StreamIdeaPickSnapshotPayload;
     };
 
 export type StreamEventType = StreamEvent['type'];

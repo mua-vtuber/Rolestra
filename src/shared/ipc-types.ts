@@ -680,6 +680,46 @@ export type IpcChannelMap = {
       reason: 'ok' | 'no_provider' | 'provider_error' | 'disabled';
     };
   };
+  /**
+   * R12-C2 T15: idea-workflow USER_PICK commit. awaiting_user_pick phase
+   * 진입한 회의에서 사용자가 카드 선택 + 자유 코멘트 보낸 후 [기획 부서로
+   * 보내기] 클릭 시 호출.
+   *
+   * 입력 검증:
+   *   - selectedScreenIds 와 userComment 가 모두 비어있으면 400-style 에러
+   *     ('idea_pick_validation' reason). UI 측은 [기획 부서로 보내기] 버튼
+   *     비활성화로 차단해야 하며, 본 IPC 는 race / 직접 호출 방어용.
+   *   - meetingId 가 awaiting_user_pick phase 가 아니면 'wrong_phase' 에러.
+   *   - 알 수 없는 화면 ID 전달 시 'unknown_screen_id' 에러.
+   *
+   * 성공 시 응답에 finalize 결과 (agreedIds / excludedIds / userOpinionId)
+   * 동봉 — UI 가 다음 화면 (compose_minutes phase 전환) 까지 progress 표시.
+   *
+   * spec §5.1 / §11.18.7.
+   */
+  'meeting:idea-finalize-selection': {
+    request: {
+      meetingId: string;
+      selectedScreenIds: string[];
+      userComment?: string;
+    };
+    response:
+      | {
+          ok: true;
+          agreedIds: string[];
+          excludedIds: string[];
+          userOpinionId: string | null;
+        }
+      | {
+          ok: false;
+          reason:
+            | 'idea_pick_validation'
+            | 'wrong_phase'
+            | 'meeting_not_found'
+            | 'unknown_screen_id';
+          message: string;
+        };
+  };
 
   // ── v3: DM (R10-Task1) ──────────────────────────────────────────
   /**
