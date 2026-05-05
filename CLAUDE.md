@@ -118,3 +118,13 @@ R1~R10 main merge 완료 (tip `dc4a763`). R11 진행 중 — 15/17 task 완료, 
 
 - `/mnt/f/hayoung/git/AI_Chat/` — 기존 v1 (Python/FastAPI/Svelte). 멀티파티 메시지 변환, 팩토리 패턴 provider, anti-sycophancy 참고
 - `/mnt/f/hayoung/git/bara_system/` — 메모리 시스템 참고 (hybrid search, Stanford 3-factor scoring, SQLite+FTS5+embeddings) — Memory Phase 3-b (R12+) 의존
+
+## graphify
+
+This project has a graphify knowledge graph at graphify-out/.
+
+Rules:
+- Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
+- If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
+- For cross-module "how does X relate to Y" questions, prefer `graphify query "<question>"`, `graphify path "<A>" "<B>"`, or `graphify explain "<concept>"` over grep — these traverse the graph's EXTRACTED + INFERRED edges instead of scanning files
+- After modifying code files in this session, run `graphify update .` to keep the graph current (AST-only, no API cost)
