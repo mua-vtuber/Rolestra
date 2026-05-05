@@ -1,0 +1,131 @@
+{
+  "planPath": "docs/plans/2026-04-29-rolestra-message-auto-meeting-trigger.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "T0: round2 A+B uncommitted commit",
+      "status": "completed",
+      "completedCommit": "97e2803",
+      "description": "**Goal:** D-A 시작 전 round2 A+B (turn status indicator + dev logs) 의 uncommitted 11 파일 commit.\n\n**Files:** message-service.ts / meeting-orchestrator.ts / meeting-turn-executor.ts / stream-bridge.ts / Composer.tsx / Thread.tsx / MessageSearchView.tsx / use-meeting-stream.ts / locales(ko/en).json / stream-events.ts\n\n**Verify:** git status clean (.omx 제외)\n\n```json:metadata\n{\"files\":[\"src/main/channels/message-service.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\",\"src/main/meetings/engine/meeting-turn-executor.ts\",\"src/main/streams/stream-bridge.ts\",\"src/renderer/features/messenger/Composer.tsx\",\"src/renderer/features/messenger/Thread.tsx\",\"src/renderer/features/search/MessageSearchView.tsx\",\"src/renderer/hooks/use-meeting-stream.ts\",\"src/renderer/i18n/locales/en.json\",\"src/renderer/i18n/locales/ko.json\",\"src/shared/stream-events.ts\"],\"verifyCommand\":\"git status --porcelain | grep -v '^.. \\\\.omx' | wc -l\",\"acceptanceCriteria\":[\"working tree clean (.omx 제외)\",\"commit message round2 A+B 명시\",\"typecheck PASS\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "T1: Migration 016 — meetings.paused_at + kind",
+      "status": "completed",
+      "completedCommit": "af3f088",
+      "blockedBy": [0],
+      "description": "**Goal:** DB 스키마 paused_at + kind 칼럼. forward-only / idempotent.\n\n**Files:** Create migrations/016-meeting-paused-and-kind.ts + test\n\n**Verify:** npm run test -- migrations/__tests__/016 PASS\n\n```json:metadata\n{\"files\":[\"src/main/database/migrations/016-meeting-paused-and-kind.ts\",\"src/main/database/migrations/__tests__/016-meeting-paused-and-kind.test.ts\",\"src/main/database/migrations/index.ts\"],\"verifyCommand\":\"npm run test -- src/main/database/migrations/__tests__/016\",\"acceptanceCriteria\":[\"paused_at column added\",\"kind column added with CHECK\",\"idempotent\",\"existing rows default applied\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "T2: Shared IPC types + zod (4 신규 채널)",
+      "status": "completed",
+      "completedCommit": "c6a97b4",
+      "blockedBy": [0],
+      "description": "**Goal:** meeting:request-stop / edit-topic / pause / resume IPC + Meeting.pausedAt/kind type.\n\n**Files:** ipc-types.ts / ipc-schemas.ts / meeting-types.ts / __tests__/ipc-schemas-meeting.test.ts\n\n**Verify:** npm run test -- ipc-schemas-meeting + typecheck\n\n```json:metadata\n{\"files\":[\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\",\"src/shared/meeting-types.ts\",\"src/shared/__tests__/ipc-schemas-meeting.test.ts\"],\"verifyCommand\":\"npm run test -- src/shared/__tests__/ipc-schemas-meeting.test.ts && npm run typecheck\",\"acceptanceCriteria\":[\"4 신규 IPC entry\",\"4 zod schema\",\"Meeting.pausedAt/kind\",\"invalid input rejected\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "T3: Per-meeting CliSessionState 격리",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** CliSessionStateManager (Map<meetingId,state>) + CliProvider sessionContext arg.\n\n**Files:** cli-session-state.ts / cli-provider.ts / provider-types.ts / cli-session-state-multi.test.ts\n\n**Verify:** npm run test -- cli-session-state-multi + 기존 cli-provider 테스트\n\n```json:metadata\n{\"files\":[\"src/main/providers/cli/cli-session-state.ts\",\"src/main/providers/cli/cli-provider.ts\",\"src/shared/provider-types.ts\",\"src/main/providers/cli/__tests__/cli-session-state-multi.test.ts\"],\"verifyCommand\":\"npm run test -- src/main/providers/cli/\",\"acceptanceCriteria\":[\"두 meetingId 호출 시 sessionId 격리\",\"meetingId 미지정 = default key\",\"shutdown 시 clearAll\",\"기존 회귀 무\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "T4: MeetingAutoTrigger — 채널 종류 분기 + race 가드",
+      "status": "completed",
+      "completedCommit": "be12492",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** MessageService 'message' 이벤트 → 채널 종류별 분기 → 회의 자동 시작/합류/DM 위임/시스템 ro 무시. AlreadyActiveMeetingError race 가드.\n\n**Files:** meetings/meeting-auto-trigger.ts + test, meeting-service.ts (start kind 추가)\n\n**Verify:** npm run test -- meeting-auto-trigger.test PASS\n\n```json:metadata\n{\"files\":[\"src/main/meetings/meeting-auto-trigger.ts\",\"src/main/meetings/meeting-auto-trigger.test.ts\",\"src/main/meetings/meeting-service.ts\",\"src/main/meetings/meeting-repository.ts\"],\"verifyCommand\":\"npm run test -- src/main/meetings/meeting-auto-trigger.test.ts\",\"acceptanceCriteria\":[\"DM/sys-ro/user/sys-general 4 분기\",\"활성 회의 합류\",\"신규 생성 + topic 슬라이스\",\"race fallback\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "T5: MessageService → MeetingAutoTrigger wiring",
+      "status": "completed",
+      "completedCommit": "81df7a5",
+      "blockedBy": [4],
+      "description": "**Goal:** 부팅 시 MeetingAutoTrigger 인스턴스화 + MessageService 'message' listener 등록 + orchestrator factory wrapper (createAndRun + interruptActive).\n\n**Files:** main/index.ts, meeting-auto-trigger-integration.test.ts\n\n**Verify:** integration test PASS\n\n```json:metadata\n{\"files\":[\"src/main/index.ts\",\"src/main/meetings/__tests__/meeting-auto-trigger-integration.test.ts\"],\"verifyCommand\":\"npm run test -- meeting-auto-trigger-integration\",\"acceptanceCriteria\":[\"부팅 시 single trigger 인스턴스\",\"message append → meeting create e2e\",\"listener throw 시 append 결과 영향 무\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "T6: DmAutoResponder — DM 단일 turn 응답",
+      "status": "completed",
+      "completedCommit": "f8604b2",
+      "blockedBy": [2],
+      "description": "**Goal:** DM 채널 메시지 시 provider.generate() 1 회 호출 → 응답 1 메시지 append. Meeting 안 만듦.\n\n**Files:** channels/dm-auto-responder.ts + test\n\n**Verify:** npm run test -- dm-auto-responder PASS\n\n```json:metadata\n{\"files\":[\"src/main/channels/dm-auto-responder.ts\",\"src/main/channels/dm-auto-responder.test.ts\"],\"verifyCommand\":\"npm run test -- src/main/channels/dm-auto-responder.test.ts\",\"acceptanceCriteria\":[\"성공 시 assistant append\",\"실패 시 system 메시지 append\",\"멤버 없음 시 noop\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "T7: MeetingService request-stop / pause / resume / editTopic + IPC",
+      "status": "pending",
+      "blockedBy": [1, 2],
+      "description": "**Goal:** 4 메서드 + 4 IPC 핸들러.\n\n**Files:** meeting-service.ts / meeting-repository.ts / meeting-handler.ts / router.ts / meeting-service-pause-resume.test.ts\n\n**Verify:** test PASS + typecheck\n\n```json:metadata\n{\"files\":[\"src/main/meetings/meeting-service.ts\",\"src/main/meetings/meeting-repository.ts\",\"src/main/ipc/handlers/meeting-handler.ts\",\"src/main/ipc/router.ts\",\"src/main/meetings/__tests__/meeting-service-pause-resume.test.ts\"],\"verifyCommand\":\"npm run test -- meeting-service-pause-resume\",\"acceptanceCriteria\":[\"pause/resume round-trip\",\"pause idempotent\",\"editTopic 갱신\",\"request-stop event emit\",\"4 IPC handler\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "T8: MeetingMinutesComposer partial summary",
+      "status": "completed",
+      "completedCommit": "f296231",
+      "blockedBy": [0],
+      "description": "**Goal:** partial=true 옵션 (라운드 한계 시 합의/논쟁/미결 3 섹션 분리). 실패 시 fallback.\n\n**Files:** meeting-minutes-composer.ts + test\n\n**Verify:** test PASS\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-minutes-composer.ts\",\"src/main/meetings/engine/__tests__/meeting-minutes-composer-partial.test.ts\"],\"verifyCommand\":\"npm run test -- meeting-minutes-composer\",\"acceptanceCriteria\":[\"partial=true 시 3-section prompt\",\"summarize 실패 fallback\",\"기본 동작 회귀 무\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "T9: MeetingOrchestrator stop hook + paused 체크 + partial 호출",
+      "status": "pending",
+      "blockedBy": [7, 8],
+      "description": "**Goal:** orchestrator (a) request-stop event 수신, (b) paused_at 체크 → PAUSED, (c) FAILED → partial=true minutes.\n\n**Files:** meeting-orchestrator.ts + test\n\n**Verify:** test PASS\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-orchestrator.ts\",\"src/main/meetings/engine/__tests__/meeting-orchestrator-stop-pause.test.ts\"],\"verifyCommand\":\"npm run test -- meeting-orchestrator-stop-pause\",\"acceptanceCriteria\":[\"request-stop 후 nextTurn skip\",\"paused 시 PAUSED entry\",\"FAILED → composeMinutes partial=true\",\"DONE → partial 미설정\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "T10: App before-quit hook + 진행 회의 다이얼로그 main side",
+      "status": "pending",
+      "blockedBy": [2, 7],
+      "description": "**Goal:** before-quit 이벤트 가로채기 + renderer push + app:quit-decision IPC + pause/wait/cancel 분기.\n\n**Files:** main/index.ts / stream-bridge.ts / stream-events.ts / app-handler.ts / ipc-types.ts / ipc-schemas.ts\n\n**Verify:** typecheck + 가능한 단위 테스트\n\n```json:metadata\n{\"files\":[\"src/main/index.ts\",\"src/main/streams/stream-bridge.ts\",\"src/shared/stream-events.ts\",\"src/main/ipc/handlers/app-handler.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\"],\"verifyCommand\":\"npm run typecheck\",\"acceptanceCriteria\":[\"활성 회의 0 시 즉시 quit\",\"≥1 시 차단 + push\",\"pause: 모두 paused → quit\",\"wait: polling → quit\",\"cancel: quit 차단 유지\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "T11: ChannelRail MeetingStatusLabel + hover swap",
+      "status": "pending",
+      "blockedBy": [2, 7],
+      "description": "**Goal:** 사이드바 채널 항목에 회의 상태 라벨 + hover swap [회의 종료]/[재개].\n\n**Files:** MeetingStatusLabel.tsx + test, ChannelRail.tsx, use-active-meetings.ts\n\n**Verify:** test PASS + typecheck\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/MeetingStatusLabel.tsx\",\"src/renderer/features/messenger/__tests__/MeetingStatusLabel.test.tsx\",\"src/renderer/features/messenger/ChannelRail.tsx\",\"src/renderer/hooks/use-active-meetings.ts\"],\"verifyCommand\":\"npm run test -- MeetingStatusLabel\",\"acceptanceCriteria\":[\"active label\",\"paused label\",\"hover swap\",\"stop click → IPC\",\"data-testid + aria-label\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "T12: ChannelHeader [회의 시작] hide + MeetingTopicEditor",
+      "status": "pending",
+      "blockedBy": [2],
+      "description": "**Goal:** 평소 [회의 시작] hide (dev/E2E 만 노출) + 토픽 inline 편집.\n\n**Files:** ChannelHeader.tsx / MeetingTopicEditor.tsx + test\n\n**Verify:** test PASS\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/ChannelHeader.tsx\",\"src/renderer/features/messenger/MeetingTopicEditor.tsx\",\"src/renderer/features/messenger/__tests__/MeetingTopicEditor.test.tsx\"],\"verifyCommand\":\"npm run test -- MeetingTopicEditor\",\"acceptanceCriteria\":[\"start meeting hidden in production\",\"dev/E2E 시 노출\",\"topic inline edit + save IPC\",\"esc cancel\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "T13: AppQuitMeetingDialog (renderer)",
+      "status": "pending",
+      "blockedBy": [10],
+      "description": "**Goal:** main push 받아 모달 + 3 버튼 + IPC 응답.\n\n**Files:** AppQuitMeetingDialog.tsx + test, use-app-quit-prompt.ts, App.tsx\n\n**Verify:** test PASS\n\n```json:metadata\n{\"files\":[\"src/renderer/features/app-quit/AppQuitMeetingDialog.tsx\",\"src/renderer/features/app-quit/__tests__/AppQuitMeetingDialog.test.tsx\",\"src/renderer/hooks/use-app-quit-prompt.ts\",\"src/renderer/App.tsx\"],\"verifyCommand\":\"npm run test -- AppQuitMeetingDialog\",\"acceptanceCriteria\":[\"event 시 모달 노출\",\"활성 회의 목록\",\"3 버튼 IPC\",\"esc cancel\"]}\n```"
+    },
+    {
+      "id": 14,
+      "subject": "T14: i18n 신규 키 (ko + en) 18 개",
+      "status": "pending",
+      "blockedBy": [0],
+      "description": "**Goal:** channelRail / endMeetingDialog / quitDialog / partialSummary 신규 키 ko/en.\n\n**Files:** locales/ko.json, en.json\n\n**Verify:** npm run lint PASS\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\"],\"verifyCommand\":\"npm run lint\",\"acceptanceCriteria\":[\"18 신규 키 양쪽 locale\",\"eslint-plugin-i18next 통과\"]}\n```"
+    },
+    {
+      "id": 15,
+      "subject": "T15: e2e — auto meeting flow + pause/resume",
+      "status": "pending",
+      "blockedBy": [5, 6, 9, 11, 13],
+      "description": "**Goal:** Playwright Electron e2e 2 스크립트.\n\n**Files:** e2e/auto-meeting-flow.spec.ts, e2e/meeting-pause-resume.spec.ts\n\n**Verify:** Windows host 에서 npm run test:e2e\n\n```json:metadata\n{\"files\":[\"e2e/auto-meeting-flow.spec.ts\",\"e2e/meeting-pause-resume.spec.ts\"],\"verifyCommand\":\"npm run test:e2e -- auto-meeting-flow meeting-pause-resume\",\"acceptanceCriteria\":[\"메시지 → 자동 회의 → 합의 → 회의록 e2e\",\"일시정지 → 재부팅 → 재개 e2e\",\"WSL skip guard\"]}\n```"
+    },
+    {
+      "id": 16,
+      "subject": "T16: 회귀 + spec/ADR 갱신 + 메모리",
+      "status": "pending",
+      "blockedBy": [15],
+      "description": "**Goal:** 전체 test/typecheck/lint GREEN + spec §7.4/§7.5/§8 갱신 + R12-decisions.md ADR + 메모리.\n\n**Files:** spec / ADR / MEMORY / 신규 메모리\n\n**Verify:** npm run test && typecheck && lint 전체 GREEN\n\n```json:metadata\n{\"files\":[\"docs/specs/2026-04-18-rolestra-design.md\",\"docs/decisions/R12-decisions.md\"],\"verifyCommand\":\"npm run test && npm run typecheck && npm run lint\",\"acceptanceCriteria\":[\"전체 test PASS\",\"typecheck 0 error\",\"lint PASS\",\"spec 본문 갱신\",\"ADR 추가\",\"메모리 D-A 완료 항목\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-30T20:50:00+09:00"
+}

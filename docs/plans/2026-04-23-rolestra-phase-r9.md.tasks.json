@@ -1,0 +1,116 @@
+{
+  "planPath": "docs/plans/2026-04-23-rolestra-phase-r9.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: R9 브랜치 + spec §10 R9 체크리스트 확장 + plan + tasks.json + Decision Log",
+      "status": "completed",
+      "description": "**Goal:** `rolestra-phase-r9` 브랜치 main tip(`3cf32ad`)에서 분기. spec §10 Phase R9 블록을 R3~R8 템플릿(체크박스 + 산출물 링크)으로 확장 — 13 구현 체크박스 + scope 경계. Decision Log 8건(D1~D8) 기록. tasks.json 14-slot skeleton.\n\n**Files:** docs/plans/2026-04-23-rolestra-phase-r9.md, docs/plans/2026-04-23-rolestra-phase-r9.md.tasks.json, docs/specs/2026-04-18-rolestra-design.md (§10 Phase R9만)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r9\n\n```json:metadata\n{\"files\":[\"docs/plans/2026-04-23-rolestra-phase-r9.md\",\"docs/plans/2026-04-23-rolestra-phase-r9.md.tasks.json\",\"docs/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r9 브랜치 생성\",\"Decision Log에 D1~D8 8건 기록\",\"§10 Phase R9 체크박스+산출물 템플릿 확장\",\"tasks.json 14-slot skeleton 존재\"]}\n```",
+      "lastUpdated": "2026-04-23T12:00:00.000Z"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Shared autonomy + queue + notification prefs types + IPC 채널 + zod + preload",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** `src/shared/queue-types.ts` + `src/shared/notification-types.ts` 확정 (이미 일부 존재 — 확장). IPC 채널 `project:set-autonomy`, `queue:list/add/reorder/remove/pause/resume`, `notification:get-prefs/update-prefs/test` 를 `ipc-types.ts` + `ipc-schemas.ts` + preload 화이트리스트에 일관 선언. Stream 이벤트 `stream:queue-updated` / `stream:notification-prefs-changed` / `stream:autonomy-mode-changed` 를 `stream-events.ts` 에 추가.\n\n**Files:** src/shared/{queue-types,notification-types,ipc-types,ipc-schemas,stream-events}.ts, src/preload/index.ts, src/shared/__tests__/ipc-schemas.test.ts (확장)\n\n**Verify:** `npm run test -- ipc-schemas queue-types notification-types`\n\n```json:metadata\n{\"files\":[\"src/shared/queue-types.ts\",\"src/shared/notification-types.ts\",\"src/shared/ipc-types.ts\",\"src/shared/ipc-schemas.ts\",\"src/shared/stream-events.ts\",\"src/preload/index.ts\"],\"verifyCommand\":\"npm run test -- ipc-schemas queue notification stream-events\",\"acceptanceCriteria\":[\"10+ 신규 채널 (+3 stream) 일관 선언\",\"zod round-trip 게이트 green\",\"기존 R8 채널 회귀 0\",\"typecheck exit 0\"]}\n```",
+      "lastUpdated": "2026-04-23T12:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: AutonomyModeToggle + 2단계 확인 다이얼로그 + use-autonomy-mode hook + stream reducer",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** `src/renderer/features/projects/AutonomyModeToggle.tsx` — 프로젝트 헤더 3분기 토글 (manual/auto_toggle/queue). `AutonomyConfirmDialog.tsx` — manual → auto_toggle/queue 승격 시 Circuit Breaker 기본값 4종 안내 + 명시적 재확인 checkbox. `use-autonomy-mode.ts` hook — fetch + invoke + `stream:autonomy-mode-changed` reducer.\n\n**Files:** src/renderer/features/projects/{AutonomyModeToggle,AutonomyConfirmDialog}.tsx + __tests__, src/renderer/hooks/use-autonomy-mode.ts + __tests__\n\n**Verify:** `npm run test -- AutonomyModeToggle AutonomyConfirmDialog use-autonomy-mode`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/projects/AutonomyModeToggle.tsx\",\"src/renderer/features/projects/AutonomyConfirmDialog.tsx\",\"src/renderer/hooks/use-autonomy-mode.ts\"],\"verifyCommand\":\"npm run test -- AutonomyModeToggle AutonomyConfirmDialog\",\"acceptanceCriteria\":[\"3 모드 토글 onClick → invoke 인자 정확\",\"manual → auto_toggle/queue 승격 시 confirm dialog open\",\"checkbox 없이 confirm 비활성\",\"stream event 수신 시 로컬 state 갱신\"]}\n```",
+      "lastUpdated": "2026-04-23T12:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: QueuePanel + use-queue hook + stream reducer",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** `src/renderer/features/projects/QueuePanel.tsx` — 프로젝트 상단 접기 가능 패널. 여러 줄 입력 → 줄 단위 항목 추가 / 목록 표시 / drag 순서 변경 / 항목 제거 / pause / resume / 진행 포인터 표시. `use-queue.ts` — `queue:list/add/reorder/remove/pause/resume` invoke + `stream:queue-updated` reducer.\n\n**Files:** src/renderer/features/projects/QueuePanel.tsx + __tests__, src/renderer/hooks/use-queue.ts + __tests__\n\n**Verify:** `npm run test -- QueuePanel use-queue`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/projects/QueuePanel.tsx\",\"src/renderer/hooks/use-queue.ts\"],\"verifyCommand\":\"npm run test -- QueuePanel use-queue\",\"acceptanceCriteria\":[\"여러 줄 입력 → add 여러 번 invoke\",\"drag 순서 변경 → reorder invoke 인자 정확\",\"pause/resume 토글\",\"진행 포인터 반영\",\"stream event 수신 시 로컬 state 갱신\"]}\n```",
+      "lastUpdated": "2026-04-23T12:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: NotificationPrefsView + use-notification-prefs + 설정 surface 진입",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** `src/renderer/features/settings/NotificationPrefsView.tsx` — 4 kind × 표시 on/off + 소리 on/off + 테스트 알림 버튼. `use-notification-prefs.ts` — fetch + update + `stream:notification-prefs-changed` reducer. 설정 surface 진입점 wire (R4 SettingsSection 또는 임시 SettingsView).\n\n**Files:** src/renderer/features/settings/NotificationPrefsView.tsx + __tests__, src/renderer/hooks/use-notification-prefs.ts + __tests__\n\n**Verify:** `npm run test -- NotificationPrefsView use-notification-prefs`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/settings/NotificationPrefsView.tsx\",\"src/renderer/hooks/use-notification-prefs.ts\"],\"verifyCommand\":\"npm run test -- NotificationPrefsView\",\"acceptanceCriteria\":[\"4 kind × 2 토글 UI 렌더\",\"update-prefs invoke 인자 정확\",\"테스트 알림 버튼 → notification:test invoke\",\"stream event 수신 반영\"]}\n```",
+      "lastUpdated": "2026-04-24T01:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: AutonomyGate — ApprovalService.create 시 autonomyMode 분기 (manual/auto/queue)",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** `src/main/autonomy/autonomy-gate.ts` — ApprovalService 'created' 이벤트 구독, 연결된 project 의 autonomyMode 조회, (a) manual: 기본 흐름 유지 (approval_item 유지), (b) auto_toggle/queue: 특정 kind + outcome 조건 (mode_transition 의 target=auto/hybrid, consensus_decision 의 accepted 결과) 만 자동 accept + `#회의록` 채널에 audit trace + NotificationService.show('work_done'). 실패 조건 (review_outcome=rework/fail, cli_spawn_failed 등) 은 강제 manual 다운그레이드 + CircuitBreaker 없이도 승격 roll-back.\n\n**Files:** src/main/autonomy/autonomy-gate.ts + __tests__, src/main/approvals/approval-service.ts (hook-in), src/main/index.ts (wire)\n\n**Verify:** `npm run test -- autonomy-gate approval-service`\n\n```json:metadata\n{\"files\":[\"src/main/autonomy/autonomy-gate.ts\",\"src/main/approvals/approval-service.ts\"],\"verifyCommand\":\"npm run test -- autonomy-gate\",\"acceptanceCriteria\":[\"manual: approval_item 생성 + 기존 흐름 (회귀 0)\",\"auto_toggle: accepted kind 자동 decide('accepted')\",\"fail/rework: 강제 manual 다운그레이드\",\"#회의록 trace 포스트\"]}\n```",
+      "lastUpdated": "2026-04-24T14:55:00.000Z"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: Circuit Breaker 실 이벤트 feed (4 tripwire) + on('fired') downgrade handler",
+      "status": "completed",
+      "blockedBy": [5],
+      "description": "**Goal:** ExecutionService `dryRunApply` 직후 `circuitBreaker.recordFileChanges(n)`, CliRunner `spawn` 완료 시 `recordCliElapsed(ms)`, QueueService `startNext` 시 `recordQueueStart`, MeetingTurnExecutor/ApprovalService 실패 시 `recordError(cat)`. `circuitBreaker.on('fired')` → ProjectService.setAutonomy('manual') + `approval_item` (category=circuit_breaker) + NotificationService.show('error', { reason }) — v3-side-effects.ts 의 breakerHandler 완성.\n\n**Files:** src/main/execution/execution-service.ts, src/main/providers/cli-runner.ts, src/main/queue/queue-service.ts, src/main/meetings/engine/meeting-turn-executor.ts, src/main/engine/v3-side-effects.ts + __tests__\n\n**Verify:** `npm run test -- circuit-breaker v3-side-effects execution-service cli-runner`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/execution/execution-service.ts\",\"src/main/providers/cli-runner.ts\",\"src/main/queue/queue-service.ts\",\"src/main/meetings/engine/meeting-turn-executor.ts\"],\"verifyCommand\":\"npm run test -- circuit-breaker v3-side-effects\",\"acceptanceCriteria\":[\"4 tripwire 각각 실 이벤트 소스에서 record 호출\",\"fired 시 ProjectService.setAutonomy('manual') 호출 확인\",\"approval_item category=circuit_breaker 생성\",\"notification.show('error', {reason})\"]}\n```",
+      "lastUpdated": "2026-04-24T17:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: Queue run loop — auto-start next + 재시작 복구 + pause/resume + stream emit",
+      "status": "completed",
+      "blockedBy": [5],
+      "description": "**Goal:** QueueService 가 meeting onFinal 직후 `startNext()` 호출 (autonomyMode=queue 인 경우). 앱 재시작 시 `status='in_progress'` 항목을 `pending` 으로 롤백 + `attempts` 유지 (복구). pause/resume 정합성. `stream:queue-updated` emit 완성. 이미 있는 구조 확장.\n\n**Files:** src/main/queue/queue-service.ts + __tests__, src/main/index.ts (recovery hook), src/main/queue/queue-repository.ts (소폭 확장)\n\n**Verify:** `npm run test -- queue-service queue-repository`\n\n```json:metadata\n{\"files\":[\"src/main/queue/queue-service.ts\",\"src/main/queue/queue-repository.ts\",\"src/main/index.ts\"],\"verifyCommand\":\"npm run test -- queue-service\",\"acceptanceCriteria\":[\"queue 모드 onFinal → startNext 호출\",\"재시작 recovery rollback 검증\",\"pause 중 startNext 호출 없음\",\"stream:queue-updated 발사\"]}\n```",
+      "lastUpdated": "2026-04-24T19:10:00.000Z"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: MeetingOrchestrator.onFinal → #회의록 요약 포스트 + NotificationService.show(work_done)",
+      "status": "completed",
+      "blockedBy": [5],
+      "description": "**Goal:** v3-side-effects.ts 의 work-done handler 완성. MeetingOrchestrator onFinal 이벤트에서 (a) `#회의록` 채널에 메타 헤더 + 요약 원문 자동 포스트 (R6 와 동일 포맷 — postMinutes 경유 기존 완료), (b) NotificationService.show('work_done', { projectId, meetingTitle }) (모든 autonomyMode 공통 — v3-side-effects terminal DONE 경로 기존 완료), (c) **신규** auto_toggle/queue 일 때만 `#일반` 채널에 완료 알림 system message 추가 (spec §8).\n\n**구현:** `postGeneralMeetingDoneMessage(deps, info)` helper를 v3-side-effects.ts 에 export, `MeetingOrchestrator.finishMeeting(outcome='accepted')` 직후 호출. ProjectService.get 으로 autonomyMode 조회 → auto_toggle/queue 일 때만 ChannelService.listByProject 에서 `system_general` 찾아 MessageService.append. 프로젝트/채널 누락/throw 모두 error-tolerant (warn + no-op).\n\n**Files:** src/main/engine/v3-side-effects.ts (+ __tests__ +9 cases), src/main/meetings/engine/meeting-orchestrator.ts (+ __tests__ +4 cases)\n\n**Verify:** `npx vitest run src/main/engine/__tests__/v3-side-effects.test.ts src/main/meetings/engine/__tests__/meeting-orchestrator.test.ts`\n\n```json:metadata\n{\"files\":[\"src/main/engine/v3-side-effects.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- v3-side-effects\",\"acceptanceCriteria\":[\"onFinal → #회의록 메시지 append 확인 (기존 postMinutes)\",\"notification.show('work_done') 호출 (기존 v3-side-effects)\",\"auto_toggle/queue 에서만 #일반 system message (신규)\",\"manual autonomy 에서 #일반 포스트 0 (회귀 0)\",\"rejected/aborted outcome 에서 #일반 포스트 0\"]}\n```",
+      "lastUpdated": "2026-04-24T19:50:00.000Z"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Production wiring — setNotificationServiceAccessor + setQueueServiceAccessor + streamBridge.connect({queue}) + prefs seed",
+      "status": "completed",
+      "blockedBy": [6, 7, 8],
+      "description": "**Goal:** R8 Task 8 패턴. main/index.ts 에서 `setNotificationServiceAccessor(() => notificationService)` + `setQueueServiceAccessor(() => queueService)` 호출. `streamBridge.connect({ ..., queue: queueService })` (현재 주석 `queue connect in R9`). NotificationPrefsRepository 기본값 4 kind × display/sound=true 로 seed (최초 부팅). notification-handler / queue-handler production 에서 throw 0.\n\n**Files:** src/main/index.ts, src/main/streams/stream-bridge.ts, src/main/notifications/notification-repository.ts (seed), src/main/__tests__/r9-boot.test.ts 또는 r2-integration-smoke 확장\n\n**Verify:** `npm run test -- r9-boot handlers-v3 r2-integration-smoke`\n\n```json:metadata\n{\"files\":[\"src/main/index.ts\",\"src/main/streams/stream-bridge.ts\",\"src/main/notifications/notification-repository.ts\"],\"verifyCommand\":\"npm run test -- r9-boot\",\"acceptanceCriteria\":[\"notification:get-prefs production throw 0\",\"queue:list production throw 0\",\"streamBridge queue 연결 확인\",\"prefs 초기 4 kind seed\"]}\n```",
+      "lastUpdated": "2026-04-24T11:15:00.000Z"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: R8 인수인계 통합 — 외근 자동 timeout 1h + MemberWarmupService backoff retry",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "**Goal:** (a) MemberProfileService 가 `status_override='offline-manual'` 일 때 마지막 변경 시각 + autonomy 기본 timeout (60분, settings 조정 가능) 를 체크하여 자동 `online` 복귀 (backend timer or getWorkStatus 지연 평가). (b) MemberWarmupService 가 timeout 실패한 provider 에 대해 10s → 30s → 60s 지수 backoff 재시도 (최대 3회). provider.warmup abort signal 지원 여부 문서화 (R10 deferred).\n\n**구현:** (a) `AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MIN=60` + `AUTONOMY_TIMEOUT_OFFLINE_MANUAL_MS` 상수를 `src/shared/member-profile-types.ts` 에 export. `MemberProfileService` constructor 에 `MemberProfileServiceOptions { offlineManualTimeoutMs?, now?: () => number }` 주입 지원. `getWorkStatus` 가 `status_override='offline-manual'` + `now - profile.updatedAt > timeoutMs` 일 때 `repo.setStatusOverride(null, now)` 로 자동 clear 한 뒤 runtime status 로 fall-through. `setStatus`/`updateProfile` 도 주입된 `this.now()` 로 일관된 시계 사용 (테스트 deterministic). `timeoutMs=0` 은 auto-clear 비활성 (legacy mode). 신규 마이그레이션 0건 — `updated_at` 을 timestamp 근거로 사용 (profile edit 시 타이머 리셋이라는 경미한 imperfection 을 service 헤더에 명시).\n(b) `WARMUP_RETRY_DELAYS_MS=[10_000,30_000,60_000]` + `WARMUP_MAX_RETRIES=3` 상수 export. `MemberWarmupService` 가 `WarmupOptions.retryDelaysMs` 로 override 가능 (테스트용 `[]`=비활성 또는 ms 단위 짧은 schedule). 초기 probe 실패 시 `scheduleRetry(providerId, 0, timeoutMs, retryDelays)` 가 linear 체인으로 `setTimeout` 예약 → 각 retry 가 `runProbe` 1회 + 실패면 `scheduleRetry(index+1)` 재귀 → 성공 시 체인 종료. `cancelRetries(id)` / `cancelAll()` / `pendingRetryCount()` 노출. `WarmupResult.retriesScheduled: boolean` 필드 추가. warmAll 은 여전히 initial probe 완료 즉시 resolve (boot UX).\n\n**Files:** src/main/members/member-profile-service.ts, src/main/members/member-warmup-service.ts + __tests__ (+6 cases offline-manual timeout + 8 cases backoff retry), src/shared/member-profile-types.ts (+4 상수)\n\n**Verify:** `npx vitest run src/main/members/__tests__/member-profile-service.test.ts src/main/members/__tests__/member-warmup-service.test.ts` — 47/47 green. `npm run typecheck` exit 0. `npx eslint src/main/members/ src/shared/member-profile-types.ts` 경고 0.\n\n```json:metadata\n{\"files\":[\"src/main/members/member-profile-service.ts\",\"src/main/members/member-warmup-service.ts\"],\"verifyCommand\":\"npm run test -- member-profile-service member-warmup-service\",\"acceptanceCriteria\":[\"60분 경과 offline-manual → online 자동 복귀\",\"warmup 실패 3회까지 backoff retry\",\"retry 모두 실패 시 offline-connection 확정\",\"회귀 0\"]}\n```",
+      "lastUpdated": "2026-04-24T20:58:00.000Z"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: i18n populate notification.* / autonomy.* / queue.* / circuitBreaker.* / settings.notifications.*",
+      "status": "completed",
+      "blockedBy": [2, 3, 4, 5, 6, 7, 8],
+      "description": "**Goal:** ko/en 신규 키 populate. `notification.*` (main-process 라벨 — R7/R8 에서 deferred 됐던 4 kind 고정 title/body + `notification.warmupFailed.*` + `notification.circuitBreaker.*`). `autonomy.mode.*` (3 라벨) / `autonomy.confirm.*` (dialog) / `autonomy.downgrade.*` (Circuit Breaker 발동 안내). `queue.panel.*` / `queue.toast.*` / `queue.recovery.*`. `circuitBreaker.tripwire.*` (4 종 + reason). `settings.notifications.*`. i18next-parser keepRemoved regex 확장.\n\n**구현:** `src/main/notifications/notification-labels.ts` NEW (D8 main-process dictionary, ko/en) — `resolveNotificationLabel` / `resolveBreakerCopy` / `resolveGeneralMeetingDoneBody` + `setNotificationLocale` R10 setting hook. `v3-side-effects.ts` + `notification-service.ts` 하드코딩 Korean 라벨 → dictionary 위임. ko/en JSON 에 `autonomy.*` / `circuitBreaker.*` / `notification.*` / `queue.*` / `settings.*` populate + `approval.kind.circuit_breaker` / `dashboard.approvals.kind.circuit_breaker` 2 leaves (R9-Task6 유산). `i18next-parser.config.js` 5 신규 keepRemoved regex (`notification.*` / `circuitBreaker.*` / `autonomy.*` / `queue.*` / `settings.*`). Parser idempotent: 두 번째 실행 diff 0. `notification-labels.test.ts` 15 cases — ko 4-kind title+body × getter / en switch / breaker copy + interpolation / generalMeetingDone titled+untitled / ko↔en parity guard.\n\n**Files:** src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js, src/main/notifications/notification-labels.ts, src/main/engine/v3-side-effects.ts, src/main/notifications/notification-service.ts, src/main/notifications/__tests__/notification-labels.test.ts\n\n**Verify:** `npm run i18n:check` (exit 0)\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"i18next-parser.config.js\",\"src/main/notifications/notification-labels.ts\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"ko/en 신규 키 populate (parser idempotent)\",\"i18n:check exit 0\",\"typecheck:web exit 0\",\"notification.* main-process 라벨 populate\"]}\n```",
+      "lastUpdated": "2026-04-24T22:00:00.000Z"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: Playwright E2E autonomy-queue-flow.spec.ts (2단계 확인 → auto accept → queue → circuit breaker)",
+      "status": "completed",
+      "blockedBy": [2, 3, 4, 9, 10],
+      "description": "**Goal:** spec §11 시나리오 — (a) 프로젝트 헤더에서 auto_toggle 승격 → 2단계 확인 다이얼로그 → 확인 → 모드 전환 mode_transition 자동 accept, (b) QueuePanel 에 2 항목 추가 → 첫 항목 시작 → 완료 시 `#일반` 알림 + 다음 항목 자동 시작, (c) Circuit Breaker `files_per_turn > 20` 모의 → 강제 manual 다운그레이드 + OS 알림 발사 (Electron Notification mock). WSL 제약 시 R4~R8 와 동일 DONE_WITH_CONCERNS.\n\n**구현:** App.tsx 가 `activeProject` 기반으로 `AutonomyModeToggle` (ShellTopBar rightSlot) + `QueuePanel` (뷰 상단 band) 를 wire — 두 컴포넌트 모두 `activeProjectId` 가 있을 때만 mount. E2E spec 은 Step A (auto_toggle 승격 + ack checkbox gate + data-mode 플립), Step B (queue 모드 전환 + 2 줄 입력 + pending status 검증 + pause/resume round-trip), Step C (Circuit Breaker downgrade — R10 mock breaker 주입 대기 — 예상 관찰물만 commented-out 블록으로 문서화). WSL 제약 시 DONE_WITH_CONCERNS.\n\n**Files:** e2e/autonomy-queue-flow.spec.ts, src/renderer/App.tsx\n\n**Verify:** `npx playwright test autonomy-queue-flow` 또는 DONE_WITH_CONCERNS. typecheck exit 0, lint 0 errors.\n\n```json:metadata\n{\"files\":[\"e2e/autonomy-queue-flow.spec.ts\",\"src/renderer/App.tsx\"],\"verifyCommand\":\"npx playwright test autonomy-queue-flow\",\"acceptanceCriteria\":[\"spec 3 단계 시나리오 존재\",\"typecheck/lint exit 0\",\"WSL 제약 시 DONE_WITH_CONCERNS 정책\"]}\n```",
+      "lastUpdated": "2026-04-24T22:15:00.000Z"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: R9 Closeout — typecheck/lint/test/i18n/theme/build + done-checklist + tasks 14/14",
+      "status": "completed",
+      "blockedBy": [11, 12],
+      "description": "**Goal:** 모든 정식 게이트 녹색. `docs/checklists/r9-done-checklist.md` 작성 (14 산출물 + Known Concerns + Decision Log). spec §10 R9 [ ] → [x]. tasks.json 14/14 completed.\n\n**결과:** typecheck (node+web) exit 0, lint 0 errors / 23 warnings (all pre-existing), i18n:check exit 0 (parser idempotent), theme:check exit 0, build exit 0 (main 671.76 kB + preload 1.98 kB + renderer 1,220.66 kB). R9 scope tests 400/400 green across 28 files. 레거시 v2 failing files (database-branch / conversation / memory / recovery / remote / session-persistence) 기존 유지 — R11 cleanup. done-checklist 에 14 산출물 맵 + Decision Log D1~D10 + Known Concerns 6건 (queue meetingStarter production / CB persistence / stream:member-status-changed / warmup provider.disabled / notification focus gate macOS / CB approval UI) 기록. spec §10 R9 모든 체크박스 [x] 전환.\n\n**Files:** docs/checklists/r9-done-checklist.md, docs/specs/2026-04-18-rolestra-design.md (§10 R9), tasks.json\n\n**Verify:** `npm run typecheck && npm run typecheck:web && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build`\n\n```json:metadata\n{\"files\":[\"docs/checklists/r9-done-checklist.md\",\"docs/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build\",\"acceptanceCriteria\":[\"정식 게이트 전체 녹색\",\"r9-done-checklist.md 작성\",\"§10 R9 모든 ✓\",\"tasks.json 14/14 completed\"]}\n```",
+      "lastUpdated": "2026-04-24T22:30:00.000Z"
+    }
+  ]
+}

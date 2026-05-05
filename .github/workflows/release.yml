@@ -18,7 +18,7 @@ name: Release packaging
 # Release).
 #
 # macOS DMG is shipped unsigned. Gatekeeper bypass guidance lives in
-# docs/디자인/패키징.md (Task 13). Code signing + notarization are deferred
+# docs/design/패키징.md (Task 13). Code signing + notarization are deferred
 # to R12+ alongside auto-update (electron-updater).
 
 on:
@@ -108,7 +108,7 @@ jobs:
             gh release create "$tag" \
               --draft \
               --title "Rolestra $tag" \
-              --notes "Automated draft for $tag. macOS DMG is unsigned — see docs/디자인/패키징.md for Gatekeeper bypass."
+              --notes "Automated draft for $tag. macOS DMG is unsigned — see docs/design/패키징.md for Gatekeeper bypass."
           fi
           # Attach every artefact under dist-artifacts/.
           shopt -s globstar nullglob

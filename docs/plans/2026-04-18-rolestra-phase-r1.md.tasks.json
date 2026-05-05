@@ -1,0 +1,110 @@
+{
+  "planPath": "docs/plans/2026-04-18-rolestra-phase-r1.md",
+  "tasks": [
+    {
+      "id": 11,
+      "subject": "Task 0: tools/cli-smoke 스캐폴드",
+      "status": "completed",
+      "description": "**Goal:** 독립 TypeScript 모듈 스캐폴드 + vitest include + tsx 실행 가능\n\n**Files:** tools/cli-smoke/{package.json,tsconfig.json,README.md,src/index.ts}, package.json (root), vitest.config.ts, .gitignore\n\n**Verify:** `npm run smoke:test`\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/package.json\",\"tools/cli-smoke/tsconfig.json\",\"tools/cli-smoke/README.md\",\"tools/cli-smoke/src/index.ts\",\"package.json\",\"vitest.config.ts\",\".gitignore\"],\"verifyCommand\":\"npm run smoke:test\",\"acceptanceCriteria\":[\"smoke:test 스크립트 존재\",\"tsx 실행 성공\",\"tsconfig가 루트 extends\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 1: 공용 타입 정의",
+      "status": "completed",
+      "blockedBy": [11],
+      "description": "**Goal:** Project/ProjectPaths/PermissionMode/CliKind zod 스키마 + 타입.\n\n**Files:** tools/cli-smoke/src/types.ts\n\n**Verify:** `npx tsc --noEmit -p tools/cli-smoke/tsconfig.json`\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/types.ts\"],\"verifyCommand\":\"npx tsc --noEmit -p tools/cli-smoke/tsconfig.json\",\"acceptanceCriteria\":[\"zod 스키마와 타입 공존\",\"enum 리터럴 일관\"]}\n```"
+    },
+    {
+      "id": 13,
+      "subject": "Task 2: resolveProjectPaths() + 단위 테스트",
+      "status": "completed",
+      "blockedBy": [12],
+      "description": "**Goal:** spec §4.2.1 단일 경로 결정. new/imported/external.\n\n**Files:** tools/cli-smoke/src/resolve-project-paths.ts, __tests__/resolve-project-paths.test.ts\n\n**Verify:** `npm run smoke:test -- resolve-project-paths` (5 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/resolve-project-paths.ts\",\"tools/cli-smoke/__tests__/resolve-project-paths.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- resolve-project-paths\",\"acceptanceCriteria\":[\"new/imported spawnCwd=projectDir\",\"external spawnCwd=projectDir/link\",\"external externalLink 없으면 throw\"]}\n```"
+    },
+    {
+      "id": 14,
+      "subject": "Task 3: PathGuard — isPathWithin + realpath",
+      "status": "completed",
+      "blockedBy": [12],
+      "description": "**Goal:** spec §7.6.4 path-guard. traversal/symlink escape 차단.\n\n**Files:** tools/cli-smoke/src/path-guard.ts, __tests__/path-guard.test.ts\n\n**Verify:** `npm run smoke:test -- path-guard` (6 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/path-guard.ts\",\"tools/cli-smoke/__tests__/path-guard.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- path-guard\",\"acceptanceCriteria\":[\"루트 하위/자체 true\",\"traversal false\",\"symlink escape false\",\"존재하지 않는 경로 처리\"]}\n```"
+    },
+    {
+      "id": 15,
+      "subject": "Task 4: Junction 유틸 (Win/POSIX)",
+      "status": "completed",
+      "blockedBy": [14],
+      "description": "**Goal:** createLink/removeLink/resolveLink — Windows mklink /J + POSIX symlink.\n\n**Files:** tools/cli-smoke/src/junction.ts, __tests__/junction.test.ts\n\n**Verify:** `npm run smoke:test -- junction` (3 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/junction.ts\",\"tools/cli-smoke/__tests__/junction.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- junction\",\"acceptanceCriteria\":[\"createLink 크로스 OS\",\"resolveLink realpath\",\"removeLink safe\"]}\n```"
+    },
+    {
+      "id": 16,
+      "subject": "Task 5: ArenaRootService",
+      "status": "completed",
+      "blockedBy": [12],
+      "description": "**Goal:** ArenaRoot 초기화 + consensus/projects/db/logs idempotent.\n\n**Files:** tools/cli-smoke/src/arena-root.ts, __tests__/arena-root.test.ts\n\n**Verify:** `npm run smoke:test -- arena-root` (4 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/arena-root.ts\",\"tools/cli-smoke/__tests__/arena-root.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- arena-root\",\"acceptanceCriteria\":[\"4개 하위 디렉토리 생성\",\"idempotent\",\"루트가 파일이면 throw\"]}\n```"
+    },
+    {
+      "id": 17,
+      "subject": "Task 6: ProjectService.createNewProject",
+      "status": "completed",
+      "blockedBy": [12, 16],
+      "description": "**Goal:** new kind 프로젝트 생성. 폴더 + .arena/meta.json.\n\n**Files:** tools/cli-smoke/src/project-service.ts, __tests__/project-service.test.ts\n\n**Verify:** `npm run smoke:test -- project-service` (3 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/project-service.ts\",\"tools/cli-smoke/__tests__/project-service.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- project-service\",\"acceptanceCriteria\":[\"폴더+meta.json 생성\",\"중복 slug throw\",\"slug 스키마 검증\"]}\n```"
+    },
+    {
+      "id": 18,
+      "subject": "Task 7: ProjectService.linkExternal + importProject",
+      "status": "completed",
+      "blockedBy": [15, 17],
+      "description": "**Goal:** external(junction + realpath) / imported(복사). external+auto 금지.\n\n**Files:** tools/cli-smoke/src/project-service.ts, __tests__/project-service.test.ts (수정)\n\n**Verify:** `npm run smoke:test -- project-service` (8 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/project-service.ts\",\"tools/cli-smoke/__tests__/project-service.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- project-service\",\"acceptanceCriteria\":[\"linkExternal junction+realpath\",\"external+auto throw\",\"importProject 복사\"]}\n```"
+    },
+    {
+      "id": 19,
+      "subject": "Task 8: CliSpawn — cwd 강제",
+      "status": "completed",
+      "blockedBy": [12],
+      "description": "**Goal:** runCli 래퍼 — cwd 필수, env 병합, Windows resolve.\n\n**Files:** tools/cli-smoke/src/cli-spawn.ts, __tests__/cli-spawn.test.ts\n\n**Verify:** `npm run smoke:test -- cli-spawn` (5 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/cli-spawn.ts\",\"tools/cli-smoke/__tests__/cli-spawn.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- cli-spawn\",\"acceptanceCriteria\":[\"cwd 미지정 throw\",\"cwd 미존재 throw\",\"env 병합\",\"node -v 성공\"]}\n```"
+    },
+    {
+      "id": 20,
+      "subject": "Task 9: ClaudePermissionAdapter",
+      "status": "completed",
+      "blockedBy": [12],
+      "description": "**Goal:** spec §7.6.3 Claude — auto(+Bash)/hybrid(-Bash)/approval + allowedTools 화이트리스트.\n\n**Files:** tools/cli-smoke/src/permission-adapter.ts, __tests__/permission-adapter.test.ts\n\n**Verify:** `npm run smoke:test -- permission-adapter` (Claude 4 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/permission-adapter.ts\",\"tools/cli-smoke/__tests__/permission-adapter.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- permission-adapter\",\"acceptanceCriteria\":[\"auto: Bash 포함\",\"hybrid: Bash 제외\",\"approval: default+최소 도구\",\"external+auto throw\"]}\n```"
+    },
+    {
+      "id": 21,
+      "subject": "Task 10: CodexPermissionAdapter",
+      "status": "completed",
+      "blockedBy": [20],
+      "description": "**Goal:** spec §7.6.3 Codex — auto(-a never +sandbox danger)/hybrid(--full-auto)/approval(on-failure+workspace-write).\n\n**Files:** tools/cli-smoke/src/permission-adapter.ts, __tests__/permission-adapter.test.ts (수정)\n\n**Verify:** `npm run smoke:test -- permission-adapter` (8 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/permission-adapter.ts\",\"tools/cli-smoke/__tests__/permission-adapter.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- permission-adapter\",\"acceptanceCriteria\":[\"auto: danger-full-access\",\"hybrid: --full-auto\",\"approval: on-failure workspace-write\",\"read-only sandbox\"]}\n```"
+    },
+    {
+      "id": 22,
+      "subject": "Task 11: GeminiPermissionAdapter",
+      "status": "completed",
+      "blockedBy": [21],
+      "description": "**Goal:** spec §7.6.3 Gemini — auto(yolo)/hybrid(auto_edit)/approval(default).\n\n**Files:** tools/cli-smoke/src/permission-adapter.ts, __tests__/permission-adapter.test.ts (수정)\n\n**Verify:** `npm run smoke:test -- permission-adapter` (12 tests)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/permission-adapter.ts\",\"tools/cli-smoke/__tests__/permission-adapter.test.ts\"],\"verifyCommand\":\"npm run smoke:test -- permission-adapter\",\"acceptanceCriteria\":[\"auto: yolo\",\"hybrid: auto_edit\",\"approval: default\",\"external+auto throw\"]}\n```"
+    },
+    {
+      "id": 23,
+      "subject": "Task 12: Smoke Matrix Runner",
+      "status": "completed",
+      "blockedBy": [13, 18, 19, 22],
+      "description": "**Goal:** 3 CLI × 3 mode × (new/external) 매트릭스 실행 orchestration. 결과 JSON.\n\n**Files:** tools/cli-smoke/src/smoke-runner.ts\n\n**Verify:** `npx tsc --noEmit -p tools/cli-smoke/tsconfig.json` (실행은 Task 13)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/src/smoke-runner.ts\"],\"verifyCommand\":\"npx tsc --noEmit -p tools/cli-smoke/tsconfig.json\",\"acceptanceCriteria\":[\"18+ 시나리오 orchestration\",\"CLI 미설치 skip\",\"결과 JSON 저장\",\"external TOCTOU 재검증\"]}\n```"
+    },
+    {
+      "id": 24,
+      "subject": "Task 13: 매트릭스 실행 + appendix 생성",
+      "status": "completed",
+      "blockedBy": [23],
+      "description": "**Goal:** `npm run smoke:run` 실제 실행 → appendix-cli-matrix.md 작성 → spec §15 링크 추가.\n\n**Files:** docs/specs/appendix/cli-matrix.md, docs/specs/2026-04-18-rolestra-design.md (수정)\n\n**Verify:** 매트릭스 JSON 저장됨 + appendix 존재\n\n```json:metadata\n{\"files\":[\"docs/specs/appendix/cli-matrix.md\",\"docs/specs/2026-04-18-rolestra-design.md\",\"tools/cli-smoke/matrix-results/\"],\"verifyCommand\":\"ls tools/cli-smoke/matrix-results/ && test -f docs/specs/appendix/cli-matrix.md\",\"acceptanceCriteria\":[\"매트릭스 러너 실행 완료\",\"JSON 결과 저장\",\"appendix 마크다운 작성\",\"spec §15 링크 추가\"]}\n```"
+    },
+    {
+      "id": 25,
+      "subject": "Task 14: R1 종료 확인 + R2 체크리스트",
+      "status": "completed",
+      "blockedBy": [24],
+      "description": "**Goal:** 전체 test/typecheck/lint pass, 매트릭스 1회 이상 성공, README에 R2 진입 체크리스트.\n\n**Files:** tools/cli-smoke/README.md (수정)\n\n**Verify:** `npm run smoke:test && npm run typecheck && npm run lint` (exit 0)\n\n```json:metadata\n{\"files\":[\"tools/cli-smoke/README.md\"],\"verifyCommand\":\"npm run smoke:test && npm run typecheck && npm run lint\",\"acceptanceCriteria\":[\"모든 단위 테스트 통과\",\"typecheck 통과\",\"lint 통과\",\"R2 체크리스트 문서\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-04-18T12:00:00.000Z"
+}

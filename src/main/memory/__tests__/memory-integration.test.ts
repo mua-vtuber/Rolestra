@@ -5,7 +5,7 @@
  * 삭제된 v2 마이그레이션 (`001-initial-schema`, `004-memory-enhancement`)
  * 에 직접 의존했다. v3 메모리 파이프라인은 Phase 3-b (임베딩 + 하이브리드
  * 서치 + 반성/진화) 가 R12+ 에서 정식화되면 같은 시점에 통합 테스트를
- * 새로 작성한다 (참조: docs/superpowers/specs/2026-04-18-rolestra-design.md
+ * 새로 작성한다 (참조: docs/specs/2026-04-18-rolestra-design.md
  * §메모리 단계).
  *
  * 그때까지 suite 자체는 skip 상태로 둔다 — `it.skip` 라벨을 통해 의도가

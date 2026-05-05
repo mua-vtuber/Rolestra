@@ -5,7 +5,7 @@
  * Canonical proof that the migration SQL shipped in
  * `src/main/database/migrations/008-memory.ts` through
  * `011-notifications.ts` matches the constraints declared in spec §5.2
- * (docs/superpowers/specs/2026-04-18-rolestra-design.md lines 440-463) and
+ * (docs/specs/2026-04-18-rolestra-design.md lines 440-463) and
  * preserves the audit-safety invariants from §12 Security.
  *
  * Coverage:

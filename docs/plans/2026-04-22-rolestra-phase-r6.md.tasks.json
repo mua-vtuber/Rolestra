@@ -1,0 +1,146 @@
+{
+  "planPath": "docs/plans/2026-04-22-rolestra-phase-r6.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: R6 브랜치 + spec §10 R6 체크리스트 확장 + Decision Log",
+      "status": "completed",
+      "description": "**Goal:** `rolestra-phase-r6` 브랜치 main tip(2f9a998)에서 분기. spec §10 Phase R6 블록을 R3/R4/R5와 동일한 체크박스+산출물 링크 템플릿으로 확장. Decision Log 6건(D1~D6) 기록. tasks.json 14-slot skeleton.\n\n**Files:** docs/plans/2026-04-22-rolestra-phase-r6.md, docs/plans/2026-04-22-rolestra-phase-r6.md.tasks.json, docs/specs/2026-04-18-rolestra-design.md (§10 Phase R6만)\n\n**Verify:** `git rev-parse --abbrev-ref HEAD` == rolestra-phase-r6\n\n```json:metadata\n{\"files\":[\"docs/plans/2026-04-22-rolestra-phase-r6.md\",\"docs/plans/2026-04-22-rolestra-phase-r6.md.tasks.json\",\"docs/specs/2026-04-18-rolestra-design.md\"],\"verifyCommand\":\"git rev-parse --abbrev-ref HEAD\",\"acceptanceCriteria\":[\"rolestra-phase-r6 브랜치 생성\",\"Decision Log에 D1~D6 6건 기록\",\"§10 Phase R6 체크박스+산출물 템플릿 확장\",\"tasks.json 14-slot skeleton 존재\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: Shared meeting-stream-types + stream-bridge v3 이벤트 API",
+      "status": "completed",
+      "blockedBy": [
+        0
+      ],
+      "description": "**Goal:** `src/shared/meeting-stream-types.ts` discriminated union 5종 (`meeting:state-changed`/`meeting:turn-start`/`meeting:turn-token`/`meeting:turn-done`/`meeting:error`) + zod schema. `src/main/streams/stream-bridge.ts` 에 `emitMeeting*` 5 메서드 + preload 화이트리스트 등록.\n\n**Files:** src/shared/meeting-stream-types.ts, src/main/streams/stream-bridge.ts, src/preload/index.ts, src/main/streams/__tests__/stream-bridge.test.ts\n\n**Verify:** `npm run test -- stream-bridge`\n\n```json:metadata\n{\"files\":[\"src/shared/meeting-stream-types.ts\",\"src/main/streams/stream-bridge.ts\",\"src/preload/index.ts\"],\"verifyCommand\":\"npm run test -- stream-bridge\",\"acceptanceCriteria\":[\"meeting:* 5 이벤트 타입 + zod\",\"stream-bridge.emitMeeting* 5 메서드\",\"preload 화이트리스트 등록\",\"round-trip 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: MeetingSession v3 재작성 (conversation.ts 대체)",
+      "status": "completed",
+      "blockedBy": [
+        1
+      ],
+      "description": "**Goal:** `src/main/meetings/engine/meeting-session.ts` 신규. 기존 SSM/TurnManager/history.ts 자산 재사용. participants ≥ 2 enforcement (D7). meetingId/channelId/projectId 1급 시민.\n\n**Files:** src/main/meetings/engine/meeting-session.ts + __tests__\n\n**Verify:** `npm run test -- meeting-session`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-session.ts\"],\"verifyCommand\":\"npm run test -- meeting-session\",\"acceptanceCriteria\":[\"ssmCtx 빈 문자열 reject\",\"participants>=2 assertion\",\"기존 history.ts adapter 재사용\",\"8~12 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: MeetingTurnExecutor v3 재작성 + singleton DI 제거",
+      "status": "completed",
+      "blockedBy": [
+        2
+      ],
+      "description": "**Goal:** `src/main/meetings/engine/meeting-turn-executor.ts` 신규. permissionService/workspaceService/consensusFolderService singleton 5곳 참조를 생성자 DI로 전환. streamBridge.emitMeetingTurn* 사용. CLI permission은 v2 registerPendingCliPermission 흐름 유지 (R7 이전).\n\n**Files:** src/main/meetings/engine/meeting-turn-executor.ts + __tests__\n\n**Verify:** `npm run test -- meeting-turn-executor`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-turn-executor.ts\"],\"verifyCommand\":\"npm run test -- meeting-turn-executor\",\"acceptanceCriteria\":[\"workspace-handler singleton import 0\",\"streamBridge.emitMeetingTurn* 이벤트 발사\",\"messageService.append persistence\",\"12~18 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: MeetingOrchestrator v3 재작성 + v2 stream:* 이벤트 폐기",
+      "status": "completed",
+      "blockedBy": [
+        3
+      ],
+      "description": "**Goal:** `src/main/meetings/engine/meeting-orchestrator.ts` 신규 + main/index.ts DI 배선 + meeting-handler 에서 start → run 체인. v2 `stream:*` 이벤트 발사 지점 제거(legacy 파일은 @deprecated). v3-side-effects wireV3SideEffects() per-meeting 호출.\n\n**Files:** src/main/meetings/engine/meeting-orchestrator.ts + __tests__, src/main/index.ts, src/main/ipc/handlers/meeting-handler.ts\n\n**Verify:** `npm run test -- meeting-orchestrator`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-orchestrator.ts\",\"src/main/index.ts\",\"src/main/ipc/handlers/meeting-handler.ts\"],\"verifyCommand\":\"npm run test -- meeting-orchestrator\",\"acceptanceCriteria\":[\"run → SSM 전이 → DONE → minutesComposer 호출\",\"v2 stream:* 이벤트 emit 0\",\"v3-side-effects disposer 관리\",\"10~14 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: MeetingMinutesComposer — #회의록 포맷 조립기",
+      "status": "completed",
+      "blockedBy": [
+        4
+      ],
+      "description": "**Goal:** `src/main/meetings/engine/meeting-minutes-composer.ts` 신규. 메타 헤더(회의번호/참여자/주제/SSM/경과/투표) + 합의본 원문 + 종료시각 푸터. FAILED 분기(사유 + 합의본 없음). i18n 라벨 `meeting.minutes.header.*`.\n\n**Files:** src/main/meetings/engine/meeting-minutes-composer.ts + __tests__\n\n**Verify:** `npm run test -- meeting-minutes-composer`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-minutes-composer.ts\"],\"verifyCommand\":\"npm run test -- meeting-minutes-composer\",\"acceptanceCriteria\":[\"happy path 포맷 정확\",\"FAILED 분기\",\"i18n ko/en\",\"8~10 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: v2 singleton 완전 제거 + @deprecated 마킹",
+      "status": "completed",
+      "blockedBy": [
+        4
+      ],
+      "description": "**Goal:** workspace-handler의 permissionService/workspaceService/consensusFolderService singleton export에 @deprecated 주석. MeetingOrchestrator / MeetingTurnExecutor 전수 grep 으로 workspace-handler import 0 확인. 스모크 테스트로 v3 DI 경로 검증.\n\n**Files:** src/main/ipc/handlers/workspace-handler.ts, src/main/meetings/engine/__tests__/smoke-v3-di.test.ts\n\n**Verify:** `npm run test -- smoke-v3-di`\n\n```json:metadata\n{\"files\":[\"src/main/ipc/handlers/workspace-handler.ts\"],\"verifyCommand\":\"npm run test -- smoke-v3-di\",\"acceptanceCriteria\":[\"meetings/engine workspace-handler import 0\",\"@deprecated 주석 추가\",\"스모크 테스트 green\",\"기존 테스트 regression 0\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: execution-coordinator/memory-coordinator 흡수 또는 슬림 재작성",
+      "status": "completed",
+      "blockedBy": [
+        4
+      ],
+      "description": "**Goal:** v2 execution-coordinator(127) + memory-coordinator(142) 책임을 MeetingOrchestrator 메서드 또는 meeting-memory-coordinator.ts 로 이관. ConversationSession 결합 제거. 기존 파일은 @deprecated.\n\n**Files:** src/main/meetings/engine/meeting-memory-coordinator.ts (신규), src/main/meetings/engine/meeting-orchestrator.ts (확장)\n\n**Verify:** `npm run test -- meeting-orchestrator`\n\n```json:metadata\n{\"files\":[\"src/main/meetings/engine/meeting-memory-coordinator.ts\",\"src/main/meetings/engine/meeting-orchestrator.ts\"],\"verifyCommand\":\"npm run test -- meeting-orchestrator\",\"acceptanceCriteria\":[\"execution-coordinator / memory-coordinator 호출자 0\",\"MeetingOrchestrator handleExecutingPhase / runMemoryMaintenance 테스트\",\"기존 coord 2파일 @deprecated\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: Renderer use-meeting-stream 훅",
+      "status": "completed",
+      "blockedBy": [
+        1
+      ],
+      "description": "**Goal:** `src/renderer/hooks/use-meeting-stream.ts` 신규. meeting:* 5 이벤트 reducer, live turn buffer 관리, DB message 도착 시 replace. channelId null idle.\n\n**Files:** src/renderer/hooks/use-meeting-stream.ts + __tests__\n\n**Verify:** `npm run test -- use-meeting-stream`\n\n```json:metadata\n{\"files\":[\"src/renderer/hooks/use-meeting-stream.ts\"],\"verifyCommand\":\"npm run test -- use-meeting-stream\",\"acceptanceCriteria\":[\"5 이벤트 reducer\",\"channelId null idle\",\"unmount 구독 해제\",\"10~14 테스트 green\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: Thread 본문 재작성 + MeetingBanner 실데이터",
+      "status": "completed",
+      "blockedBy": [
+        8
+      ],
+      "description": "**Goal:** Thread.tsx placeholder 제거. DateSeparator grouping + Message/SystemMessage/ApprovalBlock 분기 + compact mode(연속 author) + live turn 표시 및 DB replace. MeetingBanner elapsed/ssmState/crewCount 실데이터.\n\n**Files:** src/renderer/features/messenger/Thread.tsx, src/renderer/features/messenger/MeetingBanner.tsx + __tests__ 보강\n\n**Verify:** `npm run test -- \"Thread|MeetingBanner\"`\n\n```json:metadata\n{\"files\":[\"src/renderer/features/messenger/Thread.tsx\",\"src/renderer/features/messenger/MeetingBanner.tsx\"],\"verifyCommand\":\"npm run test\",\"acceptanceCriteria\":[\"placeholder 제거\",\"4 variant 렌더 + compact mode\",\"live → DB replace\",\"MeetingBanner 실데이터\",\"hex literal 0\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: Legacy typecheck 170건 정리 (tsconfig.node.json exclude)",
+      "status": "completed",
+      "blockedBy": [
+        0
+      ],
+      "description": "**Goal:** archived `src/main/{memory,recovery,remote}/__tests__` 경로를 tsconfig.node.json exclude 추가. 필요 시 dead test 삭제. npm run typecheck 전체 exit 0.\n\n**Files:** tsconfig.node.json (+ 필요시 dead test 제거)\n\n**Verify:** `npm run typecheck`\n\n```json:metadata\n{\"files\":[\"tsconfig.node.json\"],\"verifyCommand\":\"npm run typecheck\",\"acceptanceCriteria\":[\"typecheck exit 0\",\"typecheck:web 여전히 exit 0\",\"regression 0\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: i18n meeting.* namespace populate + keepRemoved",
+      "status": "completed",
+      "blockedBy": [
+        5,
+        9
+      ],
+      "description": "**Goal:** meeting.minutes.* / meeting.state.* (12 SSM 상태) / meeting.error.* / meeting.notification.* / meeting.banner.state.* 30~40 키 ko/en. keepRemoved 2 regex.\n\n**Files:** src/renderer/i18n/locales/{ko,en}.json, i18next-parser.config.js\n\n**Verify:** `npm run i18n:check`\n\n```json:metadata\n{\"files\":[\"src/renderer/i18n/locales/ko.json\",\"src/renderer/i18n/locales/en.json\",\"i18next-parser.config.js\"],\"verifyCommand\":\"npm run i18n:check\",\"acceptanceCriteria\":[\"30~40 신규 키 ko/en sync\",\"12 SSM 상태 번역\",\"keepRemoved 2 regex\",\"i18n:check clean\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: Playwright E2E meeting-flow.spec.ts",
+      "status": "completed",
+      "blockedBy": [
+        9,
+        11
+      ],
+      "description": "**Goal:** 프로젝트 → 채널 → 회의 시작 → mock provider 턴 → SSM=DONE → #회의록 포스팅 확인 시나리오. e2e mock provider 헬퍼. WSL 제약은 R4/R5 관행대로 DONE_WITH_CONCERNS.\n\n**Files:** e2e/meeting-flow.spec.ts, e2e/helpers/mock-provider.ts\n\n**Verify:** `npx playwright test meeting-flow` (WSL 제약 허용)\n\n```json:metadata\n{\"files\":[\"e2e/meeting-flow.spec.ts\",\"e2e/helpers/mock-provider.ts\"],\"verifyCommand\":\"npx playwright test meeting-flow\",\"acceptanceCriteria\":[\"스펙 파일 land\",\"mock provider 헬퍼\",\"WSL 제약은 done-checklist 기록\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    },
+    {
+      "id": 13,
+      "subject": "Task 13: R6 closeout — done-checklist + spec §10 ✓ + tasks 14/14",
+      "status": "completed",
+      "blockedBy": [
+        10,
+        11,
+        12
+      ],
+      "description": "**Goal:** r6-done-checklist.md 작성, §10 R6 체크박스 ✓, tasks.json 전체 completed. 최종 게이트(typecheck/lint/test/i18n/theme/build/e2e) 통과 기록.\n\n**Files:** docs/checklists/r6-done-checklist.md, docs/specs/2026-04-18-rolestra-design.md (§10 R6), docs/plans/2026-04-22-rolestra-phase-r6.md.tasks.json\n\n**Verify:** 전체 정식 게이트\n\n```json:metadata\n{\"files\":[\"docs/checklists/r6-done-checklist.md\",\"docs/specs/2026-04-18-rolestra-design.md\",\"docs/plans/2026-04-22-rolestra-phase-r6.md.tasks.json\"],\"verifyCommand\":\"npm run typecheck && npm run lint && npm run test && npm run i18n:check && npm run theme:check && npm run build\",\"acceptanceCriteria\":[\"done-checklist 완비\",\"§10 모든 체크박스 ✓\",\"tasks 14/14\",\"정식 게이트 전부 통과\"]}\n```",
+      "lastUpdated": "2026-04-22T15:00:00.000Z"
+    }
+  ]
+}

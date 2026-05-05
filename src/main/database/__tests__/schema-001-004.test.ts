@@ -3,7 +3,7 @@
  *
  * These tests are the canonical proof that the migration SQL shipped in
  * `src/main/database/migrations/001-core.ts` through `004-meetings.ts` matches
- * the constraints declared in spec §5.2 (docs/superpowers/specs/2026-04-18-rolestra-design.md).
+ * the constraints declared in spec §5.2 (docs/specs/2026-04-18-rolestra-design.md).
  *
  * Coverage:
  * - Table/index existence in sqlite_master

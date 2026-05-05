@@ -5,7 +5,7 @@
  * Canonical proof that the migration SQL shipped in
  * `src/main/database/migrations/005-messages.ts` through `007-queue.ts`
  * matches the constraints declared in spec §5.2
- * (docs/superpowers/specs/2026-04-18-rolestra-design.md lines 344-438).
+ * (docs/specs/2026-04-18-rolestra-design.md lines 344-438).
  *
  * Coverage:
  * - messages: FTS5 MATCH on INSERT/UPDATE/DELETE, conditional author FK trigger,

@@ -1,0 +1,96 @@
+{
+  "planPath": "docs/plans/2026-05-01-rolestra-r12-s-persona-skills.md",
+  "tasks": [
+    {
+      "id": 0,
+      "subject": "Task 0: Spec §3 능력 카탈로그 갱신 (5 → 10)",
+      "status": "completed",
+      "description": "**Goal:** 사용자 결정 반영 — spec §3 카탈로그 5개 → 10개 (디자인 4분할 + general + system meeting-summary). §11.5 회의록 정리 디폴트 자동 선택 로직 추가, §11.7 R12-S task 항목 추가.\n\n**Files:**\n- Modify: docs/specs/2026-05-01-rolestra-channel-roles-design.md\n\n**Acceptance Criteria:**\n- §3 카탈로그 표 10 행, roles 예시 다중 선택, 부서 템플릿 8개 단락 추가\n- §11.5 자동 선택 4단계 단락 추가\n- §11.7 회의록 정리 모델 + agestra reference 두 항목 추가\n\n**Verify:** git diff --stat 으로 1 file changed, 30~40 insertions 확인\n\n```json:metadata\n{\"files\": [\"docs/specs/2026-05-01-rolestra-channel-roles-design.md\"], \"verifyCommand\": \"git diff --stat docs/specs/2026-05-01-rolestra-channel-roles-design.md\", \"acceptanceCriteria\": [\"§3 카탈로그 10행\", \"§11.5 자동 선택 4단계\", \"§11.7 추가 task 두 줄\"]}\n```"
+    },
+    {
+      "id": 1,
+      "subject": "Task 1: DB Migration 017 — providers.roles + skill_overrides",
+      "status": "completed",
+      "blockedBy": [0],
+      "description": "**Goal:** providers ALTER — roles TEXT NOT NULL DEFAULT '[]' + skill_overrides TEXT NULL. Forward-only, chain-level idempotency.\n\n**Files:**\n- Create: src/main/database/migrations/017-providers-roles-skills.ts\n- Modify: src/main/database/migrations/index.ts\n- Test: src/main/database/__tests__/migrator.test.ts\n\n**Verify:** npx vitest run src/main/database/__tests__/migrator.test.ts → all PASS, PRAGMA table_info 에 두 컬럼 확인\n\n```json:metadata\n{\"files\": [\"src/main/database/migrations/017-providers-roles-skills.ts\", \"src/main/database/migrations/index.ts\", \"src/main/database/__tests__/migrator.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/database/__tests__/migrator.test.ts\", \"acceptanceCriteria\": [\"017 migration export\", \"index 등록\", \"PRAGMA 두 컬럼 확인\", \"INSERT default '[]' / NULL\"]}\n```"
+    },
+    {
+      "id": 2,
+      "subject": "Task 2: Shared Types — RoleId/SkillTemplate + ProviderInfo 확장",
+      "status": "completed",
+      "blockedBy": [1],
+      "description": "**Goal:** src/shared/role-types.ts 신규 (9 RoleId + meeting-summary SystemSkillId + ToolGrant + SkillTemplate). ProviderInfo 에 roles + skill_overrides 필드.\n\n**Files:**\n- Create: src/shared/role-types.ts\n- Modify: src/shared/provider-types.ts\n\n**Verify:** npm run typecheck → 0 error. ProviderInfo 호출지 임시 default 채워 통과.\n\n```json:metadata\n{\"files\": [\"src/shared/role-types.ts\", \"src/shared/provider-types.ts\"], \"verifyCommand\": \"npm run typecheck\", \"acceptanceCriteria\": [\"RoleId 9개 union\", \"SystemSkillId 'meeting-summary'\", \"ToolGrant 5개\", \"SkillTemplate interface\", \"ProviderInfo roles/skill_overrides 필수 필드\"]}\n```"
+    },
+    {
+      "id": 3,
+      "subject": "Task 3: 스킬 카탈로그 모듈 — 10 능력 정의 (agestra reference)",
+      "status": "completed",
+      "blockedBy": [2],
+      "description": "**Goal:** src/shared/skill-catalog.ts — SKILL_CATALOG (10) + getSkillTemplate + listEmployeeRoles. agestra plugin 4.13.0 agent prompt reference, 한국어 + Rolestra 메타포.\n\n**Files:**\n- Create: src/shared/skill-catalog.ts\n\n**Verify:** npm run typecheck → 0 error\n\n```json:metadata\n{\"files\": [\"src/shared/skill-catalog.ts\"], \"verifyCommand\": \"npm run typecheck\", \"acceptanceCriteria\": [\"10 SkillTemplate 모두 정의\", \"한국어 systemPromptKo\", \"implement 만 file.write+command.exec\", \"general 모든 tool false\", \"meeting-summary 카탈로그 포함\", \"getSkillTemplate / listEmployeeRoles helper\"]}\n```"
+    },
+    {
+      "id": 4,
+      "subject": "Task 4: SkillService + 단위 테스트 (TDD)",
+      "status": "completed",
+      "blockedBy": [3],
+      "description": "**Goal:** src/main/skills/skill-service.ts — getSkillForRole / validateRoles / listAvailableRolesForProvider. TDD red-green.\n\n**Files:**\n- Create: src/main/skills/skill-service.ts\n- Create: src/main/skills/__tests__/skill-service.test.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/skill-service.test.ts → 8+ PASS\n\n```json:metadata\n{\"files\": [\"src/main/skills/skill-service.ts\", \"src/main/skills/__tests__/skill-service.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/skill-service.test.ts\", \"acceptanceCriteria\": [\"getSkillForRole override merge\", \"validateRoles unknown throw\", \"meeting-summary system-only throw\", \"listAvailableRolesForProvider 교집합\", \"8+ 케이스 PASS\"]}\n```"
+    },
+    {
+      "id": 5,
+      "subject": "Task 5: ProviderRepository + ProviderService 확장",
+      "status": "completed",
+      "blockedBy": [4],
+      "description": "**Goal:** saveProvider 시그니처 + loadAllProviders SELECT — roles + skill_overrides 컬럼 read/write. registry parseRoles/parseSkillOverrides — JSON 실패 시 throw (silent fallback 금지). provider-handler add/update 에 SkillService.validateRoles 게이트.\n\n**Files:**\n- Modify: src/main/providers/provider-repository.ts\n- Modify: src/main/providers/registry.ts\n- Modify: src/main/ipc/handlers/provider-handler.ts\n- Modify: src/main/providers/__tests__/provider-repository.test.ts\n\n**Verify:** npx vitest run src/main/providers/ → all PASS, npm run typecheck → 0 error\n\n```json:metadata\n{\"files\": [\"src/main/providers/provider-repository.ts\", \"src/main/providers/registry.ts\", \"src/main/ipc/handlers/provider-handler.ts\", \"src/main/providers/__tests__/provider-repository.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/providers/\", \"acceptanceCriteria\": [\"saveProvider roles+skillOverrides\", \"loadAllProviders SELECT 두 컬럼\", \"JSON parse fail throw\", \"임시 [] / null 제거\"]}\n```"
+    },
+    {
+      "id": 6,
+      "subject": "Task 6: PromptComposer — persona + skill template 합성",
+      "status": "completed",
+      "blockedBy": [5],
+      "description": "**Goal:** src/main/skills/prompt-composer.ts — compose({persona, providerRoles, skillOverrides, channelRole, formatInstruction}). providerRoles ∩ channelRole 검증, 빈 단락 생략, toolGrants 한국어 라벨 요약.\n\n**Files:**\n- Create: src/main/skills/prompt-composer.ts\n- Create: src/main/skills/__tests__/prompt-composer.test.ts\n\n**Verify:** npx vitest run src/main/skills/__tests__/prompt-composer.test.ts → 6 PASS\n\n```json:metadata\n{\"files\": [\"src/main/skills/prompt-composer.ts\", \"src/main/skills/__tests__/prompt-composer.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/skills/__tests__/prompt-composer.test.ts\", \"acceptanceCriteria\": [\"compose 합성 출력\", \"persona 빈 단락 생략\", \"providerRoles ∩ channelRole 검증 throw\", \"override 적용\", \"general 권한 없음 라벨\", \"6 케이스 PASS\"]}\n```"
+    },
+    {
+      "id": 7,
+      "subject": "Task 7: IPC handlers — skill.list/getTemplate + provider.updateRoles",
+      "status": "completed",
+      "blockedBy": [6],
+      "description": "**Goal:** 3 IPC channel + zod schema + preload whitelist. RoleId enum / SkillId union schema. provider.updateRoles 가 SkillService.validateRoles 게이트 + saveProvider upsert.\n\n**Files:**\n- Create: src/main/ipc/handlers/skill-handler.ts\n- Modify: src/main/ipc/router.ts, src/main/ipc/handlers/provider-handler.ts\n- Modify: src/shared/ipc-types.ts, src/shared/ipc-schemas.ts\n- Modify: src/preload/index.ts\n- Create: src/main/ipc/__tests__/skill-handler.test.ts\n\n**Verify:** npx vitest run src/main/ipc/ → all PASS\n\n```json:metadata\n{\"files\": [\"src/main/ipc/handlers/skill-handler.ts\", \"src/main/ipc/router.ts\", \"src/main/ipc/handlers/provider-handler.ts\", \"src/shared/ipc-types.ts\", \"src/shared/ipc-schemas.ts\", \"src/preload/index.ts\", \"src/main/ipc/__tests__/skill-handler.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/ipc/\", \"acceptanceCriteria\": [\"3 IPC channel 등록\", \"zod RoleId/SkillId enum\", \"preload whitelist 추가\", \"provider:updateRoles validateRoles\", \"3+ 단위 케이스 PASS\"]}\n```"
+    },
+    {
+      "id": 8,
+      "subject": "Task 8: 직원 편집 모달 캐릭터/역할+스킬 탭 분리",
+      "status": "completed",
+      "blockedBy": [7],
+      "description": "**Goal:** Radix Tabs 2개 (character / roles-skills). RolesSkillsTab — 9 RoleId chip 다중 선택 + role 별 prompt customize textarea. use-skill-catalog hook (zustand cache + 1회 fetch). 저장 시 provider:update + provider:updateRoles 분리 호출. i18n ko/en.\n\n**Files:**\n- Modify: src/renderer/features/settings/StaffEditModal.tsx\n- Create: src/renderer/features/settings/RolesSkillsTab.tsx\n- Create: src/renderer/hooks/use-skill-catalog.ts\n- Modify: src/renderer/i18n/locales/ko/settings.json, src/renderer/i18n/locales/en/settings.json\n\n**Verify:** npm run lint && npm run typecheck → 0 error / 0 i18next warning + manual smoke (탭 토글 / chip 다중 선택 / customize 저장 / 재오픈 유지)\n\n```json:metadata\n{\"files\": [\"src/renderer/features/settings/StaffEditModal.tsx\", \"src/renderer/features/settings/RolesSkillsTab.tsx\", \"src/renderer/hooks/use-skill-catalog.ts\", \"src/renderer/i18n/locales/ko/settings.json\", \"src/renderer/i18n/locales/en/settings.json\"], \"verifyCommand\": \"npm run lint && npm run typecheck\", \"acceptanceCriteria\": [\"Radix Tabs 2개\", \"RoleId chip 다중 선택\", \"role 별 customize textarea\", \"use-skill-catalog 1회 fetch + cache\", \"provider:updateRoles 호출\", \"i18n ko/en\", \"manual smoke PASS\"]}\n```"
+    },
+    {
+      "id": 9,
+      "subject": "Task 9: 회의록 정리 모델 settings + 자동 선택 로직",
+      "status": "completed",
+      "blockedBy": [7],
+      "description": "**Goal:** summaryModelProviderId: string | null + resolveSummaryProvider 4단계 (Haiku → Flash → 기타 api/cli → Ollama). IPC settings:setSummaryModel.\n\n**Files:**\n- Create: src/main/llm/summary-model-resolver.ts\n- Create: src/main/llm/__tests__/summary-model-resolver.test.ts\n- Modify: src/main/config/settings-store.ts\n- Modify: src/shared/ipc-types.ts, src/shared/ipc-schemas.ts\n- Modify: src/main/ipc/handlers/settings-handler.ts, src/main/ipc/router.ts\n\n**Verify:** npx vitest run src/main/llm/__tests__/summary-model-resolver.test.ts → 7 PASS\n\n```json:metadata\n{\"files\": [\"src/main/llm/summary-model-resolver.ts\", \"src/main/llm/__tests__/summary-model-resolver.test.ts\", \"src/main/config/settings-store.ts\", \"src/shared/ipc-types.ts\", \"src/shared/ipc-schemas.ts\", \"src/main/ipc/handlers/settings-handler.ts\", \"src/main/ipc/router.ts\"], \"verifyCommand\": \"npx vitest run src/main/llm/__tests__/summary-model-resolver.test.ts\", \"acceptanceCriteria\": [\"summaryModelProviderId 필드\", \"4단계 자동 선택\", \"사용자 명시 우선\", \"IPC settings:setSummaryModel\", \"7 케이스 PASS\"]}\n```"
+    },
+    {
+      "id": 10,
+      "subject": "Task 10: MeetingSummaryService wire — 자동 선택 로직 사용",
+      "status": "completed",
+      "blockedBy": [9],
+      "description": "**Goal:** MeetingSummaryService 가 settings + registry 받아 resolveSummaryProvider 호출. system prompt = SKILL_CATALOG['meeting-summary'].systemPromptKo. 사용자 명시 + capability 없음 = throw.\n\n**Files:**\n- Modify: src/main/llm/meeting-summary-service.ts\n- Modify: src/main/llm/__tests__/meeting-summary-service.test.ts\n- Modify: 호출지 (MeetingOrchestrator 등)\n\n**Verify:** npx vitest run src/main/llm/__tests__/meeting-summary-service.test.ts → all PASS (4 신규 케이스 포함)\n\n```json:metadata\n{\"files\": [\"src/main/llm/meeting-summary-service.ts\", \"src/main/llm/__tests__/meeting-summary-service.test.ts\"], \"verifyCommand\": \"npx vitest run src/main/llm/\", \"acceptanceCriteria\": [\"resolveSummaryProvider 사용\", \"카탈로그 prompt 사용\", \"사용자 명시 + 무능력 throw\", \"resolver null = silent skip\", \"4 신규 케이스 PASS\"]}\n```"
+    },
+    {
+      "id": 11,
+      "subject": "Task 11: 회의록 정리 모델 설정 UI 카드",
+      "status": "completed",
+      "blockedBy": [10],
+      "description": "**Goal:** SummaryModelCard — 자동 / 특정 모델 라디오 + 드롭다운 (summarize capable provider 만). use-summary-model hook + IPC settings:getResolvedSummaryModel.\n\n**Files:**\n- Create: src/renderer/features/settings/SummaryModelCard.tsx\n- Create: src/renderer/hooks/use-summary-model.ts\n- Modify: src/renderer/features/settings/SettingsPage.tsx\n- Modify: src/renderer/i18n/locales/ko/settings.json, en/settings.json\n- Modify: src/main/ipc/handlers/settings-handler.ts, src/main/ipc/router.ts (getResolvedSummaryModel 추가)\n\n**Verify:** npm run lint && npm run typecheck → 0 error + manual smoke (라디오 토글 / 드롭다운 선택 / 저장 후 새로고침 유지)\n\n```json:metadata\n{\"files\": [\"src/renderer/features/settings/SummaryModelCard.tsx\", \"src/renderer/hooks/use-summary-model.ts\", \"src/renderer/features/settings/SettingsPage.tsx\", \"src/renderer/i18n/locales/ko/settings.json\", \"src/renderer/i18n/locales/en/settings.json\", \"src/main/ipc/handlers/settings-handler.ts\", \"src/main/ipc/router.ts\"], \"verifyCommand\": \"npm run lint && npm run typecheck\", \"acceptanceCriteria\": [\"SummaryModelCard 컴포넌트\", \"자동 / 특정 라디오\", \"summarize capable 드롭다운\", \"settings:getResolvedSummaryModel IPC\", \"i18n ko/en\", \"manual smoke PASS\"]}\n```"
+    },
+    {
+      "id": 12,
+      "subject": "Task 12: ADR + 구현현황 + 메모리 + Closeout",
+      "status": "completed",
+      "blockedBy": [8, 11],
+      "description": "**Goal:** ADR 작성 (결정 5건), 구현-현황.md R12-S 표 추가, 메모리 phase-status / r12-channel-roles-design 갱신, r12-s-completion 메모리 신규 작성. 최종 회귀 + push.\n\n**Files:**\n- Create: docs/decisions/r12-s-persona-skills.md\n- Modify: docs/구현-현황.md\n- Modify: ~/.claude/projects/.../memory/rolestra-phase-status.md\n- Modify: ~/.claude/projects/.../memory/rolestra-r12-channel-roles-design.md\n- Create: ~/.claude/projects/.../memory/rolestra-r12-s-completion.md\n\n**Verify:** npm run typecheck && npm run lint && npx vitest run → 모두 통과 + git log oneline 으로 12+ commit 확인 + git push origin main\n\n```json:metadata\n{\"files\": [\"docs/decisions/r12-s-persona-skills.md\", \"docs/구현-현황.md\"], \"verifyCommand\": \"npm run typecheck && npm run lint && npx vitest run\", \"acceptanceCriteria\": [\"ADR 결정 5건\", \"구현현황 R12-S 표\", \"phase-status 갱신\", \"r12-s-completion 메모리\", \"R12-C 진입 가이드\", \"전체 회귀 PASS\", \"push 완료\"]}\n```"
+    }
+  ],
+  "lastUpdated": "2026-05-02T00:42:00Z"
+}
