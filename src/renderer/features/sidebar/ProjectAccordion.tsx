@@ -40,7 +40,8 @@ const ROLE_ICON: Record<RoleId, string> = {
   'design.character': '🧝',
   'design.background': '🏞️',
   implement: '🔧',
-  review: '✅',
+  review: '📝',
+  audit: '🔍',
   general: '💬',
 };
 
@@ -53,6 +54,7 @@ const DEPARTMENT_ROLE_ORDER: ReadonlyArray<RoleId> = [
   'design.background',
   'implement',
   'review',
+  'audit',
 ];
 
 export interface ProjectAccordionProps {

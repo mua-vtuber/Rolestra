@@ -2,8 +2,8 @@
  * Unit tests for ProjectSkillSyncService (R12-C Task 6).
  *
  * Coverage:
- *   - Writes 9 SKILL.md files in BOTH `.claude/skills` and `.agents/skills`
- *     (= 18 files per project).
+ *   - Writes 10 SKILL.md files in BOTH `.claude/skills` and `.agents/skills`
+ *     (= 20 files per project). R12-C2 P3 T17 시점 'audit' 추가로 9 → 10.
  *   - meeting-summary (SystemSkillId) is excluded.
  *   - Idempotency: second call on unchanged tree → all entries 'unchanged'.
  *   - User customisation: pre-existing file with different content is
@@ -33,14 +33,16 @@ describe('ProjectSkillSyncService', () => {
   });
 
   describe('first-time write', () => {
-    it('writes 18 SKILL.md files (9 roles × 2 roots)', async () => {
+    it('writes 20 SKILL.md files (10 roles × 2 roots)', async () => {
+      // R12-C2 P3 T17: 'audit' 추가로 9 → 10 능력. 두 root (.claude/.agents)
+      // 모두 받아서 총 20 파일.
       const result = await service.syncProjectSkills(projectRoot);
-      expect(result.written.length).toBe(18);
+      expect(result.written.length).toBe(20);
       expect(result.unchanged.length).toBe(0);
       expect(result.skipped.length).toBe(0);
     });
 
-    it('lays out 9 directories under each skill root', async () => {
+    it('lays out 10 directories under each skill root', async () => {
       await service.syncProjectSkills(projectRoot);
       const claudeRoles = await fs.readdir(
         path.join(projectRoot, '.claude/skills'),
@@ -49,6 +51,7 @@ describe('ProjectSkillSyncService', () => {
         path.join(projectRoot, '.agents/skills'),
       );
       expect(claudeRoles.sort()).toEqual([
+        'audit',
         'design.background',
         'design.character',
         'design.ui',
@@ -86,11 +89,12 @@ describe('ProjectSkillSyncService', () => {
   });
 
   describe('idempotency', () => {
-    it('reports all 18 entries as unchanged on the second call', async () => {
+    it('reports all 20 entries as unchanged on the second call', async () => {
+      // R12-C2 P3 T17: 10 능력 × 2 root = 20.
       await service.syncProjectSkills(projectRoot);
       const second = await service.syncProjectSkills(projectRoot);
       expect(second.written.length).toBe(0);
-      expect(second.unchanged.length).toBe(18);
+      expect(second.unchanged.length).toBe(20);
       expect(second.skipped.length).toBe(0);
     });
   });

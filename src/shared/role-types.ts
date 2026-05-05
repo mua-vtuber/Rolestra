@@ -8,7 +8,7 @@
  * 모두 동기 업데이트.
  */
 
-/** 직원에게 부여 가능한 능력 (9). */
+/** 직원에게 부여 가능한 능력 (10 — R12-C2 P3 T17 에서 `'audit'` 추가). */
 export type RoleId =
   | 'idea'
   | 'planning'
@@ -18,6 +18,7 @@ export type RoleId =
   | 'design.background'
   | 'implement'
   | 'review'
+  | 'audit'
   | 'general';
 
 /** 시스템만 호출 — 직원 부여 X. */
@@ -48,7 +49,7 @@ export interface SkillTemplate {
   externalEndpoints: string[];
 }
 
-/** 9 직원 능력의 readonly array — UI chip / 검증 enum. */
+/** 10 직원 능력의 readonly array — UI chip / 검증 enum. R12-C2 P3 T17 갱신. */
 export const ALL_ROLE_IDS: readonly RoleId[] = [
   'idea',
   'planning',
@@ -58,6 +59,7 @@ export const ALL_ROLE_IDS: readonly RoleId[] = [
   'design.background',
   'implement',
   'review',
+  'audit',
   'general',
 ] as const;
 

@@ -3,12 +3,13 @@
  *
  * 두 영역을 한 step 안에 둔다:
  *   1. 역할 칭호 입력 (직원별 한 줄 — 메신저 persona 라벨)
- *   2. 능력 배정 매트릭스 — 9 능력 (idea / planning / design.ui /
+ *   2. 능력 배정 매트릭스 — 10 능력 (idea / planning / design.ui /
  *      design.ux / design.character / design.background / implement /
- *      review / general) × 직원 다중 체크박스. 사용자 결정으로 디폴트는
- *      `general` 만 모든 직원 ON, 나머지 8 능력은 모두 OFF. 사용자가
- *      직원에게 능력을 직접 부여한 뒤에야 step 3 → 4 로 진행 가능
- *      (검증: 9 능력 전부 ≥ 1명).
+ *      review / audit / general) × 직원 다중 체크박스. R12-C2 P3 T17 에서
+ *      `audit` 추가 — review (주관 평가) 와 분리된 객관 + 목적 통합. 사용자
+ *      결정으로 디폴트는 `general` 만 모든 직원 ON, 나머지 9 능력은 모두 OFF.
+ *      사용자가 직원에게 능력을 직접 부여한 뒤에야 step 3 → 4 로 진행 가능
+ *      (검증: 10 능력 전부 ≥ 1명).
  *
  * State contract:
  *   - 부모 (OnboardingPage) 가 staff (selected provider ids) + roles
@@ -54,7 +55,8 @@ const ROLE_ICON: Record<RoleId, string> = {
   'design.character': '🧝',
   'design.background': '🏞️',
   implement: '🔧',
-  review: '✅',
+  review: '📝',
+  audit: '🔍',
   general: '💬',
 };
 

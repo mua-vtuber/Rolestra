@@ -386,11 +386,12 @@ describe('OnboardingPage — step gates', () => {
 describe('OnboardingPage — step 3/4/5 surfaces', () => {
   // R12-C round 2 (commit 80266f3) 부터 step 3 → 4 진행 조건이 강화됐다:
   //   1) 모든 직원의 역할 칭호 non-empty
-  //   2) 9 능력 (idea / planning / design.ui / design.ux / design.character /
-  //      design.background / implement / review / general) 각각 ≥ 1명 배정
-  // 디폴트 skillAssignments 는 `general` 만 모든 직원 ON, 나머지 8 능력은
-  // 모두 OFF. 따라서 helper 는 첫 번째 직원 (claude) 의 8 능력 체크박스를
-  // 한 번씩 켜면 9 능력 모두 ≥ 1명 충족.
+  //   2) 10 능력 (idea / planning / design.ui / design.ux / design.character /
+  //      design.background / implement / review / audit / general) 각각 ≥ 1명
+  //      배정. `audit` 은 R12-C2 P3 T17 에서 추가된 신규 능력 — review 와 분리.
+  // 디폴트 skillAssignments 는 `general` 만 모든 직원 ON, 나머지 9 능력은
+  // 모두 OFF. 따라서 helper 는 첫 번째 직원 (claude) 의 9 능력 체크박스를
+  // 한 번씩 켜면 10 능력 모두 ≥ 1명 충족.
   const SKILLS_TO_TOGGLE_FOR_CLAUDE: RoleId[] = [
     'idea',
     'planning',
@@ -400,6 +401,7 @@ describe('OnboardingPage — step 3/4/5 surfaces', () => {
     'design.background',
     'implement',
     'review',
+    'audit',
   ];
 
   async function advanceToStep(target: 3 | 4 | 5): Promise<void> {

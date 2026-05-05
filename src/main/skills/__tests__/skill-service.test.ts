@@ -30,10 +30,22 @@ describe('SkillService.getSkillForRole', () => {
     Object.values(tpl.toolGrants).forEach((v) => expect(v).toBe(false));
   });
 
-  it('review skill grants command.exec but not file.write', () => {
+  it('review skill (R12-C2 P3 T17 — 주관 평가) grants web.search but not command.exec/file.write', () => {
+    // 옛 review (객관 검증) 의 command.exec 권한은 R12-C2 P3 T17 에서 분리된
+    // audit 능력으로 이전. 새 review = 주관 평가 / 개선 제안 — read + web 만.
     const tpl = svc.getSkillForRole('review', null);
-    expect(tpl.toolGrants['command.exec']).toBe(true);
+    expect(tpl.toolGrants['web.search']).toBe(true);
+    expect(tpl.toolGrants['file.read']).toBe(true);
+    expect(tpl.toolGrants['command.exec']).toBe(false);
     expect(tpl.toolGrants['file.write']).toBe(false);
+  });
+
+  it('audit skill (R12-C2 P3 T17 신규 — 객관 + 목적 통합) grants command.exec but not file.write', () => {
+    const tpl = svc.getSkillForRole('audit', null);
+    expect(tpl.toolGrants['command.exec']).toBe(true);
+    expect(tpl.toolGrants['file.read']).toBe(true);
+    expect(tpl.toolGrants['file.write']).toBe(false);
+    expect(tpl.toolGrants['web.search']).toBe(false);
   });
 
   it('overrides for unknown role are ignored', () => {

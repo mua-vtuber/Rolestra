@@ -336,7 +336,7 @@ function OnboardingWizardBody({
     patchSelections,
   ]);
 
-  // 9 능력 모두 ≥ 1명이어야 step 3 → 4 진행 허용.
+  // 10 능력 모두 ≥ 1명이어야 step 3 → 4 진행 허용. R12-C2 P3 T17: 'audit' 추가.
   const step3SkillsMissing = useMemo<RoleId[]>(() => {
     return ALL_ROLE_IDS.filter((role) => {
       for (const id of selectedStaffIds) {
@@ -360,7 +360,7 @@ function OnboardingWizardBody({
         return selectedCount >= MIN_STAFF && !detectionEmpty;
       case 3:
         // every selected provider must have a non-empty trimmed role label
-        // AND every one of the 9 skills must have at least one assignee
+        // AND every one of the 10 skills must have at least one assignee
         // (R12-C round 2 — fixes #3-3 침묵 회귀: 능력 분배 안 된 신규
         // 직원이 부서 채널 진입 시 PromptComposer fallback 으로 빠지는 것을
         // wizard 단계에서 차단).
