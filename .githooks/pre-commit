@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# R12-C2 T11 — pre-commit inspector hook (변경 파일 한정 — 빠른 피드백).
+#
+# Phase 1 (현재) = report-only. 빌드 차단 X — exit code 항상 0.
+# Phase 2 (T41) = 안전 카테고리 hit > 0 시 차단.
+#
+# 우회: `git commit --no-verify`.
+set -e
+
+# Staged ts/tsx 파일만 추림 (삭제된 파일 제외)
+CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | \
+          grep -E '\.tsx?$' || true)
+
+if [ -z "$CHANGED" ]; then
+  exit 0
+fi
+
+# tsx CLI 가 없으면 조용히 skip (CI 환경 외 setup 미완)
+if ! command -v npx >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "[inspector] pre-commit — 변경 파일 검사 ($(echo "$CHANGED" | wc -l) 파일)"
+npx tsx tools/inspectors/run.ts --changed $CHANGED --silent --report=tools/inspectors/report.precommit.json || true
+
+exit 0

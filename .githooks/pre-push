@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# R12-C2 T11 — pre-push inspector hook (전체 inspector 실행).
+#
+# Phase 1 (현재) = report-only. 빌드 차단 X — exit code 항상 0.
+# Phase 2 (T41) = 안전 카테고리 hit > 0 시 차단 (run.ts 가 --phase=2 로 exit 1).
+#
+# 우회: `git push --no-verify`.
+set -e
+
+if ! command -v npx >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "[inspector] pre-push — 전체 검사"
+npx tsx tools/inspectors/run.ts --silent || true
+
+exit 0

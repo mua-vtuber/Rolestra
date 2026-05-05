@@ -66,3 +66,7 @@ e2e/report/
 # Graphify knowledge graph (local-only, regenerated on demand)
 graphify-out/
 .graphifyignore
+
+# Inspector reports (R12-C2 T11 — gitignore + CI artifact 만)
+tools/inspectors/report.json
+tools/inspectors/report.precommit.json
