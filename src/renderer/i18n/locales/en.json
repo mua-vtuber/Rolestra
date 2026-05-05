@@ -598,6 +598,37 @@
       "topicLabel": "Topic",
       "topicPlaceholder": "What will you discuss?"
     },
+    "messageCard": {
+      "expand": "Show more",
+      "collapse": "Collapse",
+      "opinion": {
+        "kindLabel": {
+          "root": "Opinion",
+          "revise": "Revision",
+          "block": "Counter",
+          "addition": "Addition",
+          "self-raised": "Member note",
+          "user-raised": "User note"
+        }
+      },
+      "minutes": {
+        "title": "Meeting minutes",
+        "source": {
+          "moderator": "Moderator",
+          "moderator-retry": "Moderator (retry)",
+          "fallback": "System fallback"
+        }
+      },
+      "action": {
+        "agree": "Agree",
+        "oppose": "Oppose",
+        "select": "Select",
+        "unselect": "Deselect",
+        "propose": "Propose revision",
+        "minutesOpen": "Open full",
+        "handoff": "Hand off to next role"
+      }
+    },
     "thread": {
       "empty": "No messages yet",
       "liveTurnPending": "Preparing response…",

@@ -5,6 +5,8 @@
  * 서로 다른 도메인이므로 둘 다 유지한다. import 시 별칭으로 구분한다.
  */
 
+import type { OpinionKind } from './opinion-types';
+
 export type MessageAuthorKind = 'user' | 'member' | 'system';
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -22,7 +24,84 @@ export interface MessageMeta {
   toolCalls?: unknown[];
   approvalRef?: string;
   mentions?: string[];
+  /**
+   * R12-C2 P3 (T14) — 의견 카드 메타. 채팅창 메시지 row 가 회의 안 의견
+   * 발화 또는 일반 채널 [##본문] 카드인 경우 채워진다. spec §11.13a.
+   *
+   * 채팅창 dispatcher 가 본 키 존재 여부로 `MessageRenderer/CardVariant` 와
+   * 일반 `Message` 분기. 모든 필드가 *진실 데이터* — 빈 placeholder 금지
+   * (CLAUDE.md mock/fallback 금지 rule). 누락 필드 발견 시 caller 가 아예
+   * `opinion` 키를 빼고 시스템/일반 메시지로 보존해야 한다.
+   */
+  opinion?: OpinionCardMeta;
+  /**
+   * R12-C2 P3 (T14) — 회의록 카드 메타. compose_minutes phase 에서
+   * MeetingOrchestrator 가 system 메시지에 부착. CardVariant 가 본 키
+   * 존재 여부로 minutes 카드 렌더 분기.
+   */
+  minutes?: MinutesCardMeta;
   [k: string]: unknown;
+}
+
+/**
+ * 채팅창 의견 카드용 메타. 모든 필드는 DB opinion row + 매번 재구성되는
+ * 화면 ID 의 1:1 미러. 화면 ID 는 DB 에 없으므로 메시지 append 시점에
+ * 한 번 snapshot 해 둔다 (이후 재구성 결과와 다를 수도 있지만, 메시지
+ * row 는 발화 당시의 ID 를 보존하는 것이 audit 정직).
+ */
+export interface OpinionCardMeta {
+  /** opinion.id (UUID). 후속 vote/handoff IPC 의 진실 키. */
+  opinionRef: string;
+  /** opinion.kind — 'root' | 'revise' | 'block' | 'addition' | 'self-raised' | 'user-raised'. */
+  opinionKind: OpinionKind;
+  /** 화면 ID — 'ITEM_001' / 'ITEM_001_01' / 'ITEM_001_01_01'. */
+  opinionScreenId: string;
+  /** 회의 안 발화 ID — 'codex_1' 형식. opinion.author_label 미러. */
+  authorLabel: string;
+  /** opinion.title (NULL 가능). */
+  opinionTitle?: string | null;
+  /** opinion.rationale (NULL 가능). */
+  opinionRationale?: string | null;
+}
+
+/**
+ * 회의록 카드용 메타. MeetingMinutesService.compose 결과를 그대로 미러.
+ */
+export interface MinutesCardMeta {
+  /** ArenaRoot 봉인 안 절대 경로 — `<root>/consensus/meetings/<meetingId>/minutes.md`. */
+  minutesPath: string;
+  /** 'moderator' / 'moderator-retry' / 'fallback' — 회의록 출처 audit. */
+  minutesSource: 'moderator' | 'moderator-retry' | 'fallback';
+  /** 회의록 작성자 provider id. fallback 출처면 null. */
+  minutesProviderId?: string | null;
+}
+
+/** Type guard: 의견 카드 메시지인가? */
+export function hasOpinionMeta(
+  meta: MessageMeta | null,
+): meta is MessageMeta & { opinion: OpinionCardMeta } {
+  if (meta === null || typeof meta !== 'object') return false;
+  const op = meta.opinion;
+  if (op === undefined || op === null || typeof op !== 'object') return false;
+  return (
+    typeof (op as OpinionCardMeta).opinionRef === 'string' &&
+    typeof (op as OpinionCardMeta).opinionKind === 'string' &&
+    typeof (op as OpinionCardMeta).opinionScreenId === 'string' &&
+    typeof (op as OpinionCardMeta).authorLabel === 'string'
+  );
+}
+
+/** Type guard: 회의록 카드 메시지인가? */
+export function hasMinutesMeta(
+  meta: MessageMeta | null,
+): meta is MessageMeta & { minutes: MinutesCardMeta } {
+  if (meta === null || typeof meta !== 'object') return false;
+  const m = meta.minutes;
+  if (m === undefined || m === null || typeof m !== 'object') return false;
+  return (
+    typeof (m as MinutesCardMeta).minutesPath === 'string' &&
+    typeof (m as MinutesCardMeta).minutesSource === 'string'
+  );
 }
 
 export interface Message {

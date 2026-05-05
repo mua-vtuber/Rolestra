@@ -138,7 +138,7 @@
     {
       "id": 15,
       "subject": "T14 — MessageRenderer 카드 variant + 채팅창 카드",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         14
       ],

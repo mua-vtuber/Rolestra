@@ -38,6 +38,7 @@ import { Composer } from './Composer';
 import { DateSeparator } from './DateSeparator';
 import { MeetingBanner } from './MeetingBanner';
 import { Message, type MessageAuthorInfo } from './Message';
+import { MessageCardVariant, isCardMessage } from './MessageRenderer';
 import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
@@ -85,6 +86,13 @@ type ThreadItem =
     }
   | { kind: 'system'; key: string; message: ChannelMessage }
   | { kind: 'approval'; key: string; message: ChannelMessage }
+  /**
+   * R12-C2 P3 T14 — 의견 / 회의록 카드 메시지 (spec §11.13a). 채팅창
+   * 안에서 plain text 가 아닌 Card primitive 로 렌더된다. dispatch 분기는
+   * `isCardMessage(meta)` 가 결정하며, system author + minutes meta 인
+   * 경우도 SystemMessage 가 아닌 본 분기를 탄다.
+   */
+  | { kind: 'card'; key: string; message: ChannelMessage }
   | {
       kind: 'live';
       key: string;
@@ -233,6 +241,15 @@ export function Thread({
 
       if (isApprovalMessage(m)) {
         out.push({ kind: 'approval', key: `msg-${m.id}`, message: m });
+        lastAuthorId = null;
+        continue;
+      }
+
+      // R12-C2 P3 T14 — 의견 / 회의록 카드 분기 (spec §11.13a). isSystemMessage
+      // 보다 먼저 — minutes 메시지는 authorKind='system' 이지만 SystemMessage
+      // 가 아닌 MinutesCard 로 렌더해야 한다.
+      if (isCardMessage(m)) {
+        out.push({ kind: 'card', key: `msg-${m.id}`, message: m });
         lastAuthorId = null;
         continue;
       }
@@ -419,6 +436,11 @@ export function Thread({
             }
             if (it.kind === 'approval') {
               return <ApprovalBlock key={it.key} message={it.message} />;
+            }
+            if (it.kind === 'card') {
+              // R12-C2 P3 T14 — 의견 / 회의록 카드. 액션 버튼 핸들러는 본
+              // sub-task 에서 미주입 — T15+ workflow sub-task 가 wire.
+              return <MessageCardVariant key={it.key} message={it.message} />;
             }
             if (it.kind === 'live') {
               const ssmLabel =

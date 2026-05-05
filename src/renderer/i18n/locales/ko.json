@@ -598,6 +598,37 @@
       "topicLabel": "주제",
       "topicPlaceholder": "무엇을 논의할까요?"
     },
+    "messageCard": {
+      "expand": "더 보기",
+      "collapse": "접기",
+      "opinion": {
+        "kindLabel": {
+          "root": "의견 제시",
+          "revise": "수정안",
+          "block": "반대안",
+          "addition": "보강안",
+          "self-raised": "직원 발화",
+          "user-raised": "사용자 발화"
+        }
+      },
+      "minutes": {
+        "title": "회의록",
+        "source": {
+          "moderator": "모더레이터 작성",
+          "moderator-retry": "모더레이터 재작성",
+          "fallback": "시스템 fallback"
+        }
+      },
+      "action": {
+        "agree": "동의",
+        "oppose": "반대",
+        "select": "선택",
+        "unselect": "선택 취소",
+        "propose": "수정안 제시",
+        "minutesOpen": "전체 보기",
+        "handoff": "다음 부서로 인계"
+      }
+    },
     "thread": {
       "empty": "아직 메시지가 없습니다",
       "liveTurnPending": "응답 준비 중…",
