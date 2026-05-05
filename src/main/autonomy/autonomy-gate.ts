@@ -112,20 +112,6 @@ export interface AutonomyGateDeps {
 export const AUTONOMY_GATE_AUTO_COMMENT = '[autonomy:auto]' as const;
 
 /**
- * Outcome fields that would signal "NOT accepted" on kinds whose payload
- * may carry an outcome. `rejected` / `aborted` appear on the `meetings`
- * table enum (spec §5.2); `rework` / `fail` appear on review_outcome
- * payloads (§R8+). We duck-type against all four so a future payload
- * change does not silently flip the gate decision.
- */
-const NOT_ACCEPTED_OUTCOMES: ReadonlySet<string> = new Set([
-  'rejected',
-  'rework',
-  'fail',
-  'aborted',
-]);
-
-/**
  * Approval-kind labels routed through the dictionary.
  *
  * `evaluateDecision` returns one of these (plus `unknown` for forward
@@ -135,7 +121,6 @@ const NOT_ACCEPTED_OUTCOMES: ReadonlySet<string> = new Set([
  */
 type GateLabelKind =
   | 'mode_transition'
-  | 'consensus_decision'
   | 'review_outcome'
   | 'cli_permission'
   | 'failure_report'
@@ -359,24 +344,6 @@ export function evaluateDecision(item: ApprovalItem): GateDecision {
       return {
         kind: 'downgrade',
         label: 'mode_transition',
-        rawKind: item.kind,
-      };
-    }
-    case 'consensus_decision': {
-      const payload = item.payload as { outcome?: string } | null;
-      if (
-        typeof payload?.outcome === 'string' &&
-        NOT_ACCEPTED_OUTCOMES.has(payload.outcome)
-      ) {
-        return {
-          kind: 'downgrade',
-          label: 'consensus_decision',
-          rawKind: item.kind,
-        };
-      }
-      return {
-        kind: 'accept',
-        label: 'consensus_decision',
         rawKind: item.kind,
       };
     }

@@ -132,8 +132,14 @@ import {
 import {
   handleMeetingAbort,
   handleMeetingListActive,
-  handleMeetingVotingHistory,
 } from './handlers/meeting-handler';
+import {
+  handleOpinionGather,
+  handleOpinionTally,
+  handleOpinionQuickVote,
+  handleOpinionFreeDiscussion,
+} from './handlers/opinion-handler';
+import { handleMeetingsComposeMinutes } from './handlers/meetings-minutes-handler';
 import {
   handleMemberList,
   handleMemberGetProfile,
@@ -451,11 +457,21 @@ export function registerIpcHandlers(): void {
   // ── v3: Meeting ─────────────────────────────────────────────────
   handle('meeting:abort', isDev, (data) => handleMeetingAbort(data));
   handle('meeting:list-active', isDev, (data) => handleMeetingListActive(data));
-  // R11-Task7: voting context for the Approval detail panel — read-only
-  // projection of meeting.state_snapshot_json. Empty context on miss so
-  // the panel can still render headers.
-  handle('meeting:voting-history', isDev, (data) =>
-    handleMeetingVotingHistory(data),
+  // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거 — SSM 투표 snapshot
+  // 흐름이 폐기되어 데이터 소스가 사라졌다. 새 의견 모델 표결 surface 는
+  // P3/R12-H 에서 별도 IPC 로 재정의.
+
+  // ── R12-C2 P2-2: Opinion (의견 트리 + 투표 backend) ──────────────
+  handle('opinion:gather', isDev, (data) => handleOpinionGather(data));
+  handle('opinion:tally', isDev, (data) => handleOpinionTally(data));
+  handle('opinion:quickVote', isDev, (data) => handleOpinionQuickVote(data));
+  handle('opinion:freeDiscussion', isDev, (data) =>
+    handleOpinionFreeDiscussion(data),
+  );
+
+  // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ────────────
+  handle('meetings:composeMinutes', isDev, (data) =>
+    handleMeetingsComposeMinutes(data),
   );
 
   // ── v3: Member Profile ──────────────────────────────────────────

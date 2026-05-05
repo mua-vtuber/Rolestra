@@ -99,6 +99,18 @@ interface NotificationDictionary {
     rejectionWithComment: string;
     /** LLM summary paragraph header — `provider` interpolation. */
     summaryPrefix: string;
+    /**
+     * R12-C2 T10a — 부서 회의 종료 후 인계 mode='check' 시 OS 알림 (사용자
+     * 승인 필요). `topic` interpolation 으로 회의 주제 안내.
+     */
+    handoffTitle: string;
+    handoffBody: string;
+    /**
+     * R12-C2 T10a — 의견 1 건이 channels.max_rounds 라운드 안 합의 못 이뤄
+     * 사용자 호출 시 알림. `screenId` (의견 화면 ID) + `maxRounds` 보간.
+     */
+    maxRoundsTitle: string;
+    maxRoundsBody: string;
   };
   /**
    * R11-Task11 (D9): main-process labels for the
@@ -114,7 +126,6 @@ interface NotificationDictionary {
   approvalNotificationBridge: {
     cli_permission: { title: string; body: string };
     mode_transition: { title: string; body: string };
-    consensus_decision: { title: string; body: string };
     review_outcome: { title: string; body: string };
     failure_report: { title: string; body: string };
     circuit_breaker: { title: string; body: string };
@@ -136,7 +147,6 @@ interface NotificationDictionary {
   autonomyGate: {
     label: {
       mode_transition: string;
-      consensus_decision: string;
       review_outcome: string;
       cli_permission: string;
       failure_report: string;
@@ -220,11 +230,14 @@ const KO: NotificationDictionary = {
     rejection: '회의 합의 거절됨',
     rejectionWithComment: '회의 합의 거절됨 — {{comment}}',
     summaryPrefix: '📝 LLM 요약 ({{provider}}):',
+    handoffTitle: '회의 종료 — 다음 부서 인계 결재',
+    handoffBody: '"{{topic}}" 회의가 끝났습니다. 다음 부서로 인계할지 결재해 주세요.',
+    maxRoundsTitle: '회의 합의 지연 — 사용자 호출',
+    maxRoundsBody: '의견 {{screenId}} 가 {{maxRounds}} 라운드 안 합의에 이르지 못해 사용자 결재가 필요합니다.',
   },
   approvalNotificationBridge: {
     cli_permission: { title: 'CLI 권한 요청', body: '승인 대기' },
     mode_transition: { title: '권한 모드 변경 요청', body: '권한 모드 변경 대기' },
-    consensus_decision: { title: '합의 결과 승인 요청', body: '합의 결과 승인 대기' },
     review_outcome: { title: '리뷰 결과 승인', body: '리뷰 결과를 확인해 주세요.' },
     failure_report: { title: '실패 리포트', body: '자동 실행 실패가 보고되었습니다.' },
     circuit_breaker: {
@@ -235,7 +248,6 @@ const KO: NotificationDictionary = {
   autonomyGate: {
     label: {
       mode_transition: '모드 전환',
-      consensus_decision: '합의 결과',
       review_outcome: '리뷰 결과',
       cli_permission: 'CLI 권한',
       failure_report: '실패 리포트',
@@ -318,11 +330,14 @@ const EN: NotificationDictionary = {
     rejection: 'Consensus rejected',
     rejectionWithComment: 'Consensus rejected — {{comment}}',
     summaryPrefix: '📝 LLM summary ({{provider}}):',
+    handoffTitle: 'Meeting ended — handoff approval',
+    handoffBody: 'Meeting on "{{topic}}" finished. Approve handoff to the next department.',
+    maxRoundsTitle: 'Consensus stalled — user attention',
+    maxRoundsBody: 'Opinion {{screenId}} did not reach consensus within {{maxRounds}} rounds — please review.',
   },
   approvalNotificationBridge: {
     cli_permission: { title: 'CLI permission request', body: 'Awaiting approval' },
     mode_transition: { title: 'Permission mode change request', body: 'Awaiting permission mode change' },
-    consensus_decision: { title: 'Consensus approval request', body: 'Awaiting consensus approval' },
     review_outcome: { title: 'Review outcome approval', body: 'Please review the outcome.' },
     failure_report: { title: 'Failure report', body: 'An automated run failed.' },
     circuit_breaker: {
@@ -333,7 +348,6 @@ const EN: NotificationDictionary = {
   autonomyGate: {
     label: {
       mode_transition: 'Mode transition',
-      consensus_decision: 'Consensus result',
       review_outcome: 'Review outcome',
       cli_permission: 'CLI permission',
       failure_report: 'Failure report',
@@ -387,13 +401,15 @@ export type NotificationLabelKey =
   | 'meetingMinutes.rejection'
   | 'meetingMinutes.rejectionWithComment'
   | 'meetingMinutes.summaryPrefix'
+  | 'meetingMinutes.handoffTitle'
+  | 'meetingMinutes.handoffBody'
+  | 'meetingMinutes.maxRoundsTitle'
+  | 'meetingMinutes.maxRoundsBody'
   // R11-Task11 (D9): approval-notification-bridge labels.
   | 'approvalNotificationBridge.cli_permission.title'
   | 'approvalNotificationBridge.cli_permission.body'
   | 'approvalNotificationBridge.mode_transition.title'
   | 'approvalNotificationBridge.mode_transition.body'
-  | 'approvalNotificationBridge.consensus_decision.title'
-  | 'approvalNotificationBridge.consensus_decision.body'
   | 'approvalNotificationBridge.review_outcome.title'
   | 'approvalNotificationBridge.review_outcome.body'
   | 'approvalNotificationBridge.failure_report.title'
@@ -402,7 +418,6 @@ export type NotificationLabelKey =
   | 'approvalNotificationBridge.circuit_breaker.body'
   // R11-Task11 (D9): autonomy-gate labels.
   | 'autonomyGate.label.mode_transition'
-  | 'autonomyGate.label.consensus_decision'
   | 'autonomyGate.label.review_outcome'
   | 'autonomyGate.label.cli_permission'
   | 'autonomyGate.label.failure_report'

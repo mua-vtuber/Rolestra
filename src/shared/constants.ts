@@ -1,59 +1,42 @@
 // Application constants shared between processes
 
-import type { SessionState } from './session-state-types';
+import {
+  MEETING_PHASE_ORDER,
+  type MeetingPhase,
+} from './meeting-flow-types';
 
 export const APP_NAME = 'AI Chat Arena';
 export const APP_VERSION = '0.1.0';
 
 /**
- * Ordered list of the 12 session-state-machine states.
+ * Ordered list of meeting phase strings.
  *
- * This ordering defines the `stateIndex` used by dashboard widgets (R4
- * TasksWidget) to render progress gauges against the SSM lifecycle.
+ * R12-C2 T10b: 옛 SSM 12-state 모델 폐기 — 새 phase loop (8 phase) 로
+ * 진행. 본 상수는 dashboard widgets (R4 TasksWidget), MeetingBanner,
+ * 옛 SsmBox placeholder 가 stateIndex / SESSION_STATE_COUNT 로 progress
+ * gauge 를 그릴 때 reference. 진실 원천은 `meeting-flow-types.ts` 의
+ * {@link MEETING_PHASE_ORDER}.
  *
- * The order follows the happy-path progression documented in
- * `src/main/engine/session-state-machine.ts` and the SSM design doc
- * (spec §7.5 meetings):
+ * 진행: gather → tally → quick_vote → free_discussion → compose_minutes →
+ *       handoff → done | aborted
  *
- *   CONVERSATION → MODE_TRANSITION_PENDING → WORK_DISCUSSING →
- *   SYNTHESIZING → VOTING → CONSENSUS_APPROVED → EXECUTING →
- *   REVIEWING → USER_DECISION → DONE/FAILED/PAUSED
- *
- * DONE, FAILED, and PAUSED are terminal or suspended states that sit at
- * the end of the ordering — they still get a valid 0..11 index so the
- * UI can map any `state` value to a gauge position.
- *
- * Keep this array in lock-step with `SessionState` in
- * `session-state-types.ts`. The length assertion below is the compile-
- * time guard.
+ * P3/R12-H 에서 SsmBox 재설계 시 본 상수를 phase 기반 progress 표현으로
+ * 새로 사용한다.
  */
-export const SESSION_STATE_ORDER: readonly SessionState[] = [
-  'CONVERSATION',
-  'MODE_TRANSITION_PENDING',
-  'WORK_DISCUSSING',
-  'SYNTHESIZING',
-  'VOTING',
-  'CONSENSUS_APPROVED',
-  'EXECUTING',
-  'REVIEWING',
-  'USER_DECISION',
-  'DONE',
-  'FAILED',
-  'PAUSED',
-] as const;
+export const SESSION_STATE_ORDER: readonly MeetingPhase[] = MEETING_PHASE_ORDER;
 
-/** Total SSM states — used as the `total` prop for ProgressGauge. */
+/** Total phase 수 — 옛 SsmBox / TasksWidget / MeetingBanner 의 `total` prop. */
 export const SESSION_STATE_COUNT: number = SESSION_STATE_ORDER.length;
 
 /**
- * Map an SSM state name to its ordinal index in `SESSION_STATE_ORDER`.
+ * Map a phase name to its ordinal index in {@link SESSION_STATE_ORDER}.
  * Unknown state names (defensive — the column is a free-text string, not
  * a CHECK-constrained enum) fall back to `0`. The repository tolerates
- * drift between SSM naming and the migration schema without crashing
+ * drift between phase naming and the migration schema without crashing
  * the IPC call; the gauge will simply render at the first step.
  */
 export function sessionStateToIndex(stateName: string): number {
-  const idx = SESSION_STATE_ORDER.indexOf(stateName as SessionState);
+  const idx = SESSION_STATE_ORDER.indexOf(stateName as MeetingPhase);
   return idx < 0 ? 0 : idx;
 }
 

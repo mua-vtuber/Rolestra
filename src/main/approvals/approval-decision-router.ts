@@ -1,12 +1,16 @@
 /**
- * ApprovalDecisionRouter — R7-Task8 + R7-Task9 대상.
+ * ApprovalDecisionRouter — R7-Task8.
  *
  * ApprovalService 의 `'decided'` 이벤트를 구독해 `item.kind` 에 맞는 실행기로
- * 라우팅한다. Task 8 에서는 `mode_transition` 1 종만 처리:
+ * 라우팅한다. 현재 routing 대상:
  *   - decision ∈ {approve, conditional} + kind='mode_transition' →
  *     ProjectService.applyPermissionModeChange(id).
- *   - decision='reject' 또는 다른 kind → no-op (Task 9 에서 consensus_decision
- *     핸들러를 추가할 때 같은 파일을 확장).
+ *   - kind='circuit_breaker' (R10-Task4) — circuitBreaker.resetCounter +
+ *     project.setAutonomy(previousMode).
+ *   - decision='reject' 또는 다른 kind → no-op.
+ *
+ * R12-C2 T10b: 옛 consensus_decision 라우팅 placeholder 제거 — 새 phase loop
+ * 모델은 SSM DONE sign-off approval 자체를 발사하지 않는다.
  *
  * ApprovalSystemMessageInjector(Task 6) 와 책임이 분리돼 있다:
  *   - Injector  : reject/conditional + comment → system 메시지 주입 (AI prompt).
@@ -180,7 +184,6 @@ export class ApprovalDecisionRouter {
       return;
     }
 
-    // consensus_decision 은 R7-Task9 에서 이 switch 에 붙는다.
     // review_outcome / failure_report 는 R8+ 에서 정의.
   }
 

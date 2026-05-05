@@ -114,19 +114,6 @@ function previewByKind(
         to,
       });
     }
-    case 'consensus_decision': {
-      const votes =
-        p.votes && typeof p.votes === 'object'
-          ? (p.votes as Record<string, unknown>)
-          : null;
-      const yes = votes && typeof votes.yes === 'number' ? votes.yes : null;
-      const no = votes && typeof votes.no === 'number' ? votes.no : null;
-      if (yes === null || no === null) return '';
-      return t('dashboard.approvals.preview.consensus_decision', {
-        yes,
-        no,
-      });
-    }
     case 'review_outcome':
     case 'failure_report':
       // Payload \ud0c0\uc785\uc774 \uc544\uc9c1 \uc815\uc758\ub418\uc9c0 \uc54a\uc740 kind \u2014 raw JSON \ub178\ucd9c\uc740 \uae08\uc9c0,

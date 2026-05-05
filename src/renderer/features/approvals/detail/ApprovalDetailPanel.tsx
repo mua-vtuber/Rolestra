@@ -1,12 +1,15 @@
 /**
  * ApprovalDetailPanel — right-hand half of the #승인-대기 split layout.
  *
- * Composes the 5 R11-Task7 cards:
+ * Composes the R11-Task7 cards:
  *   1. ApvDetailHeader        — kind label + status badge
  *   2. ApvImpactedFilesCard   — paths + change-kind chip
  *   3. ApvDiffPreviewCard     — text preview of the upcoming change
- *   4. ApvConsensusContextCard — votes + comments (only when meetingId set)
- *   5. ApvActionBar           — approve / conditional / reject controls
+ *   4. ApvActionBar           — approve / conditional / reject controls
+ *
+ * R12-C2 T10b: 옛 ApvConsensusContextCard (SSM 투표 snapshot 카드) 제거 —
+ * 옛 consensus_decision approval kind 폐기로 데이터 소스가 사라졌다. 새
+ * 의견 모델 표결 surface 는 P3/R12-H 에서 별도 카드로 재정의.
  *
  * Behaviour:
  *   - `approvalId === null` → renders the "no selection" zero-state. The
@@ -26,7 +29,6 @@ import { useApprovalDetail } from '../use-approval-detail';
 import { ApvDetailHeader } from './ApvDetailHeader';
 import { ApvImpactedFilesCard } from './ApvImpactedFilesCard';
 import { ApvDiffPreviewCard } from './ApvDiffPreviewCard';
-import { ApvConsensusContextCard } from './ApvConsensusContextCard';
 import { ApvActionBar } from './ApvActionBar';
 
 export interface ApprovalDetailPanelProps {
@@ -79,7 +81,6 @@ export function ApprovalDetailPanel({
         <ApvDetailHeader approval={detail.approval} />
         <ApvImpactedFilesCard files={detail.impactedFiles} />
         <ApvDiffPreviewCard previews={detail.diffPreviews} />
-        <ApvConsensusContextCard context={detail.consensusContext} />
       </div>
     );
   }

@@ -13,15 +13,9 @@ import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { ApprovalService } from '../../approvals/approval-service';
 import type { ExecutionService } from '../../execution/execution-service';
 import type { MeetingService } from '../../meetings/meeting-service';
-import type { ApprovalConsensusContext } from '../../../shared/approval-detail-types';
-import {
-  emptyConsensusContext,
-  extractConsensusContext,
-} from '../../meetings/voting-history';
 
 let approvalAccessor: (() => ApprovalService) | null = null;
 let executionAccessor: (() => ExecutionService) | null = null;
-let meetingAccessor: (() => MeetingService) | null = null;
 
 export function setApprovalServiceAccessor(
   fn: () => ApprovalService,
@@ -31,9 +25,11 @@ export function setApprovalServiceAccessor(
 
 /**
  * R11-Task7: approval:detail-fetch composes ExecutionService.dryRunPreview
- * + meetings/voting-history into a single round-trip. Both deps are
- * optional in tests — when an accessor is null the handler treats the
- * affected slice as empty (preview = empty arrays / consensus = null).
+ * into a round-trip. Accessor is optional in tests — when null the handler
+ * treats the preview slice as empty.
+ *
+ * R12-C2 T10b: 옛 voting-history 합치기 제거됨 — SSM 투표 snapshot 데이터
+ * 소스가 폐기되어 consensusContext 는 항상 null 로 떨어진다.
  */
 export function setApprovalDetailExecutionAccessor(
   fn: () => ExecutionService,
@@ -41,10 +37,15 @@ export function setApprovalDetailExecutionAccessor(
   executionAccessor = fn;
 }
 
+/**
+ * R12-C2 T10b: 본 setter 는 historical caller (main/index.ts + 테스트) 호환을
+ * 위해 보존하지만 인자는 무시된다 — voting-history 흐름이 폐기되어 본
+ * 핸들러가 더 이상 MeetingService 에 접근하지 않는다.
+ */
 export function setApprovalDetailMeetingAccessor(
-  fn: () => MeetingService,
+  _fn: () => MeetingService,
 ): void {
-  meetingAccessor = fn;
+  // no-op
 }
 
 function getService(): ApprovalService {
@@ -137,31 +138,14 @@ export async function handleApprovalDetailFetch(
     }
   }
 
-  // Slice 2 — voting context. Only resolves when the approval names a
-  // meeting; otherwise the panel hides the votes card.
-  let consensusContext: ApprovalConsensusContext | null = null;
-  if (approval.meetingId !== null && meetingAccessor !== null) {
-    try {
-      const meeting = meetingAccessor().get(approval.meetingId);
-      consensusContext =
-        meeting === null
-          ? emptyConsensusContext(approval.meetingId)
-          : extractConsensusContext(meeting);
-    } catch (err) {
-      console.warn(
-        '[approval-handler] meeting lookup threw:',
-        err instanceof Error ? err.message : String(err),
-      );
-      consensusContext = emptyConsensusContext(approval.meetingId);
-    }
-  }
-
+  // Slice 2 — voting context. R12-C2 T10b: SSM 투표 snapshot 흐름 폐기로
+  // 항상 null. 새 의견 모델 표결 surface 는 P3/R12-H 에서 별도 IPC 로 재정의.
   return {
     detail: {
       approval,
       impactedFiles,
       diffPreviews,
-      consensusContext,
+      consensusContext: null,
     },
   };
 }

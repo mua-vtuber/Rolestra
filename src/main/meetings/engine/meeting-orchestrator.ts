@@ -1,92 +1,68 @@
 /**
- * MeetingOrchestrator — v3 replacement for the legacy
- * `ConversationOrchestrator`. Owns the run-loop that walks a
- * MeetingSession through the 12-state SSM, dispatches turns to
- * MeetingTurnExecutor, and posts the final minutes to `#회의록` when the
- * SSM reaches DONE / FAILED.
+ * MeetingOrchestrator — R12-C2 T10a 통째 재작성.
  *
- * R6 scope (plan D1 / D2 / D3):
- *   - Fully DI-wired — no `workspace-handler` singletons. Receives every
- *     service it touches through the constructor.
- *   - Emits **only** v3 `stream:meeting-*` events. The v2 `stream:token`
- *     / `stream:message-start` / `stream:state` naming is dead — this
- *     file imports neither.
- *   - `wireV3SideEffects` is called per meeting and the returned
- *     disposer is stored on `this.sideEffectDisposer` so a re-run or
- *     abort tears the listeners down cleanly.
- *   - On `SSM.state === 'DONE'` or `'FAILED'`, the orchestrator composes
- *     minutes via `MeetingMinutesComposer` and appends them to the
- *     project's `#회의록` (`system_minutes`) channel. If the channel is
- *     missing we still finish the meeting row and emit the terminal
- *     state event — the minutes post is a side-effect on top, not a
- *     gating step.
- *   - SSM synthesis / voting / execution branches are NOT re-implemented
- *     here. The R6 loop covers the "AI speaks in turn" slice that R5
- *     needs to demo; the synthesis-voting-executing path stays in the
- *     existing `ConsensusDriver` asset and lands in R6-Task7 when
- *     execution-coordinator is absorbed. The loop here breaks on
- *     WAIT_STATES so the synthesiser and voting paths can hook in
- *     without double-spending turns.
+ * 옛 모델: 12 단계 SSM (`SessionStateMachine`) 의 transition map 을
+ * 따라가며 turn-executor 를 라운드로빈 호출, terminal (`DONE`/`FAILED`)
+ * 에서 consensus_decision approval gate + composeMinutes (옛) + #회의록
+ * post 를 처리. WAIT_STATES 분기 / consensus approval gate / SSM listener
+ * (`wireV3SideEffects`) / 옛 minutes-composer 모두 폐기.
  *
- * Scope notes:
- *   - Inter-turn delay is fixed at 2s (matches v2). Configurable delay
- *     is a knob R10 can add.
- *   - User-interjection re-entry is a TurnManager concern; the
- *     orchestrator calls `session.interruptWithUserMessage()` when the
- *     channel-handler signals a mid-meeting user message and leaves the
- *     turn-manager to decide when the next AI gets the mic.
+ * 새 모델: phase loop (spec §5):
+ *
+ *   1. gather             → 직원별 의견 제시 (`requestOpinionGather`)
+ *   2. tally              → 시스템 취합 + 화면 ID 부여 (no-network)
+ *   2.5 quick_vote        → 일괄 동의 투표 + 만장일치 즉시 agreed
+ *   3. free_discussion    → 의견 1 건씩 라운드 누적 (cap = channels.max_rounds)
+ *   5. compose_minutes    → MeetingMinutesService.compose
+ *   6. handoff            → handoff_mode='check' Notification 발송 / 'auto' no-op
+ *
+ * abort / pause / resume / handleUserInterjection / injectInitialUserMessage
+ * + onFinalized 콜백 invariant 그대로 유지 — caller (channel-handler /
+ * meeting-handler / queue / auto-trigger / D-A T2.5 dispatcher / D-A T5
+ * auto-trigger) 가 옛 시그니처 그대로 호출.
+ *
+ * 발화 ID (label) 정책:
+ *   - 회의 boot 직후 each AI participant 의 `OpinionService.nextLabelHint`
+ *     결과로 `MeetingSession.primeLabelCounter` 호출 — 앱 재시작 시 in-memory
+ *     카운터 복원.
+ *   - 매 turn 호출 *전* `session.nextLabel(provider.id)` 으로 suggestedLabel
+ *     발급 (counter +1). turn-executor 가 prompt hint 로 동봉. invalid-schema
+ *     skip 도 카운터는 이미 증가 — spec §11.18.1 = 발화 시도 단위.
+ *
+ * spec docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md
+ *   - §5     D-B 흐름 (의견 트리 + 깊이 cap 3 + 발화 ID 카운터)
+ *   - §11.13a 회의록 카드 (R12-S R-T9 already implements card primitives)
+ *   - §11.14 channels.max_rounds (NULL = 무제한, 부서 디폴트 5)
+ *   - §11.16 handoff_mode (check | auto)
+ *   - §11.18 직원 응답 JSON schema 4 종 + retry/skip 흐름
  */
 
-import { createHash } from 'node:crypto';
-
-import type { VoteRecord } from '../../../shared/consensus-types';
-import type { SessionSnapshot, SessionState } from '../../../shared/session-state-types';
+import type { Channel } from '../../../shared/channel-types';
 import type {
-  ApprovalDecision,
-  ConsensusDecisionApprovalPayload,
-} from '../../../shared/approval-types';
+  MeetingPhase,
+} from '../../../shared/meeting-flow-types';
+import type {
+  Opinion,
+  OpinionTreeNode,
+  OpinionTallyResult,
+  OpinionQuickVoteResult,
+} from '../../../shared/opinion-types';
 import type { MeetingService } from '../meeting-service';
 import type { MessageService } from '../../channels/message-service';
 import type { ChannelService } from '../../channels/channel-service';
 import type { ProjectService } from '../../projects/project-service';
 import type { StreamBridge } from '../../streams/stream-bridge';
-import {
-  APPROVAL_DECIDED_EVENT,
-  type ApprovalDecidedPayload,
-  type ApprovalService,
-} from '../../approvals/approval-service';
 import type { NotificationService } from '../../notifications/notification-service';
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
-import {
-  wireV3SideEffects,
-  postGeneralMeetingDoneMessage,
-  type V3SideEffectDisposer,
-} from '../../engine/v3-side-effects';
+import type { OpinionService } from '../opinion-service';
+import type { MeetingMinutesService } from '../meeting-minutes-service';
+import { OPINION_DEPTH_CAP } from '../screen-id';
 import { tryGetLogger } from '../../log/logger-accessor';
 import type { MeetingSession } from './meeting-session';
 import type { ParticipantMessage } from '../../engine/history';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
-import { composeMinutes, type MinutesTranslator } from './meeting-minutes-composer';
 import { resolveNotificationLabel } from '../../notifications/notification-labels';
-import {
-  INTER_TURN_DELAY_MS,
-  CONSENSUS_DECISION_TTL_MS as CONSENSUS_DECISION_TIMEOUT_MS,
-} from '../../../shared/timeouts';
-
-/**
- * SSM states that need user input — the loop hands control back to the
- * renderer (or to R7 ApprovalService) and pauses until the caller
- * resumes via `handleModeTransitionResponse` / `handleWorkerSelection`
- * / `handleUserDecision`. `PAUSED` and terminals are trivially WAIT.
- */
-const WAIT_STATES: ReadonlySet<SessionState> = new Set([
-  'MODE_TRANSITION_PENDING',
-  'CONSENSUS_APPROVED',
-  'USER_DECISION',
-  'DONE',
-  'FAILED',
-  'PAUSED',
-]);
+import { INTER_TURN_DELAY_MS } from '../../../shared/timeouts';
 
 export interface MeetingOrchestratorDeps {
   session: MeetingSession;
@@ -96,52 +72,25 @@ export interface MeetingOrchestratorDeps {
   meetingService: MeetingService;
   channelService: ChannelService;
   projectService: ProjectService;
-  approvalService: ApprovalService;
   notificationService: NotificationService;
-  circuitBreaker: CircuitBreaker;
   /**
-   * R10-Task11: optional LLM summary appender. When provided, the
-   * orchestrator calls `summarize(body)` after composing the minutes and
-   * appends the result as a final paragraph. Failure is silent — the
-   * minutes message is posted regardless.
+   * orchestrator 자체는 사용 안 함 — turn-executor 가 직접 받아 turn-error
+   * 분류로 호출. main/index.ts factory 가 turn-executor 와 같은 instance 를
+   * 양쪽에 주입할 수 있도록 옵셔널로 받아둔다 (의존 graph 가독성 유지).
    */
-  meetingSummaryService?: {
-    summarize(
-      content: string,
-      opts?: {
-        preferredProviderId?: string | null;
-        signal?: AbortSignal;
-        /**
-         * R11-Task8: meeting context forwarded so the summary service
-         * can correlate cost-audit rows with this meeting.
-         */
-        meetingId?: string | null;
-      },
-    ): Promise<{ summary: string | null; providerId: string | null }>;
-  };
-  /** Optional i18n translator threaded into `composeMinutes`. */
-  t?: MinutesTranslator;
-  /** Opt-out hook for tests — disables the inter-turn delay so loop
-   *  unit tests don't wait 2s between speakers. */
+  circuitBreaker?: CircuitBreaker;
+  /** R12-C2 P2-2 — 의견 트리 + 투표 service. */
+  opinionService: OpinionService;
+  /** R12-C2 P2-3 — step 5 모더레이터 회의록 service. */
+  meetingMinutesService: MeetingMinutesService;
+  /** Opt-out hook for tests — disables the inter-turn delay. */
   interTurnDelayMs?: number;
-  /**
-   * R7-Task9: consensus_decision approval timeout. Default 24h. Tests
-   * pass a small value (e.g. 10ms) so the timeout branch fires without
-   * stalling the suite.
-   */
-  consensusDecisionTimeoutMs?: number;
   /**
    * R9-Task7: optional post-finalise callback. Invoked exactly once per
    * run, immediately after {@link MeetingService.finish} settles the
-   * meeting row (accepted / rejected / aborted). The autonomy-queue
-   * loop uses this to drive `QueueService.complete(item, ...)` +
+   * meeting row (accepted / rejected / aborted). The autonomy-queue loop
+   * uses this to drive `QueueService.complete(item, ...)` +
    * `startNext(projectId)` when the owning project is in `queue` mode.
-   *
-   * Errors are logged and swallowed — the meeting is already final
-   * before the callback runs, so a broken queue hand-off must not
-   * resurface as a meeting error. The callback runs asynchronously
-   * (fire-and-forget) so the finalise path does not block on a slow
-   * queue-side side-effect.
    */
   onFinalized?: (info: {
     meetingId: string;
@@ -149,6 +98,102 @@ export interface MeetingOrchestratorDeps {
     channelId: string;
     outcome: 'accepted' | 'rejected' | 'aborted';
   }) => void | Promise<void>;
+}
+
+/**
+ * 화면 ID list 의 prompt-friendly markdown 표 — quick_vote phase prompt 안에 들어감.
+ *
+ * orchestrator 안 helper — turn-executor 는 *생성된 markdown* 만 받고 트리
+ * 구조는 모르게 분리.
+ */
+function renderOpinionsMarkdown(tree: OpinionTreeNode[]): string {
+  if (tree.length === 0) return '(의견 없음)';
+  const lines: string[] = [];
+  lines.push('| 화면 ID | 발의자 | 제목 | 본문 | 근거 |');
+  lines.push('|---------|--------|------|------|------|');
+  for (const node of tree) {
+    appendRow(lines, node);
+    for (const child of node.children) {
+      appendRow(lines, child);
+      for (const grand of child.children) {
+        appendRow(lines, grand);
+      }
+    }
+  }
+  return lines.join('\n');
+}
+
+function appendRow(lines: string[], node: OpinionTreeNode): void {
+  const op = node.opinion;
+  const cell = (s: string | null | undefined): string =>
+    (s ?? '')
+      .replace(/\|/g, '\\|')
+      .replace(/\r?\n/g, ' ');
+  lines.push(
+    `| ${node.screenId} | ${cell(op.authorLabel)} | ${cell(op.title)} | ${cell(op.content)} | ${cell(op.rationale)} |`,
+  );
+}
+
+/** 진행 중 root 의견의 markdown body (free_discussion phase prompt 안 동봉). */
+function renderCurrentOpinionMarkdown(node: OpinionTreeNode): string {
+  const op = node.opinion;
+  const lines: string[] = [];
+  lines.push(`현재 진행 의견: **${node.screenId}** (${op.authorLabel} 발의)`);
+  if (op.title) lines.push(`제목: ${op.title}`);
+  if (op.content) lines.push(`본문: ${op.content}`);
+  if (op.rationale) lines.push(`근거: ${op.rationale}`);
+  return lines.join('\n');
+}
+
+/** 자식 의견 list markdown — 화면 ID + kind + 작성자 + 제목 / 본문. */
+function renderChildrenMarkdown(node: OpinionTreeNode): string {
+  if (node.children.length === 0) return '(자식 의견 없음)';
+  const lines: string[] = [];
+  for (const child of node.children) {
+    const c = child.opinion;
+    lines.push(`- ${child.screenId} [${c.kind}] (${c.authorLabel}): ${c.title ?? '(제목 없음)'}`);
+    if (c.content) lines.push(`  - 본문: ${c.content}`);
+    if (c.rationale) lines.push(`  - 근거: ${c.rationale}`);
+    for (const grand of child.children) {
+      const g = grand.opinion;
+      lines.push(`  - ${grand.screenId} [${g.kind}] (${g.authorLabel}): ${g.title ?? '(제목 없음)'}`);
+      if (g.content) lines.push(`    - 본문: ${g.content}`);
+      if (g.rationale) lines.push(`    - 근거: ${g.rationale}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
+ * 깊이 cap 도달 의견 (depth = OPINION_DEPTH_CAP - 1 — 즉 손자 수준) 의 화면 ID
+ * list. 직원이 이 의견에 자식 추가 시 OpinionService.freeDiscussionRound 가
+ * `OpinionDepthCapError` throw — prompt 단계에서 미리 안내.
+ */
+function collectDepthCapReached(tree: OpinionTreeNode[]): string[] {
+  const result: string[] = [];
+  const walk = (node: OpinionTreeNode): void => {
+    if (node.depth >= OPINION_DEPTH_CAP - 1) result.push(node.screenId);
+    for (const child of node.children) walk(child);
+  };
+  for (const root of tree) walk(root);
+  return result;
+}
+
+/** tally 결과의 전체 트리에서 노드 1 개를 UUID 로 검색. */
+function findNodeByUuid(
+  tree: OpinionTreeNode[],
+  uuid: string,
+): OpinionTreeNode | null {
+  for (const root of tree) {
+    if (root.opinion.id === uuid) return root;
+    for (const child of root.children) {
+      if (child.opinion.id === uuid) return child;
+      for (const grand of child.children) {
+        if (grand.opinion.id === uuid) return grand;
+      }
+    }
+  }
+  return null;
 }
 
 export class MeetingOrchestrator {
@@ -159,46 +204,15 @@ export class MeetingOrchestrator {
   private readonly meetingService: MeetingService;
   private readonly channelService: ChannelService;
   private readonly projectService: ProjectService;
-  private readonly approvalService: ApprovalService;
   private readonly notificationService: NotificationService;
-  private readonly circuitBreaker: CircuitBreaker;
-  private readonly meetingSummaryService:
-    | MeetingOrchestratorDeps['meetingSummaryService']
-    | undefined;
-  private readonly t?: MinutesTranslator;
+  private readonly opinionService: OpinionService;
+  private readonly meetingMinutesService: MeetingMinutesService;
   private readonly interTurnDelayMs: number;
-  private readonly consensusDecisionTimeoutMs: number;
   private readonly onFinalized?: MeetingOrchestratorDeps['onFinalized'];
-  /**
-   * Per-run listener/timeout pair for the consensus approval gate. Kept so
-   * `stop()` can tear down the wait without leaving an open listener
-   * after an abort.
-   */
-  private consensusGateDisposer: (() => void) | null = null;
 
   private running = false;
-  private abortController: AbortController | null = null;
-  private sideEffectDisposer: V3SideEffectDisposer | null = null;
-  /** Latches the TERMINAL state so the async SSM listener only posts
-   *  minutes / finishes the meeting row once per run, even if the SSM
-   *  emits the same state twice (e.g. re-enter the loop after a
-   *  retry). */
   private terminalHandled = false;
-
-  /**
-   * round2.5 fix: 라운드 단위 success/fail 카운터.
-   *
-   * 한 라운드 내 모든 turn 이 실패 ('failed') 로 끝났는데도 round 가
-   * "정상 종료" 로 처리되어 다음 라운드를 무한 반복하는 문제를 막는다.
-   *
-   * 카운터는 `runSpeakerRound` 내에서 누적되고 `getNextSpeaker() === null`
-   * 시점에 검사 후 reset 된다. success > 0 이면 라운드는 살아있는 것으로
-   * 보고 ROUND_COMPLETE 그대로. 0 success && >=1 failed 이면 ssm.transition
-   * ('ERROR') 으로 FAILED 상태 진입 → handleTerminal 이 partial 회의록
-   * (T8 layout) 으로 마무리.
-   */
-  private roundSuccessCount = 0;
-  private roundFailCount = 0;
+  private paused = false;
 
   constructor(deps: MeetingOrchestratorDeps) {
     this.session = deps.session;
@@ -208,15 +222,10 @@ export class MeetingOrchestrator {
     this.meetingService = deps.meetingService;
     this.channelService = deps.channelService;
     this.projectService = deps.projectService;
-    this.approvalService = deps.approvalService;
     this.notificationService = deps.notificationService;
-    this.circuitBreaker = deps.circuitBreaker;
-    this.meetingSummaryService = deps.meetingSummaryService;
-    this.t = deps.t;
-    this.interTurnDelayMs =
-      deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
-    this.consensusDecisionTimeoutMs =
-      deps.consensusDecisionTimeoutMs ?? CONSENSUS_DECISION_TIMEOUT_MS;
+    this.opinionService = deps.opinionService;
+    this.meetingMinutesService = deps.meetingMinutesService;
+    this.interTurnDelayMs = deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
     this.onFinalized = deps.onFinalized;
   }
 
@@ -224,13 +233,13 @@ export class MeetingOrchestrator {
     return this.running;
   }
 
-  /** Kick off the meeting loop. Idempotent — calling twice is a no-op
-   *  until the previous run exits. */
+  // ── caller-facing surface (시그니처 보존) ───────────────────────────────
+
   async run(): Promise<void> {
     if (this.running) return;
     this.running = true;
     this.terminalHandled = false;
-    this.abortController = new AbortController();
+    this.paused = false;
 
     const runStartedAt = Date.now();
     tryGetLogger()?.info({
@@ -243,47 +252,50 @@ export class MeetingOrchestrator {
         projectId: this.session.projectId,
         topic: this.session.topic,
         participantCount: this.session.participants.length,
-        roundSetting: this.session.turnManager.roundSetting,
       },
     });
-
-    // Per-meeting wiring: SSM transitions → meetings DB + stream-bridge
-    // state-changed + terminal #회의록 post + notifications.
-    this.sideEffectDisposer = wireV3SideEffects(this.session.sessionMachine, {
-      messages: this.messageService,
-      meetings: this.meetingService,
-      approvals: this.approvalService,
-      notifications: this.notificationService,
-      projects: this.projectService,
-      channels: this.channelService,
-      bridge: this.streamBridge,
-      breaker: this.circuitBreaker,
-    });
-
-    // Local terminal listener — v3-side-effects owns the #회의록 post
-    // with the terse "합의 결과" format, but the R6 minutes contract is
-    // the richer MinutesComposer output. We subscribe here so we can
-    // REPLACE the default post with the composed minutes.
-    const unsubTerminal = this.session.sessionMachine.onStateChange(
-      (snapshot) => {
-        if (snapshot.state === 'DONE' || snapshot.state === 'FAILED') {
-          void this.handleTerminal(snapshot);
-        }
-      },
-    );
 
     try {
-      if (this.session.turnManager.state !== 'running') {
-        this.session.start();
-      }
       this.consumePendingAdvisory();
-      await this.loop();
+      this.primeLabelCounters();
+
+      // ── phase 1: gather ─────────────────────────────────────────────
+      await this.runGatherPhase();
+      if (this.session.aborted) return await this.finalize('aborted');
+
+      // ── phase 2: tally (no provider call) ────────────────────────────
+      this.transitionToPhase('tally');
+
+      // ── phase 2.5: quick_vote ────────────────────────────────────────
+      const quickResult = await this.runQuickVotePhase();
+      if (this.session.aborted) return await this.finalize('aborted');
+
+      // ── phase 3: free_discussion (선택) ──────────────────────────────
+      if (quickResult.unresolved.length > 0) {
+        await this.runFreeDiscussionPhase(quickResult.unresolved);
+        if (this.session.aborted) return await this.finalize('aborted');
+      }
+
+      // ── phase 5: compose_minutes ────────────────────────────────────
+      await this.runComposeMinutesPhase();
+      if (this.session.aborted) return await this.finalize('aborted');
+
+      // ── phase 6: handoff ────────────────────────────────────────────
+      await this.runHandoffPhase();
+
+      await this.finalize('accepted');
+    } catch (err) {
+      console.error('[MeetingOrchestrator] run threw', errorPayload(err));
+      try {
+        await this.finalize('aborted');
+      } catch (finalizeErr) {
+        console.warn(
+          '[MeetingOrchestrator] finalize during catch threw',
+          errorPayload(finalizeErr),
+        );
+      }
     } finally {
-      unsubTerminal();
       this.running = false;
-      this.abortController = null;
-      this.sideEffectDisposer?.();
-      this.sideEffectDisposer = null;
       tryGetLogger()?.info({
         component: 'meeting',
         action: 'run-end',
@@ -292,20 +304,365 @@ export class MeetingOrchestrator {
         metadata: {
           meetingId: this.session.meetingId,
           channelId: this.session.channelId,
-          finalState: this.session.sessionMachine.state,
+          finalPhase: this.session.currentPhase,
         },
       });
     }
   }
 
+  /** Stop the loop. Aborts in-flight turn + flips session.aborted = true.
+   *  finalize('aborted') 는 phase loop 가 다음 가드에서 자연 진입한다. */
+  stop(): void {
+    if (!this.running) return;
+    this.session.abort();
+    this.turnExecutor.abort();
+  }
+
+  pause(): void {
+    if (!this.running || this.paused) return;
+    this.paused = true;
+    try {
+      this.meetingService.updateState(
+        this.session.meetingId,
+        this.session.currentPhase,
+        null,
+      );
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] pause updateState failed',
+        errorPayload(err),
+      );
+    }
+  }
+
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    try {
+      this.meetingService.updateState(
+        this.session.meetingId,
+        this.session.currentPhase,
+        null,
+      );
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] resume updateState failed',
+        errorPayload(err),
+      );
+    }
+  }
+
   /**
-   * R11-Task10: 회의 시작 직후 ProjectService 의 pendingAdvisory slot 을
-   * 한 번 읽어 system message 로 prepend 한다. slot 이 비어있으면 no-op.
-   * 모든 실패 (advisory 자체가 없거나, append 가 throw 하거나) 는 warn 만
-   * 남기고 회의 흐름에는 예외를 흘리지 않는다 — advisory 는 보조 안내라서
-   * 실패 시 기본 회의 진행을 막을 이유가 없다. consume 은 1회용 — 두 번째
-   * 호출은 null 을 반환하므로 같은 run() 안에서 불려도 이중 prepend 가
-   * 발생하지 않는다.
+   * D-A T2.5 dispatcher 가 호출 — user 메시지를 session 메시지 버퍼에 push.
+   * 다음 turn 경계에서 prompt 안 자연 포함.
+   */
+  handleUserInterjection(message: ParticipantMessage): void {
+    this.session.interruptWithUserMessage(message);
+  }
+
+  /**
+   * D-A T5 auto-trigger 가 호출 — user 의 첫 메시지 (회의 spawn 트리거) 를
+   * session 버퍼에 push. 첫 turn 진입 전.
+   */
+  injectInitialUserMessage(message: ParticipantMessage): void {
+    this.session.appendUserMessage(message);
+  }
+
+  // ── phase 별 본체 ────────────────────────────────────────────────────
+
+  private async runGatherPhase(): Promise<void> {
+    this.transitionToPhase('gather');
+    const responses: Array<{
+      providerId: string;
+      payload: import('../../../shared/meeting-flow-types').Step1OpinionGatherSchemaType;
+    }> = [];
+
+    for (const speaker of this.session.aiParticipants) {
+      if (this.session.aborted) return;
+      await this.waitWhilePaused();
+      const suggestedLabel = this.session.nextLabel(speaker.id);
+      const turnResult = await this.turnExecutor.requestOpinionGather(speaker, {
+        suggestedLabel,
+      });
+      if (turnResult.kind === 'ok') {
+        responses.push({
+          providerId: speaker.id,
+          payload: turnResult.payload,
+        });
+      }
+      await this.delay(this.interTurnDelayMs);
+    }
+
+    try {
+      this.opinionService.gather({
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        round: 0,
+        responses,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] opinionService.gather threw',
+        errorPayload(err),
+      );
+    }
+  }
+
+  private async runQuickVotePhase(): Promise<OpinionQuickVoteResult> {
+    this.transitionToPhase('quick_vote');
+    const tally = this.opinionService.tally(this.session.meetingId);
+    const opinionsMarkdown = renderOpinionsMarkdown(tally.tree);
+
+    const responses: Array<{
+      providerId: string;
+      payload: import('../../../shared/meeting-flow-types').Step25QuickVoteSchemaType;
+    }> = [];
+
+    for (const speaker of this.session.aiParticipants) {
+      if (this.session.aborted) return emptyQuickVoteResult(this.session.meetingId);
+      await this.waitWhilePaused();
+      const suggestedLabel = this.session.nextLabel(speaker.id);
+      const turnResult = await this.turnExecutor.requestQuickVote(speaker, {
+        suggestedLabel,
+        opinionsMarkdown,
+      });
+      if (turnResult.kind === 'ok') {
+        responses.push({
+          providerId: speaker.id,
+          payload: turnResult.payload,
+        });
+      }
+      await this.delay(this.interTurnDelayMs);
+    }
+
+    try {
+      return this.opinionService.quickVote({
+        meetingId: this.session.meetingId,
+        round: 1,
+        responses,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] opinionService.quickVote threw',
+        errorPayload(err),
+      );
+      return emptyQuickVoteResult(this.session.meetingId);
+    }
+  }
+
+  /**
+   * 자유 토론 phase. unresolved 의견 1 개씩 처리. 각 의견에 대해 max_rounds
+   * 라운드 cap 안에서 라운드 누적. 자식 의견 추가 시 unresolved 큐 뒤에 push
+   * (다음 의견 진입 시 다룸).
+   */
+  private async runFreeDiscussionPhase(initialUnresolved: string[]): Promise<void> {
+    this.transitionToPhase('free_discussion');
+
+    const channel = this.lookupChannel();
+    const maxRounds = resolveMaxRounds(channel);
+
+    // 큐 — 처음 unresolved 가 head, 자유 토론 안 새로 등장한 자식 의견은 tail.
+    const queue: string[] = [...initialUnresolved];
+    let nextRound = 2; // step 1 = round 0, step 2.5 = round 1, step 3 시작 = round 2
+
+    while (queue.length > 0) {
+      if (this.session.aborted) return;
+      const opinionId = queue.shift()!;
+
+      // 매 의견 진입 시 tally 다시 — 직전 round 의 자식 추가 / status 갱신 반영.
+      const tally = this.opinionService.tally(this.session.meetingId);
+      const node = findNodeByUuid(tally.tree, opinionId);
+      if (!node) {
+        // 트리에 없는 UUID — 본 의견 이미 합의 / 제외 처리됨. skip.
+        continue;
+      }
+      if (node.opinion.status !== 'pending') {
+        // 다른 round 에서 합의/제외 처리된 의견. skip.
+        continue;
+      }
+
+      this.session.setCurrentOpinionScreenId(node.screenId);
+      this.session.resetRound();
+      // 매 의견 진입 시 phase-changed 재방출 (round=0 + opinion screen id 갱신).
+      this.emitPhaseChanged(this.session.currentPhase);
+
+      let agreedThisOpinion = false;
+      let opinionRound = 0;
+
+      while (opinionRound < maxRounds) {
+        if (this.session.aborted) return;
+        opinionRound += 1;
+        this.session.incrementRound();
+        // round 변경에 맞춰 phase-changed 재방출.
+        this.emitPhaseChanged(this.session.currentPhase);
+
+        // round 진입 시점의 트리 (자식 의견 list 가 매 라운드 갱신).
+        const roundTally = this.opinionService.tally(this.session.meetingId);
+        const roundNode = findNodeByUuid(roundTally.tree, opinionId);
+        if (!roundNode) break;
+
+        const currentOpinionMarkdown = renderCurrentOpinionMarkdown(roundNode);
+        const childrenMarkdown = renderChildrenMarkdown(roundNode);
+        const depthCapReachedScreenIds = collectDepthCapReached(roundTally.tree);
+
+        const responses: Array<{
+          providerId: string;
+          payload: import('../../../shared/meeting-flow-types').Step3FreeDiscussionSchemaType;
+        }> = [];
+
+        for (const speaker of this.session.aiParticipants) {
+          if (this.session.aborted) return;
+          await this.waitWhilePaused();
+          const suggestedLabel = this.session.nextLabel(speaker.id);
+          const turnResult = await this.turnExecutor.requestFreeDiscussion(
+            speaker,
+            {
+              suggestedLabel,
+              currentOpinionMarkdown,
+              childrenMarkdown,
+              depthCapReachedScreenIds,
+            },
+          );
+          if (turnResult.kind === 'ok') {
+            responses.push({
+              providerId: speaker.id,
+              payload: turnResult.payload,
+            });
+          }
+          await this.delay(this.interTurnDelayMs);
+        }
+
+        let result: ReturnType<OpinionService['freeDiscussionRound']>;
+        try {
+          result = this.opinionService.freeDiscussionRound({
+            meetingId: this.session.meetingId,
+            opinionId,
+            round: nextRound,
+            responses,
+          });
+        } catch (err) {
+          // OpinionDepthCapError / UnknownScreenIdError / OpinionNotFoundError —
+          // 본 의견의 라운드를 더 진행하지 않고 다음 의견으로. agreed 여부 미상.
+          console.warn(
+            '[MeetingOrchestrator] freeDiscussionRound threw',
+            errorPayload(err),
+          );
+          break;
+        }
+        nextRound += 1;
+
+        // 자식 의견 신규 추가 — 다음 진입 큐에 push.
+        for (const child of result.additions) {
+          queue.push(child.id);
+        }
+
+        if (result.agreed) {
+          agreedThisOpinion = true;
+          break;
+        }
+      }
+
+      if (!agreedThisOpinion && opinionRound >= maxRounds) {
+        // max_rounds 도달 — 사용자 호출. 본 sub-task 는 Notification 만, 실제
+        // pause 흐름은 P6 R12-H 에서 본격. simple emit + system message.
+        try {
+          this.notifyMaxRoundsReached(node.screenId, maxRounds);
+        } catch (err) {
+          console.warn(
+            '[MeetingOrchestrator] notifyMaxRoundsReached failed',
+            errorPayload(err),
+          );
+        }
+      }
+
+      // 의견 1 개 종료 — opinion screen id 비움 (다음 의견 진입 시 재할당).
+      this.session.setCurrentOpinionScreenId(null);
+    }
+  }
+
+  private async runComposeMinutesPhase(): Promise<void> {
+    this.transitionToPhase('compose_minutes');
+    try {
+      const result = await this.meetingMinutesService.compose({
+        meetingId: this.session.meetingId,
+      });
+      // 채팅창 회의록 카드 — meta.minutesPath / meta.minutesSource 로 renderer 가
+      // 카드 컴포넌트 (T12) 와 매핑. 본 sub-task 는 system message 1 건.
+      try {
+        this.messageService.append({
+          channelId: this.session.channelId,
+          meetingId: this.session.meetingId,
+          authorId: 'system',
+          authorKind: 'system',
+          role: 'system',
+          content: result.body,
+          meta: {
+            minutesPath: result.minutesPath,
+            minutesSource: result.source,
+            minutesProviderId: result.providerId,
+          },
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] minutes append failed',
+          errorPayload(err),
+        );
+      }
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] minutes compose threw',
+        errorPayload(err),
+      );
+    }
+  }
+
+  private async runHandoffPhase(): Promise<void> {
+    this.transitionToPhase('handoff');
+    const channel = this.lookupChannel();
+    const handoffMode = channel?.handoffMode ?? 'check';
+    if (handoffMode === 'check') {
+      try {
+        const title = resolveNotificationLabel('meetingMinutes.handoffTitle');
+        const body = resolveNotificationLabel('meetingMinutes.handoffBody', {
+          topic: this.session.topic,
+        });
+        this.notificationService.show({
+          kind: 'meeting_state',
+          title,
+          body,
+          channelId: this.session.channelId,
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] handoff notify threw',
+          errorPayload(err),
+        );
+      }
+      try {
+        this.messageService.append({
+          channelId: this.session.channelId,
+          meetingId: this.session.meetingId,
+          authorId: 'system',
+          authorKind: 'system',
+          role: 'system',
+          content: '회의가 끝났습니다 — 다음 부서 인계는 사용자 승인 대기 중입니다.',
+          meta: { handoff: 'check' },
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] handoff system message append failed',
+          errorPayload(err),
+        );
+      }
+    }
+    // 'auto' 는 P6 R12-H 책임 — 본 sub-task no-op.
+  }
+
+  // ── helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * 회의 boot 직후 ProjectService.consumePendingAdvisory slot 을 1 회 읽어
+   * system message 로 prepend. 옛 R11-Task10 invariant 그대로.
    */
   private consumePendingAdvisory(): void {
     let advisory: string | null = null;
@@ -321,7 +678,6 @@ export class MeetingOrchestrator {
       return;
     }
     if (advisory === null || advisory.length === 0) return;
-
     const prefix = resolveNotificationLabel(
       'approvalSystemMessage.modeTransitionAdvisoryPrefix',
     );
@@ -344,403 +700,82 @@ export class MeetingOrchestrator {
     }
   }
 
-  /** Stop the loop. Cancels the in-flight provider request and freezes
-   *  the SSM at whatever state it reached. The meeting row is NOT
-   *  finished here — aborting via IPC (meeting:abort) sets outcome
-   *  separately. */
-  stop(): void {
-    this.turnExecutor.abort();
-    this.abortController?.abort();
-    this.session.stop();
-    this.running = false;
-    // R7-Task9: if the consensus approval gate was open, tear it down so
-    // the listener + 24h timer do not outlive the aborted meeting.
-    this.disposeConsensusGate();
-  }
-
-  /** Pause the loop; the current turn finishes then the loop idles. */
-  pause(): void {
-    if (this.session.turnManager.state === 'running') {
-      this.session.pause();
-    }
-  }
-
-  /** Resume a paused meeting. */
-  resume(): void {
-    if (this.session.turnManager.state === 'paused') {
-      this.session.resume();
-    }
-  }
-
   /**
-   * Signal from the channel-handler that the user sent a message
-   * mid-meeting. Pushes the message body onto the session buffer (so the
-   * next AI turn's prompt actually sees it — D-A T2.5 / spec §5.5) and
-   * interrupts the turn rotation.
-   *
-   * Pre-T2.5 this method only interrupted; the message text was lost on
-   * the way to the AI, which manifested as the round2.6 dogfooding
-   * report (#3 — AI 가 사용자 추가 메시지를 무시하고 메타 토론으로 빠짐).
+   * 회의 재시작 / 재진입 시 (앱 재시작 후) DB 의 nextLabelHint 결과로
+   * MeetingSession 의 in-memory 카운터를 prime. 첫 회의에서는 hint = 1 이라
+   * 카운터도 0 → 1 로 prime — nextLabel 첫 호출이 `_1` 발급.
    */
-  handleUserInterjection(message: ParticipantMessage): void {
-    this.session.interruptWithUserMessage(message);
-  }
-
-  /**
-   * Seed the meeting with the user's first message *before* any AI turn
-   * runs. Differs from {@link handleUserInterjection} in that it does
-   * NOT raise the TurnManager's interrupt flag — the auto-trigger path
-   * (D-A T5) appends the message that *spawned* the meeting, not an
-   * interjection into a live round, so the first AI turn must be free
-   * to start normally.
-   */
-  injectInitialUserMessage(message: ParticipantMessage): void {
-    this.session.appendUserMessage(message);
-  }
-
-  // ── Main loop ───────────────────────────────────────────────────────
-
-  private async loop(): Promise<void> {
-    const ssm = this.session.sessionMachine;
-    while (!ssm.isTerminal && this.session.state !== 'stopped') {
-      if (this.session.state === 'paused') {
-        await this.delay(500);
-        continue;
-      }
-
-      if (WAIT_STATES.has(ssm.state)) {
-        // Wait states exit the loop — the R7 approval path (or the
-        // user-decision IPC) will transition SSM forward and, if the
-        // caller wants, call `run()` again to resume.
-        break;
-      }
-
-      if (this.session.state !== 'running') break;
-
-      // The R6 orchestrator only drives the "AI speaks in turn" slice
-      // of the SSM. Synthesis / voting / execution / review loops land
-      // in R6-Task7 when ConsensusDriver / ExecutionCoordinator are
-      // absorbed. For non-speaker states we surface them via the
-      // stream-bridge and break so the R7 work can resume the loop.
-      let roundEnded = false;
-      switch (ssm.state) {
-        case 'CONVERSATION':
-        case 'WORK_DISCUSSING':
-          roundEnded = await this.runSpeakerRound();
-          break;
-        default:
-          // SYNTHESIZING / VOTING / EXECUTING / REVIEWING — hand off
-          // to a future ConsensusDriver-style subscriber. Return so we
-          // don't spin.
-          return;
-      }
-
-      // Round finished without a state transition out of the speaker
-      // phase (e.g. CONVERSATION → CONVERSATION with no work-majority,
-      // or WORK_DISCUSSING when no next speaker is available yet).
-      // Break out of the loop so the SSM sits idle until the next
-      // IPC-driven resume, mirroring the v2 orchestrator contract.
-      if (roundEnded) break;
-
-      if (this.session.state === 'running') {
-        await this.delay(this.interTurnDelayMs, this.abortController?.signal);
-      }
-    }
-  }
-
-  /** Run one speaker turn. Returns true when the round ended — either
-   *  because the SSM transitioned out of the speaker phase, or because
-   *  the round is finished and no further speaker is available. */
-  private async runSpeakerRound(): Promise<boolean> {
-    const speaker = this.session.getNextSpeaker();
-    if (!speaker) {
-      // round2.5 fix: 라운드 종료 직전 — 모든 참가자가 실패였다면
-      // ROUND_COMPLETE 대신 ERROR transition 으로 FAILED 진입. handleTerminal
-      // 이 partial-summary 양식 (T8) 으로 회의록을 마무리한다.
-      const allFailed =
-        this.roundSuccessCount === 0 && this.roundFailCount > 0;
-      this.roundSuccessCount = 0;
-      this.roundFailCount = 0;
-
-      if (allFailed) {
-        console.warn(
-          `[MeetingOrchestrator:${this.session.meetingId}] all participants failed this round — forcing FAILED state`,
+  private primeLabelCounters(): void {
+    for (const p of this.session.aiParticipants) {
+      try {
+        const hint = this.opinionService.nextLabelHint(
+          this.session.meetingId,
+          p.id,
         );
-        this.session.sessionMachine.transition('ERROR');
-      } else {
-        // SSM 의 transition map 이 CONVERSATION → CONVERSATION
-        // (no-mode-judgment majority) vs → MODE_TRANSITION_PENDING 분기.
-        this.session.sessionMachine.transition('ROUND_COMPLETE');
+        this.session.primeLabelCounter(p.id, hint);
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] primeLabelCounter failed',
+          errorPayload(err),
+        );
       }
-      return true;
     }
-    await this.turnExecutor.executeTurn(speaker);
-    switch (this.turnExecutor.lastTurnResult) {
-      case 'success':
-        this.roundSuccessCount += 1;
-        break;
-      case 'failed':
-        this.roundFailCount += 1;
-        break;
-      // 'skipped' / 'idle' 는 카운트 안 함 — work-status gate 의 정상 흐름
-      // 이거나 사용자 abort 같은 control-flow signal 이라 round-fatal 이
-      // 아님.
-    }
-    return false;
   }
 
-  // ── Terminal handling ───────────────────────────────────────────────
+  private transitionToPhase(phase: MeetingPhase): void {
+    this.session.setPhase(phase);
+    this.emitPhaseChanged(phase);
+    try {
+      this.meetingService.updateState(this.session.meetingId, phase, null);
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] meetingService.updateState failed',
+        errorPayload(err),
+      );
+    }
+  }
 
-  private async handleTerminal(snapshot: SessionSnapshot): Promise<void> {
+  private emitPhaseChanged(phase: MeetingPhase): void {
+    const prev = this.session.currentPhase === phase ? null : null;
+    // Note: session.currentPhase 가 이미 갱신된 상태에서 본 method 를 부른다 —
+    // prev 추적은 별도 필드가 필요하나 본 sub-task 는 단순화하여 prev=null
+    // 사용 (renderer SsmBox 가 prev 정보 활용 X — phase 자체만 사용).
+    this.streamBridge.emitMeetingPhaseChanged({
+      meetingId: this.session.meetingId,
+      channelId: this.session.channelId,
+      prevPhase: prev,
+      phase,
+      round: this.session.currentRound,
+      currentOpinionScreenId: this.session.currentOpinionScreenId,
+    });
+    // 옛 신호도 *값만* 새 phase 문자열로 dispatch — schema 호환 (사용자 결정 ①).
+    this.streamBridge.emitMeetingStateChanged({
+      meetingId: this.session.meetingId,
+      channelId: this.session.channelId,
+      state: phase,
+    });
+  }
+
+  private async finalize(
+    outcome: 'accepted' | 'rejected' | 'aborted',
+  ): Promise<void> {
     if (this.terminalHandled) return;
     this.terminalHandled = true;
 
-    if (snapshot.state === 'FAILED') {
-      // FAILED path — no approval gate. v3-side-effects posted the terse
-      // fail line; we add the composed minutes + close the meeting row.
-      try {
-        await this.postMinutes(snapshot);
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] minutes post failed',
-          errorPayload(err),
-        );
-      }
-      this.finishMeeting(snapshot, 'rejected');
-      return;
-    }
+    const finalPhase: MeetingPhase = outcome === 'aborted' ? 'aborted' : 'done';
+    this.session.setPhase(finalPhase);
+    this.emitPhaseChanged(finalPhase);
 
-    // DONE — R7-Task9 consensus-decision approval gate (spec §7.5).
-    // The run() Promise resolves here; the user's decision (or the 24h
-    // timeout) fires asynchronously on the approval service and drives
-    // the final #회의록 post + meeting.finish() via the listener set up
-    // below. The orchestrator instance stays alive via the closure.
-    this.openConsensusDecisionGate(snapshot);
-  }
-
-  /**
-   * Build the `consensus_decision` payload, open the approval row, and
-   * subscribe to the `'decided'` event with a {@link consensusDecisionTimeoutMs}
-   * safety timer. Idempotent per-run via `terminalHandled`.
-   */
-  private openConsensusDecisionGate(snapshot: SessionSnapshot): void {
-    const payload = this.buildConsensusDecisionPayload(snapshot);
-
-    let approvalId: string;
     try {
-      const created = this.approvalService.create({
-        kind: 'consensus_decision',
-        projectId: this.session.projectId,
-        channelId: this.session.channelId,
-        meetingId: this.session.meetingId,
-        requesterId: null,
-        payload,
-      });
-      approvalId = created.id;
+      this.meetingService.finish(this.session.meetingId, outcome, null);
     } catch (err) {
-      // ApprovalService.create failure must not strand the meeting in
-      // limbo — fall back to the pre-R7 behaviour (immediate post +
-      // accepted). Log loudly so the wiring bug surfaces.
-      console.warn(
-        '[MeetingOrchestrator] consensus approval create failed — falling back to immediate post',
-        errorPayload(err),
-      );
-      void this.fallbackImmediateFinish(snapshot);
-      return;
-    }
-
-    let settled = false;
-    const onDecided = (event: ApprovalDecidedPayload): void => {
-      if (event.item.id !== approvalId) return;
-      if (settled) return;
-      settled = true;
-      this.disposeConsensusGate();
-      void this.handleConsensusDecision(snapshot, event.decision, event.comment);
-    };
-
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      this.disposeConsensusGate();
-      try {
-        this.approvalService.expire(approvalId);
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] consensus approval expire failed',
-          errorPayload(err),
-        );
-      }
-      void this.handleConsensusTimeout(snapshot);
-    }, this.consensusDecisionTimeoutMs);
-    // Let the app exit even if the 24h timer is still pending.
-    if (typeof timer.unref === 'function') timer.unref();
-
-    this.approvalService.on(APPROVAL_DECIDED_EVENT, onDecided);
-
-    this.consensusGateDisposer = (): void => {
-      clearTimeout(timer);
-      this.approvalService.off(APPROVAL_DECIDED_EVENT, onDecided);
-    };
-  }
-
-  private disposeConsensusGate(): void {
-    if (this.consensusGateDisposer) {
-      try {
-        this.consensusGateDisposer();
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] consensus gate disposer threw',
-          errorPayload(err),
-        );
-      }
-      this.consensusGateDisposer = null;
-    }
-  }
-
-  private async handleConsensusDecision(
-    snapshot: SessionSnapshot,
-    decision: ApprovalDecision,
-    comment: string | null,
-  ): Promise<void> {
-    if (decision === 'reject') {
-      // Reject — write the rejection message to #회의록 and close the
-      // meeting as rejected. The reject comment (if any) is also
-      // injected as a system message by ApprovalSystemMessageInjector
-      // (Task 6); we don't duplicate it here.
-      try {
-        const minutesChannelId = this.findMinutesChannelId();
-        if (minutesChannelId) {
-          const trimmed = comment?.trim() ?? '';
-          const body =
-            trimmed.length > 0
-              ? resolveNotificationLabel(
-                  'meetingMinutes.rejectionWithComment',
-                  { comment: trimmed },
-                )
-              : resolveNotificationLabel('meetingMinutes.rejection');
-          this.messageService.append({
-            channelId: minutesChannelId,
-            meetingId: this.session.meetingId,
-            authorId: 'system',
-            authorKind: 'system',
-            role: 'system',
-            content: body,
-            meta: null,
-          });
-        }
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] consensus rejection post failed',
-          errorPayload(err),
-        );
-      }
-      this.finishMeeting(snapshot, 'rejected');
-      return;
-    }
-
-    // approve / conditional → composed minutes + accepted. Conditional
-    // comment is already injected into the next turn's system prompt by
-    // ApprovalSystemMessageInjector(Task 6) — here we only need the
-    // minutes post + outcome stamp.
-    try {
-      await this.postMinutes(snapshot);
-    } catch (err) {
-      console.warn(
-        '[MeetingOrchestrator] consensus minutes post failed',
-        errorPayload(err),
-      );
-    }
-    this.finishMeeting(snapshot, 'accepted');
-  }
-
-  private async handleConsensusTimeout(
-    snapshot: SessionSnapshot,
-  ): Promise<void> {
-    try {
-      const minutesChannelId = this.findMinutesChannelId();
-      if (minutesChannelId) {
-        this.messageService.append({
-          channelId: minutesChannelId,
-          meetingId: this.session.meetingId,
-          authorId: 'system',
-          authorKind: 'system',
-          role: 'system',
-          content: '회의 합의 승인 대기 시간 초과 — 회의가 아카이브되었습니다.',
-          meta: null,
-        });
-      }
-    } catch (err) {
-      console.warn(
-        '[MeetingOrchestrator] consensus timeout post failed',
-        errorPayload(err),
-      );
-    }
-    this.finishMeeting(snapshot, 'aborted');
-  }
-
-  private async fallbackImmediateFinish(
-    snapshot: SessionSnapshot,
-  ): Promise<void> {
-    try {
-      await this.postMinutes(snapshot);
-    } catch (err) {
-      console.warn(
-        '[MeetingOrchestrator] fallback minutes post failed',
-        errorPayload(err),
-      );
-    }
-    this.finishMeeting(snapshot, 'accepted');
-  }
-
-  private finishMeeting(
-    snapshot: SessionSnapshot,
-    outcome: 'accepted' | 'rejected' | 'aborted',
-  ): void {
-    try {
-      this.meetingService.finish(
-        this.session.meetingId,
-        outcome,
-        JSON.stringify(snapshot),
-      );
-    } catch (err) {
-      // finish() throws MeetingNotFoundError when the row was already
-      // finished. Log + swallow — terminal state is authoritative.
       console.warn(
         '[MeetingOrchestrator] meeting finish failed',
         errorPayload(err),
       );
     }
 
-    // R9-Task8: post the autonomy-mode `#일반` completion message when
-    // the meeting settled as accepted. The helper is a no-op for manual
-    // projects and for missing `#일반` channels, so the call is safe to
-    // issue unconditionally on the accepted branch. Rejected / aborted
-    // outcomes skip this post — `#일반` is reserved for positive
-    // completions (rejection / timeout already wrote to `#회의록`).
-    if (outcome === 'accepted' && this.session.projectId) {
-      try {
-        postGeneralMeetingDoneMessage(
-          {
-            channels: this.channelService,
-            messages: this.messageService,
-            projects: this.projectService,
-          },
-          {
-            projectId: this.session.projectId,
-            meetingId: this.session.meetingId,
-            meetingTitle: this.session.topic,
-          },
-        );
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] #일반 work-done post threw',
-          errorPayload(err),
-        );
-      }
-    }
-
-    // R9-Task7: fire the post-finalise hook (if any). Fire-and-forget —
-    // the queue hand-off must not resurface as a meeting error.
+    // R9-Task7: fire the post-finalise hook — fire-and-forget.
     const hook = this.onFinalized;
     if (hook) {
       const info = {
@@ -765,135 +800,86 @@ export class MeetingOrchestrator {
     }
   }
 
-  private buildConsensusDecisionPayload(
-    snapshot: SessionSnapshot,
-  ): ConsensusDecisionApprovalPayload {
-    const finalText = (snapshot.proposal ?? '').trim();
-    const votes: VoteRecord[] = snapshot.votes ?? [];
-    let yes = 0;
-    let no = 0;
-    let pending = 0;
-    for (const v of votes) {
-      if (v.vote === 'agree') yes += 1;
-      else if (v.vote === 'disagree' || v.vote === 'block') no += 1;
-      else pending += 1; // 'abstain'
-    }
-    const hashInput = `${finalText}|${JSON.stringify(votes)}`;
-    const snapshotHash = createHash('sha256')
-      .update(hashInput)
-      .digest('hex')
-      .slice(0, 32);
-    return {
-      kind: 'consensus_decision',
-      snapshotHash,
-      finalText,
-      votes: { yes, no, pending },
-    };
-  }
-
-  private async postMinutes(snapshot: SessionSnapshot): Promise<void> {
-    const minutesChannelId = this.findMinutesChannelId();
-    if (!minutesChannelId) return;
-
-    const meeting = this.meetingService.get(this.session.meetingId);
-    const startedAt = meeting?.startedAt ?? Date.now();
-
-    const body = composeMinutes({
-      meetingId: this.session.meetingId,
-      topic: this.session.topic,
-      participants: this.session.participants,
-      snapshot: this.asSnapshotWithVotes(snapshot),
-      startedAt,
-      endedAt: Date.now(),
-      t: this.t,
-    });
-
-    // R10-Task11: best-effort LLM summary appended as a final paragraph.
-    // The summarize call is bounded internally (timeout + max chars) and
-    // never throws — a null result preserves the deterministic body.
-    let finalContent = body;
-    if (this.meetingSummaryService !== undefined) {
-      try {
-        const result = await this.meetingSummaryService.summarize(body, {
-          meetingId: this.session.meetingId,
-        });
-        if (result.summary !== null) {
-          const provider = result.providerId ?? '?';
-          const prefix = resolveNotificationLabel(
-            'meetingMinutes.summaryPrefix',
-            { provider },
-          );
-          finalContent = `${body}\n\n---\n${prefix} ${result.summary}`;
-        }
-      } catch (err) {
-        // Defensive — summarize() should never throw, but if it does we
-        // log and fall back to the deterministic body.
-        console.warn(
-          '[MeetingOrchestrator] llm summary failed',
-          errorPayload(err),
-        );
-      }
-    }
-
-    this.messageService.append({
-      channelId: minutesChannelId,
-      meetingId: this.session.meetingId,
-      authorId: 'system',
-      authorKind: 'system',
-      role: 'system',
-      content: finalContent,
-      meta: null,
-    });
-  }
-
-  /** Look up the `#회의록` (`system_minutes`) channel for the project
-   *  owning this meeting. Returns null when the channel is missing
-   *  (test fixtures or archived projects). */
-  private findMinutesChannelId(): string | null {
-    const projectId = this.session.projectId;
-    if (!projectId) return null;
+  private notifyMaxRoundsReached(screenId: string, maxRounds: number): void {
     try {
-      const rows = this.channelService.listByProject(projectId);
-      const minutes = rows.find((c) => c.kind === 'system_minutes');
-      return minutes?.id ?? null;
+      const title = resolveNotificationLabel('meetingMinutes.maxRoundsTitle');
+      const body = resolveNotificationLabel('meetingMinutes.maxRoundsBody', {
+        screenId,
+        maxRounds: String(maxRounds),
+      });
+      this.notificationService.show({
+        kind: 'meeting_state',
+        title,
+        body,
+        channelId: this.session.channelId,
+      });
     } catch (err) {
       console.warn(
-        '[MeetingOrchestrator] listByProject failed',
+        '[MeetingOrchestrator] maxRounds notify threw',
+        errorPayload(err),
+      );
+    }
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: `의견 ${screenId} 가 ${maxRounds} 라운드 동안 합의에 이르지 못해 사용자 호출 — 회의를 일시 정지합니다.`,
+        meta: { maxRoundsReached: true, screenId, maxRounds },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] maxRounds system message append failed',
+        errorPayload(err),
+      );
+    }
+  }
+
+  private lookupChannel(): Channel | null {
+    try {
+      return this.channelService.get(this.session.channelId) ?? null;
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] channelService.get failed',
         errorPayload(err),
       );
       return null;
     }
   }
 
-  /** Ensure the snapshot we hand to composeMinutes carries the `votes`
-   *  array even when the SSM emits a FAILED snapshot with an empty
-   *  record (SSM snapshots always have votes:[]; this is a defensive
-   *  copy). */
-  private asSnapshotWithVotes(snapshot: SessionSnapshot): SessionSnapshot {
-    const votes: VoteRecord[] = [...(snapshot.votes ?? [])];
-    return { ...snapshot, votes };
+  private async waitWhilePaused(): Promise<void> {
+    while (this.paused && !this.session.aborted) {
+      await this.delay(500);
+    }
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────
-
-  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+  private delay(ms: number): Promise<void> {
     if (ms <= 0) return Promise.resolve();
     return new Promise<void>((resolve) => {
-      if (signal?.aborted) {
-        resolve();
-        return;
-      }
-      const timer = setTimeout(resolve, ms);
-      signal?.addEventListener(
-        'abort',
-        () => {
-          clearTimeout(timer);
-          resolve();
-        },
-        { once: true },
-      );
+      setTimeout(resolve, ms);
     });
   }
+}
+
+// ── 모듈 helpers ──────────────────────────────────────────────────────
+
+/** channels.max_rounds = NULL → Infinity, 정수 → 그 값. spec §11.14 결정. */
+function resolveMaxRounds(channel: Channel | null): number {
+  const raw = channel?.maxRounds;
+  if (raw === null || raw === undefined) return Number.POSITIVE_INFINITY;
+  if (raw <= 0) return Number.POSITIVE_INFINITY;
+  return raw;
+}
+
+function emptyQuickVoteResult(meetingId: string): OpinionQuickVoteResult {
+  return {
+    meetingId,
+    agreed: [],
+    unresolved: [],
+    votesInserted: 0,
+  };
 }
 
 function errorPayload(err: unknown): { name?: string; message: string } {
@@ -902,3 +888,14 @@ function errorPayload(err: unknown): { name?: string; message: string } {
   }
   return { message: String(err) };
 }
+
+// 컴파일러가 deps 파일들이 unused import 가 없도록 — Opinion 도메인 타입을
+// 본 모듈이 사용한다고 명시.
+type _OpinionUsed = Opinion;
+type _TallyUsed = OpinionTallyResult;
+type _CircuitBreakerUsed = CircuitBreaker;
+export type {
+  _OpinionUsed as _OpinionTypeUsed,
+  _TallyUsed as _TallyTypeUsed,
+  _CircuitBreakerUsed as _CircuitBreakerTypeUsed,
+};

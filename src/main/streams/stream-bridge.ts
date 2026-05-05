@@ -49,6 +49,7 @@ import type {
   StreamApprovalDecidedPayload,
   StreamProjectUpdatedPayload,
   StreamMeetingStateChangedPayload,
+  StreamMeetingPhaseChangedPayload,
   StreamMeetingTurnStartPayload,
   StreamMeetingTurnTokenPayload,
   StreamMeetingTurnDonePayload,
@@ -85,6 +86,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:approval-decided',
   'stream:project-updated',
   'stream:meeting-state-changed',
+  'stream:meeting-phase-changed',
   'stream:meeting-turn-start',
   'stream:meeting-turn-token',
   'stream:meeting-turn-done',
@@ -353,6 +355,17 @@ export class StreamBridge {
     this.emit({ type: 'stream:meeting-state-changed', payload });
   }
 
+  /**
+   * R12-C2 T10a — 새 phase 전환 신호. 옛 `state-changed` 와 *함께* 호출 (orchestrator
+   * 가 양쪽 emit). schema 호환은 `state-changed` 의 `state` 필드에 phase 문자열을
+   * 그대로 dispatch 하는 것으로 유지 — 본 신호는 prev/round/현재 의견 정보 추가용.
+   */
+  emitMeetingPhaseChanged(
+    payload: StreamMeetingPhaseChangedPayload,
+  ): void {
+    this.emit({ type: 'stream:meeting-phase-changed', payload });
+  }
+
   emitMeetingTurnStart(payload: StreamMeetingTurnStartPayload): void {
     this.emit({ type: 'stream:meeting-turn-start', payload });
   }
@@ -480,6 +493,17 @@ export class StreamBridge {
           typeof payload.meetingId === 'string' &&
           typeof payload.channelId === 'string' &&
           typeof payload.state === 'string'
+        );
+      case 'stream:meeting-phase-changed':
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.channelId === 'string' &&
+          (payload.prevPhase === null ||
+            typeof payload.prevPhase === 'string') &&
+          typeof payload.phase === 'string' &&
+          typeof payload.round === 'number' &&
+          (payload.currentOpinionScreenId === null ||
+            typeof payload.currentOpinionScreenId === 'string')
         );
       case 'stream:meeting-turn-start':
         return (

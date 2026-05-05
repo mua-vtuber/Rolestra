@@ -290,6 +290,20 @@ export function handleDmCreate(
 export function handleChannelStartMeeting(
   data: IpcRequest<'channel:start-meeting'>,
 ): IpcResponse<'channel:start-meeting'> {
+  // R12-C2 P1.5 — 일반 채널 (#일반, system_general) 은 회의 X.
+  // spec §11.3 + 메모리 r12-meeting-system-redesign §3 결정: 일반 채널은
+  // 잡담 + `[##본문]` 파싱 카드 + 동의/반대 카운터만 — 회의록 / 인계 X.
+  // boundary 가드를 MeetingService.start 자체에 두려면 ChannelService 의존
+  // 추가 필요 → P2 OpinionService 도입 시 structural refactor 안에서 옮긴다.
+  // 그 전까지는 알려진 두 호출자 (본 핸들러 + default-meeting-starter) 측에
+  // 차단 가드를 박아 신규 회의 row 생성을 막는다.
+  const channel = getChannel().get(data.channelId);
+  if (channel?.kind === 'system_general') {
+    throw new Error(
+      `channel:start-meeting: 일반 채널 (#일반) 은 회의 X — channelId=${data.channelId}`,
+    );
+  }
+
   const meeting = getMeeting().start({
     channelId: data.channelId,
     topic: data.topic,
@@ -301,7 +315,6 @@ export function handleChannelStartMeeting(
   // events on its own schedule.
   const factory = orchestratorFactory;
   if (factory) {
-    const channel = getChannel().get(data.channelId);
     if (channel && channel.projectId) {
       const members = getChannel().listMembers(data.channelId);
       const participants: Participant[] = members.map((m) => ({

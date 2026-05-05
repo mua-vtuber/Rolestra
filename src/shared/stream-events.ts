@@ -80,6 +80,37 @@ export interface StreamMeetingStateChangedPayload {
   outcome?: MeetingOutcome;
 }
 
+/**
+ * R12-C2 T10a — phase 전환 신호. 옛 `stream:meeting-state-changed` (state: string)
+ * 와 함께 dispatch — `state-changed` 의 `state` 필드는 새 phase 문자열을 그대로
+ * 담는다 (schema 호환). 본 신호는 prev / round / 진행 의견 정보를 풍부하게
+ * 추가해 P3 SsmBox 가 어떤 phase / 어떤 round / 어떤 의견 카드 highlight 할지
+ * 결정할 수 있게 한다.
+ *
+ * 옛 신호 (`state-changed`) 통째 삭제는 P3 SsmBox 마이그레이션 종결 시점.
+ *
+ * spec docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md §5
+ *  + 결정 메모리 rolestra-r12-c2-t10-split.md (사용자 답 ① 2026-05-04).
+ */
+export interface StreamMeetingPhaseChangedPayload {
+  meetingId: string;
+  channelId: string;
+  /** 직전 phase. 회의 시작 직후 첫 emit 은 null. */
+  prevPhase: string | null;
+  /** 현재 phase 문자열 — `MeetingPhase` (`gather` | `tally` | ...). */
+  phase: string;
+  /**
+   * `free_discussion` phase 안 라운드 카운터. 다른 phase 에서는 0. 의견 1 개
+   * 합의되면 다음 의견 진입 시 0 으로 리셋.
+   */
+  round: number;
+  /**
+   * `free_discussion` phase 안 진행 중 의견의 *화면 ID* (예 `ITEM_002`).
+   * 다른 phase 에서는 null.
+   */
+  currentOpinionScreenId: string | null;
+}
+
 export interface StreamNotificationPayload {
   id: string;
   kind: NotificationKind;
@@ -232,6 +263,10 @@ export type StreamEvent =
   | {
       type: 'stream:meeting-state-changed';
       payload: StreamMeetingStateChangedPayload;
+    }
+  | {
+      type: 'stream:meeting-phase-changed';
+      payload: StreamMeetingPhaseChangedPayload;
     }
   | {
       type: 'stream:meeting-turn-start';

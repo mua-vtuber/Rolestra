@@ -55,9 +55,11 @@ import type {
   HandoffMode,
 } from '../../shared/channel-role-types';
 import { DEFAULT_HANDOFF_MODE } from '../../shared/channel-role-types';
+import { MEETING_DEFAULT_MAX_ROUNDS } from '../../shared/meeting-flow-types';
 import type { ProjectMember } from '../../shared/project-types';
 import type { Message } from '../../shared/message-types';
 import { SKILL_CATALOG } from '../../shared/skill-catalog';
+import { providerRegistry } from '../providers/registry';
 import { ChannelRepository } from './channel-repository';
 
 // ── Error hierarchy ────────────────────────────────────────────────────
@@ -325,6 +327,10 @@ export class ChannelService {
       role: input.role ?? null,
       purpose: input.purpose ?? null,
       handoffMode: input.handoffMode ?? DEFAULT_HANDOFF_MODE,
+      // R12-C2 — 사용자 자유 채널 디폴트 = NULL (잡담 — 회의 X). 사용자가
+      // 명시적으로 부서 role 지정 시 P3 채널 설정 모달이 5 입력. input
+      // 받아도 본 sub-task 시점에서는 별 channel:create input 확장 X — P3.
+      maxRounds: null,
     };
 
     try {
@@ -384,6 +390,8 @@ export class ChannelService {
       role: null,
       purpose: null,
       handoffMode: 'check',
+      // R12-C2 — system 채널은 회의 X (회의록 / 승인 / 일반 모두) 라 NULL.
+      maxRounds: null,
     }));
 
     try {
@@ -428,6 +436,8 @@ export class ChannelService {
       role: null,
       purpose: null,
       handoffMode: 'check',
+      // R12-C2 — DM 은 회의 X (개별 지시 방) 라 NULL.
+      maxRounds: null,
     };
 
     try {
@@ -567,6 +577,22 @@ export class ChannelService {
 
   /** Returns channel-members for `channelId` ordered by provider id. */
   listMembers(channelId: string) {
+    // R12-C2 P1.5 follow-up — 일반 채널 (전역 system_general) 은 모든
+    // 등록 직원이 자동 멤버. spec §11.3 + 메모리 r12-meeting-system
+    // -redesign §3 결정: "general 능력 모든 직원 자동 부여 / 모든 직원이
+    // 일반 능력 자동 부여". channel_members 테이블 sync (boot reconcile +
+    // 직원 등록/삭제 hook) 대신 ProviderRegistry 동적 합성 — DB write 0
+    // + 직원 등록 시점에 hook 불필요 + 직원 삭제 시 cleanup 불필요. 일반
+    // 채널의 *프로젝트 외부 전역 1개* 정체성과 일치.
+    const channel = this.repo.get(channelId);
+    if (channel?.kind === 'system_general') {
+      return providerRegistry.listAll().map((p, idx) => ({
+        channelId,
+        projectId: null,
+        providerId: p.id,
+        dragOrder: idx,
+      }));
+    }
     return this.repo.listMembers(channelId);
   }
 
@@ -744,6 +770,8 @@ export class ChannelService {
       role: null,
       purpose: null,
       handoffMode: DEFAULT_HANDOFF_MODE,
+      // R12-C2 — 일반 채널 (system_general, 전역) 은 회의 X (잡담 정체성) 라 NULL.
+      maxRounds: null,
     };
     this.repo.insert(channel);
     return channel;
@@ -785,6 +813,11 @@ export class ChannelService {
       role: spec.role,
       purpose: null,
       handoffMode: DEFAULT_HANDOFF_MODE,
+      // R12-C2 — 부서 채널 default = 5 라운드 (사용자 결정 2026-05-04 ④).
+      // 사용자가 P3 채널 설정 모달에서 무제한 (NULL) 또는 다른 정수로 변경
+      // 가능. 아이디어 부서 (idea) 는 자유 토론 X 라 max_rounds 무의미하지만
+      // 컬럼 자체는 일관성 위해 5 로 채움.
+      maxRounds: MEETING_DEFAULT_MAX_ROUNDS,
     }));
 
     try {

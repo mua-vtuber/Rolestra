@@ -34,11 +34,13 @@ import {
  * R7 범위의 kind enum. `review_outcome` / `failure_report` 도 enum 값으로는
  * 존재하지만 R7 payload 스키마는 두 kind 만큼 정의하지 않는다 — 발사 지점이
  * 없어서 아직 shape 가 확정되지 않음. R8+ 에서 추가.
+ *
+ * R12-C2 T10b: `consensus_decision` 제거 — 옛 SSM DONE sign-off 흐름이 새
+ * phase loop 모델로 대체되며 발사 지점이 사라짐.
  */
 export const approvalKindSchema = z.enum([
   'cli_permission',
   'mode_transition',
-  'consensus_decision',
   'review_outcome',
   'failure_report',
   // R9-Task6: CircuitBreaker downgrade receipts. Payload shape is not
@@ -66,26 +68,15 @@ export const modeTransitionPayloadSchema = z.object({
   reason: z.string().max(2000).optional(),
 });
 
-export const consensusDecisionPayloadSchema = z.object({
-  kind: z.literal('consensus_decision'),
-  snapshotHash: z.string().min(1).max(128),
-  finalText: z.string().max(200_000),
-  votes: z.object({
-    yes: z.number().int().nonnegative(),
-    no: z.number().int().nonnegative(),
-    pending: z.number().int().nonnegative(),
-  }),
-});
-
 /**
- * Discriminated union zod — R7 3 kind. R8+ 확장 시 여기에 추가. 기존
+ * Discriminated union zod — R7 2 kind 후 R12-C2 T10b 에서
+ * consensus_decision 제거됨. R8+ 확장 시 여기에 추가. 기존
  * `approval_items` row 가 가진 payload 는 `unknown` 이고 DB 쪽 제약이 없으니
  * round-trip 에서 항상 validation 해야 안전하다.
  */
 export const approvalPayloadSchema = z.discriminatedUnion('kind', [
   cliPermissionPayloadSchema,
   modeTransitionPayloadSchema,
-  consensusDecisionPayloadSchema,
 ]);
 
 // ── ApprovalItem ────────────────────────────────────────────────────

@@ -139,26 +139,8 @@ describe('ApprovalNotificationBridge — created → show', () => {
     h.dispose();
   });
 
-  it('consensus_decision → title + truncated finalText body', () => {
-    const h = makeHarness();
-    const long = 'a'.repeat(120);
-    h.emitCreated(
-      makeItem({
-        kind: 'consensus_decision',
-        payload: {
-          kind: 'consensus_decision',
-          snapshotHash: 'x',
-          finalText: long,
-          votes: { yes: 1, no: 0, pending: 0 },
-        },
-      }),
-    );
-    const arg = h.showSpy.mock.calls[0][0];
-    expect(arg.title).toBe('합의 결과 승인 요청');
-    expect(arg.body.endsWith('…')).toBe(true);
-    expect(arg.body.length).toBeLessThanOrEqual(81);
-    h.dispose();
-  });
+  // R12-C2 T10b: consensus_decision title/body 테스트 통째 삭제 — 옛 SSM
+  // DONE sign-off approval kind 자체가 폐기됨.
 });
 
 describe('ApprovalNotificationBridge — dedupe', () => {

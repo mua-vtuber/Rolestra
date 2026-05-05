@@ -106,6 +106,17 @@ export function createDefaultMeetingStarter(
         `target channel not found: ${channelId}`,
       );
     }
+    // R12-C2 P1.5 — 일반 채널 (#일반, system_general) 은 회의 X
+    // (spec §11.3 + 메모리 r12-meeting-system-redesign §3). queue 의 디폴트
+    // landing 자체가 system_general 인 R10 시점 leftover 가 회의 row 신규
+    // 생성의 회귀 경로 — pinned 또는 fallback 어느 쪽이든 일반 채널이
+    // 결과면 fail 로 표시해 queue runner 가 last_error 로 surface 한다.
+    // queue 의 default landing 재배선은 P2 회의 backend 안에서 정식.
+    if (channel.kind === 'system_general') {
+      throw new QueueMeetingStarterError(
+        `target channel ${channelId} 은 일반 채널 (#일반) — 회의 X. 부서 채널을 pin 하거나 일반 채널 fallback 을 제거하라`,
+      );
+    }
 
     // 2. Build the participant list from the channel members.
     const members = deps.channelService.listMembers(channelId);

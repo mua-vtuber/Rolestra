@@ -9,6 +9,13 @@
  * meeting 이 없는 경우(=회의 비활성) 는 상위 MemberPanel 이 null 을
  * 넘기므로 이 컴포넌트는 그 때 별도 empty 라벨을 그린다.
  *
+ * R12-C2 T10b: 옛 SSM 12-state 모델이 phase loop 8 phase 모델로 교체됨.
+ * `SESSION_STATE_COUNT` 와 `meeting.stateIndex` 는 이제 phase 기반
+ * (gather/tally/quick_vote/free_discussion/compose_minutes/handoff/done/
+ *  aborted) 으로 매핑된다. 본 컴포넌트는 P3/R12-H 에서 phase 카드 + 박스
+ * 새 layout 으로 재설계 예정 — 그 때까지는 "SSM N/TOTAL" 라벨이 phase
+ * 진행률을 표현하는 placeholder 로 남는다.
+ *
  * hex literal 금지.
  */
 import { clsx } from 'clsx';

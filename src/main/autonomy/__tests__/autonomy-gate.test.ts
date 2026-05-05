@@ -6,15 +6,19 @@
  *   - auto_toggle:
  *     - mode_transition(target=auto) → decide(approve) + minutes trace +
  *       work_done notification.
- *     - consensus_decision (no outcome) → auto accept.
- *     - consensus_decision(outcome=rework) → downgrade path, no decide.
+ *     - review_outcome(outcome=accepted) → auto accept.
+ *     - review_outcome(outcome=rework/fail) → downgrade path, no decide.
  *     - cli_permission → downgrade path, no decide.
- *   - queue: same policy as auto_toggle (consensus_decision accepted).
+ *   - queue: same policy as auto_toggle (review_outcome accepted).
  *   - Downgrade path calls setAutonomy('manual', reason='autonomy_gate_fail')
  *     and posts the correct minutes trace + error notification.
  *   - failure isolation: downstream throws do not rethrow into the
  *     approvalService listener chain.
  *   - wire() idempotency + disposer.
+ *
+ * R12-C2 T10b: 옛 consensus_decision kind 폐기 — 본 fixture default 와
+ * dedicated consensus_decision 테스트가 review_outcome / mode_transition 으로
+ * 대체됨.
  */
 
 import { EventEmitter } from 'node:events';
@@ -33,7 +37,7 @@ import {
 function makeItem(overrides: Partial<ApprovalItem> = {}): ApprovalItem {
   return {
     id: 'appr-1',
-    kind: 'consensus_decision',
+    kind: 'review_outcome',
     projectId: 'p-1',
     channelId: 'c-1',
     meetingId: 'm-1',
@@ -227,28 +231,6 @@ describe('AutonomyGate — auto_toggle accept path', () => {
     h.dispose();
   });
 
-  it('consensus_decision (no outcome) → decide(approve)', () => {
-    const h = makeHarness({ autonomyMode: 'auto_toggle' });
-    h.emitCreated(
-      makeItem({
-        kind: 'consensus_decision',
-        payload: {
-          kind: 'consensus_decision',
-          snapshotHash: 'hash-1',
-          finalText: 'Deploy',
-          votes: { yes: 2, no: 0, pending: 0 },
-        },
-      }),
-    );
-    expect(h.decideSpy).toHaveBeenCalledWith(
-      'appr-1',
-      'approve',
-      AUTONOMY_GATE_AUTO_COMMENT,
-    );
-    expect(h.setAutonomySpy).not.toHaveBeenCalled();
-    h.dispose();
-  });
-
   it('review_outcome(outcome=accepted) → decide(approve)', () => {
     const h = makeHarness({ autonomyMode: 'auto_toggle' });
     h.emitCreated(
@@ -267,17 +249,12 @@ describe('AutonomyGate — auto_toggle accept path', () => {
 });
 
 describe('AutonomyGate — auto_toggle downgrade path', () => {
-  it('consensus_decision(outcome=rework) → setAutonomy(manual) + no decide', () => {
+  it('review_outcome(outcome=rework) → setAutonomy(manual) + no decide', () => {
     const h = makeHarness({ autonomyMode: 'auto_toggle' });
     h.emitCreated(
       makeItem({
-        kind: 'consensus_decision',
-        payload: {
-          // duck-typed rework — real payload type does not yet carry
-          // `outcome`, but AutonomyGate watches for it defensively so a
-          // future payload migration does not silently auto-accept a fail.
-          outcome: 'rework',
-        },
+        kind: 'review_outcome',
+        payload: { outcome: 'rework' },
       }),
     );
     expect(h.decideSpy).not.toHaveBeenCalled();
@@ -360,17 +337,12 @@ describe('AutonomyGate — auto_toggle downgrade path', () => {
 });
 
 describe('AutonomyGate — queue mode parity with auto_toggle', () => {
-  it('queue + consensus_decision accepted → decide(approve)', () => {
+  it('queue + review_outcome accepted → decide(approve)', () => {
     const h = makeHarness({ autonomyMode: 'queue' });
     h.emitCreated(
       makeItem({
-        kind: 'consensus_decision',
-        payload: {
-          kind: 'consensus_decision',
-          snapshotHash: 'hash-1',
-          finalText: 'Deploy',
-          votes: { yes: 3, no: 0, pending: 0 },
-        },
+        kind: 'review_outcome',
+        payload: { outcome: 'accepted' },
       }),
     );
     expect(h.decideSpy).toHaveBeenCalledWith(
@@ -381,11 +353,11 @@ describe('AutonomyGate — queue mode parity with auto_toggle', () => {
     h.dispose();
   });
 
-  it('queue + consensus_decision rework → downgrade (same as auto_toggle)', () => {
+  it('queue + review_outcome rework → downgrade (same as auto_toggle)', () => {
     const h = makeHarness({ autonomyMode: 'queue' });
     h.emitCreated(
       makeItem({
-        kind: 'consensus_decision',
+        kind: 'review_outcome',
         payload: { outcome: 'rework' },
       }),
     );
@@ -398,19 +370,19 @@ describe('AutonomyGate — queue mode parity with auto_toggle', () => {
 });
 
 describe('AutonomyGate — failure isolation', () => {
+  // R12-C2 T10b: accept-path fixture 를 mode_transition(target=auto) 로 통일
+  // (옛 consensus_decision+payload=null 의 자리를 채운다).
+  const acceptItem = (): Parameters<typeof makeItem>[0] => ({
+    kind: 'mode_transition',
+    payload: { kind: 'mode_transition', currentMode: 'manual', targetMode: 'auto' },
+  });
+
   it('decide throws → no rethrow, downstream side-effects still skipped safely', () => {
     const h = makeHarness({
       autonomyMode: 'auto_toggle',
       decideThrows: new Error('sqlite down'),
     });
-    expect(() =>
-      h.emitCreated(
-        makeItem({
-          kind: 'consensus_decision',
-          payload: null,
-        }),
-      ),
-    ).not.toThrow();
+    expect(() => h.emitCreated(makeItem(acceptItem()))).not.toThrow();
     // When decide fails we intentionally abort the trace + notification
     // — without a real decision the notification would be misleading.
     expect(h.appendSpy).not.toHaveBeenCalled();
@@ -438,14 +410,7 @@ describe('AutonomyGate — failure isolation', () => {
       autonomyMode: 'auto_toggle',
       notifyThrows: new Error('adapter down'),
     });
-    expect(() =>
-      h.emitCreated(
-        makeItem({
-          kind: 'consensus_decision',
-          payload: null,
-        }),
-      ),
-    ).not.toThrow();
+    expect(() => h.emitCreated(makeItem(acceptItem()))).not.toThrow();
     expect(warnSpy).toHaveBeenCalled();
     h.dispose();
   });
@@ -455,12 +420,7 @@ describe('AutonomyGate — failure isolation', () => {
       autonomyMode: 'auto_toggle',
       minutesChannelId: null,
     });
-    h.emitCreated(
-      makeItem({
-        kind: 'consensus_decision',
-        payload: null,
-      }),
-    );
+    h.emitCreated(makeItem(acceptItem()));
     expect(h.decideSpy).toHaveBeenCalledTimes(1);
     expect(h.appendSpy).not.toHaveBeenCalled();
     expect(h.notifySpy).toHaveBeenCalledTimes(1);
@@ -472,14 +432,7 @@ describe('AutonomyGate — failure isolation', () => {
       autonomyMode: 'auto_toggle',
       listByProjectThrows: new Error('repo down'),
     });
-    expect(() =>
-      h.emitCreated(
-        makeItem({
-          kind: 'consensus_decision',
-          payload: null,
-        }),
-      ),
-    ).not.toThrow();
+    expect(() => h.emitCreated(makeItem(acceptItem()))).not.toThrow();
     expect(h.decideSpy).toHaveBeenCalledTimes(1);
     expect(h.appendSpy).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalled();
@@ -492,7 +445,7 @@ describe('AutonomyGate — lifecycle', () => {
     const h = makeHarness({ autonomyMode: 'auto_toggle' });
     h.dispose();
     h.emitCreated(
-      makeItem({ kind: 'consensus_decision', payload: null }),
+      makeItem({ kind: 'review_outcome', payload: null }),
     );
     expect(h.decideSpy).not.toHaveBeenCalled();
     expect(h.approvalService.listenerCount(APPROVAL_CREATED_EVENT)).toBe(0);
@@ -529,18 +482,6 @@ describe('evaluateDecision — pure policy table', () => {
       name: 'mode_transition approval',
       kind: 'mode_transition',
       payload: { targetMode: 'approval' },
-      expected: 'downgrade',
-    },
-    {
-      name: 'consensus_decision no-outcome',
-      kind: 'consensus_decision',
-      payload: null,
-      expected: 'accept',
-    },
-    {
-      name: 'consensus_decision rejected',
-      kind: 'consensus_decision',
-      payload: { outcome: 'rejected' },
       expected: 'downgrade',
     },
     {

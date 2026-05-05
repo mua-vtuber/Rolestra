@@ -590,12 +590,8 @@ export const approvalDetailFetchSchema = z.object({
   approvalId: z.string().min(1).max(128),
 });
 
-/**
- * R11-Task5/7: `meeting:voting-history` — meetingId 1건 조회.
- */
-export const meetingVotingHistorySchema = z.object({
-  meetingId: z.string().min(1).max(128),
-});
+// R12-C2 T10b: 옛 `meeting:voting-history` 스키마 제거 — IPC 채널이 같은
+// commit 안에서 ipc-types/router 에서도 제거됨.
 
 /**
  * R11-Task4: `dev:trip-circuit-breaker` — discriminated by `tripwire`.
@@ -626,6 +622,124 @@ export const devTripCircuitBreakerSchema = z.discriminatedUnion('tripwire', [
     projectId: z.string().min(1).max(128).optional(),
   }),
 ]);
+
+// ── R12-C2 P2-2: Opinion (의견 트리 + 투표) ───────────────────────────
+
+/**
+ * Step1OpinionGather payload (§11.18.2). 직원 의견 제시. opinions 배열 길이
+ * ≥ 0 (0 건 = 의견 없음 응답 허용). title/content/rationale 길이 상한은
+ * 사실상 prompt 응답 token 한계가 결정 — 본 schema 는 boundary 검증만:
+ *   - title: 1..400 (≤ 80 권장 + 안전 여유)
+ *   - content: 1..100_000 (회의록 본문 truncate 금지 / message 와 같은 상한)
+ *   - rationale: 1..50_000
+ */
+const step1OpinionGatherPayloadSchema = z.object({
+  name: z.string().min(1).max(128),
+  label: z.string().min(1).max(64),
+  opinions: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(400),
+        content: z.string().min(1).max(100_000),
+        rationale: z.string().min(1).max(50_000),
+      }),
+    )
+    .max(50),
+});
+
+/** §11.18.4 step 2.5 일괄 동의 투표 payload. quick_votes 배열 길이 ≤ 200. */
+const step25QuickVotePayloadSchema = z.object({
+  name: z.string().min(1).max(128),
+  label: z.string().min(1).max(64),
+  quick_votes: z
+    .array(
+      z.object({
+        target_id: z.string().min(1).max(128),
+        vote: z.enum(['agree', 'oppose', 'abstain']),
+        comment: z.string().max(10_000).optional(),
+      }),
+    )
+    .max(200),
+});
+
+/** §11.18.5 step 3 자유 토론 payload. votes + additions 동시 가능. */
+const step3FreeDiscussionPayloadSchema = z.object({
+  name: z.string().min(1).max(128),
+  label: z.string().min(1).max(64),
+  votes: z
+    .array(
+      z.object({
+        target_id: z.string().min(1).max(128),
+        vote: z.enum(['agree', 'oppose', 'abstain']),
+        comment: z.string().max(10_000).optional(),
+      }),
+    )
+    .max(200),
+  additions: z
+    .array(
+      z.object({
+        parent_id: z.string().min(1).max(128),
+        kind: z.enum(['revise', 'block', 'addition']),
+        title: z.string().min(1).max(400),
+        content: z.string().min(1).max(100_000),
+        rationale: z.string().min(1).max(50_000),
+      }),
+    )
+    .max(50),
+});
+
+const opinionResponseEnvelopeSchema = (
+  payload: z.ZodTypeAny,
+): z.ZodTypeAny =>
+  z.object({
+    providerId: z.string().min(1).max(128),
+    payload,
+  });
+
+/** opinion:gather 입력 schema. responses 배열 길이 ≤ 32 (한 회의 멤버 상한). */
+export const opinionGatherSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  channelId: z.string().min(1).max(128),
+  round: z.number().int().min(0).max(10_000),
+  responses: z
+    .array(opinionResponseEnvelopeSchema(step1OpinionGatherPayloadSchema))
+    .min(0)
+    .max(32),
+});
+
+/** opinion:tally 입력 schema. */
+export const opinionTallySchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
+/** opinion:quickVote 입력 schema. */
+export const opinionQuickVoteSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  round: z.number().int().min(0).max(10_000),
+  responses: z
+    .array(opinionResponseEnvelopeSchema(step25QuickVotePayloadSchema))
+    .min(0)
+    .max(32),
+});
+
+/** opinion:freeDiscussion 입력 schema. */
+export const opinionFreeDiscussionSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  opinionId: z.string().min(1).max(128),
+  round: z.number().int().min(0).max(10_000),
+  responses: z
+    .array(opinionResponseEnvelopeSchema(step3FreeDiscussionPayloadSchema))
+    .min(0)
+    .max(32),
+});
+
+/**
+ * meetings:composeMinutes 입력 schema (R12-C2 P2-3).
+ * 단일 식별자 — service 가 회의 history + 의견 트리를 직접 조회한다.
+ */
+export const meetingsComposeMinutesSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
 
 /** Channel-keyed map of v3 schemas for router/handler wiring. */
 export const v3ChannelSchemas = {
@@ -687,7 +801,14 @@ export const v3ChannelSchemas = {
   'llm:cost-summary': llmCostSummarySchema,
   'execution:dry-run-preview': executionDryRunPreviewSchema,
   'approval:detail-fetch': approvalDetailFetchSchema,
-  'meeting:voting-history': meetingVotingHistorySchema,
+  // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거됨.
+  // ── R12-C2 P2-2: Opinion (의견 트리 + 투표 backend) ─────────────
+  'opinion:gather': opinionGatherSchema,
+  'opinion:tally': opinionTallySchema,
+  'opinion:quickVote': opinionQuickVoteSchema,
+  'opinion:freeDiscussion': opinionFreeDiscussionSchema,
+  // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ─────────────
+  'meetings:composeMinutes': meetingsComposeMinutesSchema,
 } as const;
 
 export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;

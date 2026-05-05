@@ -26,6 +26,11 @@ import { setDashboardServiceAccessor } from './ipc/handlers/dashboard-handler';
 import { MessageRepository } from './channels/message-repository';
 import { MessageService } from './channels/message-service';
 import { MeetingService } from './meetings/meeting-service';
+import { OpinionRepository } from './meetings/opinion-repository';
+import { OpinionService } from './meetings/opinion-service';
+import { setOpinionServiceAccessor } from './ipc/handlers/opinion-handler';
+import { MeetingMinutesService } from './meetings/meeting-minutes-service';
+import { setMeetingMinutesServiceAccessor } from './ipc/handlers/meetings-minutes-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
 import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
@@ -208,6 +213,15 @@ app.whenReady().then(async () => {
     const messageService = new MessageService(messageRepository);
     setMeetingAbortServiceAccessor(() => meetingService);
     setMessageServiceAccessor(() => messageService);
+
+    // R12-C2 P2-2: OpinionService 부팅. opinion + opinion_vote 두 테이블의
+    // 4 method (gather / tally / quickVote / freeDiscussionRound) 을 IPC
+    // surface (opinion:*) 에 노출. T10 MeetingOrchestrator 재배선이 본
+    // accessor 를 통해 service 를 호출하게 된다 — 그 전까지는 일반 채널
+    // [##] flow / 테스트 / dev tools 가 직접 호출.
+    const opinionRepo = new OpinionRepository(db);
+    const opinionService = new OpinionService(opinionRepo);
+    setOpinionServiceAccessor(() => opinionService);
 
     // D-A T2.5 / spec §5.5 — 채널에 user 메시지가 들어오면 활성 회의의
     // orchestrator 로 전달해 다음 AI turn 의 prompt 에 합류시킨다. 이전에는
@@ -777,24 +791,24 @@ app.whenReady().then(async () => {
       }),
     });
 
-    // R10-Task11: re-arm consensus_decision approval expiry timers from
-    // the persisted approval_items rows (R7 D2 deferred). The original
-    // setTimeout was owned by the now-gone MeetingOrchestrator instance,
-    // so without rehydration a row created moments before a crash would
-    // sit `pending` forever. The helper expires aged-out rows
-    // immediately and reschedules the rest.
-    try {
-      const rehydrate = approvalService.rehydrateConsensusTimers();
-      console.info(
-        '[rolestra.approvals] consensus rehydrate',
-        rehydrate,
-      );
-    } catch (err) {
-      console.warn(
-        '[rolestra.approvals] consensus rehydrate failed',
-        err instanceof Error ? err.message : String(err),
-      );
-    }
+    // R12-C2 P2-3: MeetingMinutesService 부팅. step 5 모더레이터 회의록
+    // 작성 + minutes.md atomic write. T10 재배선 전까지는 dev tools / 테스트
+    // 가 직접 IPC `meetings:composeMinutes` 호출. provider 가 truncate /
+    // 호출 실패 시 deterministic fallback 으로 떨어진다.
+    const meetingMinutesService = new MeetingMinutesService({
+      arenaRoot,
+      meetingRepo,
+      channelRepo,
+      projectRepo,
+      messageRepo: messageRepository,
+      opinionRepo,
+      meetingSummary: meetingSummaryService,
+    });
+    setMeetingMinutesServiceAccessor(() => meetingMinutesService);
+
+    // R12-C2 T10b: 옛 consensus_decision rehydrate 흐름 제거 — 새 phase loop
+    // 모델은 SSM DONE sign-off approval 자체를 발사하지 않으므로 boot 시점에
+    // 재무장할 row 가 없다.
 
     // R6-Task1 + R7-Task2 + R7-Task11: StreamBridge — central Main →
     // Renderer v3 push hub. `connect({ notifications })` wires
@@ -861,6 +875,10 @@ app.whenReady().then(async () => {
           unregisterOrchestrator,
         } = await import('./meetings/engine/meeting-orchestrator-registry');
 
+        // R12-C2 T10a: new MeetingSession dropped `roundSetting` — channels.
+        // max_rounds replaces the per-meeting setting, resolved by the
+        // orchestrator from `Channel.maxRounds` at run-time.
+        void roundSetting;
         const session = new MeetingSession({
           meetingId: meeting.id,
           channelId: meeting.channelId,
@@ -868,7 +886,6 @@ app.whenReady().then(async () => {
           topic,
           participants,
           ssmCtx,
-          ...(roundSetting !== undefined ? { roundSetting } : {}),
         });
 
         const personaPrimedParticipants = new Set<string>();
@@ -899,10 +916,10 @@ app.whenReady().then(async () => {
           meetingService,
           channelService,
           projectService,
-          approvalService,
           notificationService,
           circuitBreaker,
-          meetingSummaryService,
+          opinionService,
+          meetingMinutesService,
           // R9-Task7: autonomy-queue run loop. When the finalised meeting
           // belongs to a project in `queue` mode, complete the owning
           // queue item and advance to the next pending item. Lookups miss

@@ -95,16 +95,17 @@ describe('SsmBox — meeting → ProgressGauge wire + label', () => {
   });
 
   it('ProgressGauge receives value/total correctly', () => {
-    renderWithTheme('warm', <SsmBox meeting={makeMeeting({ stateIndex: 7 })} />);
+    // R12-C2 T10b: SESSION_STATE_COUNT 가 12 → 8 (phase 모델). stateIndex=3
+    // 으로 변경 — ratio = 4/8 = 0.5 로 phase 모델에서도 의미가 통하는 값.
+    renderWithTheme('warm', <SsmBox meeting={makeMeeting({ stateIndex: 3 })} />);
     const gauge = screen.getByTestId('progress-gauge');
-    // Warm variant: RoundBarGauge has data-gauge-ratio.
     const warmGauge = gauge.querySelector('[data-gauge-variant="warm"]');
     expect(warmGauge).toBeTruthy();
     const ratio = Number(warmGauge?.getAttribute('data-gauge-ratio'));
     expect(ratio).toBeGreaterThan(0);
-    expect(ratio).toBeLessThanOrEqual(1);
-    // expected ratio = (7+1) / 12 = 0.666…
-    expect(ratio).toBeCloseTo(8 / SESSION_STATE_COUNT, 4);
+    expect(ratio).toBeLessThan(1);
+    // expected ratio = (3+1) / SESSION_STATE_COUNT = 4 / 8 = 0.5
+    expect(ratio).toBeCloseTo(4 / SESSION_STATE_COUNT, 4);
   });
 
   it('topic appears in description body', () => {

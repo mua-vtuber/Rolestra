@@ -1,64 +1,68 @@
 /**
- * MeetingTurnExecutor — v3 replacement for the legacy `TurnExecutor`.
+ * MeetingTurnExecutor — R12-C2 T10a 통째 재작성.
  *
- * Runs one AI participant's turn inside a MeetingSession:
- *   1. Resolve provider via the registry (injected).
- *   2. Emit `stream:meeting-turn-start` so renderers allocate a bubble
- *      for the new messageId.
- *   3. Build the provider-adapted history + persona (optionally with an
- *      SSM-state-specific format instruction) and call
- *      `provider.streamCompletion(...)`.
- *   4. Fan each incremental token out as `stream:meeting-turn-token` with
- *      the running cumulative buffer + a monotonic `sequence`.
- *   5. On success, persist the final row via `messageService.append(...)`
- *      and emit `stream:meeting-turn-done` (the renderer refetches via
- *      `message:list-by-channel`).
- *   6. On error, emit `stream:meeting-error` with `fatal` reflecting
- *      whether the turn can be retried.
+ * 옛 모델: `executeTurn(speaker)` 단일 method 가 SSM state 별 format
+ * instruction (`getFormatInstruction`) + parser (`parseOutputByState`)
+ * 로 분기, 자유 markdown 본문 파싱.
  *
- * R6 Decision Log notes:
- *   - **D8 (CLI permission)** [R7-Task3 resolved]: CLI-native permission_request
- *     handling used to sit on the v2 `registerPendingCliPermission` Map.
- *     R7 routes every prompt through {@link ApprovalCliAdapter}, which
- *     creates an `approval_items` row, subscribes to `ApprovalService`
- *     `'decided'`, and resolves the CLI Promise on approve/conditional/
- *     reject/timeout. The legacy helper + `stream:cli-permission-request`
- *     emit + `legacyWebContents` DI slot are gone — no Map, no dangling
- *     resolvers across app restarts.
- *   - **D9 (persona permission)**: `buildEffectivePersona` accepts a
- *     `permission` field that the v2 path populated from the singleton
- *     `permissionService.getPermissionsForParticipant`. The v3
- *     PermissionService exposes only boundary / CLI policy APIs; a
- *     per-participant permission surface lands in R7. For R6 the persona
- *     is built with `permission: null`, yielding conversation-mode
- *     guardrails — meetings still function, persona just omits the
- *     "write allowed under /project/x" block until R7 adds it.
- *   - **D10 (worker summary + SSM parsing)**: state-specific format
- *     injection and worker-summary filename management are delegated to
- *     the v2 `MessageFormatter` asset (re-used unchanged). If the SSM
- *     is in a state the formatter doesn't know about, we send raw prose —
- *     a regression would be caught by the orchestrator-flow tests.
- *   - **D11 (stream:log, stream:deep-debate)** [R10 still owns]: these
- *     v2 diagnostic streams have no emit site here post-R7. The render-
- *     side subscribers survive in the legacy channel isolation list until
- *     R10 replaces them with the structured logger.
+ * 새 모델: phase 별 *3 method* — 각 method 가 phase 전용 prompt 양식 + zod
+ * schema parse + 1 회 재요청 + 2 회 실패 시 skip 분기를 갖춘다 (spec
+ * §11.18.7). 옛 worker-mode / consensus-decision 분기 통째 폐기.
+ *
+ *   - {@link requestOpinionGather}    step 1 의견 제시
+ *   - {@link requestQuickVote}        step 2.5 일괄 동의 투표
+ *   - {@link requestFreeDiscussion}   step 3 자유 토론 (의견 1 건씩)
+ *
+ * 보존된 표면:
+ *   - work-status gate (spec §7.2) — speaker.status !== 'online' → skip +
+ *     emitMeetingTurnSkipped + system marker 메시지 persist
+ *   - provider lookup + AbortController + signal 전파
+ *   - stream emit 5 종 (turn-start / turn-token / turn-done / error /
+ *     turn-skipped)
+ *   - persona = `MemberProfileService.buildPersona(speakerId)` +
+ *     `buildPermissionRules(...)`
+ *   - CLI permission prompt (CLI provider 한정, `approvalCliAdapter`)
+ *   - assistant 응답 messageService.append (raw JSON 본문 그대로 저장 —
+ *     디스플레이 변환은 renderer 책임)
+ *   - circuitBreaker.recordError (turn 단위 분류)
+ *
+ * 폐기:
+ *   - SSM state 별 format instruction / `MessageFormatter` / `parseOutputByState`
+ *   - `AppToolProvider` (옛 작업 모드 도구)
+ *   - worker-summary 파일 관리 (`lastWorkerSummaryFileName` /
+ *     `WORK_SUMMARY_PREFIX` / `WORKER_PERMISSION_REQUEST_INSTRUCTION`)
+ *   - `lastTurnResult` 누적 / `workerPermissionInstructionSentForId`
+ *   - `recordModeJudgment` 호출 / deepDebate 분기 / `setRoundSetting`
+ *
+ * 발화 ID (label) 정책 (spec §11.18.1):
+ *   - orchestrator 가 매 turn 직전 `session.nextLabel(provider.id)` 으로
+ *     suggestedLabel 을 발급, turn-executor 의 ctx 로 넘긴다.
+ *   - turn-executor 는 prompt hint 로만 동봉 — 직원 응답의 `label` 필드를
+ *     그대로 신뢰 (validation 은 schema 만, label 값 자체는 임의 문자열).
+ *   - schema fail 로 skip 된 turn 도 카운터는 이미 증가 (orchestrator 가
+ *     turn 호출 *전* nextLabel 호출). 직원이 응답 안 했어도 다음 round 에서
+ *     `codex_3` 으로 진입 가능 — spec §11.18.1 = "발화 시도" 단위 카운터.
+ *
+ * spec docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md
+ *   - §5     D-B 흐름 (의견 트리 + 깊이 cap 3 + 발화 ID 카운터)
+ *   - §11.18 직원 응답 JSON schema 4 종 + retry/skip 흐름
  */
 
 import { randomUUID } from 'node:crypto';
-import type {
-  Participant,
-  RoundSetting as _RoundSetting,
-} from '../../../shared/engine-types';
+import type { ZodType } from 'zod';
+import type { Participant } from '../../../shared/engine-types';
 import type {
   CliProviderConfig,
-  ToolDefinition,
   Message as ProviderMessage,
 } from '../../../shared/provider-types';
-import type { SessionState } from '../../../shared/session-state-types';
-import type { ParsedAiOutput } from '../../../shared/message-protocol-types';
+import {
+  PHASE_RESPONSE_SCHEMAS,
+  type MeetingTurnResult,
+  type Step1OpinionGatherSchemaType,
+  type Step25QuickVoteSchemaType,
+  type Step3FreeDiscussionSchemaType,
+} from '../../../shared/meeting-flow-types';
 import { buildPermissionRules } from '../../members/persona-permission-rules';
-import { MessageFormatter } from '../../engine/message-formatter';
-import { AppToolProvider, type AppTool } from '../../engine/app-tool-provider';
 import { tryGetLogger } from '../../log/logger-accessor';
 import type { BaseProvider } from '../../providers/provider-interface';
 import { CliProvider } from '../../providers/cli/cli-provider';
@@ -68,13 +72,12 @@ import type { MessageService } from '../../channels/message-service';
 import type { ArenaRootService } from '../../arena/arena-root-service';
 import type { providerRegistry } from '../../providers/registry';
 import type { ApprovalCliAdapter } from '../../approvals/approval-cli-adapter';
+import type { MeetingSession } from './meeting-session';
+import type { CircuitBreaker } from '../../queue/circuit-breaker';
 
 /** Alias for the registry's instance type — the concrete class is not
  *  exported, so callers reach it via the singleton or through DI. */
 type ProviderRegistry = typeof providerRegistry;
-import type { MessageMeta } from '../../../shared/message-types';
-import type { MeetingSession } from './meeting-session';
-import type { CircuitBreaker } from '../../queue/circuit-breaker';
 
 /**
  * R9-Task6 error categories fed to CircuitBreaker.recordError. Tightly
@@ -88,13 +91,6 @@ type TurnErrorCategory =
   | 'provider_stream_failed'
   | 'turn_error';
 
-/**
- * Map a raw turn exception to a CircuitBreaker category. Narrow by the
- * marker strings the CLI stack produces (`spawn`, `ENOENT`); everything
- * else collapses to the generic `turn_error` bucket. We classify off the
- * message because the exception class is invariably a plain `Error`
- * rethrown from subprocess / HTTP layers.
- */
 function classifyTurnError(err: unknown): TurnErrorCategory {
   const message = err instanceof Error ? err.message : String(err);
   const lower = message.toLowerCase();
@@ -111,21 +107,11 @@ function classifyTurnError(err: unknown): TurnErrorCategory {
   return 'turn_error';
 }
 
-const WORK_SUMMARY_PREFIX = 'work-summary-';
-
-const WORKER_PERMISSION_REQUEST_INSTRUCTION =
-  '작업 시작 전에 프로젝트 폴더에 대한 쓰기 권한을 요청해 주세요. 권한 승인 후 작업을 진행하세요.';
-
-function buildSummaryFileName(timestamp: number): string {
-  return `${WORK_SUMMARY_PREFIX}${timestamp}.md`;
-}
-
-/** Deps injected into the constructor — all mandatory.
+/**
+ * Deps injected into the constructor — all mandatory.
  *
- *  R7-Task3 removed `legacyWebContents` together with the only remaining
- *  legacyEmit call site (`stream:cli-permission-request`). The v2 stream:log
- *  and stream:deep-debate events had no emit sites here even before R7.
- *  `approvalCliAdapter` is the new channel for CLI permission prompts. */
+ * `circuitBreaker` 는 옵셔널 (R6/R7 smoke 테스트가 autonomy 미설치 모드).
+ */
 export interface MeetingTurnExecutorDeps {
   session: MeetingSession;
   streamBridge: StreamBridge;
@@ -133,30 +119,47 @@ export interface MeetingTurnExecutorDeps {
   arenaRootService: ArenaRootService;
   providerRegistry: ProviderRegistry;
   /** Shared set across all turns of the meeting — tracks which CLI
-   *  providers already consumed their persona prompt this meeting.
-   *  Owned by the MeetingOrchestrator so it survives turn boundaries. */
+   *  providers already consumed their persona prompt this meeting. */
   personaPrimedParticipants: Set<string>;
-  /** R7-Task3: CLI permission prompts go through ApprovalService via this
-   *  adapter. One instance can be shared across every turn executor. */
+  /** CLI permission prompts go through ApprovalService via this adapter. */
   approvalCliAdapter: ApprovalCliAdapter;
-  /**
-   * R8-Task9 / R11-Task2: MemberProfileService for the work-status gate
-   * (spec §7.2 "턴매니저는 online 상태 멤버만 선발") and the persona
-   * Identity block. R8 made it optional so R7 smoke harnesses kept
-   * compiling; R11 made it required when the v2 fallback path was
-   * deleted along with `engine/persona-builder.ts`. Tests construct a
-   * minimal mock — see `meeting-turn-executor.test.ts:buildDeps`.
-   */
+  /** work-status gate + persona Identity block. */
   memberProfileService: import('../../members/member-profile-service').MemberProfileService;
-  /**
-   * R9-Task6 (spec §8 CB-5 `same_error`): optional CircuitBreaker that
-   * receives a `recordError(category)` tick whenever a turn bubbles an
-   * exception out of `provider.streamCompletion`. Optional to match
-   * the `memberProfileService` pattern — R6/R7 smoke tests do not
-   * install an autonomy loop, so the DI slot stays null.
-   */
+  /** R9-Task6 same_error tripwire. Optional. */
   circuitBreaker?: CircuitBreaker;
 }
+
+// ── Phase context shapes — orchestrator 가 turn-executor 에 넘기는 추가 정보 ─
+
+export interface OpinionGatherCtx {
+  /** orchestrator 가 발급한 발화 ID hint (`<providerId>_<n>`). prompt 안 안내. */
+  suggestedLabel: string;
+}
+
+export interface QuickVoteCtx {
+  suggestedLabel: string;
+  /**
+   * step 2 결과 — 의견 list markdown. 화면 ID + 본문 + 근거 + 발의자 label
+   * 통째 동봉. orchestrator 가 OpinionService.tally + caller-side renderer 로
+   * 미리 빌드.
+   */
+  opinionsMarkdown: string;
+}
+
+export interface FreeDiscussionCtx {
+  suggestedLabel: string;
+  /** 진행 중 root 의견 markdown — 화면 ID / 제목 / 본문 / 근거. */
+  currentOpinionMarkdown: string;
+  /** 자식 의견 list markdown (없으면 "(자식 의견 없음)"). depth cap 안내 동봉. */
+  childrenMarkdown: string;
+  /**
+   * 깊이 cap 도달 의견의 화면 ID list — 직원이 그 의견에 자식 추가 시
+   * `OpinionDepthCapError` 를 throw 하므로, prompt 단계에서 미리 안내.
+   */
+  depthCapReachedScreenIds: string[];
+}
+
+// ── Service ────────────────────────────────────────────────────────────
 
 export class MeetingTurnExecutor {
   private readonly session: MeetingSession;
@@ -169,30 +172,7 @@ export class MeetingTurnExecutor {
   private readonly memberProfileService: MeetingTurnExecutorDeps['memberProfileService'];
   private readonly circuitBreaker?: CircuitBreaker;
 
-  private readonly messageFormatter = new MessageFormatter();
-  private readonly appToolProvider = new AppToolProvider();
-
   private abortController: AbortController | null = null;
-
-  /** Filename of the work summary document written during the last
-   *  EXECUTING turn. Read by the orchestrator to hand reviewers the path. */
-  lastWorkerSummaryFileName: string | null = null;
-
-  /**
-   * round2.5 fix: 직전 turn 의 결과 분류. orchestrator 가 라운드 단위로
-   * 누적해서 "라운드 전원 실패" 상태를 감지한다 (모든 직원이 매번 실패하면
-   * 회의가 영원히 빈 라운드를 반복하는 문제 fix).
-   *
-   * - 'success' : assistant message 가 정상 append 됨
-   * - 'failed'  : turn-error emit (CLI 실패, provider not found 등)
-   * - 'skipped' : work-status gate 로 skip (offline 등)
-   * - 'idle'    : 초기 / 직전 호출 없음
-   */
-  lastTurnResult: 'success' | 'failed' | 'skipped' | 'idle' = 'idle';
-
-  /** Tracks whether the worker's first EXECUTING turn injected the
-   *  permission-request instruction. Resets when the worker id changes. */
-  private workerPermissionInstructionSentForId: string | null = null;
 
   constructor(deps: MeetingTurnExecutorDeps) {
     this.session = deps.session;
@@ -211,13 +191,63 @@ export class MeetingTurnExecutor {
     this.abortController?.abort();
   }
 
-  /** Execute a single AI turn for the given speaker. */
-  async executeTurn(speaker: Participant): Promise<void> {
-    this.lastTurnResult = 'idle';
-    // R8-Task9 / R11-Task2: work-status gate (spec §7.2). Skip the turn
-    // entirely when the speaker is not `online`. The skip is NOT a turn
-    // failure — we do not emit TURN_DONE/TURN_FAIL. The orchestrator's
-    // turn rotation decides what to do next (move to the next speaker).
+  // ── Phase 별 turn 호출 ─────────────────────────────────────────────
+
+  async requestOpinionGather(
+    speaker: Participant,
+    ctx: OpinionGatherCtx,
+  ): Promise<MeetingTurnResult<Step1OpinionGatherSchemaType>> {
+    return this.runPhaseTurn({
+      phase: 'gather',
+      speaker,
+      schema: PHASE_RESPONSE_SCHEMAS.gather,
+      buildPromptBody: () => buildGatherPromptBody(speaker, ctx),
+    });
+  }
+
+  async requestQuickVote(
+    speaker: Participant,
+    ctx: QuickVoteCtx,
+  ): Promise<MeetingTurnResult<Step25QuickVoteSchemaType>> {
+    return this.runPhaseTurn({
+      phase: 'quick_vote',
+      speaker,
+      schema: PHASE_RESPONSE_SCHEMAS.quick_vote,
+      buildPromptBody: () => buildQuickVotePromptBody(speaker, ctx),
+    });
+  }
+
+  async requestFreeDiscussion(
+    speaker: Participant,
+    ctx: FreeDiscussionCtx,
+  ): Promise<MeetingTurnResult<Step3FreeDiscussionSchemaType>> {
+    return this.runPhaseTurn({
+      phase: 'free_discussion',
+      speaker,
+      schema: PHASE_RESPONSE_SCHEMAS.free_discussion,
+      buildPromptBody: () => buildFreeDiscussionPromptBody(speaker, ctx),
+    });
+  }
+
+  // ── 공통 phase turn 흐름 ──────────────────────────────────────────
+
+  private async runPhaseTurn<T>(args: {
+    phase: 'gather' | 'quick_vote' | 'free_discussion';
+    speaker: Participant;
+    schema: ZodType<T>;
+    buildPromptBody: () => string;
+  }): Promise<MeetingTurnResult<T>> {
+    const { phase, speaker, schema, buildPromptBody } = args;
+
+    // (1) abort 가드 — orchestrator 가 phase loop 진입 직전에도 가드하지만,
+    // race-condition 방지로 turn 진입 직후 다시 검사.
+    if (this.session.aborted) {
+      return { kind: 'skipped', providerId: speaker.id, reason: 'aborted' };
+    }
+
+    // (2) work-status gate (spec §7.2). speaker !== 'online' → skip + persist
+    // marker. 본 marker 는 채널 transcript 가 회의 종료 후에도 skip 사실을
+    // 보존할 수 있도록 — 옛 모델 그대로.
     {
       const status = this.memberProfileService.getWorkStatus(speaker.id);
       if (status !== 'online') {
@@ -237,14 +267,11 @@ export class MeetingTurnExecutor {
           metadata: {
             meetingId: this.session.meetingId,
             channelId: this.session.channelId,
+            phase,
             participantName: speaker.displayName,
             reason: status,
           },
         });
-        // Persist a system message so the channel transcript shows the
-        // skip even after the meeting ends. The renderer Thread (Task 9
-        // continued) maps the well-known meta marker to a translated
-        // banner.
         try {
           this.messageService.append({
             channelId: this.session.channelId,
@@ -262,19 +289,20 @@ export class MeetingTurnExecutor {
             },
           });
         } catch (e) {
-          // Persisting the marker is best-effort — even if the DB write
-          // fails, the live `stream:meeting-turn-skipped` already
-          // surfaced the skip to the renderer.
           console.warn(
             '[meeting-turn-executor] failed to persist turn-skipped marker',
             e instanceof Error ? e.message : String(e),
           );
         }
-        this.lastTurnResult = 'skipped';
-        return;
+        return {
+          kind: 'skipped',
+          providerId: speaker.id,
+          reason: 'work-status-gate',
+        };
       }
     }
 
+    // (3) provider lookup
     const provider = this.providerRegistry.get(speaker.id);
     if (!provider) {
       const errorMsg = `Provider not found: ${speaker.id}`;
@@ -294,13 +322,141 @@ export class MeetingTurnExecutor {
         metadata: {
           meetingId: this.session.meetingId,
           channelId: this.session.channelId,
-          phase: 'pre-start',
+          phase,
         },
       });
-      this.lastTurnResult = 'failed';
-      return;
+      return {
+        kind: 'skipped',
+        providerId: speaker.id,
+        reason: 'provider-error',
+      };
     }
 
+    // (4) 1차 시도 → 실패 시 1회 재요청. 두 번 모두 schema 부합 안 함 →
+    // skipped:'invalid-schema'. provider 호출 실패 → skipped:'provider-error'.
+    let lastInvalidRaw: string | null = null;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      const promptBody =
+        attempt === 1
+          ? buildPromptBody()
+          : buildRetryPromptBody(buildPromptBody(), lastInvalidRaw);
+      const callResult = await this.callProviderOnce({
+        provider,
+        speaker,
+        promptBody,
+        phase,
+      });
+      if (callResult.kind === 'provider-error') {
+        return {
+          kind: 'skipped',
+          providerId: speaker.id,
+          reason: 'provider-error',
+        };
+      }
+      // (5) raw text → JSON 추출 → schema parse
+      const raw = callResult.fullContent;
+      const extracted = extractJsonObject(raw);
+      const parsed = extracted === null ? null : safeParse(schema, extracted);
+
+      if (parsed !== null) {
+        // (6) 성공 — assistant 메시지 persist + emit turn-done.
+        const persisted = this.persistAssistantMessage({
+          speaker,
+          messageId: callResult.messageId,
+          rawContent: raw,
+        });
+        if (!persisted) {
+          // FK / disk-full 등 fatal — 회의 자체 abort.
+          this.session.abort();
+          return {
+            kind: 'skipped',
+            providerId: speaker.id,
+            reason: 'provider-error',
+          };
+        }
+        this.streamBridge.emitMeetingTurnDone({
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          messageId: callResult.messageId,
+          totalTokens: callResult.outputTokens ?? callResult.tokenSequence,
+        });
+        tryGetLogger()?.info({
+          component: 'meeting',
+          action: 'turn-done',
+          result: 'success',
+          participantId: speaker.id,
+          metadata: {
+            meetingId: this.session.meetingId,
+            channelId: this.session.channelId,
+            phase,
+            messageId: callResult.messageId,
+            participantName: speaker.displayName,
+            attempt,
+            contentLength: raw.length,
+          },
+        });
+        this.personaPrimedParticipants.add(speaker.id);
+        return {
+          kind: 'ok',
+          providerId: speaker.id,
+          payload: parsed,
+          messageId: callResult.messageId,
+        };
+      }
+
+      // schema 부합 안 함. raw 보존 + 다음 시도 (attempt 2).
+      lastInvalidRaw = raw;
+      tryGetLogger()?.warn({
+        component: 'meeting',
+        action: 'turn-invalid-schema',
+        result: 'failure',
+        participantId: speaker.id,
+        metadata: {
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          phase,
+          attempt,
+          rawLength: raw.length,
+        },
+      });
+    }
+
+    // 두 번 모두 실패 — skip + emit error (non-fatal).
+    this.streamBridge.emitMeetingError({
+      meetingId: this.session.meetingId,
+      channelId: this.session.channelId,
+      error: `phase=${phase} schema invalid after 2 attempts`,
+      fatal: false,
+      speakerId: speaker.id,
+    });
+    return {
+      kind: 'skipped',
+      providerId: speaker.id,
+      reason: 'invalid-schema',
+    };
+  }
+
+  /**
+   * 단발 provider 호출 — token streaming + persona/permission 동봉.
+   * 응답 raw text + messageId + token 카운트 반환. 호출 자체가 throw 하면
+   * provider-error 분기.
+   */
+  private async callProviderOnce(args: {
+    provider: BaseProvider;
+    speaker: Participant;
+    promptBody: string;
+    phase: 'gather' | 'quick_vote' | 'free_discussion';
+  }): Promise<
+    | {
+        kind: 'ok';
+        messageId: string;
+        fullContent: string;
+        tokenSequence: number;
+        outputTokens: number | null;
+      }
+    | { kind: 'provider-error' }
+  > {
+    const { provider, speaker, promptBody, phase } = args;
     const messageId = randomUUID();
     const turnStartedAt = Date.now();
     let fullContent = '';
@@ -319,9 +475,9 @@ export class MeetingTurnExecutor {
       metadata: {
         meetingId: this.session.meetingId,
         channelId: this.session.channelId,
+        phase,
         messageId,
         participantName: speaker.displayName,
-        ssmState: this.session.sessionMachine.state,
         providerType: provider.type,
       },
     });
@@ -330,57 +486,24 @@ export class MeetingTurnExecutor {
     const { signal } = this.abortController;
 
     try {
-      const messages = this.session.getMessagesForProvider(speaker.id);
+      // history = session 의 누적 메시지 + 본 turn 의 phase prompt body.
+      // phase prompt body 는 system 메시지로 history 마지막에 push (직원이 이번
+      // 단계 양식을 즉시 보도록).
+      const history = this.session.getMessagesForProvider(speaker.id);
+      const messages: ProviderMessage[] = [
+        ...history,
+        { role: 'system', content: promptBody },
+      ];
 
-      const ssm = this.session.sessionMachine;
-      const otherNames = this.session.participants
-        .filter((p) => p.isActive && p.id !== 'user' && p.id !== speaker.id)
-        .map((p) => p.displayName);
-      const formatInstruction = this.getFormatInstruction(
-        ssm.state,
-        speaker.displayName,
-        otherNames,
-      );
-      if (formatInstruction) {
-        messages.unshift({ role: 'system', content: formatInstruction });
-      }
-
-      // R11-Task2: v3 PersonaBuilder is now the single path. Identity
-      // section comes from {@link MemberProfileService.buildPersona}
-      // (reads the `member_profiles` row fresh every call so user edits
-      // in {@link MemberProfileEditModal} land in the AI's system prompt
-      // starting next turn). Permission rules are appended via the v3
-      // {@link buildPermissionRules} helper. The v2 `buildEffectivePersona`
-      // fallback is gone with the v2 engine deletion.
       let persona = '';
       if (this.shouldIncludePersona(provider, speaker.id)) {
         const permissionRules = buildPermissionRules({
           permission: null,
-          projectFolder: this.session.sessionMachine.ctx.projectPath || null,
+          projectFolder: this.session.ssmCtx.projectPath || null,
           arenaFolder: this.arenaRootService.getPath(),
         });
         const v3Identity = this.memberProfileService.buildPersona(speaker.id);
         persona = `${v3Identity}${permissionRules}`;
-      }
-
-      if (provider.type === 'cli') {
-        const permissionPrompt = this.buildCliPermissionPrompt(provider, speaker);
-        if (permissionPrompt) persona = permissionPrompt + '\n\n' + persona;
-      }
-
-      let completionOptions: { tools: ToolDefinition[] } | undefined;
-      if (provider.type !== 'cli') {
-        const isWorker =
-          ssm.workerId === speaker.id && ssm.state === 'EXECUTING';
-        const appTools = this.appToolProvider.getAvailableTools(
-          ssm.state,
-          isWorker,
-        );
-        if (appTools.length > 0) {
-          completionOptions = {
-            tools: this.convertToolsToDefinitions(appTools),
-          };
-        }
       }
 
       if (provider instanceof CliProvider) {
@@ -392,10 +515,10 @@ export class MeetingTurnExecutor {
         for await (const token of provider.streamCompletion(
           messages,
           persona,
-          completionOptions,
+          undefined,
           signal,
         )) {
-          if (this.session.state === 'stopped') break;
+          if (this.session.aborted) break;
           fullContent += token;
           this.streamBridge.emitMeetingTurnToken({
             meetingId: this.session.meetingId,
@@ -413,224 +536,117 @@ export class MeetingTurnExecutor {
       }
 
       const providerUsage = provider.consumeLastTokenUsage();
-      const outputTokens = providerUsage?.outputTokens ?? null;
-
-      if (fullContent) {
-        const parsedMetadata = this.parseOutputByState(
-          ssm.state,
-          speaker,
-          fullContent,
-        );
-        let contentForDisplay = fullContent;
-
-        if (
-          ssm.state === 'EXECUTING' &&
-          ssm.workerId === speaker.id
-        ) {
-          const summaryFileName = this.lastWorkerSummaryFileName;
-          contentForDisplay = summaryFileName
-            ? `작업을 완료했습니다. 작업 내용은 합의 폴더의 \`${summaryFileName}\`을 확인해 주세요.`
-            : '작업을 완료했습니다.';
-        } else {
-          const display = this.extractDisplayContent(parsedMetadata);
-          if (display) contentForDisplay = display;
-        }
-
-        this.session.createMessage({
-          id: messageId,
-          participantId: speaker.id,
-          participantName: speaker.displayName,
-          role: 'assistant',
-          content: fullContent,
-          metadata: parsedMetadata,
-        });
-
-        const meta: MessageMeta | null = parsedMetadata
-          ? { parsedOutput: parsedMetadata.parsedOutput }
-          : null;
-
-        try {
-          this.messageService.append({
-            channelId: this.session.channelId,
-            meetingId: this.session.meetingId,
-            authorId: speaker.providerId ?? speaker.id,
-            authorKind: 'member',
-            role: 'assistant',
-            content: contentForDisplay,
-            meta,
-          });
-        } catch (dbErr) {
-          console.error(
-            `[MeetingOrchestrator:${this.session.meetingId}] DB persist error:`,
-            dbErr,
-          );
-          // round2.5 fix: FK constraint / disk-full 등 메시지 영속 실패는
-          // 단순 swallow 가 아니라 fatal — 회의를 즉시 FAILED 로 종료한다.
-          // 사용자가 앱 종료 / abort 한 직후 stale turn 응답이 도착해
-          // channel / meeting / provider FK 가 깨진 경우, 다음 라운드도
-          // 같은 패턴으로 무한 반복되는 것을 막기 위해.
-          const dbErrCode =
-            dbErr instanceof Error
-              ? (dbErr as { code?: string }).code ?? 'unknown'
-              : 'unknown';
-          this.streamBridge.emitMeetingError({
-            meetingId: this.session.meetingId,
-            channelId: this.session.channelId,
-            error:
-              dbErr instanceof Error
-                ? `DB persist failed: ${dbErr.message}`
-                : 'DB persist failed',
-            fatal: true,
-            messageId,
-            speakerId: speaker.id,
-          });
-          tryGetLogger()?.error({
-            component: 'meeting',
-            action: 'turn-error',
-            result: 'failure',
-            participantId: speaker.id,
-            error: { code: 'db_persist', message: dbErrCode },
-            metadata: {
-              meetingId: this.session.meetingId,
-              channelId: this.session.channelId,
-              messageId,
-              participantName: speaker.displayName,
-              phase: 'persist',
-            },
-          });
-          this.lastTurnResult = 'failed';
-          // FAILED 로 강제 transition — orchestrator loop 가 다음 iteration
-          // 에서 isTerminal 검사로 handleTerminal 진입 → 회의록 마무리.
-          try {
-            this.session.sessionMachine.transition('ERROR');
-          } catch {
-            // SSM 이 이미 terminal 이거나 transition map 에 없는 경우 무시.
-          }
-          return;
-        }
+      return {
+        kind: 'ok',
+        messageId,
+        fullContent,
+        tokenSequence: sequence,
+        outputTokens: providerUsage?.outputTokens ?? null,
+      };
+    } catch (err) {
+      if (signal.aborted) {
+        // 사용자 abort — 통제 신호로 분류, circuit breaker 손대지 않음.
+        return { kind: 'provider-error' };
       }
-
-      this.streamBridge.emitMeetingTurnDone({
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      const errorCategory = classifyTurnError(err);
+      this.streamBridge.emitMeetingError({
         meetingId: this.session.meetingId,
         channelId: this.session.channelId,
+        error: errorMsg,
+        fatal: false,
         messageId,
-        totalTokens: outputTokens ?? sequence,
+        speakerId: speaker.id,
       });
-      tryGetLogger()?.info({
+      tryGetLogger()?.error({
         component: 'meeting',
-        action: 'turn-done',
-        result: 'success',
+        action: 'turn-error',
+        result: 'failure',
         participantId: speaker.id,
         latencyMs: Date.now() - turnStartedAt,
+        error: { code: errorCategory, message: errorMsg },
         metadata: {
           meetingId: this.session.meetingId,
           channelId: this.session.channelId,
+          phase,
           messageId,
           participantName: speaker.displayName,
-          totalTokens: outputTokens ?? sequence,
-          contentLength: fullContent.length,
+          partialContentLength: fullContent.length,
         },
       });
-      this.lastTurnResult = 'success';
-
-      this.personaPrimedParticipants.add(speaker.id);
-
-      if (this.session.deepDebateActive && fullContent) {
-        this.session.recordDeepDebateTurn();
-        if (this.session.isDeepDebateBudgetExhausted()) {
-          this.session.stopDeepDebate();
-          this.session.setRoundSetting(
-            this.session.turnManager.currentRound,
-          );
-          console.info(
-            `[MeetingOrchestrator:${this.session.meetingId}] deep debate budget exhausted`,
-          );
-        }
-      }
-    } catch (err) {
-      if (!signal.aborted) {
-        this.lastTurnResult = 'failed';
-        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        const errorCategory = classifyTurnError(err);
-        this.streamBridge.emitMeetingError({
-          meetingId: this.session.meetingId,
-          channelId: this.session.channelId,
-          error: errorMsg,
-          fatal: false,
-          messageId,
-          speakerId: speaker.id,
-        });
-        tryGetLogger()?.error({
-          component: 'meeting',
-          action: 'turn-error',
-          result: 'failure',
-          participantId: speaker.id,
-          latencyMs: Date.now() - turnStartedAt,
-          error: { code: errorCategory, message: errorMsg },
-          metadata: {
-            meetingId: this.session.meetingId,
-            channelId: this.session.channelId,
-            messageId,
-            participantName: speaker.displayName,
-            partialContentLength: fullContent.length,
-          },
-        });
-        // R9-Task6: feed the `same_error` tripwire. User-initiated aborts
-        // (signal.aborted) are a control-flow signal, not a failure — we
-        // must not let `meeting:abort` inflate the counter and trip the
-        // breaker. Classification is a closed enum (see
-        // `classifyTurnError`) so the streak counter cannot be perturbed
-        // by attacker-controlled error text.
-        this.circuitBreaker?.recordError(errorCategory);
-      }
+      this.circuitBreaker?.recordError(errorCategory);
+      return { kind: 'provider-error' };
     } finally {
       this.abortController = null;
     }
   }
 
-  // ── SSM-aware helpers (delegate to v2 MessageFormatter asset) ────
-
-  getFormatInstruction(
-    state: SessionState,
-    selfName: string,
-    otherNames: string[],
-  ): string | null {
-    switch (state) {
-      case 'CONVERSATION':
-        return this.messageFormatter.buildConversationFormatInstruction(selfName);
-      case 'WORK_DISCUSSING':
-        return this.messageFormatter.buildWorkDiscussionFormatInstruction(
-          selfName,
-          otherNames,
-        );
-      case 'EXECUTING': {
-        // projectPath is the permission-guard anchor; consensusFolder
-        // resolves via ArenaRootService (shared across projects for now).
-        const consensusFolder = this.arenaRootService.consensusPath();
-        const summaryFileName = buildSummaryFileName(Date.now());
-        this.lastWorkerSummaryFileName = summaryFileName;
-        return this.messageFormatter.buildExecutionFormatInstruction(
-          selfName,
-          consensusFolder,
-          summaryFileName,
-        );
-      }
-      case 'REVIEWING':
-        return this.messageFormatter.buildReviewFormatInstruction(selfName);
-      default:
-        return null;
+  /**
+   * raw assistant 응답을 messageService 와 session in-memory 둘 다 push.
+   * persist 실패 시 회의 자체를 abort (DB FK / disk-full 같은 fatal).
+   */
+  private persistAssistantMessage(args: {
+    speaker: Participant;
+    messageId: string;
+    rawContent: string;
+  }): boolean {
+    const { speaker, messageId, rawContent } = args;
+    // session in-memory — 다음 turn prompt history 에 자연 포함.
+    this.session.createMessage({
+      id: messageId,
+      participantId: speaker.id,
+      participantName: speaker.displayName,
+      role: 'assistant',
+      content: rawContent,
+    });
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: speaker.providerId ?? speaker.id,
+        authorKind: 'member',
+        role: 'assistant',
+        content: rawContent,
+        meta: null,
+      });
+      return true;
+    } catch (dbErr) {
+      const dbErrCode =
+        dbErr instanceof Error
+          ? (dbErr as { code?: string }).code ?? 'unknown'
+          : 'unknown';
+      this.streamBridge.emitMeetingError({
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        error:
+          dbErr instanceof Error
+            ? `DB persist failed: ${dbErr.message}`
+            : 'DB persist failed',
+        fatal: true,
+        messageId,
+        speakerId: speaker.id,
+      });
+      tryGetLogger()?.error({
+        component: 'meeting',
+        action: 'turn-error',
+        result: 'failure',
+        participantId: speaker.id,
+        error: { code: 'db_persist', message: dbErrCode },
+        metadata: {
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          messageId,
+          participantName: speaker.displayName,
+          phase: 'persist',
+        },
+      });
+      return false;
     }
   }
 
-  convertToolsToDefinitions(tools: AppTool[]): ToolDefinition[] {
-    return tools.map((t) => ({
-      name: t.name,
-      description: t.description,
-      parameters: {},
-    }));
-  }
+  // ── Persona / CLI permission helpers ────────────────────────────────
 
-  shouldIncludePersona(
+  private shouldIncludePersona(
     provider: { type: string; config: unknown },
     participantId: string,
   ): boolean {
@@ -644,73 +660,6 @@ export class MeetingTurnExecutor {
     return !this.personaPrimedParticipants.has(participantId);
   }
 
-  // ── Private helpers ──────────────────────────────────────────────
-
-  private buildCliPermissionPrompt(
-    provider: BaseProvider,
-    speaker: Participant,
-  ): string {
-    const ssm = this.session.sessionMachine;
-    const isWorker = ssm.workerId === speaker.id && ssm.state === 'EXECUTING';
-    const providerWithAdapter = provider as {
-      getPermissionAdapter?: () => {
-        getWorkerSystemPrompt?: (
-          projectPath: string,
-          consensusFolder: string,
-          summaryFileName: string,
-        ) => string;
-        getObserverSystemPrompt?: (workerName: string) => string;
-        getReadOnlySystemPrompt?: () => string;
-      } | null;
-    };
-    const adapter =
-      typeof providerWithAdapter.getPermissionAdapter === 'function'
-        ? providerWithAdapter.getPermissionAdapter()
-        : null;
-
-    const projectPath = this.session.sessionMachine.ctx.projectPath || '.';
-
-    if (adapter) {
-      if (isWorker && adapter.getWorkerSystemPrompt) {
-        const consensusFolder = this.arenaRootService.consensusPath();
-        const summaryFileName = buildSummaryFileName(Date.now());
-        this.lastWorkerSummaryFileName = summaryFileName;
-        let prompt = adapter.getWorkerSystemPrompt(
-          projectPath,
-          consensusFolder,
-          summaryFileName,
-        );
-        if (this.workerPermissionInstructionSentForId !== speaker.id) {
-          this.workerPermissionInstructionSentForId = speaker.id;
-          prompt = WORKER_PERMISSION_REQUEST_INSTRUCTION + '\n\n' + prompt;
-        }
-        return prompt;
-      }
-      if (ssm.state === 'EXECUTING' && adapter.getObserverSystemPrompt) {
-        const workerParticipant = this.session.participants.find(
-          (p) => p.id === ssm.workerId,
-        );
-        const workerName = workerParticipant?.displayName ?? 'Worker';
-        return adapter.getObserverSystemPrompt(workerName);
-      }
-      if (ssm.state === 'REVIEWING' && adapter.getReadOnlySystemPrompt) {
-        return adapter.getReadOnlySystemPrompt();
-      }
-      return '';
-    }
-
-    // Hardcoded fallback when no permission adapter is available.
-    if (isWorker) {
-      const consensusFolder = this.arenaRootService.consensusPath();
-      const summaryFileName = buildSummaryFileName(Date.now());
-      this.lastWorkerSummaryFileName = summaryFileName;
-      return `[WORKER MODE] You have write access to the project. Execute the approved plan.\nAfter completing all work, write a summary to: ${consensusFolder}/${summaryFileName}`;
-    }
-    return ssm.state === 'REVIEWING'
-      ? '[REVIEWER MODE] Review the worker output. Report issues found.'
-      : '[OBSERVER MODE] You are in read-only mode. Discuss and analyze only.';
-  }
-
   private wireCliPermissionCallback(
     provider: CliProvider,
     speaker: Participant,
@@ -720,13 +669,6 @@ export class MeetingTurnExecutor {
         participantId: string,
         req: ParsedCliPermissionRequest,
       ): Promise<boolean> => {
-        // R7-Task3: every CLI permission prompt now lands in the
-        // ApprovalService table with kind='cli_permission'. The adapter
-        // owns the Promise bridge (create + subscribe-once('decided') +
-        // 5-minute timeout + listener cleanup). approve/conditional →
-        // true, reject/timeout → false. Conditional comments are
-        // delivered to the AI on the next turn by the SystemMessage-
-        // Injector (R7-Task6) — the CLI only sees the allow signal.
         return this.approvalCliAdapter.createCliPermissionApproval({
           meetingId: this.session.meetingId,
           channelId: this.session.channelId,
@@ -738,67 +680,254 @@ export class MeetingTurnExecutor {
       },
     );
   }
+}
 
-  private parseOutputByState(
-    state: SessionState,
-    speaker: Participant,
-    content: string,
-  ): { parsedOutput: ParsedAiOutput } | undefined {
-    let parsed: ParsedAiOutput;
-    switch (state) {
-      case 'CONVERSATION':
-        parsed = this.messageFormatter.parseConversationOutput(
-          content,
-          speaker.displayName,
-        );
-        if (parsed.type === 'conversation') {
-          this.session.sessionMachine.recordModeJudgment({
-            participantId: speaker.id,
-            participantName: speaker.displayName,
-            judgment: parsed.data.mode_judgment,
-            reason: parsed.data.judgment_reason,
-          });
-        }
-        return { parsedOutput: parsed };
-      case 'WORK_DISCUSSING':
-        parsed = this.messageFormatter.parseWorkDiscussionOutput(
-          content,
-          speaker.displayName,
-        );
-        return { parsedOutput: parsed };
-      case 'REVIEWING':
-        parsed = this.messageFormatter.parseReviewOutput(
-          content,
-          speaker.displayName,
-        );
-        return { parsedOutput: parsed };
-      default:
-        return undefined;
+// ── Prompt builders (spec §11.18.2 / .4 / .5) ───────────────────────────
+
+/**
+ * step 1 의견 제시 prompt body. session 의 첫 system 메시지 (회의 주제) 가 이미
+ * provider history 안에 있으므로 본 prompt 는 *현재 단계 양식* 만 안내.
+ */
+function buildGatherPromptBody(
+  speaker: Participant,
+  ctx: OpinionGatherCtx,
+): string {
+  const lines: string[] = [];
+  lines.push('[현재 단계: step 1 — 의견 제시]');
+  lines.push(
+    '회의 주제는 이전 system 메시지에 있습니다. 본 단계에서 본인의 의견을 제시하세요.',
+  );
+  lines.push('');
+  lines.push(
+    '응답은 *JSON 한 객체만* — markdown code fence 사용 금지, JSON 외 본문 금지.',
+  );
+  lines.push('');
+  lines.push('```json (스키마 — 그대로 따르기)');
+  lines.push('{');
+  lines.push(`  "name": "${escapeForPrompt(speaker.displayName)}",`);
+  lines.push(`  "label": "${escapeForPrompt(ctx.suggestedLabel)}",`);
+  lines.push('  "opinions": [');
+  lines.push('    {');
+  lines.push('      "title": "<짧은 제목>",');
+  lines.push('      "content": "<본문 — 통째 / truncate 금지>",');
+  lines.push('      "rationale": "<근거 / 이유>"');
+  lines.push('    }');
+  lines.push('  ]');
+  lines.push('}');
+  lines.push('```');
+  lines.push('');
+  lines.push(
+    '`opinions` 배열 길이 ≥ 0. 의견 없으면 빈 배열로 응답 가능 (`"opinions": []`).',
+  );
+  lines.push('본문 / 근거 통째 보존 — 요약 / 축약 금지.');
+  return lines.join('\n');
+}
+
+function buildQuickVotePromptBody(
+  speaker: Participant,
+  ctx: QuickVoteCtx,
+): string {
+  const lines: string[] = [];
+  lines.push('[현재 단계: step 2.5 — 일괄 동의 투표]');
+  lines.push('');
+  lines.push('직원들이 제시한 의견 list:');
+  lines.push('');
+  lines.push(ctx.opinionsMarkdown.trim() || '(의견 없음)');
+  lines.push('');
+  lines.push(
+    '각 의견에 대해 동의 / 반대 / 보류 중 하나로 투표하세요. 응답은 *JSON 한 객체만*.',
+  );
+  lines.push('');
+  lines.push('```json (스키마 — 그대로 따르기)');
+  lines.push('{');
+  lines.push(`  "name": "${escapeForPrompt(speaker.displayName)}",`);
+  lines.push(`  "label": "${escapeForPrompt(ctx.suggestedLabel)}",`);
+  lines.push('  "quick_votes": [');
+  lines.push('    {');
+  lines.push('      "target_id": "<화면 ID 예: ITEM_001>",');
+  lines.push('      "vote": "agree" | "oppose" | "abstain",');
+  lines.push('      "comment": "<선택 — 동의해도 코멘트 가능>"');
+  lines.push('    }');
+  lines.push('  ]');
+  lines.push('}');
+  lines.push('```');
+  lines.push('');
+  lines.push('`quick_votes` 배열 길이 ≥ 1 (모든 의견에 표명 권장).');
+  return lines.join('\n');
+}
+
+function buildFreeDiscussionPromptBody(
+  speaker: Participant,
+  ctx: FreeDiscussionCtx,
+): string {
+  const lines: string[] = [];
+  lines.push('[현재 단계: step 3 — 자유 토론]');
+  lines.push('');
+  lines.push('진행 중 의견:');
+  lines.push(ctx.currentOpinionMarkdown.trim());
+  lines.push('');
+  lines.push('자식 의견 (수정 / 반대 / 보강):');
+  lines.push(ctx.childrenMarkdown.trim() || '(자식 의견 없음)');
+  lines.push('');
+  if (ctx.depthCapReachedScreenIds.length > 0) {
+    lines.push(
+      '⚠ 다음 의견은 깊이 cap 도달 — 자식 추가 불가 (parent_id 로 지정 시 거부됩니다):',
+    );
+    for (const id of ctx.depthCapReachedScreenIds) {
+      lines.push(`  - ${id}`);
     }
+    lines.push('');
   }
+  lines.push(
+    '이 의견 (또는 자식) 에 대해 동의 / 반대 / 보류 표명, 또는 수정안 / 반대안 / 보강안 제시.',
+  );
+  lines.push(
+    '한 응답 안에 votes (기존 의견 표명) + additions (새 자식 의견) 둘 다 가능하지만, *둘 합쳐 최소 1 항목*.',
+  );
+  lines.push('');
+  lines.push('```json (스키마 — 그대로 따르기)');
+  lines.push('{');
+  lines.push(`  "name": "${escapeForPrompt(speaker.displayName)}",`);
+  lines.push(`  "label": "${escapeForPrompt(ctx.suggestedLabel)}",`);
+  lines.push('  "votes": [');
+  lines.push('    {');
+  lines.push('      "target_id": "<화면 ID>",');
+  lines.push('      "vote": "agree" | "oppose" | "abstain",');
+  lines.push('      "comment": "<선택>"');
+  lines.push('    }');
+  lines.push('  ],');
+  lines.push('  "additions": [');
+  lines.push('    {');
+  lines.push('      "parent_id": "<자식이 매달릴 부모 화면 ID>",');
+  lines.push('      "kind": "revise" | "block" | "addition",');
+  lines.push('      "title": "<제목>",');
+  lines.push('      "content": "<본문 — 통째>",');
+  lines.push('      "rationale": "<근거>"');
+  lines.push('    }');
+  lines.push('  ]');
+  lines.push('}');
+  lines.push('```');
+  return lines.join('\n');
+}
 
-  private extractDisplayContent(
-    parsedMetadata: { parsedOutput: ParsedAiOutput } | undefined,
-  ): string | undefined {
-    if (!parsedMetadata) return undefined;
-    const output = parsedMetadata.parsedOutput;
-    switch (output.type) {
-      case 'conversation':
-        return output.data.content;
-      case 'work_discussion':
-        return `**의견:** ${output.data.opinion}\n\n**근거:** ${output.data.reasoning}`;
-      case 'review': {
-        const issues =
-          output.data.issues.length > 0
-            ? output.data.issues.map((i: string) => `- ${i}`).join('\n')
-            : '';
-        return `**결과:** ${output.data.review_result}${issues ? `\n\n**이슈:**\n${issues}` : ''}\n\n${output.data.comments}`;
+/**
+ * 1 회 재요청 prompt — 직전 응답 raw + "schema 부합 안 함" 안내 + 양식 재동봉.
+ * orchestrator 의 retry 결정 기준은 caller 가 schema parse 실패를 감지했다는
+ * 사실이라, 본 함수는 "왜 실패했는지" 의 구체값은 안 받음 (zod issue list 는
+ * 디버그용이라 직원에게 전달해도 의미 X — schema 양식 자체를 다시 강조).
+ */
+function buildRetryPromptBody(
+  baseBody: string,
+  lastInvalidRaw: string | null,
+): string {
+  const lines: string[] = [];
+  lines.push(
+    '[재요청] 직전 응답이 schema 부합 안 했습니다. 양식을 정확히 따라 다시 응답하세요.',
+  );
+  if (lastInvalidRaw) {
+    const trimmed = lastInvalidRaw.trim();
+    const preview =
+      trimmed.length > 400 ? `${trimmed.slice(0, 400)}…(생략)` : trimmed;
+    lines.push('');
+    lines.push('직전 응답 (참고):');
+    lines.push('```');
+    lines.push(preview);
+    lines.push('```');
+  }
+  lines.push('');
+  lines.push(baseBody);
+  return lines.join('\n');
+}
+
+// ── JSON 추출 + zod parse helpers ───────────────────────────────────────
+
+/**
+ * raw 문자열에서 JSON 객체 추출. 우선 raw 전체를 JSON.parse 시도 → 실패 시
+ * 마지막 `{ ... }` 블록만 잘라 재시도. 둘 다 실패 시 null.
+ *
+ * 옛 message-formatter 의 `extractLastJsonObject` 와 동일한 기조 — code fence
+ * 안 / 양 끝 markdown 잡설 / trailing 텍스트 모두 견인.
+ */
+function extractJsonObject(raw: string): unknown {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // 1차 — 통째 시도
+  const direct = tryJsonParse(trimmed);
+  if (direct !== null) return direct;
+
+  // 2차 — 마지막 `{...}` 블록 추출. 깊이 카운터로 외곽 객체 1 개만.
+  const lastBlock = extractLastBraceBlock(trimmed);
+  if (lastBlock === null) return null;
+  return tryJsonParse(lastBlock);
+}
+
+function tryJsonParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 깊이 카운터로 마지막 외곽 `{...}` 블록 추출. string literal 안의 `{` `}` 는
+ * 카운트 X — 단순 escape-aware scanner. 실패 시 null.
+ */
+function extractLastBraceBlock(text: string): string | null {
+  let lastOpen = -1;
+  let depth = 0;
+  let inString = false;
+  let stringChar = '';
+  let escaped = false;
+  let candidateStart = -1;
+  let candidateEnd = -1;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === '\\') {
+        escaped = true;
+      } else if (ch === stringChar) {
+        inString = false;
       }
-      default:
-        return undefined;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      inString = true;
+      stringChar = ch;
+      continue;
+    }
+    if (ch === '{') {
+      if (depth === 0) lastOpen = i;
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && lastOpen >= 0) {
+        candidateStart = lastOpen;
+        candidateEnd = i;
+      }
     }
   }
+  if (candidateStart < 0 || candidateEnd < 0) return null;
+  return text.slice(candidateStart, candidateEnd + 1);
+}
 
+function safeParse<T>(schema: ZodType<T>, value: unknown): T | null {
+  const result = schema.safeParse(value);
+  return result.success ? result.data : null;
+}
+
+// ── 잡유틸 ─────────────────────────────────────────────────────────────
+
+/**
+ * prompt 안 string literal 에 들어가는 사용자 입력 / displayName / label 의
+ * `"` 와 `\` 를 escape — JSON-like 양식 안에서 깨지지 않도록.
+ */
+function escapeForPrompt(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
 function isCliProviderConfig(config: unknown): config is CliProviderConfig {

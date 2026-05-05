@@ -8,7 +8,12 @@ import {
   type MeetingAutoTriggerDeps,
 } from '../meeting-auto-trigger';
 
-const R12C_DEFAULTS = { role: null, purpose: null, handoffMode: 'check' as const };
+const R12C_DEFAULTS = {
+  role: null,
+  purpose: null,
+  handoffMode: 'check' as const,
+  maxRounds: null,
+};
 
 const userChannel: Channel = {
   id: 'c-user',

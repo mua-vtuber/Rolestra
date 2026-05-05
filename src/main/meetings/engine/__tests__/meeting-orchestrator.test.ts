@@ -1,39 +1,34 @@
 /**
- * MeetingOrchestrator unit tests.
+ * MeetingOrchestrator 단위 테스트 — R12-C2 T10a 통째 재작성.
  *
- * Scope: DI contract, SSM state → loop dispatch, terminal-post wiring,
- * v3-side-effects disposer lifecycle. Full SSM transition coverage lives
- * in the SSM unit tests (src/main/engine/__tests__/session-state-machine.*).
+ * 옛 12 단계 SSM + WAIT_STATES + consensus_decision approval gate +
+ * composeMinutes 의존 시나리오는 새 모델 (phase loop) 에서 의미 X. 본 파일은
+ * 새 surface 의 happy-path + abort 분기만 커버 — turn-executor 와 OpinionService
+ * 는 mock 으로 차단.
  */
 
-import { EventEmitter } from 'node:events';
-
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { MeetingSession } from '../meeting-session';
-import { MeetingOrchestrator } from '../meeting-orchestrator';
-import type {
-  MeetingTurnExecutor,
-} from '../meeting-turn-executor';
+import {
+  MeetingOrchestrator,
+  type MeetingOrchestratorDeps,
+} from '../meeting-orchestrator';
+import type { MeetingTurnExecutor } from '../meeting-turn-executor';
+import type { Participant } from '../../../../shared/engine-types';
+import type { SsmContext } from '../../../../shared/ssm-context-types';
 import type { StreamBridge } from '../../../streams/stream-bridge';
 import type { MessageService } from '../../../channels/message-service';
 import type { MeetingService } from '../../meeting-service';
 import type { ChannelService } from '../../../channels/channel-service';
 import type { ProjectService } from '../../../projects/project-service';
-import {
-  APPROVAL_DECIDED_EVENT,
-  type ApprovalService,
-} from '../../../approvals/approval-service';
-import type { ApprovalItem } from '../../../../shared/approval-types';
 import type { NotificationService } from '../../../notifications/notification-service';
-import type { CircuitBreaker } from '../../../queue/circuit-breaker';
-import type { Participant } from '../../../../shared/engine-types';
-import type { SsmContext } from '../../../../shared/ssm-context-types';
+import type { OpinionService } from '../../opinion-service';
+import type { MeetingMinutesService } from '../../meeting-minutes-service';
+import type { Channel } from '../../../../shared/channel-types';
 
-const MEETING_ID = 'mt-orc-1';
-const CHANNEL_ID = 'ch-orc-1';
-const PROJECT_ID = 'pr-orc-1';
-const MINUTES_CHANNEL_ID = 'ch-minutes';
-const GENERAL_CHANNEL_ID = 'ch-general';
+const MEETING_ID = 'mt-1';
+const CHANNEL_ID = 'ch-1';
+const PROJECT_ID = 'pr-1';
 
 function ctx(): SsmContext {
   return {
@@ -60,53 +55,81 @@ function buildSession(): MeetingSession {
     meetingId: MEETING_ID,
     channelId: CHANNEL_ID,
     projectId: PROJECT_ID,
-    topic: 'Ship v1.0 this week',
+    topic: 'Release planning',
     participants: participants(2),
     ssmCtx: ctx(),
-    // roundSetting=1 so the loop terminates after a single round. With
-    // 'unlimited' the turn-manager never returns null from
-    // getNextSpeaker, producing an infinite turn loop under tests.
-    roundSetting: 1,
   });
 }
 
-interface Mocks {
-  session: MeetingSession;
-  turnExecutor: MeetingTurnExecutor;
-  streamBridge: StreamBridge;
-  messageService: MessageService;
-  meetingService: MeetingService;
-  channelService: ChannelService;
-  projectService: ProjectService;
-  approvalService: ApprovalService;
-  notificationService: NotificationService;
-  circuitBreaker: CircuitBreaker;
-  listeners: {
-    onOff: ReturnType<typeof vi.fn>;
-    circuitBreakerOn: ReturnType<typeof vi.fn>;
-    circuitBreakerOff: ReturnType<typeof vi.fn>;
-  };
+function makeChannel(maxRounds: number | null = 5): Channel {
+  return {
+    id: CHANNEL_ID,
+    projectId: PROJECT_ID,
+    kind: 'department',
+    name: '#planning',
+    department: 'planning',
+    maxRounds,
+    handoffMode: 'check',
+    pinned: false,
+    archived: false,
+    createdAt: 0,
+    updatedAt: 0,
+  } as unknown as Channel;
 }
 
-function buildMocks(): Mocks {
-  const session = buildSession();
+function buildDeps(
+  overrides: Partial<MeetingOrchestratorDeps> = {},
+): MeetingOrchestratorDeps {
+  const session = overrides.session ?? buildSession();
 
   const turnExecutor = {
-    executeTurn: vi.fn(async () => {}),
+    requestOpinionGather: vi.fn(async (speaker, c) => ({
+      kind: 'ok' as const,
+      providerId: speaker.id,
+      messageId: 'msg',
+      payload: {
+        name: speaker.displayName,
+        label: c.suggestedLabel,
+        opinions: [{ title: 't1', content: 'c1', rationale: 'r1' }],
+      },
+    })),
+    requestQuickVote: vi.fn(async (speaker, c) => ({
+      kind: 'ok' as const,
+      providerId: speaker.id,
+      messageId: 'msg',
+      payload: {
+        name: speaker.displayName,
+        label: c.suggestedLabel,
+        quick_votes: [{ target_id: 'ITEM_001', vote: 'agree' as const }],
+      },
+    })),
+    requestFreeDiscussion: vi.fn(async (speaker, c) => ({
+      kind: 'ok' as const,
+      providerId: speaker.id,
+      messageId: 'msg',
+      payload: {
+        name: speaker.displayName,
+        label: c.suggestedLabel,
+        votes: [{ target_id: 'ITEM_001', vote: 'agree' as const }],
+        additions: [],
+      },
+    })),
     abort: vi.fn(),
   } as unknown as MeetingTurnExecutor;
 
   const streamBridge = {
+    emitMeetingPhaseChanged: vi.fn(),
     emitMeetingStateChanged: vi.fn(),
     emitMeetingTurnStart: vi.fn(),
     emitMeetingTurnToken: vi.fn(),
     emitMeetingTurnDone: vi.fn(),
     emitMeetingError: vi.fn(),
+    emitMeetingTurnSkipped: vi.fn(),
   } as unknown as StreamBridge;
 
   const messageService = {
     append: vi.fn((input) => ({
-      id: 'msg-1',
+      id: 'msg',
       ...input,
       meta: input.meta ?? null,
       createdAt: Date.now(),
@@ -114,824 +137,236 @@ function buildMocks(): Mocks {
   } as unknown as MessageService;
 
   const meetingService = {
-    get: vi.fn(() => ({
-      id: MEETING_ID,
-      channelId: CHANNEL_ID,
-      topic: 'Ship v1.0 this week',
-      state: 'DONE',
-      stateSnapshotJson: null,
-      startedAt: Date.now() - 5 * 60_000,
-      endedAt: null,
-      outcome: null,
-    })),
-    finish: vi.fn(),
     updateState: vi.fn(),
+    finish: vi.fn(),
   } as unknown as MeetingService;
 
   const channelService = {
-    listByProject: vi.fn(() => [
-      { id: MINUTES_CHANNEL_ID, kind: 'system_minutes', name: '#회의록' },
-      { id: GENERAL_CHANNEL_ID, kind: 'system_general', name: '#일반' },
-      { id: CHANNEL_ID, kind: 'user', name: '#작업' },
-    ]),
+    get: vi.fn(() => makeChannel(5)),
   } as unknown as ChannelService;
 
-  // R9-Task8: finishMeeting(accepted) calls `projects.get` to look up
-  // autonomyMode before posting to `#일반`. Default to a `manual` project
-  // so the existing R6/R7 assertions stay green; tests that exercise
-  // auto_toggle/queue override this mock explicitly.
-  // R11-Task10: consumePendingAdvisory is invoked by run() right after
-  // session.start(). Default returns null so the existing tests behave
-  // identically; advisory-specific tests override this mock to assert
-  // the system message prepend path.
   const projectService = {
-    setAutonomy: vi.fn(),
-    consumePendingAdvisory: vi.fn(() => null as string | null),
-    get: vi.fn(() => ({
-      id: PROJECT_ID,
-      slug: 'proj',
-      name: 'Test Project',
-      description: '',
-      kind: 'new' as const,
-      externalLink: null,
-      permissionMode: 'hybrid' as const,
-      autonomyMode: 'manual' as const,
-      status: 'active' as const,
-      createdAt: Date.now(),
-      archivedAt: null,
-    })),
+    consumePendingAdvisory: vi.fn(() => null),
   } as unknown as ProjectService;
 
-  // R7-Task9: the orchestrator now subscribes to ApprovalService
-  // 'decided' events for the consensus gate. Use a real EventEmitter so
-  // tests can emit synthetic decisions without reaching into private
-  // state. `create` returns a fake ApprovalItem with a predictable id so
-  // the test assertion can match against `stream:approval-decided` style
-  // payloads.
-  const approvalEmitter = new EventEmitter();
-  let approvalIdCounter = 0;
-  const approvalRows: ApprovalItem[] = [];
-  const approvalCreate = vi.fn((input: Record<string, unknown>) => {
-    approvalIdCounter += 1;
-    const row: ApprovalItem = {
-      id: `appr-${approvalIdCounter}`,
-      kind: (input.kind as ApprovalItem['kind']) ?? 'consensus_decision',
-      projectId: (input.projectId as string | null) ?? null,
-      channelId: (input.channelId as string | null) ?? null,
-      meetingId: (input.meetingId as string | null) ?? null,
-      requesterId: (input.requesterId as string | null) ?? null,
-      payload: input.payload ?? null,
-      status: 'pending',
-      decisionComment: null,
-      createdAt: Date.now(),
-      decidedAt: null,
-    };
-    approvalRows.push(row);
-    return row;
-  });
-  const approvalExpire = vi.fn((id: string) => {
-    const row = approvalRows.find((r) => r.id === id);
-    if (row) {
-      row.status = 'expired';
-      row.decidedAt = Date.now();
-    }
-  });
-  const approvalService = Object.assign(approvalEmitter, {
-    create: approvalCreate,
-    expire: approvalExpire,
-    approvalRows,
-  }) as unknown as ApprovalService;
-
   const notificationService = {
-    show: vi.fn(() => null),
+    show: vi.fn(),
   } as unknown as NotificationService;
 
-  const cbOn = vi.fn().mockReturnThis();
-  const cbOff = vi.fn().mockReturnThis();
-  const circuitBreaker = {
-    on: cbOn,
-    off: cbOff,
-  } as unknown as CircuitBreaker;
+  const opinionService = {
+    nextLabelHint: vi.fn(() => 1),
+    gather: vi.fn(() => ({ meetingId: MEETING_ID, inserted: [] })),
+    tally: vi.fn(() => ({
+      meetingId: MEETING_ID,
+      rootCount: 0,
+      totalCount: 0,
+      tree: [],
+      screenToUuid: {},
+      uuidToScreen: {},
+    })),
+    quickVote: vi.fn(() => ({
+      meetingId: MEETING_ID,
+      agreed: [],
+      unresolved: [],
+      votesInserted: 0,
+    })),
+    freeDiscussionRound: vi.fn(() => ({
+      meetingId: MEETING_ID,
+      opinionId: 'op',
+      agreed: true,
+      additions: [],
+      votesInserted: 0,
+    })),
+  } as unknown as OpinionService;
+
+  const meetingMinutesService = {
+    compose: vi.fn(async () => ({
+      body: '# minutes',
+      source: 'fallback' as const,
+      providerId: null,
+      minutesPath: '/tmp/minutes.md',
+      truncationDetected: false,
+    })),
+  } as unknown as MeetingMinutesService;
 
   return {
     session,
-    turnExecutor,
-    streamBridge,
-    messageService,
-    meetingService,
-    channelService,
-    projectService,
-    approvalService,
-    notificationService,
-    circuitBreaker,
-    listeners: {
-      onOff: vi.fn(),
-      circuitBreakerOn: cbOn,
-      circuitBreakerOff: cbOff,
-    },
+    turnExecutor: overrides.turnExecutor ?? turnExecutor,
+    streamBridge: overrides.streamBridge ?? streamBridge,
+    messageService: overrides.messageService ?? messageService,
+    meetingService: overrides.meetingService ?? meetingService,
+    channelService: overrides.channelService ?? channelService,
+    projectService: overrides.projectService ?? projectService,
+    notificationService: overrides.notificationService ?? notificationService,
+    opinionService: overrides.opinionService ?? opinionService,
+    meetingMinutesService:
+      overrides.meetingMinutesService ?? meetingMinutesService,
+    interTurnDelayMs: 0,
+    onFinalized: overrides.onFinalized,
   };
 }
 
-function buildOrchestrator(mocks: Mocks): MeetingOrchestrator {
-  return new MeetingOrchestrator({
-    session: mocks.session,
-    turnExecutor: mocks.turnExecutor,
-    streamBridge: mocks.streamBridge,
-    messageService: mocks.messageService,
-    meetingService: mocks.meetingService,
-    channelService: mocks.channelService,
-    projectService: mocks.projectService,
-    approvalService: mocks.approvalService,
-    notificationService: mocks.notificationService,
-    circuitBreaker: mocks.circuitBreaker,
-    interTurnDelayMs: 0,
-  });
-}
+describe('MeetingOrchestrator — happy-path phase loop', () => {
+  it('runs gather → tally → quick_vote → compose_minutes → handoff → done', async () => {
+    const deps = buildDeps();
+    const orchestrator = new MeetingOrchestrator(deps);
+    await orchestrator.run();
 
-describe('MeetingOrchestrator — DI contract', () => {
-  it('constructs with all required DI fields', () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    expect(orc).toBeInstanceOf(MeetingOrchestrator);
-    expect(orc.isRunning).toBe(false);
-  });
-});
-
-describe('MeetingOrchestrator — loop dispatch', () => {
-  let mocks: Mocks;
-  let orc: MeetingOrchestrator;
-
-  beforeEach(() => {
-    mocks = buildMocks();
-    orc = buildOrchestrator(mocks);
-  });
-
-  afterEach(() => {
-    orc.stop();
-  });
-
-  it('executes at least one turn per AI participant on CONVERSATION', async () => {
-    await orc.run();
-    // 2 AI participants × one pass before the SSM transitions out of
-    // CONVERSATION = 2 turn calls.
-    expect(
-      (mocks.turnExecutor.executeTurn as ReturnType<typeof vi.fn>).mock.calls.length,
-    ).toBeGreaterThanOrEqual(2);
-  });
-
-  it('emits stream:meeting-state-changed on SSM transitions', async () => {
-    await orc.run();
-    expect(mocks.streamBridge.emitMeetingStateChanged).toHaveBeenCalled();
-    const firstCall = (mocks.streamBridge.emitMeetingStateChanged as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(firstCall).toMatchObject({
-      meetingId: MEETING_ID,
-      channelId: CHANNEL_ID,
-    });
-  });
-
-  it('breaks the loop when SSM enters a WAIT state', async () => {
-    // Pre-transition SSM to MODE_TRANSITION_PENDING via the ROUND_COMPLETE
-    // path with majority-work judgments.
-    const ssm = mocks.session.sessionMachine;
-    for (const p of mocks.session.participants.filter((x) => x.id !== 'user')) {
-      ssm.recordModeJudgment({
-        participantId: p.id,
-        participantName: p.displayName,
-        judgment: 'work',
-        reason: 'code_change',
-      });
-    }
-    ssm.transition('ROUND_COMPLETE');
-    // Now SSM should be at MODE_TRANSITION_PENDING — run should exit
-    // without calling executeTurn.
-    await orc.run();
-    expect(mocks.turnExecutor.executeTurn).not.toHaveBeenCalled();
-  });
-
-  it('second run() call while already running is a no-op', async () => {
-    const p1 = orc.run();
-    const p2 = orc.run();
-    await Promise.all([p1, p2]);
-    // We can't easily assert "no-op" but we CAN assert the number of
-    // turn calls stays within the single-run expectation.
-    expect(
-      (mocks.turnExecutor.executeTurn as ReturnType<typeof vi.fn>).mock.calls.length,
-    ).toBeLessThan(10);
-  });
-});
-
-describe('MeetingOrchestrator — terminal handling', () => {
-  it('posts composed minutes to #회의록 on FAILED', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    const runPromise = orc.run();
-
-    // Force SSM to FAILED under the live subscription so the terminal
-    // listener's post path exercises.
-    mocks.session.sessionMachine.setProposal('Approved plan body.');
-    mocks.session.sessionMachine.transition('ERROR');
-
-    await runPromise;
-
-    expect(mocks.messageService.append).toHaveBeenCalled();
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    // v3-side-effects posts a terse placeholder; the orchestrator
-    // posts the composed minutes on top. Locate the richer one so the
-    // assertion stays stable after R10 collapses them.
-    const minutesCall = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string; content: string };
-      return p.channelId === MINUTES_CHANNEL_ID && p.content.startsWith('## 회의 #');
-    });
-    expect(minutesCall).toBeDefined();
-    const payload = minutesCall![0] as {
-      channelId: string;
-      authorKind: string;
-      content: string;
-    };
-    expect(payload.authorKind).toBe('system');
-    expect(payload.content).toContain('**참여자**:');
-    expect(payload.content).toContain('SSM 최종 상태**: FAILED');
-
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
-      MEETING_ID,
-      'rejected',
-      expect.any(String),
-    );
-  });
-
-  it('skips the minutes post when no #회의록 channel exists', async () => {
-    const mocks2 = buildMocks();
-    (mocks2.channelService.listByProject as ReturnType<typeof vi.fn>).mockReturnValue([
-      { id: CHANNEL_ID, kind: 'user', name: '#일반' },
-    ]);
-    const orc2 = buildOrchestrator(mocks2);
-    const runPromise = orc2.run();
-
-    const ssm = mocks2.session.sessionMachine;
-    ssm.transition('ERROR');
-
-    await runPromise;
-
-    const appendCalls = (mocks2.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const minutesCall = appendCalls.find(
-      (c) => (c[0] as { channelId: string }).channelId === MINUTES_CHANNEL_ID,
-    );
-    expect(minutesCall).toBeUndefined();
-    // finish() still runs — minutes post is best-effort.
-    expect(mocks2.meetingService.finish).toHaveBeenCalled();
-  });
-
-  it('finishes the meeting with outcome=rejected on FAILED', async () => {
-    const mocks3 = buildMocks();
-    const orc3 = buildOrchestrator(mocks3);
-    const runPromise = orc3.run();
-    mocks3.session.sessionMachine.transition('ERROR');
-    await runPromise;
-
-    expect(mocks3.meetingService.finish).toHaveBeenCalledWith(
-      MEETING_ID,
-      'rejected',
-      expect.any(String),
-    );
-  });
-
-  // ── R9-Task7: onFinalized callback ────────────────────────────────
-
-  it('invokes onFinalized with meeting + project + outcome after FAILED finish', async () => {
-    const mocks = buildMocks();
-    const onFinalized = vi.fn(async () => {});
-    const orc = new MeetingOrchestrator({
-      session: mocks.session,
-      turnExecutor: mocks.turnExecutor,
-      streamBridge: mocks.streamBridge,
-      messageService: mocks.messageService,
-      meetingService: mocks.meetingService,
-      channelService: mocks.channelService,
-      projectService: mocks.projectService,
-      approvalService: mocks.approvalService,
-      notificationService: mocks.notificationService,
-      circuitBreaker: mocks.circuitBreaker,
-      interTurnDelayMs: 0,
-      onFinalized,
-    });
-
-    const runPromise = orc.run();
-    mocks.session.sessionMachine.transition('ERROR');
-    await runPromise;
-    // onFinalized runs fire-and-forget inside the finalise path; drain
-    // the microtask queue so the assertion stabilises.
-    await Promise.resolve();
-
-    expect(onFinalized).toHaveBeenCalledTimes(1);
-    expect(onFinalized).toHaveBeenCalledWith({
-      meetingId: MEETING_ID,
-      projectId: PROJECT_ID,
-      channelId: CHANNEL_ID,
-      outcome: 'rejected',
-    });
-  });
-
-  it('swallows onFinalized callback errors — meeting finish stays authoritative', async () => {
-    const mocks = buildMocks();
-    const onFinalized = vi
-      .fn(async () => {
-        throw new Error('queue hand-off broke');
-      });
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
-    const orc = new MeetingOrchestrator({
-      session: mocks.session,
-      turnExecutor: mocks.turnExecutor,
-      streamBridge: mocks.streamBridge,
-      messageService: mocks.messageService,
-      meetingService: mocks.meetingService,
-      channelService: mocks.channelService,
-      projectService: mocks.projectService,
-      approvalService: mocks.approvalService,
-      notificationService: mocks.notificationService,
-      circuitBreaker: mocks.circuitBreaker,
-      interTurnDelayMs: 0,
-      onFinalized,
-    });
-
-    const runPromise = orc.run();
-    mocks.session.sessionMachine.transition('ERROR');
-    await runPromise;
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(onFinalized).toHaveBeenCalled();
-    expect(mocks.meetingService.finish).toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('onFinalized callback threw'),
-      expect.any(Object),
-    );
-
-    warn.mockRestore();
-  });
-});
-
-describe('MeetingOrchestrator — R7-Task9 consensus_decision approval gate', () => {
-  function driveTerminalDone(
-    orc: MeetingOrchestrator,
-    snapshot: { state: 'DONE'; proposal?: string; votes?: unknown },
-  ): void {
-    // Directly invoke the private terminal handler — the full SSM walk
-    // from CONVERSATION to DONE is overkill for this unit-test slice.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (orc as any).handleTerminal({
-      state: 'DONE',
-      proposal: snapshot.proposal ?? 'Approved plan',
-      votes: snapshot.votes ?? [],
-    });
-  }
-
-  it('DONE → opens consensus_decision approval row (no #회의록 post yet)', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '배포는 자정' });
-
-    await Promise.resolve(); // flush microtasks
-    expect(mocks.approvalService.create).toHaveBeenCalledTimes(1);
-    const createCall = (mocks.approvalService.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(createCall.kind).toBe('consensus_decision');
-    expect(createCall.meetingId).toBe(MEETING_ID);
-    expect(createCall.channelId).toBe(CHANNEL_ID);
-    expect(createCall.projectId).toBe(PROJECT_ID);
-    const payload = createCall.payload as {
-      kind: string;
-      finalText: string;
-      snapshotHash: string;
-      votes: { yes: number; no: number; pending: number };
-    };
-    expect(payload.kind).toBe('consensus_decision');
-    expect(payload.finalText).toBe('배포는 자정');
-    expect(payload.snapshotHash.length).toBeGreaterThan(0);
-
-    // #회의록 post / finish must wait for the decision.
-    expect(mocks.messageService.append).not.toHaveBeenCalled();
-    expect(mocks.meetingService.finish).not.toHaveBeenCalled();
-  });
-
-  it('DONE → approve → posts composed minutes + finish(accepted)', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '배포 계획' });
-    await Promise.resolve();
-
-    const approvalId = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] })
-      .approvalRows[0].id;
-
-    // Emit decision.
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...((mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0]), status: 'approved' },
-      decision: 'approve',
-      comment: null,
-    });
-
-    // flush microtasks (postMinutes is async)
-    await new Promise((r) => setImmediate(r));
-
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const minutesCall = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string; content: string };
-      return p.channelId === MINUTES_CHANNEL_ID && p.content.startsWith('## 회의 #');
-    });
-    expect(minutesCall).toBeDefined();
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+    // 2 명의 AI participant 각각 gather + quick_vote 1 회씩 호출.
+    expect(deps.turnExecutor.requestOpinionGather).toHaveBeenCalledTimes(2);
+    expect(deps.turnExecutor.requestQuickVote).toHaveBeenCalledTimes(2);
+    // free_discussion skip — quickVote.unresolved = [].
+    expect(deps.turnExecutor.requestFreeDiscussion).not.toHaveBeenCalled();
+    expect(deps.meetingMinutesService.compose).toHaveBeenCalledTimes(1);
+    expect(deps.meetingService.finish).toHaveBeenCalledWith(
       MEETING_ID,
       'accepted',
-      expect.any(String),
+      null,
     );
-    void approvalId;
+    expect(deps.streamBridge.emitMeetingPhaseChanged).toHaveBeenCalled();
   });
 
-  it('DONE → conditional → posts composed minutes + finish(accepted) (comment handled by injector)', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
+  it('enters free_discussion when quickVote leaves unresolved opinions', async () => {
+    const deps = buildDeps();
+    const opinionService = {
+      nextLabelHint: vi.fn(() => 1),
+      gather: vi.fn(() => ({ meetingId: MEETING_ID, inserted: [] })),
+      tally: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        rootCount: 1,
+        totalCount: 1,
+        tree: [
+          {
+            opinion: {
+              id: 'op-1',
+              parentId: null,
+              meetingId: MEETING_ID,
+              channelId: CHANNEL_ID,
+              kind: 'root',
+              authorProviderId: 'ai-1',
+              authorLabel: 'ai-1_1',
+              title: 't1',
+              content: 'c1',
+              rationale: 'r1',
+              status: 'pending',
+              exclusionReason: null,
+              round: 0,
+              createdAt: 0,
+              updatedAt: 0,
+            },
+            screenId: 'ITEM_001',
+            depth: 0,
+            children: [],
+          },
+        ],
+        screenToUuid: { ITEM_001: 'op-1' },
+        uuidToScreen: { 'op-1': 'ITEM_001' },
+      })),
+      quickVote: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        agreed: [],
+        unresolved: ['op-1'],
+        votesInserted: 0,
+      })),
+      freeDiscussionRound: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        opinionId: 'op-1',
+        agreed: true,
+        additions: [],
+        votesInserted: 0,
+      })),
+    } as unknown as OpinionService;
 
-    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...row, status: 'approved' },
-      decision: 'conditional',
-      comment: '문서 검토 후 반영',
+    const orchestrator = new MeetingOrchestrator({
+      ...deps,
+      opinionService,
     });
-    await new Promise((r) => setImmediate(r));
+    await orchestrator.run();
 
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
-      MEETING_ID,
-      'accepted',
-      expect.any(String),
-    );
+    expect(deps.turnExecutor.requestFreeDiscussion).toHaveBeenCalled();
+    // 합의 도달 → 다음 round 진입 X. 1 라운드만 (2 명 호출).
+    expect(deps.turnExecutor.requestFreeDiscussion).toHaveBeenCalledTimes(2);
+    expect(deps.meetingMinutesService.compose).toHaveBeenCalled();
   });
+});
 
-  it('DONE → reject → posts rejection message + finish(rejected)', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
+describe('MeetingOrchestrator — abort handling', () => {
+  it('stop() flips session.aborted and finalize is called with aborted', async () => {
+    const deps = buildDeps();
+    const orchestrator = new MeetingOrchestrator(deps);
 
-    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...row, status: 'rejected' },
-      decision: 'reject',
-      comment: '보안 감사 필요',
+    // 첫 gather turn 직후 stop. 이후 phase 진입 가드에서 자연 abort.
+    (deps.turnExecutor.requestOpinionGather as unknown as ReturnType<
+      typeof vi.fn
+    >).mockImplementation(async (speaker: Participant) => {
+      orchestrator.stop();
+      return {
+        kind: 'skipped',
+        providerId: speaker.id,
+        reason: 'aborted',
+      };
     });
-    await new Promise((r) => setImmediate(r));
 
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const rejectionCall = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string; content: string };
-      return (
-        p.channelId === MINUTES_CHANNEL_ID &&
-        p.content.includes('회의 합의 거절됨')
-      );
-    });
-    expect(rejectionCall).toBeDefined();
-    expect(((rejectionCall as unknown) as [{ content: string }])[0].content).toContain('보안 감사 필요');
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
-      MEETING_ID,
-      'rejected',
-      expect.any(String),
-    );
-  });
+    await orchestrator.run();
 
-  it('DONE → timeout → expires approval + posts timeout message + finish(aborted)', async () => {
-    const mocks = buildMocks();
-    const orc = new MeetingOrchestrator({
-      session: mocks.session,
-      turnExecutor: mocks.turnExecutor,
-      streamBridge: mocks.streamBridge,
-      messageService: mocks.messageService,
-      meetingService: mocks.meetingService,
-      channelService: mocks.channelService,
-      projectService: mocks.projectService,
-      approvalService: mocks.approvalService,
-      notificationService: mocks.notificationService,
-      circuitBreaker: mocks.circuitBreaker,
-      interTurnDelayMs: 0,
-      consensusDecisionTimeoutMs: 5, // 5ms — fires immediately in tests
-    });
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-
-    // Wait past the timeout.
-    await new Promise((r) => setTimeout(r, 25));
-
-    // Approval expired via expire() call.
-    const approvalId = (
-      (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] })
-        .approvalRows[0]?.id
-    );
-    expect(
-      (mocks.approvalService as unknown as { expire: ReturnType<typeof vi.fn> }).expire,
-    ).toHaveBeenCalledWith(approvalId);
-
-    // Post to #회의록 with timeout message.
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const timeoutCall = appendCalls.find((c) => {
-      const p = c[0] as { content: string };
-      return p.content.includes('대기 시간 초과');
-    });
-    expect(timeoutCall).toBeDefined();
-
-    // finish() with aborted outcome.
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
+    expect(deps.session.aborted).toBe(true);
+    expect(deps.meetingService.finish).toHaveBeenCalledWith(
       MEETING_ID,
       'aborted',
-      expect.any(String),
+      null,
     );
-  });
-
-  it('R9-Task8: DONE → approve → manual project — no #일반 post (regression guard)', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
-
-    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...row, status: 'approved' },
-      decision: 'approve',
-      comment: null,
-    });
-    await new Promise((r) => setImmediate(r));
-
-    // Manual autonomy must NOT post to #일반 (system_general).
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const generalPost = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string };
-      return p.channelId === GENERAL_CHANNEL_ID;
-    });
-    expect(generalPost).toBeUndefined();
-  });
-
-  it('R9-Task8: DONE → approve → auto_toggle project — posts #일반 completion message', async () => {
-    const mocks = buildMocks();
-    (mocks.projectService.get as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: PROJECT_ID,
-      slug: 'proj',
-      name: 'Test Project',
-      description: '',
-      kind: 'new',
-      externalLink: null,
-      permissionMode: 'hybrid',
-      autonomyMode: 'auto_toggle',
-      status: 'active',
-      createdAt: Date.now(),
-      archivedAt: null,
-    });
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
-
-    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...row, status: 'approved' },
-      decision: 'approve',
-      comment: null,
-    });
-    await new Promise((r) => setImmediate(r));
-
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const generalPost = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string; content: string };
-      return (
-        p.channelId === GENERAL_CHANNEL_ID &&
-        p.content.includes('Ship v1.0 this week')
-      );
-    });
-    expect(generalPost).toBeDefined();
-    const generalPayload = (generalPost as unknown as [
-      { authorKind: string; role: string; meetingId: string },
-    ])[0];
-    expect(generalPayload.authorKind).toBe('system');
-    expect(generalPayload.role).toBe('system');
-    expect(generalPayload.meetingId).toBe(MEETING_ID);
-
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
-      MEETING_ID,
-      'accepted',
-      expect.any(String),
-    );
-  });
-
-  it('R9-Task8: DONE → approve → queue project — posts #일반 completion message', async () => {
-    const mocks = buildMocks();
-    (mocks.projectService.get as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: PROJECT_ID,
-      slug: 'proj',
-      name: 'Test Project',
-      description: '',
-      kind: 'new',
-      externalLink: null,
-      permissionMode: 'hybrid',
-      autonomyMode: 'queue',
-      status: 'active',
-      createdAt: Date.now(),
-      archivedAt: null,
-    });
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
-
-    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...row, status: 'approved' },
-      decision: 'approve',
-      comment: null,
-    });
-    await new Promise((r) => setImmediate(r));
-
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const generalPost = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string };
-      return p.channelId === GENERAL_CHANNEL_ID;
-    });
-    expect(generalPost).toBeDefined();
-  });
-
-  it('R9-Task8: DONE → reject → auto_toggle project — skips #일반 post (outcome=rejected)', async () => {
-    const mocks = buildMocks();
-    (mocks.projectService.get as ReturnType<typeof vi.fn>).mockReturnValue({
-      id: PROJECT_ID,
-      slug: 'proj',
-      name: 'Test Project',
-      description: '',
-      kind: 'new',
-      externalLink: null,
-      permissionMode: 'hybrid',
-      autonomyMode: 'auto_toggle',
-      status: 'active',
-      createdAt: Date.now(),
-      archivedAt: null,
-    });
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
-
-    const row = (mocks.approvalService as unknown as { approvalRows: ApprovalItem[] }).approvalRows[0];
-    (mocks.approvalService as unknown as EventEmitter).emit(APPROVAL_DECIDED_EVENT, {
-      item: { ...row, status: 'rejected' },
-      decision: 'reject',
-      comment: '반려',
-    });
-    await new Promise((r) => setImmediate(r));
-
-    const appendCalls = (mocks.messageService.append as ReturnType<typeof vi.fn>).mock.calls;
-    const generalPost = appendCalls.find((c) => {
-      const p = c[0] as { channelId: string };
-      return p.channelId === GENERAL_CHANNEL_ID;
-    });
-    expect(generalPost).toBeUndefined();
-    expect(mocks.meetingService.finish).toHaveBeenCalledWith(
-      MEETING_ID,
-      'rejected',
-      expect.any(String),
-    );
-  });
-
-  it('stop() after DONE approval opened disposes listener + timer', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    driveTerminalDone(orc, { state: 'DONE', proposal: '제안' });
-    await Promise.resolve();
-
-    const listenerCountBefore = (
-      mocks.approvalService as unknown as EventEmitter
-    ).listenerCount(APPROVAL_DECIDED_EVENT);
-    expect(listenerCountBefore).toBe(1);
-
-    orc.stop();
-
-    const listenerCountAfter = (
-      mocks.approvalService as unknown as EventEmitter
-    ).listenerCount(APPROVAL_DECIDED_EVENT);
-    expect(listenerCountAfter).toBe(0);
+    expect(deps.turnExecutor.requestFreeDiscussion).not.toHaveBeenCalled();
+    expect(deps.meetingMinutesService.compose).not.toHaveBeenCalled();
   });
 });
 
-describe('MeetingOrchestrator — R11-Task10 advisory consume on run()', () => {
-  it('null advisory → no system message append (existing flow unchanged)', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    await orc.run();
-    expect(mocks.projectService.consumePendingAdvisory).toHaveBeenCalledWith(
-      PROJECT_ID,
-    );
-    const appendSpy = mocks.messageService.append as ReturnType<typeof vi.fn>;
-    const advisoryAppends = appendSpy.mock.calls.filter((args) =>
-      typeof args[0]?.content === 'string' &&
-      args[0].content.includes('권한 모드 변경'),
-    );
-    expect(advisoryAppends).toHaveLength(0);
-  });
+describe('MeetingOrchestrator — onFinalized hook', () => {
+  it('fires the onFinalized callback with outcome=accepted on happy-path', async () => {
+    const onFinalized = vi.fn();
+    const deps = buildDeps({ onFinalized });
+    const orchestrator = new MeetingOrchestrator(deps);
+    await orchestrator.run();
+    // onFinalized 가 fire-and-forget 이라 microtask 1 회 양보.
+    await Promise.resolve();
+    await Promise.resolve();
 
-  it('non-null advisory → system message prepended once with prefix + comment', async () => {
-    const mocks = buildMocks();
-    (mocks.projectService.consumePendingAdvisory as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce('src/external/ 만 read-only')
-      .mockReturnValue(null);
-    const orc = buildOrchestrator(mocks);
-    await orc.run();
-
-    const appendSpy = mocks.messageService.append as ReturnType<typeof vi.fn>;
-    const advisoryAppends = appendSpy.mock.calls.filter((args) =>
-      typeof args[0]?.content === 'string' &&
-      args[0].content.includes('src/external/ 만 read-only'),
+    expect(onFinalized).toHaveBeenCalledWith(
+      expect.objectContaining({
+        meetingId: MEETING_ID,
+        projectId: PROJECT_ID,
+        channelId: CHANNEL_ID,
+        outcome: 'accepted',
+      }),
     );
-    expect(advisoryAppends).toHaveLength(1);
-    const call = advisoryAppends[0][0];
-    expect(call.channelId).toBe(CHANNEL_ID);
-    expect(call.meetingId).toBe(MEETING_ID);
-    expect(call.authorKind).toBe('system');
-    expect(call.role).toBe('system');
-    // prefix 가 붙어 있어야 한다 (notification-labels modeTransitionAdvisoryPrefix).
-    expect(call.content).toMatch(/\[권한 모드 변경/);
-  });
-
-  it('consume is invoked exactly once per run() — second run() pulls again', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    await orc.run();
-    expect(mocks.projectService.consumePendingAdvisory).toHaveBeenCalledTimes(1);
-    // run() that's already finished can be invoked again — consume runs again.
-    await orc.run().catch(() => {});
-    expect(
-      (mocks.projectService.consumePendingAdvisory as ReturnType<typeof vi.fn>)
-        .mock.calls.length,
-    ).toBeGreaterThanOrEqual(1);
-  });
-
-  it('append failure is swallowed (warn) — meeting still proceeds', async () => {
-    const mocks = buildMocks();
-    (mocks.projectService.consumePendingAdvisory as ReturnType<typeof vi.fn>)
-      .mockReturnValueOnce('advisory body')
-      .mockReturnValue(null);
-    // Make the FIRST append (the advisory one) throw. Subsequent appends
-    // (minutes etc.) keep working with a passthrough.
-    let appendCallIdx = 0;
-    (mocks.messageService as unknown as { append: ReturnType<typeof vi.fn> }).append = vi.fn(
-      (input: Record<string, unknown>) => {
-        appendCallIdx += 1;
-        if (appendCallIdx === 1) {
-          throw new Error('synthetic append failure');
-        }
-        return {
-          id: `msg-${appendCallIdx}`,
-          ...input,
-          meta: input.meta ?? null,
-          createdAt: Date.now(),
-        };
-      },
-    );
-
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const orc = buildOrchestrator(mocks);
-    await expect(orc.run()).resolves.not.toThrow();
-    expect(warnSpy).toHaveBeenCalled();
-    const advisoryWarn = warnSpy.mock.calls.find((args) =>
-      typeof args[0] === 'string' && args[0].includes('advisory append failed'),
-    );
-    expect(advisoryWarn).toBeDefined();
-    warnSpy.mockRestore();
   });
 });
 
-describe('MeetingOrchestrator — lifecycle', () => {
-  it('stop() calls turnExecutor.abort() and marks running=false', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    void orc.run();
-    orc.stop();
-    expect(mocks.turnExecutor.abort).toHaveBeenCalled();
-    expect(orc.isRunning).toBe(false);
-  });
-
-  it('pause()/resume() toggle session turn-manager state', async () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    mocks.session.start();
-    orc.pause();
-    expect(mocks.session.turnManager.state).toBe('paused');
-    orc.resume();
-    expect(mocks.session.turnManager.state).toBe('running');
-  });
-
-  it('handleUserInterjection(message) pushes the message and flags the turn manager (D-A T2.5)', () => {
-    const mocks = buildMocks();
-    const orc = buildOrchestrator(mocks);
-    // T2.5: handleUserInterjection now requires a ParticipantMessage and
-    // forwards the body to session._messages so the next AI turn's prompt
-    // sees it. The smoke test verifies both legs.
-    const userMsg = {
-      id: 'um1',
-      role: 'user' as const,
-      content: 'follow-up from the user',
+describe('MeetingOrchestrator — caller surface', () => {
+  it('handleUserInterjection pushes user message to session buffer', () => {
+    const deps = buildDeps();
+    const orchestrator = new MeetingOrchestrator(deps);
+    const before = deps.session.messages.length;
+    orchestrator.handleUserInterjection({
+      id: 'm',
+      role: 'user',
+      content: 'hi',
       participantId: 'user',
-      participantName: '사용자',
-    };
-    expect(() => orc.handleUserInterjection(userMsg)).not.toThrow();
+      participantName: 'User',
+    });
+    expect(deps.session.messages.length).toBe(before + 1);
+  });
+
+  it('injectInitialUserMessage also appends a user message', () => {
+    const deps = buildDeps();
+    const orchestrator = new MeetingOrchestrator(deps);
+    const before = deps.session.messages.length;
+    orchestrator.injectInitialUserMessage({
+      id: 'm',
+      role: 'user',
+      content: 'hello',
+      participantId: 'user',
+      participantName: 'User',
+    });
+    expect(deps.session.messages.length).toBe(before + 1);
   });
 });

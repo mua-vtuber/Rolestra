@@ -71,9 +71,13 @@ export function MemberPanel({
 
   const activeMeeting = useMemo(() => {
     if (activeChannelId === null) return null;
+    // R12-C2 P1.5 — 일반 채널 (#일반) 은 회의 X (spec §11.3). 잔존 active
+    // meeting row 가 있어도 SsmBox empty 가 정직. 신규 생성은 backend
+    // 가드로 차단되지만 옛 row 즉시 회복은 frontend 분기.
+    if (isGeneralChannel) return null;
     if (meetings === null) return null;
     return meetings.find((m) => m.channelId === activeChannelId) ?? null;
-  }, [activeChannelId, meetings]);
+  }, [activeChannelId, isGeneralChannel, meetings]);
 
   const participantCount =
     members === null ? null : members.length;
@@ -133,35 +137,10 @@ export function MemberPanel({
     );
   })();
 
-  if (isGeneralChannel) {
-    return (
-      <div
-        data-testid="member-panel"
-        data-general-channel="true"
-        data-project-id={projectId}
-        data-channel-id={activeChannelId ?? ''}
-        className={clsx(
-          'flex h-full min-h-0 flex-col gap-3 p-3',
-          className,
-        )}
-      >
-        <Card data-testid="member-panel-general-info" className="flex flex-col">
-          <CardBody>
-            <p className="text-sm text-fg-muted">
-              {t('messenger.memberPanel.generalChannelHint', {
-                defaultValue:
-                  '일반 채널은 단순 chat 입니다. 참여자 목록 / 합의 상태는 표시하지 않습니다.',
-              })}
-            </p>
-          </CardBody>
-        </Card>
-      </div>
-    );
-  }
-
   return (
     <div
       data-testid="member-panel"
+      data-general-channel={isGeneralChannel ? 'true' : 'false'}
       data-project-id={projectId}
       data-channel-id={activeChannelId ?? ''}
       className={clsx('flex h-full min-h-0 flex-col gap-3 p-3', className)}
@@ -179,12 +158,21 @@ export function MemberPanel({
         <CardBody>{participantsBody}</CardBody>
       </Card>
 
-      <Card data-testid="member-panel-consensus" className="flex flex-col">
-        <CardHeader heading={t('messenger.memberPanel.consensusTitle')} />
-        <CardBody>
-          <SsmBox meeting={activeMeeting} />
-        </CardBody>
-      </Card>
+      {/* R12-C2 P1.5 follow-up — 일반 채널 (전역 system_general) 은 합의
+          상태 카드 hide. *가벼운 동의/반대 카운터* + `[##본문]` 카드는 P4
+          본격 흐름 land 시점에 등장하며, 그 사이에는 surface 정의가
+          없으므로 카드 자체를 렌더하지 않는다 (R12-C round 4 시점에는
+          panel 통째 안내 문구로 대체됐지만, 사용자 dogfooding 결과 멤버
+          목록 노출 요청으로 *참여자 카드는 유지 + 합의 카드만 hide* 로
+          전환). */}
+      {!isGeneralChannel && (
+        <Card data-testid="member-panel-consensus" className="flex flex-col">
+          <CardHeader heading={t('messenger.memberPanel.consensusTitle')} />
+          <CardBody>
+            <SsmBox meeting={activeMeeting} />
+          </CardBody>
+        </Card>
+      )}
     </div>
   );
 }

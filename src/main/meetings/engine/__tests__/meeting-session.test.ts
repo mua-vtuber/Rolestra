@@ -1,10 +1,19 @@
+/**
+ * MeetingSession 단위 테스트 — R12-C2 T10a 통째 재작성.
+ *
+ * 옛 SSM (`SessionStateMachine`) + DeepDebate / start / pause / resume /
+ * stop 의존 테스트는 새 모델에서 의미 X — 통째 삭제. 새 surface 만 검증.
+ */
+
 import { describe, it, expect } from 'vitest';
 import {
   MeetingSession,
+  SYSTEM_TOPIC_PARTICIPANT_ID,
   type MeetingSessionOptions,
 } from '../meeting-session';
 import type { Participant } from '../../../../shared/engine-types';
 import type { SsmContext } from '../../../../shared/ssm-context-types';
+import type { ParticipantMessage } from '../../../engine/history';
 
 const MEETING_ID = 'mt-1';
 const CHANNEL_ID = 'ch-1';
@@ -47,21 +56,21 @@ function buildOptions(
 
 describe('MeetingSession — construction validation', () => {
   it('rejects empty meetingId', () => {
-    expect(() =>
-      new MeetingSession(buildOptions({ meetingId: '' })),
-    ).toThrow(/meetingId/);
+    expect(() => new MeetingSession(buildOptions({ meetingId: '' }))).toThrow(
+      /meetingId/,
+    );
   });
 
   it('rejects empty channelId', () => {
-    expect(() =>
-      new MeetingSession(buildOptions({ channelId: '' })),
-    ).toThrow(/channelId/);
+    expect(() => new MeetingSession(buildOptions({ channelId: '' }))).toThrow(
+      /channelId/,
+    );
   });
 
   it('rejects empty projectId', () => {
-    expect(() =>
-      new MeetingSession(buildOptions({ projectId: '' })),
-    ).toThrow(/projectId/);
+    expect(() => new MeetingSession(buildOptions({ projectId: '' }))).toThrow(
+      /projectId/,
+    );
   });
 
   it('rejects short topic', () => {
@@ -71,255 +80,173 @@ describe('MeetingSession — construction validation', () => {
   });
 
   it('rejects ssmCtx.meetingId mismatch', () => {
-    expect(() =>
-      new MeetingSession(
-        buildOptions({ ssmCtx: buildCtx({ meetingId: 'wrong' }) }),
-      ),
+    expect(
+      () =>
+        new MeetingSession(
+          buildOptions({ ssmCtx: buildCtx({ meetingId: 'wrong' }) }),
+        ),
     ).toThrow(/ssmCtx\.meetingId/);
   });
 
-  it('rejects ssmCtx.channelId mismatch', () => {
-    expect(() =>
-      new MeetingSession(
-        buildOptions({ ssmCtx: buildCtx({ channelId: 'wrong' }) }),
-      ),
-    ).toThrow(/ssmCtx\.channelId/);
-  });
-
-  it('rejects ssmCtx.projectId mismatch', () => {
-    expect(() =>
-      new MeetingSession(
-        buildOptions({ ssmCtx: buildCtx({ projectId: 'wrong' }) }),
-      ),
-    ).toThrow(/ssmCtx\.projectId/);
-  });
-
-  it('rejects single-AI meeting (R6 D7: participants>=2)', () => {
-    expect(() =>
-      new MeetingSession(buildOptions({ participants: buildParticipants(1) })),
+  it('rejects single-AI meeting (≥ 2 participants required)', () => {
+    expect(
+      () =>
+        new MeetingSession(
+          buildOptions({ participants: buildParticipants(1) }),
+        ),
     ).toThrow(/at least 2/);
-  });
-
-  it('rejects zero-AI meeting even when user sentinel is present', () => {
-    const participants: Participant[] = [
-      { id: 'user', displayName: 'User', isActive: true },
-      { id: 'ai-1', displayName: 'AI 1', providerId: 'ai-1', isActive: true },
-    ];
-    expect(() =>
-      new MeetingSession(buildOptions({ participants })),
-    ).toThrow(/at least 2/);
-  });
-
-  it('accepts exactly 2 AI participants', () => {
-    const session = new MeetingSession(buildOptions());
-    expect(session.meetingId).toBe(MEETING_ID);
-    expect(session.channelId).toBe(CHANNEL_ID);
-    expect(session.projectId).toBe(PROJECT_ID);
-    expect(session.sessionMachine).not.toBeNull();
-  });
-
-  it('accepts user sentinel alongside 2 AI participants', () => {
-    const participants: Participant[] = [
-      { id: 'user', displayName: 'User', isActive: true },
-      ...buildParticipants(2),
-    ];
-    const session = new MeetingSession(buildOptions({ participants }));
-    expect(session.participants).toHaveLength(3);
   });
 });
 
-describe('MeetingSession — state and message management', () => {
-  it('defaults title to topic when not provided', () => {
-    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
-    expect(session.title).toBe('planning');
-  });
-
-  it('honours explicit title override', () => {
-    const session = new MeetingSession(
-      buildOptions({ topic: 'planning', title: 'Sprint Planning' }),
-    );
-    expect(session.title).toBe('Sprint Planning');
-  });
-
-  it('createMessage pushes into messages buffer and returns the row', () => {
+describe('MeetingSession — boot invariants', () => {
+  it('seeds the message buffer with the topic system message', () => {
     const session = new MeetingSession(buildOptions());
-    const msg = session.createMessage({
-      participantId: 'ai-1',
-      participantName: 'AI 1',
-      role: 'assistant',
-      content: 'hello',
-    });
-    // T2.5: constructor injects a topic system message at index 0, so the
-    // assistant message above lands at index 1 (length === 2).
-    expect(session.messages).toHaveLength(2);
-    expect(session.messages[0].role).toBe('system');
-    expect(msg.participantId).toBe('ai-1');
-    expect(msg.content).toBe('hello');
-  });
-
-  it('getMessagesForProvider returns provider-adapted history', () => {
-    const session = new MeetingSession(buildOptions());
-    session.createMessage({
-      participantId: 'ai-1',
-      participantName: 'AI 1',
-      role: 'assistant',
-      content: 'hi',
-    });
-    session.createMessage({
-      participantId: 'ai-2',
-      participantName: 'AI 2',
-      role: 'assistant',
-      content: 'hey',
-    });
-    const forAi1 = session.getMessagesForProvider('ai-1');
-    expect(forAi1.length).toBeGreaterThan(0);
-  });
-});
-
-// ── D-A T2.5 / spec §5.5 — topic prompt + user-message injection ──
-
-describe('MeetingSession — topic prompt injection (D-A T2.5)', () => {
-  it('injects the topic as a system message at index 0', () => {
-    const session = new MeetingSession(buildOptions({ topic: '1+1=2 동의?' }));
     expect(session.messages).toHaveLength(1);
     expect(session.messages[0].role).toBe('system');
-    expect(session.messages[0].content).toContain('1+1=2 동의?');
+    expect(session.messages[0].participantId).toBe(SYSTEM_TOPIC_PARTICIPANT_ID);
+    expect(session.messages[0].content).toContain('Discuss release plan');
   });
 
-  it('topic system message uses the system sentinel participant id', () => {
-    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
-    expect(session.messages[0].participantId).toBe('__system__');
+  it('starts in phase=gather, round=0, opinion=null, not aborted', () => {
+    const session = new MeetingSession(buildOptions());
+    expect(session.currentPhase).toBe('gather');
+    expect(session.currentRound).toBe(0);
+    expect(session.currentOpinionScreenId).toBeNull();
+    expect(session.aborted).toBe(false);
   });
 
-  it('topic system message survives subsequent createMessage calls', () => {
-    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
-    session.createMessage({
-      participantId: 'ai-1',
-      participantName: 'AI 1',
-      role: 'assistant',
-      content: 'first reply',
-    });
-    expect(session.messages).toHaveLength(2);
-    expect(session.messages[0].role).toBe('system');
-    expect(session.messages[1].role).toBe('assistant');
+  it('exposes only AI participants via aiParticipants', () => {
+    const userPart: Participant = {
+      id: 'user',
+      displayName: 'User',
+      providerId: 'user',
+      isActive: true,
+    };
+    const session = new MeetingSession(
+      buildOptions({
+        participants: [...buildParticipants(2), userPart],
+      }),
+    );
+    const ids = session.aiParticipants.map((p) => p.id);
+    expect(ids).toEqual(['ai-1', 'ai-2']);
   });
 });
 
-describe('MeetingSession — interruptWithUserMessage (D-A T2.5)', () => {
-  function buildUserMessage(content: string) {
+describe('MeetingSession — phase / round / opinion screen ID', () => {
+  it('setPhase mutates currentPhase', () => {
+    const session = new MeetingSession(buildOptions());
+    session.setPhase('quick_vote');
+    expect(session.currentPhase).toBe('quick_vote');
+  });
+
+  it('incrementRound / resetRound update the counter', () => {
+    const session = new MeetingSession(buildOptions());
+    session.incrementRound();
+    session.incrementRound();
+    expect(session.currentRound).toBe(2);
+    session.resetRound();
+    expect(session.currentRound).toBe(0);
+  });
+
+  it('setCurrentOpinionScreenId stores nullable value', () => {
+    const session = new MeetingSession(buildOptions());
+    session.setCurrentOpinionScreenId('ITEM_002');
+    expect(session.currentOpinionScreenId).toBe('ITEM_002');
+    session.setCurrentOpinionScreenId(null);
+    expect(session.currentOpinionScreenId).toBeNull();
+  });
+});
+
+describe('MeetingSession — label counter', () => {
+  it('nextLabel emits per-provider sequential labels', () => {
+    const session = new MeetingSession(buildOptions());
+    expect(session.nextLabel('ai-1')).toBe('ai-1_1');
+    expect(session.nextLabel('ai-1')).toBe('ai-1_2');
+    expect(session.nextLabel('ai-2')).toBe('ai-2_1');
+    expect(session.nextLabel('ai-1')).toBe('ai-1_3');
+  });
+
+  it('primeLabelCounter sets next number for next nextLabel call', () => {
+    const session = new MeetingSession(buildOptions());
+    session.primeLabelCounter('ai-1', 5);
+    expect(session.nextLabel('ai-1')).toBe('ai-1_5');
+    expect(session.nextLabel('ai-1')).toBe('ai-1_6');
+  });
+
+  it('primeLabelCounter rejects nextNumber < 1', () => {
+    const session = new MeetingSession(buildOptions());
+    expect(() => session.primeLabelCounter('ai-1', 0)).toThrow(/≥ 1/);
+  });
+});
+
+describe('MeetingSession — abort', () => {
+  it('abort sets aborted=true and phase=aborted', () => {
+    const session = new MeetingSession(buildOptions());
+    session.setPhase('free_discussion');
+    session.abort();
+    expect(session.aborted).toBe(true);
+    expect(session.currentPhase).toBe('aborted');
+  });
+
+  it('abort is idempotent', () => {
+    const session = new MeetingSession(buildOptions());
+    session.abort();
+    session.abort();
+    expect(session.aborted).toBe(true);
+  });
+});
+
+describe('MeetingSession — user message intake', () => {
+  function userMsg(): ParticipantMessage {
     return {
-      id: `um-${content}`,
-      role: 'user' as const,
-      content,
+      id: 'm1',
+      role: 'user',
+      content: 'hi',
       participantId: 'user',
-      participantName: '사용자',
+      participantName: 'User',
     };
   }
 
-  it('pushes the user message onto the buffer in addition to flagging the turn manager', () => {
-    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
-    const msg = buildUserMessage('1+1=2 동의?');
-    session.interruptWithUserMessage(msg);
-    // [topic-system, user-message]
-    expect(session.messages).toHaveLength(2);
-    expect(session.messages[1]).toEqual(msg);
+  it('interruptWithUserMessage pushes a user role', () => {
+    const session = new MeetingSession(buildOptions());
+    const before = session.messages.length;
+    session.interruptWithUserMessage(userMsg());
+    expect(session.messages.length).toBe(before + 1);
+    expect(session.messages[session.messages.length - 1].role).toBe('user');
   });
 
-  it('throws when given a non-user role (defends against prompt contamination)', () => {
-    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
+  it('interruptWithUserMessage rejects non-user role', () => {
+    const session = new MeetingSession(buildOptions());
     expect(() =>
       session.interruptWithUserMessage({
-        id: 'bad',
+        ...userMsg(),
         role: 'assistant',
-        content: 'hi',
-        participantId: 'ai-1',
-        participantName: 'AI 1',
       }),
     ).toThrow(/user/);
   });
 
-  it('multiple interjections accumulate in order', () => {
-    const session = new MeetingSession(buildOptions({ topic: 'planning' }));
-    session.interruptWithUserMessage(buildUserMessage('first'));
-    session.interruptWithUserMessage(buildUserMessage('second'));
-    expect(session.messages.map((m) => m.content)).toEqual([
-      session.messages[0].content, // topic system message
-      'first',
-      'second',
-    ]);
-  });
-});
-
-describe('MeetingSession — SSM wiring', () => {
-  it('forwards setProjectPath to the SSM', () => {
+  it('appendUserMessage rejects non-user role', () => {
     const session = new MeetingSession(buildOptions());
-    session.setProjectPath('/new/path');
-    // Indirect check: SSM retained the call — toInfo() surfaces nothing
-    // path-specific, so we rely on absence of throw.
-    expect(session.sessionMachine).toBeTruthy();
-  });
-
-  it('SSM is constructed and receives ctx with the meeting identity', () => {
-    const session = new MeetingSession(buildOptions());
-    expect(session.sessionMachine).toBeTruthy();
-    expect(session.sessionMachine.ctx.meetingId).toBe(MEETING_ID);
-    expect(session.sessionMachine.ctx.channelId).toBe(CHANNEL_ID);
-    expect(session.sessionMachine.ctx.projectId).toBe(PROJECT_ID);
-  });
-});
-
-describe('MeetingSession — deep debate', () => {
-  it('tracks deep-debate turn count with default budget 30', () => {
-    const session = new MeetingSession(buildOptions());
-    expect(session.deepDebateActive).toBe(false);
-    expect(session.deepDebateTurnsRemaining).toBe(0);
-
-    session.startDeepDebate();
-    expect(session.deepDebateActive).toBe(true);
-    expect(session.deepDebateTurnsRemaining).toBe(30);
-
-    session.recordDeepDebateTurn();
-    expect(session.deepDebateTurnsUsed).toBe(1);
-    expect(session.deepDebateTurnsRemaining).toBe(29);
-
-    session.stopDeepDebate();
-    expect(session.deepDebateActive).toBe(false);
-    expect(session.deepDebateTurnsUsed).toBe(0);
-  });
-
-  it('honours taskSettings.deepDebateTurnBudget override', () => {
-    const session = new MeetingSession(
-      buildOptions({
-        taskSettings: { deepDebateTurnBudget: 5 } as never,
+    expect(() =>
+      session.appendUserMessage({
+        ...userMsg(),
+        role: 'system',
       }),
-    );
-    session.startDeepDebate();
-    expect(session.deepDebateTurnsRemaining).toBe(5);
+    ).toThrow(/user/);
   });
 });
 
-describe('MeetingSession — lifecycle + serialization', () => {
-  it('start/pause/resume/stop forward to turn manager', () => {
+describe('MeetingSession — toInfo', () => {
+  it('produces an IPC-safe projection', () => {
     const session = new MeetingSession(buildOptions());
-    expect(() => session.start()).not.toThrow();
-    expect(() => session.pause()).not.toThrow();
-    expect(() => session.resume()).not.toThrow();
-    expect(() => session.stop()).not.toThrow();
-  });
-
-  it('toInfo exposes identity + metadata, no message bodies', () => {
-    const session = new MeetingSession(buildOptions());
-    session.createMessage({
-      participantId: 'ai-1',
-      participantName: 'AI 1',
-      role: 'assistant',
-      content: 'secret content',
-    });
+    session.setPhase('free_discussion');
+    session.incrementRound();
+    session.setCurrentOpinionScreenId('ITEM_001');
     const info = session.toInfo();
     expect(info.meetingId).toBe(MEETING_ID);
-    expect(info.channelId).toBe(CHANNEL_ID);
-    expect(info.projectId).toBe(PROJECT_ID);
-    // Type-level check: no message bodies in toInfo() payload.
-    expect((info as unknown as { messages?: unknown }).messages).toBeUndefined();
+    expect(info.phase).toBe('free_discussion');
+    expect(info.currentRound).toBe(1);
+    expect(info.currentOpinionScreenId).toBe('ITEM_001');
+    expect(info.aborted).toBe(false);
   });
 });

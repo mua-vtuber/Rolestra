@@ -119,7 +119,7 @@ describe('ApprovalDecisionRouter — mode_transition routing', () => {
   });
 });
 
-describe('ApprovalDecisionRouter — other kinds are skipped (Task 9 handles consensus_decision)', () => {
+describe('ApprovalDecisionRouter — other kinds are skipped', () => {
   it('cli_permission → no apply call', () => {
     const h = makeHarness();
     h.emitDecided({
@@ -131,10 +131,10 @@ describe('ApprovalDecisionRouter — other kinds are skipped (Task 9 handles con
     h.dispose();
   });
 
-  it('consensus_decision → no apply call (R7-Task9 will wire this kind)', () => {
+  it('review_outcome → no apply call', () => {
     const h = makeHarness();
     h.emitDecided({
-      item: makeItem({ kind: 'consensus_decision' }),
+      item: makeItem({ kind: 'review_outcome' }),
       decision: 'approve',
       comment: null,
     });

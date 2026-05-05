@@ -185,9 +185,13 @@ export function Thread({
 
   const activeMeeting = useMemo(() => {
     if (activeChannelId === null) return null;
+    // R12-C2 P1.5 — 일반 채널 (#일반, system_general) 은 회의 X (spec
+    // §11.3). 잔존 active meeting row 가 있어도 MeetingBanner hide 가
+    // 정직. backend 가드는 신규 생성 차단, 본 분기는 옛 row 즉시 회복.
+    if (activeChannel?.kind === 'system_general') return null;
     if (meetings === null) return null;
     return meetings.find((m) => m.channelId === activeChannelId) ?? null;
-  }, [activeChannelId, meetings]);
+  }, [activeChannelId, activeChannel, meetings]);
 
   // R12-C T11 — 부서 채널 disabled 분기 (워크플로우 미진입 시 잠금).
   const channelDisabledState = useChannelDisabledState(activeChannel, meetings);

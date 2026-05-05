@@ -317,14 +317,16 @@ describe('MeetingService', () => {
       expect(remaining[0].id).toBe(b.id);
     });
 
-    it('derives stateIndex from the SSM state name', async () => {
+    it('derives stateIndex from the phase name (R12-C2 T10b new model)', async () => {
       const channelId = await seedChannel();
       const meeting = meetingService.start({ channelId });
-      meetingService.updateState(meeting.id, 'VOTING', null);
+      meetingService.updateState(meeting.id, 'quick_vote', null);
       const [summary] = meetingService.listActive();
-      // SESSION_STATE_ORDER: ..., VOTING is index 4.
-      expect(summary.stateName).toBe('VOTING');
-      expect(summary.stateIndex).toBe(4);
+      // SESSION_STATE_ORDER (= MEETING_PHASE_ORDER):
+      //   gather=0, tally=1, quick_vote=2, free_discussion=3,
+      //   compose_minutes=4, handoff=5, done=6, aborted=7
+      expect(summary.stateName).toBe('quick_vote');
+      expect(summary.stateIndex).toBe(2);
     });
 
     it('respects limit', async () => {

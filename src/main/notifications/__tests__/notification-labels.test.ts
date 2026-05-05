@@ -183,11 +183,11 @@ describe('notification-labels dictionary parity (ko ↔ en)', () => {
 // ── R11-Task11 (D9): main-process locale 이전 ─────────────────────
 
 describe('approvalNotificationBridge labels (R11-Task11)', () => {
-  it('resolves the 6 approval kinds × title+body in ko', () => {
+  // R12-C2 T10b: consensus_decision kind 제거 — 5 approval kind 만 남음.
+  it('resolves the 5 approval kinds × title+body in ko', () => {
     const kinds = [
       'cli_permission',
       'mode_transition',
-      'consensus_decision',
       'review_outcome',
       'failure_report',
       'circuit_breaker',
@@ -210,7 +210,7 @@ describe('approvalNotificationBridge labels (R11-Task11)', () => {
     }
   });
 
-  it('switches the 6 approval kinds to en after setNotificationLocale("en")', () => {
+  it('switches the 5 approval kinds to en after setNotificationLocale("en")', () => {
     setNotificationLocale('en');
     expect(
       resolveNotificationLabel('approvalNotificationBridge.cli_permission.title'),
@@ -220,11 +220,6 @@ describe('approvalNotificationBridge labels (R11-Task11)', () => {
         'approvalNotificationBridge.mode_transition.title',
       ),
     ).toBe('Permission mode change request');
-    expect(
-      resolveNotificationLabel(
-        'approvalNotificationBridge.consensus_decision.title',
-      ),
-    ).toBe('Consensus approval request');
     expect(
       resolveNotificationLabel('approvalNotificationBridge.review_outcome.title'),
     ).toBe('Review outcome approval');
@@ -238,13 +233,11 @@ describe('approvalNotificationBridge labels (R11-Task11)', () => {
 });
 
 describe('autonomyGate labels (R11-Task11)', () => {
-  it('resolves the 5 approval-kind labels in ko', () => {
+  // R12-C2 T10b: consensus_decision label 제거 — 4 label 만 남음.
+  it('resolves the 4 approval-kind labels in ko', () => {
     expect(
       resolveNotificationLabel('autonomyGate.label.mode_transition'),
     ).toBe('모드 전환');
-    expect(
-      resolveNotificationLabel('autonomyGate.label.consensus_decision'),
-    ).toBe('합의 결과');
     expect(
       resolveNotificationLabel('autonomyGate.label.review_outcome'),
     ).toBe('리뷰 결과');
@@ -256,14 +249,11 @@ describe('autonomyGate labels (R11-Task11)', () => {
     ).toBe('실패 리포트');
   });
 
-  it('switches the 5 approval-kind labels to en', () => {
+  it('switches the 4 approval-kind labels to en', () => {
     setNotificationLocale('en');
     expect(
       resolveNotificationLabel('autonomyGate.label.mode_transition'),
     ).toBe('Mode transition');
-    expect(
-      resolveNotificationLabel('autonomyGate.label.consensus_decision'),
-    ).toBe('Consensus result');
     expect(resolveNotificationLabel('autonomyGate.label.review_outcome')).toBe(
       'Review outcome',
     );

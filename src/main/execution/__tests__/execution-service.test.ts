@@ -840,21 +840,16 @@ describe('ExecutionService', () => {
       expect(result.diffPreviews).toEqual([]);
     });
 
-    it('mode_transition / consensus_decision → empty arrays (no fs impact)', async () => {
+    it('mode_transition / review_outcome → empty arrays (no fs impact)', async () => {
       const modeTransition = makeApproval('mode_transition', {
         kind: 'mode_transition',
         currentMode: 'hybrid',
         targetMode: 'auto',
       });
-      const consensus = makeApproval('consensus_decision', {
-        kind: 'consensus_decision',
-        snapshotHash: 'h',
-        finalText: 'final',
-        votes: { yes: 1, no: 0, pending: 0 },
-      });
+      const review = makeApproval('review_outcome', { outcome: 'accepted' });
 
       const a = await service.dryRunPreview(modeTransition);
-      const b = await service.dryRunPreview(consensus);
+      const b = await service.dryRunPreview(review);
       expect(a).toEqual({ impactedFiles: [], diffPreviews: [] });
       expect(b).toEqual({ impactedFiles: [], diffPreviews: [] });
     });

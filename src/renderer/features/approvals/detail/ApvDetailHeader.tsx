@@ -57,8 +57,6 @@ function kindLabel(
       return t('approval.kind.cli_permission');
     case 'mode_transition':
       return t('approval.kind.mode_transition');
-    case 'consensus_decision':
-      return t('approval.kind.consensus_decision');
     case 'review_outcome':
       return t('approval.kind.review_outcome');
     case 'failure_report':

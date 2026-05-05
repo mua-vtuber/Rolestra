@@ -114,20 +114,8 @@ describe('ApprovalDetailPanel (R11-Task7)', () => {
     });
   });
 
-  it('consensus card renders only when context is non-null', async () => {
-    const detailWithContext = makeDetail({
-      approval: makeItem({ meetingId: 'mtg-1' }),
-      consensusContext: {
-        meetingId: 'mtg-1',
-        participantVotes: [{ providerId: 'p-a', vote: 'approve' }],
-      },
-    });
-    installArena(() => Promise.resolve({ detail: detailWithContext }));
-    renderPanel('app-1');
-    await waitFor(() => {
-      expect(screen.getByTestId('apv-consensus-card')).toBeTruthy();
-    });
-  });
+  // R12-C2 T10b: 옛 ApvConsensusContextCard 삭제 — consensus card 검증
+  // 케이스 제거. 새 의견 모델 표결 카드는 P3/R12-H 에서 별도로 land.
 
   it('error path renders the inline error block', async () => {
     installArena(() => Promise.reject(new Error('network down')));

@@ -6,20 +6,20 @@
  *   - `meeting:list-active` — R4 dashboard TasksWidget fetch (spec §7.5).
  *
  * Start flows through `channel:start-meeting`; finish happens inside the
- * SSM engine. Abort is surfaced here so the user can exit a stuck meeting
- * without waiting for the SSM to reach a terminal state.
+ * meeting orchestrator engine. Abort is surfaced here so the user can exit
+ * a stuck meeting without waiting for the engine to reach a terminal state.
  *
  * Both active-listing and abort share the same MeetingService accessor
  * — the service owns the repository handle and list semantics.
+ *
+ * R12-C2 T10b: 옛 `meeting:voting-history` 핸들러 제거 — SSM 투표 snapshot
+ * 흐름이 폐기되어 voting-history 프로젝션의 데이터 소스가 사라졌다. 새 의견
+ * 모델의 표결 surface 는 P3/R12-H 에서 별도 IPC 로 재정의.
  */
 
 import type { IpcRequest, IpcResponse } from '../../../shared/ipc-types';
 import type { MeetingService } from '../../meetings/meeting-service';
 import { getOrchestrator } from '../../meetings/engine/meeting-orchestrator-registry';
-import {
-  emptyConsensusContext,
-  extractConsensusContext,
-} from '../../meetings/voting-history';
 
 let meetingAccessor: (() => MeetingService) | null = null;
 
@@ -64,19 +64,5 @@ export function handleMeetingListActive(
   return { meetings };
 }
 
-/**
- * R11-Task7: meeting:voting-history — projects the meeting's SSM snapshot
- * into the approvals-side `ApprovalConsensusContext`. Lookup miss returns
- * an empty context (the panel can still render headers); a parse failure
- * inside `extractConsensusContext` already collapses to the same empty
- * shape so the handler stays single-path.
- */
-export function handleMeetingVotingHistory(
-  data: IpcRequest<'meeting:voting-history'>,
-): IpcResponse<'meeting:voting-history'> {
-  const meeting = getService().get(data.meetingId);
-  if (meeting === null) {
-    return { context: emptyConsensusContext(data.meetingId) };
-  }
-  return { context: extractConsensusContext(meeting) };
-}
+// R12-C2 T10b: handleMeetingVotingHistory 제거 — IPC 채널 자체도 같은
+// commit 안에서 ipc-types/ipc-schemas/router 에서 제거됨.

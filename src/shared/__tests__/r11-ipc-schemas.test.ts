@@ -15,7 +15,6 @@ import {
   llmCostSummarySchema,
   executionDryRunPreviewSchema,
   approvalDetailFetchSchema,
-  meetingVotingHistorySchema,
   v3ChannelSchemas,
 } from '../ipc-schemas';
 import type { ProviderCapability } from '../provider-types';
@@ -198,22 +197,10 @@ describe('R11 IPC — approval:detail-fetch schema', () => {
   });
 });
 
-describe('R11 IPC — meeting:voting-history schema', () => {
-  it('accepts a plain meetingId', () => {
-    expect(
-      meetingVotingHistorySchema.safeParse({ meetingId: 'm-1' }).success,
-    ).toBe(true);
-  });
-
-  it('rejects empty meetingId', () => {
-    expect(
-      meetingVotingHistorySchema.safeParse({ meetingId: '' }).success,
-    ).toBe(false);
-  });
-});
+// R12-C2 T10b: 옛 `meeting:voting-history` 스키마 + 채널 제거.
 
 describe('R11 IPC — v3ChannelSchemas registry parity', () => {
-  it('has all 8 R11 channels registered', () => {
+  it('has all 7 R11 channels registered (T10b removed meeting:voting-history)', () => {
     expect(v3ChannelSchemas['onboarding:get-state']).toBeDefined();
     expect(v3ChannelSchemas['onboarding:set-state']).toBeDefined();
     expect(v3ChannelSchemas['onboarding:complete']).toBeDefined();
@@ -221,7 +208,6 @@ describe('R11 IPC — v3ChannelSchemas registry parity', () => {
     expect(v3ChannelSchemas['llm:cost-summary']).toBeDefined();
     expect(v3ChannelSchemas['execution:dry-run-preview']).toBeDefined();
     expect(v3ChannelSchemas['approval:detail-fetch']).toBeDefined();
-    expect(v3ChannelSchemas['meeting:voting-history']).toBeDefined();
   });
 });
 
