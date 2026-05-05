@@ -14,6 +14,7 @@ Rolestra v3 의 모든 문서가 들어가는 디렉토리. 폴더는 **용도�
 | `checklists/` | phase 완료 검증용 done-checklist | r3 ~ r11 done-checklist 9 건 |
 | `reports/audit/` | 감사 리포트 — 구현 ↔ spec 일치 여부 검증 보고서 | `YYYY-MM-DD-<topic>-audit.md` |
 | `reports/analysis/` | 분석 / 조사 보고서 — one-shot 조사 결과 | 참고프로젝트 분석 / WSL CLI 감지 설계 / messenger theme prep 등 |
+| `reports/work-log/` | 세션별 작업 완료 보고 — task 진행 / 결정 사유 / 다음 진입 가이드 (메모리 미러) | `<phase>-<topic>-completion.md` 또는 `<phase>-<topic>-progress.md` (예: `rolestra-r12-c2-t13-completion.md`) |
 | `archive/` | 옛날 계획서 — **재설계 필요** 표시. 즉시 폐기는 아니지만 그대로 구현 불가 | `YYYY-MM-DD-<주제>-재설계예정.md` |
 | `design/` | 디자인 정식 (테마 시안 + 패키징) | README + 패키징.md |
 | `Rolestra_sample/` | 디자인 시안 산출물 (html / jsx / screenshots) | 6 화면 × 6 변형 mockup |
