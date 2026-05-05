@@ -448,6 +448,14 @@
       "metaElapsed": "경과 {{minutes}}분",
       "metaSsm": "단계 {{cur}}/{{total}}"
     },
+    "designPreview": {
+      "emptyNoMeeting": "디자인 부서 회의가 진행 중일 때 미리보기가 표시됩니다.",
+      "emptyPending": "디자인 합의가 끝나면 데스크톱·모바일 미리보기가 자동으로 만들어집니다.",
+      "tabsAriaLabel": "디자인 미리보기 화면 비율",
+      "tabDesktop": "데스크톱",
+      "tabMobile": "모바일",
+      "imgAlt": "디자인 미리보기 ({{viewport}})"
+    },
     "channelCreate": {
       "cancel": "취소",
       "errors": {

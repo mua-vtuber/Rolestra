@@ -86,6 +86,7 @@ import {
   DesignatedWorkerNotFoundError,
   resolveDesignatedWorker,
   extractDesignedTaskOpinion,
+  type DesignSnapshotPaths,
   type DesignatedWorkerCandidate,
   type DesignedTaskContext,
   type DesignedTaskKind,
@@ -131,6 +132,27 @@ export interface MeetingOrchestratorDeps {
    * 흐름은 본 deps 사용 안 함 (idle pass-through).
    */
   providerRegistry: ProviderRegistry;
+  /**
+   * R12-C2 T16c — design-workflow step 7b (generating_snapshot) 본체. 회의 #2
+   * 합의 직후 design_implementation root opinion (HTML/CSS) 을 desktop +
+   * mobile PNG 로 렌더 + ArenaRoot 봉인 안 atomic 저장. orchestrator 는 결과
+   * paths 를 stream:design-snapshot-ready emit + outcome.snapshot 에 담음.
+   *
+   * idea / 풀세트 흐름은 본 deps 사용 안 함 (idle pass-through). 테스트는
+   * fake `captureDesignSnapshot` 주입 가능.
+   */
+  designSnapshotService: {
+    captureDesignSnapshot: (req: {
+      htmlContent: string;
+      meetingId: string;
+      sourceOpinionUuid: string;
+    }) => Promise<{
+      desktopPath: string;
+      mobilePath: string;
+      generatedAt: number;
+      sourceOpinionUuid: string;
+    }>;
+  };
   /** Opt-out hook for tests — disables the inter-turn delay. */
   interTurnDelayMs?: number;
   /**
@@ -276,6 +298,7 @@ export class MeetingOrchestrator {
   private readonly meetingMinutesService: MeetingMinutesService;
   private readonly runStepService: RunStepService;
   private readonly providerRegistry: ProviderRegistry;
+  private readonly designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'];
   private readonly interTurnDelayMs: number;
   private readonly onFinalized?: MeetingOrchestratorDeps['onFinalized'];
 
@@ -311,6 +334,7 @@ export class MeetingOrchestrator {
     this.meetingMinutesService = deps.meetingMinutesService;
     this.runStepService = deps.runStepService;
     this.providerRegistry = deps.providerRegistry;
+    this.designSnapshotService = deps.designSnapshotService;
     this.interTurnDelayMs = deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
     this.onFinalized = deps.onFinalized;
   }
@@ -1167,25 +1191,50 @@ export class MeetingOrchestrator {
 
   /**
    * Playwright PNG 생성 phase placeholder. T16c sub-task 가 본체 wire — 본
-   * sub-task 에서는 phase transition + 명시적 throw (또는 noop) 로 placeholder
-   * 만 둔다.
+   * R12-C2 T16c land — placeholder throw 가 실제 본체로 교체됨.
    *
-   * T16c 가 본 메서드를 다음으로 교체:
-   *   - off-screen Electron BrowserWindow 로 HTML/CSS 렌더 (1280x720 + 375x812)
-   *   - PathGuard 검증 ArenaRoot 안 PNG 저장
-   *   - emitDesignSnapshotReady(payload) push
-   *   - DesignSnapshotPaths 반환
+   * 흐름:
+   *   1. transitionToPhase('generating_snapshot') — UI 상태 갱신
+   *   2. designSnapshotService.captureDesignSnapshot — desktop + mobile PNG
+   *      atomic 저장 (PathGuard 봉인 ArenaRoot 안)
+   *   3. streamBridge.emitDesignSnapshotReady — DesignPreview UI 활성화 신호
+   *   4. DesignSnapshotPaths 반환 (caller 가 outcome.snapshot 에 담음)
    *
-   * 본 placeholder 는 T16c 진입 전 통합 테스트 시 동작 검증을 위해 throw
-   * (snapshot_failed) — caller (runDesignWorkflow) 가 catch + abortReason 매핑.
+   * 실패 분기 (caller catch 후 abortReason='snapshot_failed' 매핑):
+   *   - 빈 content / 봉인 위반 / capture fn throw / 빈 PNG buffer
+   *
+   * 회의록 자체는 이미 작성된 상태에서 snapshot 만 실패하므로 — 회의록은
+   * 디스크에 남고 PNG 만 X. spec §11.18.9d "회의록 자체는 이미 작성된 상태"
+   * 부합.
    */
-  private async runGeneratingSnapshotPhase(
-    _sourceOpinionUuid: string,
-  ): Promise<never> {
+  private async runGeneratingSnapshotPhase(args: {
+    sourceOpinionUuid: string;
+    htmlContent: string;
+  }): Promise<DesignSnapshotPaths> {
     this.transitionToPhase('generating_snapshot');
-    throw new Error(
-      '[MeetingOrchestrator] generating_snapshot not implemented yet — T16c land 시 playwright-snapshot.ts wire',
-    );
+    const result = await this.designSnapshotService.captureDesignSnapshot({
+      htmlContent: args.htmlContent,
+      meetingId: this.session.meetingId,
+      sourceOpinionUuid: args.sourceOpinionUuid,
+    });
+    try {
+      this.streamBridge.emitDesignSnapshotReady({
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        desktopPath: result.desktopPath,
+        mobilePath: result.mobilePath,
+        generatedAt: result.generatedAt,
+        sourceOpinionUuid: result.sourceOpinionUuid,
+      });
+    } catch (err) {
+      // stream emit 실패는 disk PNG 자체에 영향 X — UI 상태 동기화만 누락.
+      // 다음 회의 / 앱 재시작 시 caller (renderer) 가 재구독하면 paths 는 그대로.
+      console.warn(
+        '[MeetingOrchestrator] design-snapshot stream emit threw',
+        errorPayload(err),
+      );
+    }
+    return result;
   }
 
   /**
@@ -1290,16 +1339,22 @@ export class MeetingOrchestrator {
         return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
       }
 
-      // step 7b — Playwright snapshot. T16c 가 wire 하면 outcome.snapshot 채움.
-      // 현재 placeholder 는 throw — 통합 catch 가 abortReason='snapshot_failed' 로 변환.
-      // (T16c land 시 snapshot 결과를 return 에 담아 outcome='committed' + snapshot.)
-      const designImplOpinionUuid = await this.findLatestDesignImplementationOpinion();
-      const snapshot = await this.runGeneratingSnapshotPhase(
-        designImplOpinionUuid,
-      );
-      // 유효 코드 — generating_snapshot 가 throw 만 하므로 unreachable, T16c land 시 활성.
-      void snapshot;
-      return { meetingId, outcome: 'committed' };
+      // step 7b — Playwright snapshot (T16c land). 회의 #2 의 마지막 root opinion
+      // (= step 6 design_implementation 응답) 을 desktop + mobile PNG 로 렌더 +
+      // PathGuard 봉인 안 atomic 저장. 실패 시 통합 catch 가 abortReason='snapshot_failed'.
+      const designImplOpinion = await this.findLatestDesignImplementationOpinion();
+      const snapshot = await this.runGeneratingSnapshotPhase({
+        sourceOpinionUuid: designImplOpinion.id,
+        htmlContent: designImplOpinion.content,
+      });
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+
+      // step 7c — handoff (풀세트와 동일 — runHandoffPhase 재사용).
+      await this.runHandoffPhase();
+
+      return { meetingId, outcome: 'committed', snapshot };
     } catch (err) {
       if (err instanceof DesignatedWorkerNotFoundError) {
         return {
@@ -1326,7 +1381,12 @@ export class MeetingOrchestrator {
           },
         };
       }
-      // generating_snapshot placeholder throw 또는 임의 throw — snapshot_failed 로 매핑.
+      // T16c land — runGeneratingSnapshotPhase 본체에서 던지는 분기들:
+      //   - SnapshotCaptureError (capture fn / 빈 PNG buffer)
+      //   - SnapshotPathOutsideConsensusError (PathGuard 봉인 위반)
+      //   - findLatestDesignImplementationOpinion 의 빈 content / no root throw
+      // 이 외 예기치 않은 throw 도 같은 분기 — 회의록은 이미 디스크에 land 상태
+      // (compose_minutes #2 직후) 라 회의록만 남고 PNG 만 X. spec §11.18.9d 부합.
       return {
         meetingId,
         outcome: 'aborted',
@@ -1352,15 +1412,22 @@ export class MeetingOrchestrator {
 
   /**
    * 회의 #2 시드 = `design_implementation` root opinion. opinion 트리에서
-   * 가장 마지막 root (kind='root', author=design.ui 직원) 의 uuid 를 반환.
-   * runDesignWorkflow 가 step 6 직후 step 7a 회의 #2 가 끝난 후 snapshot 호출
-   * 에 사용.
+   * 가장 마지막 root (kind='root', author=design.ui 직원) 의 uuid + content
+   * 를 반환. runDesignWorkflow 가 step 6 직후 step 7a 회의 #2 가 끝난 후
+   * snapshot 호출에 사용.
    *
    * 트리 구조: design 부서 회의는 root 3 개 누적 — step 1 (drafting), step 5
    * (revision), step 6 (implementation). 마지막 root (created_at 기준) 를
    * implementation 으로 가정 (design-workflow 진행 순서).
+   *
+   * content 가 NULL / 빈 문자열이면 throw — generating_snapshot 입력 자체가
+   * 없으므로 snapshot 시도 의미 없음. caller (runDesignWorkflow) 의 catch 가
+   * snapshot_failed 로 매핑한다.
    */
-  private async findLatestDesignImplementationOpinion(): Promise<string> {
+  private async findLatestDesignImplementationOpinion(): Promise<{
+    id: string;
+    content: string;
+  }> {
     const tally = this.opinionService.tally(this.session.meetingId);
     if (tally.tree.length === 0) {
       throw new Error(
@@ -1369,7 +1436,13 @@ export class MeetingOrchestrator {
     }
     // tally tree 가 created_at 오름차순으로 정렬되어 있다고 가정 — 마지막 root 가 step 6.
     const last = tally.tree[tally.tree.length - 1]!;
-    return last.opinion.id;
+    const content = last.opinion.content ?? '';
+    if (content.trim().length === 0) {
+      throw new Error(
+        `[MeetingOrchestrator] design-workflow snapshot — design_implementation opinion '${last.opinion.id}' has empty content`,
+      );
+    }
+    return { id: last.opinion.id, content };
   }
 
   private async runComposeMinutesPhase(options?: {

@@ -818,6 +818,23 @@ app.whenReady().then(async () => {
     });
     setMeetingMinutesServiceAccessor(() => meetingMinutesService);
 
+    // R12-C2 T16c: DesignSnapshotService 부팅. design-workflow step 7b
+    // (generating_snapshot) 의 본체 — 회의 #2 합의 직후 design_implementation
+    // root opinion (HTML+CSS) 을 desktop 1280x720 + mobile 375x812 PNG 로
+    // 렌더 + ArenaRoot 봉인 안 atomic 저장. Electron BrowserWindow off-screen
+    // capture 어댑터는 별도 모듈 (electron-snapshot-capture) — service 자체는
+    // Node-only test 에서도 import 가능 (electron import 격리).
+    const { DesignSnapshotService } = await import(
+      './snapshot/playwright-snapshot'
+    );
+    const { createElectronSnapshotCapture } = await import(
+      './snapshot/electron-snapshot-capture'
+    );
+    const designSnapshotService = new DesignSnapshotService({
+      arenaRoot,
+      capture: createElectronSnapshotCapture(),
+    });
+
     // R12-C2 T10b: 옛 consensus_decision rehydrate 흐름 제거 — 새 phase loop
     // 모델은 SSM DONE sign-off approval 자체를 발사하지 않으므로 boot 시점에
     // 재무장할 row 가 없다.
@@ -934,6 +951,7 @@ app.whenReady().then(async () => {
           meetingMinutesService,
           runStepService,
           providerRegistry,
+          designSnapshotService,
           // R9-Task7: autonomy-queue run loop. When the finalised meeting
           // belongs to a project in `queue` mode, complete the owning
           // queue item and advance to the next pending item. Lookups miss

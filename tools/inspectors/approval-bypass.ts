@@ -32,6 +32,11 @@ const WRITER_ALLOWLIST: readonly string[] = [
   'src/main/memory/',
   'src/main/providers/registry',
   'src/main/members/',
+  // R12-C2 T16c — design-workflow generating_snapshot 의 본체. 회의 #2 합의
+  // PNG (desktop + mobile) 를 ArenaRoot/consensus 안 atomic 저장. PathGuard
+  // 봉인 + atomic write 패턴은 meeting-minutes-service 와 동일 — 디자인
+  // mockup 도 회의 산출물이라 같은 service-owned write surface 로 분류.
+  'src/main/snapshot/',
 ];
 
 function isAllowed(rel: string): boolean {

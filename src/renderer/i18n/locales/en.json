@@ -448,6 +448,14 @@
       "metaElapsed": "elapsed {{minutes}}m",
       "metaSsm": "Phase {{cur}}/{{total}}"
     },
+    "designPreview": {
+      "emptyNoMeeting": "The preview appears while a design department meeting is running.",
+      "emptyPending": "Once the design discussion concludes, desktop and mobile previews are generated automatically.",
+      "tabsAriaLabel": "Design preview viewport",
+      "tabDesktop": "Desktop",
+      "tabMobile": "Mobile",
+      "imgAlt": "Design preview ({{viewport}})"
+    },
     "channelCreate": {
       "cancel": "Cancel",
       "errors": {

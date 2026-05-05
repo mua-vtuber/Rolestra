@@ -222,6 +222,18 @@ function buildDeps(
     get: vi.fn(() => undefined),
   } as unknown as MeetingOrchestratorDeps['providerRegistry'];
 
+  // T16c — design-workflow step 7b 본체. 디폴트는 reject (호출되면 throw) —
+  // 풀세트 / idea 흐름은 미호출이라야 한다. design 분기 테스트가 capture 결과
+  // 검증 필요 시 override.
+  const designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'] =
+    {
+      captureDesignSnapshot: vi.fn(() => {
+        throw new Error(
+          '[test] designSnapshotService.captureDesignSnapshot — default stub. design-workflow only path; override in design test.',
+        );
+      }),
+    };
+
   return {
     session,
     turnExecutor: overrides.turnExecutor ?? turnExecutor,
@@ -236,6 +248,8 @@ function buildDeps(
       overrides.meetingMinutesService ?? meetingMinutesService,
     runStepService: overrides.runStepService ?? runStepService,
     providerRegistry: overrides.providerRegistry ?? providerRegistry,
+    designSnapshotService:
+      overrides.designSnapshotService ?? designSnapshotService,
     interTurnDelayMs: 0,
     onFinalized: overrides.onFinalized,
   };
@@ -398,6 +412,433 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
     // resolver 가 throw → assigning_designated_task turn 호출 X.
     // (turn-executor mock 에 requestAssigningDesignatedTask 가 없어서 호출 시
     //  TypeError — 본 분기에서는 호출 자체가 없어야 함을 검증.)
+    expect(deps.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'aborted',
+      null,
+    );
+  });
+
+  it('T16c: design 부서 happy-path — snapshot 캡처 + stream emit + outcome.committed', async () => {
+    // 디자인 부서 채널 (role='design.ui') + 직원 1 명이 design.ux/ui 통째 보유.
+    // requestAssigningDesignatedTask 3 회 + requestQuickVote 2 회 + compose 2 회
+    // 통째 성공 → step 7b snapshot 호출 → emitDesignSnapshotReady → handoff →
+    // outcome='committed' + result.snapshot 채워짐.
+    const session = new MeetingSession({
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      projectId: PROJECT_ID,
+      topic: 'Design login screen',
+      participants: [
+        {
+          id: 'designer-1',
+          providerId: 'designer-1',
+          displayName: 'Designer 1',
+          isActive: true,
+        },
+        {
+          id: 'designer-2',
+          providerId: 'designer-2',
+          displayName: 'Designer 2',
+          isActive: true,
+        },
+      ],
+      ssmCtx: ctx(),
+    });
+    const designChannel = makeChannel(5);
+    (designChannel as unknown as { role: string }).role = 'design.ui';
+
+    const channelService = {
+      get: vi.fn(() => designChannel),
+      list: vi.fn(() => [designChannel]),
+    } as unknown as ChannelService;
+
+    const providerRegistry = {
+      get: vi.fn((id: string) => ({
+        id,
+        type: 'api' as const,
+        displayName: id === 'designer-1' ? 'Designer 1' : 'Designer 2',
+        model: 'm',
+        capabilities: [],
+        status: 'ready' as const,
+        config: {},
+        roles: ['design.ux', 'design.ui'],
+        skill_overrides: null,
+      })),
+    } as unknown as MeetingOrchestratorDeps['providerRegistry'];
+
+    // 3 회 requestAssigningDesignatedTask 응답 — 각 step 의 가짜 본문.
+    let designedCallCount = 0;
+    const turnExecutor = {
+      requestOpinionGather: vi.fn(),
+      requestQuickVote: vi.fn(async (speaker, c) => ({
+        kind: 'ok' as const,
+        providerId: speaker.id,
+        messageId: 'msg',
+        payload: {
+          name: speaker.displayName,
+          label: c.suggestedLabel,
+          quick_votes: [{ target_id: 'ITEM_001', vote: 'agree' as const }],
+        },
+      })),
+      requestFreeDiscussion: vi.fn(),
+      requestAssigningDesignatedTask: vi.fn(async (speaker, dctx) => {
+        designedCallCount += 1;
+        const content =
+          dctx.kind === 'design_implementation'
+            ? '<html><body><div>login</div></body></html>'
+            : `wireframe step ${designedCallCount}`;
+        return {
+          kind: 'ok' as const,
+          providerId: speaker.id,
+          messageId: `msg-${designedCallCount}`,
+          payload: {
+            name: speaker.displayName,
+            label: dctx.suggestedLabel,
+            opinions: [
+              {
+                title: `step-${designedCallCount}`,
+                content,
+                rationale: 'r',
+              },
+            ],
+          },
+        };
+      }),
+      abort: vi.fn(),
+    } as unknown as MeetingTurnExecutor;
+
+    // opinionService.gather → 본문을 누적해서 inserted row 반환 + tally 도 같은
+    // 누적에서 빌드. orchestrator 의 designated-task path 가 "OpinionService.gather
+    // returned empty inserted" invariant 를 갖고 있어 inserted 비면 throw.
+    const accumulatedRoots: Array<{
+      id: string;
+      content: string;
+      createdAt: number;
+    }> = [];
+    let opinionCounter = 0;
+    const buildOpinion = (root: typeof accumulatedRoots[number]) => ({
+      id: root.id,
+      parentId: null,
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      kind: 'root' as const,
+      authorProviderId: 'designer-1',
+      authorLabel: 'designer_1',
+      title: null,
+      content: root.content,
+      rationale: null,
+      status: 'draft' as const,
+      exclusionReason: null,
+      round: 0,
+      createdAt: root.createdAt,
+      updatedAt: root.createdAt,
+    });
+    const opinionService = {
+      nextLabelHint: vi.fn(() => 1),
+      gather: vi.fn(
+        (req: {
+          responses: { payload: { opinions: { content: string }[] } }[];
+        }) => {
+          const inserted: ReturnType<typeof buildOpinion>[] = [];
+          for (const r of req.responses) {
+            for (const op of r.payload.opinions) {
+              opinionCounter += 1;
+              const root = {
+                id: `op-${opinionCounter}`,
+                content: op.content,
+                createdAt: opinionCounter,
+              };
+              accumulatedRoots.push(root);
+              inserted.push(buildOpinion(root));
+            }
+          }
+          return { meetingId: MEETING_ID, inserted };
+        },
+      ),
+      tally: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        rootCount: accumulatedRoots.length,
+        totalCount: accumulatedRoots.length,
+        tree: accumulatedRoots.map((r) => ({
+          opinion: buildOpinion(r),
+          screenId: null,
+          children: [],
+        })),
+        screenToUuid: {},
+        uuidToScreen: {},
+      })),
+      quickVote: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        agreed: [],
+        unresolved: [],
+        votesInserted: 0,
+      })),
+      freeDiscussionRound: vi.fn(),
+    } as unknown as OpinionService;
+
+    const meetingMinutesService = {
+      compose: vi.fn(async () => ({
+        body: '# minutes',
+        source: 'fallback' as const,
+        providerId: null,
+        minutesPath: '/tmp/minutes.md',
+        truncationDetected: false,
+      })),
+      readMinutesBody: vi.fn(async () => '# minutes #1 합의 본문'),
+    } as unknown as MeetingMinutesService;
+
+    // T16c — snapshot service mock + stream emit spy.
+    const captureDesignSnapshot = vi.fn(async (req) => ({
+      desktopPath: `/fake/consensus/meetings/${req.meetingId}/design-snapshot-desktop.png`,
+      mobilePath: `/fake/consensus/meetings/${req.meetingId}/design-snapshot-mobile.png`,
+      generatedAt: 1_700_000_001_234,
+      sourceOpinionUuid: req.sourceOpinionUuid,
+    }));
+    const designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'] =
+      { captureDesignSnapshot };
+
+    const emitDesignSnapshotReady = vi.fn();
+    const streamBridge = {
+      emitMeetingPhaseChanged: vi.fn(),
+      emitMeetingStateChanged: vi.fn(),
+      emitMeetingTurnStart: vi.fn(),
+      emitMeetingTurnToken: vi.fn(),
+      emitMeetingTurnDone: vi.fn(),
+      emitMeetingError: vi.fn(),
+      emitMeetingTurnSkipped: vi.fn(),
+      emitNextStepClassified: vi.fn(),
+      emitDesignedTaskAssigned: vi.fn(),
+      emitDesignSnapshotReady,
+    } as unknown as StreamBridge;
+
+    const deps = buildDeps({
+      session,
+      channelService,
+      providerRegistry,
+      turnExecutor,
+      opinionService,
+      meetingMinutesService,
+      streamBridge,
+      designSnapshotService,
+    });
+    const orchestrator = new MeetingOrchestrator(deps);
+    await orchestrator.run();
+
+    // 3 회 design-task 호출 (step 1 / 5 / 6).
+    expect(turnExecutor.requestAssigningDesignatedTask).toHaveBeenCalledTimes(3);
+    // 2 회 회의 (#1 wireframe / #2 design) → quick_vote 회의당 1 회 + compose 1 회.
+    expect(turnExecutor.requestQuickVote).toHaveBeenCalled();
+    expect(meetingMinutesService.compose).toHaveBeenCalledTimes(2);
+
+    // T16c 핵심 — snapshot service 호출 + 입력 검증.
+    expect(captureDesignSnapshot).toHaveBeenCalledTimes(1);
+    const snapArgs = captureDesignSnapshot.mock.calls[0]![0];
+    expect(snapArgs.meetingId).toBe(MEETING_ID);
+    expect(snapArgs.htmlContent).toBe(
+      '<html><body><div>login</div></body></html>',
+    );
+    expect(snapArgs.sourceOpinionUuid).toBe('op-3');
+
+    // stream emit 검증.
+    expect(emitDesignSnapshotReady).toHaveBeenCalledTimes(1);
+    const streamPayload = emitDesignSnapshotReady.mock.calls[0]![0];
+    expect(streamPayload.meetingId).toBe(MEETING_ID);
+    expect(streamPayload.channelId).toBe(CHANNEL_ID);
+    expect(streamPayload.desktopPath).toContain('design-snapshot-desktop.png');
+    expect(streamPayload.mobilePath).toContain('design-snapshot-mobile.png');
+
+    // outcome.committed (accepted = committed 매핑).
+    expect(deps.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'accepted',
+      null,
+    );
+  });
+
+  it('T16c: snapshot 실패 → snapshot_failed abort, 회의록은 이미 land', async () => {
+    // 위 happy-path 와 동일 setup 인데 captureDesignSnapshot 가 throw → orchestrator
+    // catch + outcome='aborted' / abortReason.kind='snapshot_failed' 매핑.
+    const session = new MeetingSession({
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      projectId: PROJECT_ID,
+      topic: 'Design login screen',
+      participants: [
+        {
+          id: 'designer-1',
+          providerId: 'designer-1',
+          displayName: 'Designer 1',
+          isActive: true,
+        },
+        {
+          id: 'designer-2',
+          providerId: 'designer-2',
+          displayName: 'Designer 2',
+          isActive: true,
+        },
+      ],
+      ssmCtx: ctx(),
+    });
+    const designChannel = makeChannel(5);
+    (designChannel as unknown as { role: string }).role = 'design.ui';
+
+    const channelService = {
+      get: vi.fn(() => designChannel),
+      list: vi.fn(() => [designChannel]),
+    } as unknown as ChannelService;
+
+    const providerRegistry = {
+      get: vi.fn((id: string) => ({
+        id,
+        type: 'api' as const,
+        displayName: id === 'designer-1' ? 'Designer 1' : 'Designer 2',
+        model: 'm',
+        capabilities: [],
+        status: 'ready' as const,
+        config: {},
+        roles: ['design.ux', 'design.ui'],
+        skill_overrides: null,
+      })),
+    } as unknown as MeetingOrchestratorDeps['providerRegistry'];
+
+    let designedCallCount = 0;
+    const turnExecutor = {
+      requestOpinionGather: vi.fn(),
+      requestQuickVote: vi.fn(async (speaker, c) => ({
+        kind: 'ok' as const,
+        providerId: speaker.id,
+        messageId: 'msg',
+        payload: {
+          name: speaker.displayName,
+          label: c.suggestedLabel,
+          quick_votes: [{ target_id: 'ITEM_001', vote: 'agree' as const }],
+        },
+      })),
+      requestFreeDiscussion: vi.fn(),
+      requestAssigningDesignatedTask: vi.fn(async (speaker, dctx) => {
+        designedCallCount += 1;
+        const content =
+          dctx.kind === 'design_implementation'
+            ? '<html><body>x</body></html>'
+            : `wf-${designedCallCount}`;
+        return {
+          kind: 'ok' as const,
+          providerId: speaker.id,
+          messageId: `msg-${designedCallCount}`,
+          payload: {
+            name: speaker.displayName,
+            label: dctx.suggestedLabel,
+            opinions: [
+              { title: 't', content, rationale: 'r' },
+            ],
+          },
+        };
+      }),
+      abort: vi.fn(),
+    } as unknown as MeetingTurnExecutor;
+
+    const accumulatedRoots: Array<{
+      id: string;
+      content: string;
+      createdAt: number;
+    }> = [];
+    let opinionCounter = 0;
+    const buildOpinion = (root: typeof accumulatedRoots[number]) => ({
+      id: root.id,
+      parentId: null,
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      kind: 'root' as const,
+      authorProviderId: 'designer-1',
+      authorLabel: 'designer_1',
+      title: null,
+      content: root.content,
+      rationale: null,
+      status: 'draft' as const,
+      exclusionReason: null,
+      round: 0,
+      createdAt: root.createdAt,
+      updatedAt: root.createdAt,
+    });
+    const opinionService = {
+      nextLabelHint: vi.fn(() => 1),
+      gather: vi.fn(
+        (req: {
+          responses: { payload: { opinions: { content: string }[] } }[];
+        }) => {
+          const inserted: ReturnType<typeof buildOpinion>[] = [];
+          for (const r of req.responses) {
+            for (const op of r.payload.opinions) {
+              opinionCounter += 1;
+              const root = {
+                id: `op-${opinionCounter}`,
+                content: op.content,
+                createdAt: opinionCounter,
+              };
+              accumulatedRoots.push(root);
+              inserted.push(buildOpinion(root));
+            }
+          }
+          return { meetingId: MEETING_ID, inserted };
+        },
+      ),
+      tally: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        rootCount: accumulatedRoots.length,
+        totalCount: accumulatedRoots.length,
+        tree: accumulatedRoots.map((r) => ({
+          opinion: buildOpinion(r),
+          screenId: null,
+          children: [],
+        })),
+        screenToUuid: {},
+        uuidToScreen: {},
+      })),
+      quickVote: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        agreed: [],
+        unresolved: [],
+        votesInserted: 0,
+      })),
+      freeDiscussionRound: vi.fn(),
+    } as unknown as OpinionService;
+
+    const meetingMinutesService = {
+      compose: vi.fn(async () => ({
+        body: '# minutes',
+        source: 'fallback' as const,
+        providerId: null,
+        minutesPath: '/tmp/minutes.md',
+        truncationDetected: false,
+      })),
+      readMinutesBody: vi.fn(async () => '# m1'),
+    } as unknown as MeetingMinutesService;
+
+    // T16c — snapshot service throws → snapshot_failed abort.
+    const captureDesignSnapshot = vi.fn(async () => {
+      throw new Error('chromium gpu crashed');
+    });
+    const designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'] =
+      { captureDesignSnapshot };
+
+    const deps = buildDeps({
+      session,
+      channelService,
+      providerRegistry,
+      turnExecutor,
+      opinionService,
+      meetingMinutesService,
+      designSnapshotService,
+    });
+    const orchestrator = new MeetingOrchestrator(deps);
+    await orchestrator.run();
+
+    // 회의록 #2 까지 land 후 snapshot 만 실패 → 회의록 compose 2 회 모두 호출됨.
+    expect(meetingMinutesService.compose).toHaveBeenCalledTimes(2);
+    // snapshot 1 회 시도 후 throw.
+    expect(captureDesignSnapshot).toHaveBeenCalledTimes(1);
+    // outcome aborted.
     expect(deps.meetingService.finish).toHaveBeenCalledWith(
       MEETING_ID,
       'aborted',
