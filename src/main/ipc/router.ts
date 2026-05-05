@@ -140,6 +140,7 @@ import {
   handleOpinionFreeDiscussion,
 } from './handlers/opinion-handler';
 import { handleMeetingsComposeMinutes } from './handlers/meetings-minutes-handler';
+import { handleMeetingListRunSteps } from './handlers/run-step-handler';
 import {
   handleMemberList,
   handleMemberGetProfile,
@@ -473,6 +474,17 @@ export function registerIpcHandlers(): void {
   handle('meetings:composeMinutes', isDev, (data) =>
     handleMeetingsComposeMinutes(data),
   );
+
+  // ── R12-C2 P2 T12: RunStep read (dev-only registration) ────────
+  // 디버깅 / replay / 회귀 분석 용. production 빌드는 핸들러 자체가
+  // 부재 — renderer 가 호출해도 typedInvoke 가 timeout 으로 실패. zod
+  // schema 는 v3ChannelSchemas 안 항상 등록되어 dev 모드 round-trip 이
+  // 잘못된 payload 를 잡아낸다.
+  if (process.env.NODE_ENV !== 'production') {
+    handle('meeting:list-run-steps', isDev, (data) =>
+      handleMeetingListRunSteps(data),
+    );
+  }
 
   // ── v3: Member Profile ──────────────────────────────────────────
   handle('member:list', isDev, () => handleMemberList());

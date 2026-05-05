@@ -119,7 +119,7 @@
     {
       "id": 13,
       "subject": "T12 — A. migration 020 (run_step) + RunStepService skeleton",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         12
       ],

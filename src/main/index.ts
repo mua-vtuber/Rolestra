@@ -29,6 +29,9 @@ import { MeetingService } from './meetings/meeting-service';
 import { OpinionRepository } from './meetings/opinion-repository';
 import { OpinionService } from './meetings/opinion-service';
 import { setOpinionServiceAccessor } from './ipc/handlers/opinion-handler';
+import { RunStepRepository } from './meetings/run-step/run-step-repository';
+import { RunStepService } from './meetings/run-step/run-step-service';
+import { setRunStepServiceAccessor } from './ipc/handlers/run-step-handler';
 import { MeetingMinutesService } from './meetings/meeting-minutes-service';
 import { setMeetingMinutesServiceAccessor } from './ipc/handlers/meetings-minutes-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
@@ -222,6 +225,15 @@ app.whenReady().then(async () => {
     const opinionRepo = new OpinionRepository(db);
     const opinionService = new OpinionService(opinionRepo);
     setOpinionServiceAccessor(() => opinionService);
+
+    // R12-C2 P2 T12: RunStepService 부팅. 회의 turn *진행 일지* 영속 레이어
+    // (run_step 테이블, migration 020). T13 MeetingOrchestrator 재배선이
+    // 매 turn 후 service.appendForTurn 으로 일지 적층. T12 시점에는
+    // skeleton — IPC `meeting:list-run-steps` (dev 전용) 으로 영속 동작
+    // 검증. spec §11.19.
+    const runStepRepo = new RunStepRepository(db);
+    const runStepService = new RunStepService(runStepRepo);
+    setRunStepServiceAccessor(() => runStepService);
 
     // D-A T2.5 / spec §5.5 — 채널에 user 메시지가 들어오면 활성 회의의
     // orchestrator 로 전달해 다음 AI turn 의 prompt 에 합류시킨다. 이전에는

@@ -741,6 +741,31 @@ export const meetingsComposeMinutesSchema = z.object({
   meetingId: z.string().min(1).max(128),
 });
 
+/**
+ * meeting:list-run-steps 입력 schema (R12-C2 P2 T12).
+ *
+ * 3 scope discriminated union — caller 가 회의 단위 / 채널 단위 / turn 단위
+ * 중 하나를 선택. spec §11.19 의 RunStep 영속 read 표면 (디버깅 / replay 용).
+ *
+ * dev 전용 등록 — production 빌드는 router.ts 가 핸들러를 skip 한다.
+ * schema 자체는 항상 등록되어 dev 모드 zod 검증 round-trip 이 작동.
+ */
+export const meetingListRunStepsSchema = z.discriminatedUnion('scope', [
+  z.object({
+    scope: z.literal('meeting'),
+    meetingId: z.string().min(1).max(128),
+  }),
+  z.object({
+    scope: z.literal('channel'),
+    channelId: z.string().min(1).max(128),
+  }),
+  z.object({
+    scope: z.literal('turn'),
+    meetingId: z.string().min(1).max(128),
+    turnIndex: z.number().int().min(0).max(1_000_000),
+  }),
+]);
+
 /** Channel-keyed map of v3 schemas for router/handler wiring. */
 export const v3ChannelSchemas = {
   'arena-root:set': arenaRootSetSchema,
@@ -809,6 +834,10 @@ export const v3ChannelSchemas = {
   'opinion:freeDiscussion': opinionFreeDiscussionSchema,
   // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ─────────────
   'meetings:composeMinutes': meetingsComposeMinutesSchema,
+  // ── R12-C2 P2 T12: RunStep read (dev-only registration) ─────────
+  // router.ts 가 process.env.NODE_ENV !== 'production' 일 때만 핸들러 등록.
+  // schema 는 항상 등록되어 dev 모드 zod round-trip 이 잘못된 payload 를 잡음.
+  'meeting:list-run-steps': meetingListRunStepsSchema,
 } as const;
 
 export type V3ChannelWithSchema = keyof typeof v3ChannelSchemas;

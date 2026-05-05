@@ -71,6 +71,7 @@ import type {
   Step3FreeDiscussionResponse,
 } from './opinion-types';
 import type { MeetingMinutesComposeResult } from './meeting-minutes-types';
+import type { RunStep } from './run-step-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -1020,6 +1021,29 @@ export type IpcChannelMap = {
   'meetings:composeMinutes': {
     request: { meetingId: string };
     response: { result: MeetingMinutesComposeResult };
+  };
+
+  /**
+   * R12-C2 P2 T12: 회의 turn *진행 일지* (RunStep) list — 디버깅 / replay /
+   * 회귀 분석 용. spec §11.19 의 cross-cutting 영속 레이어 read 표면.
+   *
+   * **dev 전용 등록**: router.ts 가 `process.env.NODE_ENV !== 'production'`
+   * 일 때만 핸들러를 등록. production 빌드는 채널 자체가 부재 — renderer
+   * 가 호출해도 주 프로세스가 응답 안 함 (typedInvoke 가 timeout 으로 실패).
+   * schema 는 v3ChannelSchemas 안 *항상* 등록되어 dev 모드 zod round-trip
+   * 이 잘못된 payload 를 잡아낼 수 있게 한다.
+   *
+   * 3 scope:
+   *  - `meeting`  meetingId 의 모든 RunStep (turn-by-turn replay)
+   *  - `channel`  channelId 의 모든 RunStep (채널 진행률 + 시간순)
+   *  - `turn`     meetingId + turnIndex 의 step 흐름 (한 turn 의 상세)
+   */
+  'meeting:list-run-steps': {
+    request:
+      | { scope: 'meeting'; meetingId: string }
+      | { scope: 'channel'; channelId: string }
+      | { scope: 'turn'; meetingId: string; turnIndex: number };
+    response: { steps: RunStep[] };
   };
 
   // ── R11-Task4: dev hooks (E2E only, gated by ROLESTRA_E2E=1) ────
