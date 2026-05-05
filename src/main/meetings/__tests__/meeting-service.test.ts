@@ -317,16 +317,18 @@ describe('MeetingService', () => {
       expect(remaining[0].id).toBe(b.id);
     });
 
-    it('derives stateIndex from the phase name (R12-C2 T15 — awaiting_user_pick added)', async () => {
+    it('derives stateIndex from the phase name (R12-C2 T16 — design phases added)', async () => {
       const channelId = await seedChannel();
       const meeting = meetingService.start({ channelId });
       meetingService.updateState(meeting.id, 'quick_vote', null);
       const [summary] = meetingService.listActive();
-      // SESSION_STATE_ORDER (= MEETING_PHASE_ORDER) 9 종:
+      // SESSION_STATE_ORDER (= MEETING_PHASE_ORDER) 11 종 (T16 = +2 design phases):
       //   gather=0, tally=1, awaiting_user_pick=2 (T15 idea-only),
-      //   quick_vote=3, free_discussion=4, compose_minutes=5, handoff=6, done=7
-      // 풀세트 회의 (planning / design / review / audit) 는 awaiting_user_pick
-      // skip 하지만 ordinal 만 차지함 — 정상.
+      //   quick_vote=3, free_discussion=4, assigning_designated_task=5 (T16 design-only),
+      //   compose_minutes=6, generating_snapshot=7 (T16 design-only),
+      //   handoff=8, done=9
+      // 풀세트 회의 (planning / review / audit) 는 awaiting_user_pick / designated /
+      // snapshot 모두 skip — ordinal 만 차지함, 정상.
       expect(summary.stateName).toBe('quick_vote');
       expect(summary.stateIndex).toBe(3);
     });

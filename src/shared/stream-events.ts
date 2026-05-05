@@ -315,6 +315,58 @@ export interface StreamIdeaPickSnapshotPayload {
   }>;
 }
 
+// ── design-workflow (T16 land — spec §5.2 / §11.18.9) ───────────────
+
+import type { DesignedTaskKind } from './meeting-flow-types';
+
+/**
+ * `stream:designed-task-assigned` 페이로드 — design-workflow 가 step 1/5/6
+ * 진입 시 emit. UI (SsmBox design variant — T18) 가 받아 "UX 직원이 와이어프레임
+ * 작성 중..." / "UI 직원이 HTML/CSS 작성 중..." 등 inline progress 표시.
+ *
+ * 직원 응답 도착 시 별도 이벤트 X — `stream:meeting-turn-done` 그대로 사용
+ * (단일 turn dispatch). 이후 phase 전이는 `stream:meeting-phase-changed` 로
+ * 알림.
+ *
+ * spec §5.2 디자인 부서 7 단계 + §11.18.9 designated-task 직원 응답 schema.
+ */
+export interface StreamDesignedTaskAssignedPayload {
+  meetingId: string;
+  channelId: string;
+  /** 진행 sub-kind — UI 가 메시지 분기. */
+  taskKind: DesignedTaskKind;
+  /** 어느 회의 차수인지 (1=와이어프레임 회의, 2=디자인 회의). UI 진행 표시용. */
+  meetingOrdinal: 1 | 2;
+  /** 지정된 직원 provider id (designated worker). UI 가 표시. */
+  assignedProviderId: string;
+  /** 직원 라벨 (예: 'gemini_1'). */
+  assignedAuthorLabel: string;
+}
+
+/**
+ * `stream:design-snapshot-ready` 페이로드 — design-workflow 가 generating_snapshot
+ * phase 완료 시 emit. UI (DesignPreview — T16c) 가 받아 desktop / mobile 탭
+ * surface 활성화 + PNG 표시.
+ *
+ * 경로는 ArenaRoot 기준 절대 경로 (PathGuard 봉인 안). UI 는 file:// URL 로
+ * 변환해 <img> src 로 사용. 동일 회의 안 재생성 X — handoff 시점에 1 회만.
+ *
+ * spec §11.18.9d — Playwright PNG 1280x720 + 375x812 (PathGuard 봉인 ArenaRoot
+ * 안 저장).
+ */
+export interface StreamDesignSnapshotReadyPayload {
+  meetingId: string;
+  channelId: string;
+  /** desktop viewport (1280x720) PNG 절대 경로. */
+  desktopPath: string;
+  /** mobile viewport (375x812) PNG 절대 경로. */
+  mobilePath: string;
+  /** 생성 timestamp (epoch ms). */
+  generatedAt: number;
+  /** 어느 의견 (HTML/CSS root) 으로부터 생성됐는지 — opinion uuid (audit 가능). */
+  sourceOpinionUuid: string;
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -371,6 +423,14 @@ export type StreamEvent =
   | {
       type: 'stream:idea-pick-snapshot';
       payload: StreamIdeaPickSnapshotPayload;
+    }
+  | {
+      type: 'stream:designed-task-assigned';
+      payload: StreamDesignedTaskAssignedPayload;
+    }
+  | {
+      type: 'stream:design-snapshot-ready';
+      payload: StreamDesignSnapshotReadyPayload;
     };
 
 export type StreamEventType = StreamEvent['type'];

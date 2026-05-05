@@ -358,9 +358,38 @@ DM
 6. handoff            — 기획 부서 인계 (handoff_mode 따라 분기, 풀세트와 동일)
 ```
 
-→ MeetingPhase enum 9 종 (gather / tally / **awaiting_user_pick** / quick_vote / free_discussion / compose_minutes / handoff / aborted / done) — `awaiting_user_pick` 은 idea-workflow 만 진입.
+→ MeetingPhase enum 11 종 (T16 갱신: gather / tally / **awaiting_user_pick** / quick_vote / free_discussion / **assigning_designated_task** / compose_minutes / **generating_snapshot** / handoff / aborted / done) — `awaiting_user_pick` 은 idea-workflow 만, `assigning_designated_task` + `generating_snapshot` 은 design-workflow 만 진입.
 → SsmBox idea variant (T18 통합) 가 phase=`awaiting_user_pick` 일 때 카드 list + 선택 체크 + textarea + 버튼 surface 활성화.
 → orchestrator 는 awaiting_user_pick 진입 시 *직원 발화 X / suspend* — 사용자 IPC 응답까지 phase loop 정지. 사용자 commit 후 compose_minutes → handoff 자동 진행.
+
+#### 5.2 디자인 부서 7 단계 (R12-C2 P3 정식, T16)
+
+디자인 부서는 풀세트 5+2.5 phase loop 를 *두 번* 거치면서, 그 사이/후로 **시스템→지정 직원 단일 turn 지시** (`assigning_designated_task`) 와 **Playwright PNG 생성** (`generating_snapshot`) phase 가 끼워진다. 합의 회의는 풀세트와 동일 — 부서별 차이는 (a) phase 진입 순서 (b) prompt template 분기 (c) snapshot 생성 후 handoff 에 한정.
+
+```
+[와이어프레임 단계 — 5 sub-step + 회의 #1]
+1. assigning_designated_task (kind='wireframe_drafting')
+   — 시스템 → UX 직원 단일 turn → 와이어프레임 root opinion 등록
+   — designated worker = capability='design.ux' 의 첫 직원 (T23 정식 resolver 전 임시)
+2-4. quick_vote → free_discussion → compose_minutes (회의 #1 — 와이어프레임)
+5. assigning_designated_task (kind='wireframe_revision')
+   — 시스템 → UI 직원 단일 turn → 합의 반영 와이어프레임 root opinion 등록
+   — designated worker = capability='design.ui' 의 첫 직원
+
+[디자인 단계 — 2 sub-step + 회의 #2]
+6. assigning_designated_task (kind='design_implementation')
+   — 시스템 → UI 직원 단일 turn → HTML/CSS root opinion 등록 (회의 #2 시드)
+7a. quick_vote → free_discussion → compose_minutes (회의 #2 — 디자인)
+7b. generating_snapshot
+   — Playwright off-screen Chromium → desktop 1280x720 + mobile 375x812 PNG
+   — ArenaRoot 봉인 안 저장 (PathGuard junction realpath 비교)
+7c. handoff — handoff_mode 따라 분기 (풀세트와 동일)
+```
+
+→ assigning_designated_task 응답 schema = §11.18.9 (Step6DesignedTaskSchema = §11.18.2 Step1 alias — single root opinion 권장).
+→ designated worker 결정 알고리즘은 R12-C2 P5 T23 (E. designated-worker-resolver) 에서 정식 — 부서장 핀 우선 → drag_order 1 번 → fallback. T16 land 시점에는 capability-first-match 임시 인라인 resolver 사용 (T23 land 시 교체).
+→ Playwright snapshot 은 T16c sub-task 에서 별도 land — 본 §5.2 의 step 7b 는 phase 정의만, 실제 PNG 생성은 `playwright-snapshot.ts` (T16c) 가 담당.
+→ design-workflow 가 mid-meeting abort 시 outcome='aborted' + abortReason 반환 (designated_task_failed / snapshot_failed / aborted / replaced).
 
 ### 데이터 모델 (R12-C2 — opinion 트리 + opinion_vote)
 
@@ -1246,6 +1275,44 @@ step 4 (모든 의견 합의/제외) 후 시스템이 모더레이터 (R12-S `Me
 | B1 NextStep 카드 (의견-단위) | 발언 *직후* 동작 | 발언 *직후* | **본 레이어** — 안전군 자동 / 결과 전파군 모달 |
 
 → 4 레이어 모두 *살아있고 공존*. B1 도입으로 사라지는 정책 없음. handoff_mode='auto' 의 의미만 *명시 opt-in 우회 (B1 디폴트 위에서)* 로 좁아짐.
+
+#### 11.18.9 step 6 — assigning_designated_task 직원 응답 (R12-C2 T16, design-workflow)
+
+design-workflow 의 시스템→지정 직원 단일 turn 지시 응답. 응답 구조는 §11.18.2 (step 1 의견 제시) 와 *완전 동일* — `opinions` 배열에 single root opinion 1 건 권장. 시스템이 단일 직원 (designated worker) 에게 단일 prompt 로 지시 → 그 직원의 단일 turn 응답을 root opinion 으로 등록.
+
+`Step6DesignedTaskSchema = Step1OpinionGatherSchema` (alias). schema 본체 X — 향후 분기 필요 시 (예: 와이어프레임 전용 `wireframe_text` 필드 추가) alias 만 교체.
+
+##### 11.18.9a sub-kind 3 종 (DesignedTaskKind)
+
+| # | kind | step | 지시 받는 직원 capability | 응답 본문 (`content`) |
+|---|------|------|----------------------|---------------------|
+| 1 | `wireframe_drafting`     | step 1 | `design.ux` | 와이어프레임 (ASCII tree / 구조 outline / 화면별 영역 description) |
+| 2 | `wireframe_revision`     | step 5 | `design.ui` | 합의 반영 수정 와이어프레임 |
+| 3 | `design_implementation`  | step 6 | `design.ui` | HTML + CSS 통째 (Playwright 입력 — desktop 1280x720 + mobile 375x812 모두 동작 권장) |
+
+##### 11.18.9b sub-kind 별 prompt 분기
+
+`buildDesignedTaskPromptBody(ctx)` (`src/main/meetings/workflows/design-workflow.ts`) 가 sub-kind 별로 헤더 + 미션 + priorContent + 응답 JSON skeleton 조합:
+
+- 헤더: "[현재 단계: 디자인 부서 — step N — <description>]"
+- 미션: sub-kind 별 본문 (와이어프레임 작성 / 합의 반영 / HTML/CSS 작성)
+- 참고 자료: priorContent (기획 인계서 / 회의 #1 회의록 / 수정 와이어프레임)
+- 응답 JSON skeleton: §11.18.2 Step1 양식 그대로 (single opinion 권장)
+
+##### 11.18.9c 빈 opinions 응답 처리
+
+`opinions: []` 응답 (직원 거부) 시 caller (orchestrator) 가 1 회 재요청 + 2 회 실패 시 회의 abort + outcome='aborted' + abortReason='designated_task_failed' 반환. (idea/full-set 의 의견-없음 분기와 다름 — designated-task 는 회의 진입 자체가 막히므로 회의 자체가 의미 없음.)
+
+##### 11.18.9d generating_snapshot phase
+
+design-workflow step 7b — 회의 #2 합의 직후, handoff 직전. 직원 응답 X (시스템 내부 Playwright off-screen 작업).
+
+- 입력: 회의 #2 의 root opinion (kind='root', design_implementation 응답) `content` 필드 = HTML + CSS
+- 출력: desktop (1280x720) + mobile (375x812) PNG 2 파일 — ArenaRoot 봉인 안 저장 (PathGuard junction realpath 비교)
+- 실패: snapshot exception 시 outcome='aborted' + abortReason='snapshot_failed' (회의록 자체는 이미 작성된 상태 — 회의록만 남고 PNG X)
+- stream 신호: `stream:design-snapshot-ready` (T16a land — `desktopPath` / `mobilePath` / `generatedAt` / `sourceOpinionUuid`)
+
+→ playwright-snapshot.ts 본체는 R12-C2 P3 T16c sub-task 에서 land. 본 §11.18.9d 는 phase 정의 + stream 신호 contract 만.
 
 ---
 

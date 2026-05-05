@@ -63,6 +63,8 @@ import type {
   StreamNotificationPrefsChangedPayload,
   StreamAutonomyModeChangedPayload,
   StreamIdeaPickSnapshotPayload,
+  StreamDesignedTaskAssignedPayload,
+  StreamDesignSnapshotReadyPayload,
 } from '../../shared/stream-events';
 
 /** Renderer-delivery hook. */
@@ -101,6 +103,8 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:notification-prefs-changed',
   'stream:autonomy-mode-changed',
   'stream:idea-pick-snapshot',
+  'stream:designed-task-assigned',
+  'stream:design-snapshot-ready',
 ]);
 
 interface FailureState {
@@ -434,6 +438,28 @@ export class StreamBridge {
     payload: StreamIdeaPickSnapshotPayload,
   ): void {
     this.emit({ type: 'stream:idea-pick-snapshot', payload });
+  }
+
+  /**
+   * R12-C2 T16 — design-workflow assigning_designated_task phase 진입 시
+   * 1 회 push. UI (renderer SsmBox design variant — T18) 가 inline progress
+   * ("UX 가 와이어프레임 작성 중...") 표시. spec §5.2 / §11.18.8.
+   */
+  emitDesignedTaskAssigned(
+    payload: StreamDesignedTaskAssignedPayload,
+  ): void {
+    this.emit({ type: 'stream:designed-task-assigned', payload });
+  }
+
+  /**
+   * R12-C2 T16 — design-workflow generating_snapshot phase 완료 시 1 회 push.
+   * UI (DesignPreview — T16c) 가 desktop / mobile PNG 탭 surface 활성화.
+   * spec §5.2 / §11.18.8c.
+   */
+  emitDesignSnapshotReady(
+    payload: StreamDesignSnapshotReadyPayload,
+  ): void {
+    this.emit({ type: 'stream:design-snapshot-ready', payload });
   }
 
   // ── Introspection (tests / diagnostics) ───────────────────────────
