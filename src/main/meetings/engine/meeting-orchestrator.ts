@@ -38,6 +38,7 @@
  */
 
 import type { Channel } from '../../../shared/channel-types';
+import { isDesignDepartmentRole } from '../../../shared/channel-role-types';
 import type {
   MeetingPhase,
   Step1OpinionGatherSchemaType,
@@ -67,6 +68,7 @@ import { tryGetLogger } from '../../log/logger-accessor';
 import type { MeetingSession } from './meeting-session';
 import type { ParticipantMessage } from '../../engine/history';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
+import type { providerRegistry } from '../../providers/registry';
 import { resolveNotificationLabel } from '../../notifications/notification-labels';
 import { INTER_TURN_DELAY_MS } from '../../../shared/timeouts';
 import {
@@ -79,10 +81,23 @@ import {
   type IdeaUserPickAbortReason,
   type IdeaWorkflowResult,
 } from '../workflows/idea-workflow';
+import {
+  capabilityForKind,
+  DesignatedWorkerNotFoundError,
+  resolveDesignatedWorker,
+  extractDesignedTaskOpinion,
+  type DesignatedWorkerCandidate,
+  type DesignedTaskContext,
+  type DesignedTaskKind,
+  type DesignWorkflowResult,
+} from '../workflows/design-workflow';
 import type {
   IdeaFinalizeSelectionInput,
   IdeaFinalizeSelectionResult,
 } from '../../../shared/opinion-types';
+
+/** Alias for the registry's instance type — same pattern as turn-executor. */
+type ProviderRegistry = typeof providerRegistry;
 
 export interface MeetingOrchestratorDeps {
   session: MeetingSession;
@@ -109,6 +124,13 @@ export interface MeetingOrchestratorDeps {
    * `step_kind='next_step_classify'` row 로 적층. spec §11.18.8 + §11.19.
    */
   runStepService: RunStepService;
+  /**
+   * R12-C2 T16b — design-workflow 의 시스템→지정 직원 phase 가 직원 capability
+   * (`design.ux` / `design.ui`) 를 lookup 하기 위해 사용. session.aiParticipants
+   * 의 providerId 를 ProviderInfo 로 join 해서 roles 추출. 풀세트 / idea 부서
+   * 흐름은 본 deps 사용 안 함 (idle pass-through).
+   */
+  providerRegistry: ProviderRegistry;
   /** Opt-out hook for tests — disables the inter-turn delay. */
   interTurnDelayMs?: number;
   /**
@@ -253,6 +275,7 @@ export class MeetingOrchestrator {
   private readonly opinionService: OpinionService;
   private readonly meetingMinutesService: MeetingMinutesService;
   private readonly runStepService: RunStepService;
+  private readonly providerRegistry: ProviderRegistry;
   private readonly interTurnDelayMs: number;
   private readonly onFinalized?: MeetingOrchestratorDeps['onFinalized'];
 
@@ -287,6 +310,7 @@ export class MeetingOrchestrator {
     this.opinionService = deps.opinionService;
     this.meetingMinutesService = deps.meetingMinutesService;
     this.runStepService = deps.runStepService;
+    this.providerRegistry = deps.providerRegistry;
     this.interTurnDelayMs = deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
     this.onFinalized = deps.onFinalized;
   }
@@ -322,6 +346,20 @@ export class MeetingOrchestrator {
       this.consumePendingAdvisory();
       this.primeLabelCounters();
 
+      // ── R12-C2 T16b: design 부서 분기 (gather phase 자체 우회) ────────
+      // 디자인 부서는 step 1 가 풀세트의 'gather' (전 직원 의견 모으기) 가
+      // 아니라 'assigning_designated_task' (지정 직원 1 명 발화) 로 시작 —
+      // design-workflow 가 자체 안에서 7-step 통째 진행 + compose_minutes
+      // 두 번 + (T16c land 시) snapshot + handoff 까지 다 처리.
+      const channel = this.lookupChannel();
+      if (channel && isDesignDepartmentRole(channel.role)) {
+        const designResult = await this.runDesignWorkflow();
+        if (this.session.aborted || designResult.outcome === 'aborted') {
+          return await this.finalize('aborted');
+        }
+        return await this.finalize('accepted');
+      }
+
       // ── phase 1: gather ─────────────────────────────────────────────
       await this.runGatherPhase();
       if (this.session.aborted) return await this.finalize('aborted');
@@ -330,7 +368,6 @@ export class MeetingOrchestrator {
       this.transitionToPhase('tally');
 
       // ── R12-C2 T15: idea-workflow 분기 (D-B-Light + USER_PICK) ──────
-      const channel = this.lookupChannel();
       if (channel?.role === 'idea') {
         const ideaResult = await this.runAwaitingUserPickPhase();
         if (this.session.aborted) return await this.finalize('aborted');
@@ -961,7 +998,383 @@ export class MeetingOrchestrator {
     };
   }
 
-  private async runComposeMinutesPhase(): Promise<void> {
+  // ── R12-C2 T16b: design-workflow phase 메서드 ───────────────────────
+
+  /**
+   * 회의 참가 직원 list 를 ProviderRegistry 와 join 해서 capability 매칭에
+   * 쓰일 후보 배열로 변환. design-workflow.resolveDesignatedWorker 의 입력.
+   *
+   * Provider 가 registry 에 없는 경우 (구성 시 삭제됨 etc.) 는 silent skip —
+   * 직원 list 자체는 회의 시점에 이미 검증됨. roles=[] 인 직원도 그대로 포함
+   * (resolveDesignatedWorker 가 capability 매칭 0 인 경우 throw).
+   */
+  private collectDesignedWorkerCandidates(): DesignatedWorkerCandidate[] {
+    const candidates: DesignatedWorkerCandidate[] = [];
+    for (const speaker of this.session.aiParticipants) {
+      const provider = this.providerRegistry.get(speaker.id);
+      if (!provider) continue;
+      candidates.push({
+        providerId: speaker.id,
+        displayName: speaker.displayName,
+        roles: provider.roles,
+      });
+    }
+    return candidates;
+  }
+
+  /**
+   * 시스템→지정 직원 단일 turn 지시 phase. spec §5.2 / §11.18.9.
+   *
+   * 흐름:
+   *   1. transitionToPhase('assigning_designated_task') + emit phase-changed
+   *   2. resolveDesignatedWorker(candidates, capabilityForKind(kind))
+   *      → 매칭 직원 0 명 → DesignatedWorkerNotFoundError 그대로 propagate
+   *      (caller 의 design-workflow 가 outcome='aborted' / abortReason 매핑)
+   *   3. emitDesignedTaskAssigned (UI 진행 표시)
+   *   4. requestAssigningDesignatedTask 1차 → ok+opinions≥1 시 성공 path
+   *      / ok+빈 opinions 시 또는 skipped 시 → 1 회 retry
+   *      / 두 번째도 실패 시 → throw DesignatedTaskFailedError
+   *   5. 성공 시 OpinionService.gather 1 건 호출 (root opinion 등록)
+   *
+   * 반환: 등록된 opinion uuid + content (caller 가 다음 step priorContent 로 활용).
+   */
+  private async runAssigningDesignatedTaskPhase(
+    kind: DesignedTaskKind,
+    meetingOrdinal: 1 | 2,
+    priorContent: string,
+  ): Promise<{ opinionUuid: string; content: string }> {
+    this.transitionToPhase('assigning_designated_task');
+
+    const capability = capabilityForKind(kind);
+    const candidates = this.collectDesignedWorkerCandidates();
+    const speaker = resolveDesignatedWorker(candidates, capability);
+    const speakerParticipant = this.session.aiParticipants.find(
+      (p) => p.id === speaker.providerId,
+    );
+    if (!speakerParticipant) {
+      // resolveDesignatedWorker 가 candidates 안에서 골랐고 candidates 자체는
+      // session.aiParticipants 로부터 만들었으므로 방어 — 발생 시 fail-loud.
+      throw new Error(
+        `[MeetingOrchestrator] designated speaker '${speaker.providerId}' missing from session participants`,
+      );
+    }
+
+    const suggestedLabel = this.session.nextLabel(speaker.providerId);
+
+    try {
+      this.streamBridge.emitDesignedTaskAssigned({
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        taskKind: kind,
+        meetingOrdinal,
+        assignedProviderId: speaker.providerId,
+        assignedAuthorLabel: suggestedLabel,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] emitDesignedTaskAssigned threw',
+        errorPayload(err),
+      );
+    }
+
+    const ctxBase: DesignedTaskContext = {
+      kind,
+      meetingOrdinal,
+      priorContent,
+      speakerDisplayName: speaker.displayName,
+      suggestedLabel,
+    };
+
+    let lastCause: 'empty-opinions' | 'turn-skipped' = 'turn-skipped';
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      if (this.session.aborted) {
+        throw new (await import('../workflows/design-workflow')).DesignatedTaskFailedError(
+          kind,
+          meetingOrdinal,
+          'turn-skipped',
+          `meeting aborted before designated-task attempt ${attempt}`,
+        );
+      }
+      // attempt 2 는 같은 prompt 재호출 — turn-executor 자체 retry 와 별개
+      // ("빈 opinions 응답" 은 schema 통과로 turn-executor 가 ok 반환하므로
+      //  caller 측 retry 가 필요. spec §11.18.9c).
+      const turnStartedAt = Date.now();
+      const result = await this.turnExecutor.requestAssigningDesignatedTask(
+        speakerParticipant,
+        ctxBase,
+      );
+      const turnEndedAt = Date.now();
+
+      if (result.kind === 'ok') {
+        const extracted = extractDesignedTaskOpinion(result.payload);
+        if (extracted !== null) {
+          // 성공 — root opinion 1 건 등록.
+          const channel = this.lookupChannel();
+          const maxRounds = resolveMaxRounds(channel);
+          const insertResult = this.opinionService.gather({
+            meetingId: this.session.meetingId,
+            channelId: this.session.channelId,
+            round: 0,
+            responses: [
+              { providerId: speaker.providerId, payload: result.payload },
+            ],
+          });
+          this.classifyAndPersistTurn({
+            phase: 'assigning_designated_task',
+            actorKind: 'employee',
+            speaker: speakerParticipant,
+            response: result.payload,
+            context: {
+              ...this.snapshotTreeFlags(),
+              currentRound: 0,
+              maxRounds,
+              hasNextChain: false,
+              minutesComposed: false,
+            },
+            durationMs: turnEndedAt - turnStartedAt,
+          });
+          // OpinionService.gather 가 입력 순서대로 row 를 push — 단일 응답이라
+          // 첫 inserted row 가 본 turn 의 root opinion.
+          const inserted = insertResult.inserted[0];
+          if (!inserted) {
+            // gather 가 빈 inserted 반환 = service 측 invariant 위반 — fail-loud.
+            throw new Error(
+              `[MeetingOrchestrator] OpinionService.gather returned empty inserted for designated-task '${kind}'`,
+            );
+          }
+          return {
+            opinionUuid: inserted.id,
+            content: inserted.content ?? extracted.content,
+          };
+        }
+        // ok + 빈 opinions → 다음 attempt.
+        lastCause = 'empty-opinions';
+        continue;
+      }
+      // skipped (provider-error / invalid-schema / aborted / work-status-gate).
+      lastCause = 'turn-skipped';
+    }
+
+    // 2 attempts 모두 실패 — caller 가 DesignWorkflowAbortReason 으로 매핑.
+    const designWorkflowMod = await import('../workflows/design-workflow');
+    throw new designWorkflowMod.DesignatedTaskFailedError(
+      kind,
+      meetingOrdinal,
+      lastCause,
+      `designated-task '${kind}' failed twice (cause=${lastCause}, capability=${capability})`,
+    );
+  }
+
+  /**
+   * Playwright PNG 생성 phase placeholder. T16c sub-task 가 본체 wire — 본
+   * sub-task 에서는 phase transition + 명시적 throw (또는 noop) 로 placeholder
+   * 만 둔다.
+   *
+   * T16c 가 본 메서드를 다음으로 교체:
+   *   - off-screen Electron BrowserWindow 로 HTML/CSS 렌더 (1280x720 + 375x812)
+   *   - PathGuard 검증 ArenaRoot 안 PNG 저장
+   *   - emitDesignSnapshotReady(payload) push
+   *   - DesignSnapshotPaths 반환
+   *
+   * 본 placeholder 는 T16c 진입 전 통합 테스트 시 동작 검증을 위해 throw
+   * (snapshot_failed) — caller (runDesignWorkflow) 가 catch + abortReason 매핑.
+   */
+  private async runGeneratingSnapshotPhase(
+    _sourceOpinionUuid: string,
+  ): Promise<never> {
+    this.transitionToPhase('generating_snapshot');
+    throw new Error(
+      '[MeetingOrchestrator] generating_snapshot not implemented yet — T16c land 시 playwright-snapshot.ts wire',
+    );
+  }
+
+  /**
+   * R12-C2 T16b — 디자인 부서 7 단계 통합. spec §5.2.
+   *
+   * 단일 회의 lifetime 안에서 풀세트 phase loop (quick_vote → free_discussion
+   * → compose_minutes) 를 *두 번* 거치며, 그 사이/후로 시스템→지정 직원 단일
+   * turn (assigning_designated_task) 을 3 회 / Playwright snapshot 1 회 끼워넣음.
+   *
+   *   step 1.   assigning_designated_task wireframe_drafting (UX 직원 → 회의 #1 시드)
+   *   step 2-4. 회의 #1 (quick_vote → free_discussion → compose_minutes #1)
+   *   step 5.   assigning_designated_task wireframe_revision (UI 직원, prior=회의록 #1)
+   *   step 6.   assigning_designated_task design_implementation (UI 직원, prior=수정 와이어프레임 → 회의 #2 시드)
+   *   step 7a.  회의 #2 (quick_vote → free_discussion → compose_minutes #2)
+   *   step 7b.  generating_snapshot (Playwright PNG, T16c 본체 land 전 placeholder throw)
+   *   step 7c.  handoff (풀세트와 동일 — runHandoffPhase 재사용)
+   *
+   * 회의록은 ordinal 별 분리 (`minutes-1.md` + `minutes-2.md`) — 두 회의의
+   * 의사결정 분리 audit 용. round 카운터는 회의 ordinal 별 reset (
+   * compose_minutes #1 직후 session.resetForNextDesignMeeting 호출).
+   *
+   * 실패 분기:
+   *   - DesignatedWorkerNotFoundError (capability 직원 0 명) → abortReason
+   *     {kind:'designated_task_failed', taskKind, meetingOrdinal, message}
+   *   - DesignatedTaskFailedError (1 회 재요청 + 2 회 실패) → 같은 abortReason
+   *   - generating_snapshot throw → abortReason {kind:'snapshot_failed', message}
+   *   - session.aborted → abortReason {kind:'aborted'}
+   */
+  private async runDesignWorkflow(): Promise<DesignWorkflowResult> {
+    const meetingId = this.session.meetingId;
+    try {
+      // step 1 — 와이어프레임 작성 (UX 직원).
+      const channel = this.lookupChannel();
+      const planningHandoff =
+        channel?.purpose && channel.purpose.length > 0
+          ? channel.purpose
+          : this.session.topic;
+      const step1 = await this.runAssigningDesignatedTaskPhase(
+        'wireframe_drafting',
+        1,
+        planningHandoff,
+      );
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+
+      // step 2-4 — 회의 #1 (와이어프레임).
+      const quickResult1 = await this.runQuickVotePhase();
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+      if (quickResult1.unresolved.length > 0) {
+        await this.runFreeDiscussionPhase(quickResult1.unresolved);
+        if (this.session.aborted) {
+          return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+        }
+      }
+      await this.runComposeMinutesPhase({ ordinal: 1 });
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+      const minutes1 = await this.readMinutesBody(1);
+
+      // 회의 #1 종결 — 회의 #2 진입 전 round 카운터 reset (회의 ordinal 별
+      // 1 부터 다시 카운트). 발화 ID 카운터는 reset X — 직원 식별 일관성 유지.
+      this.session.resetRound();
+
+      // step 5 — 와이어프레임 수정 (UI 직원).
+      void step1;
+      const step5 = await this.runAssigningDesignatedTaskPhase(
+        'wireframe_revision',
+        1,
+        minutes1,
+      );
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+
+      // step 6 — HTML/CSS 작성 (UI 직원, 회의 #2 시드).
+      await this.runAssigningDesignatedTaskPhase(
+        'design_implementation',
+        2,
+        step5.content,
+      );
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+
+      // step 7a — 회의 #2 (디자인).
+      const quickResult2 = await this.runQuickVotePhase();
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+      if (quickResult2.unresolved.length > 0) {
+        await this.runFreeDiscussionPhase(quickResult2.unresolved);
+        if (this.session.aborted) {
+          return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+        }
+      }
+      await this.runComposeMinutesPhase({ ordinal: 2 });
+      if (this.session.aborted) {
+        return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+
+      // step 7b — Playwright snapshot. T16c 가 wire 하면 outcome.snapshot 채움.
+      // 현재 placeholder 는 throw — 통합 catch 가 abortReason='snapshot_failed' 로 변환.
+      // (T16c land 시 snapshot 결과를 return 에 담아 outcome='committed' + snapshot.)
+      const designImplOpinionUuid = await this.findLatestDesignImplementationOpinion();
+      const snapshot = await this.runGeneratingSnapshotPhase(
+        designImplOpinionUuid,
+      );
+      // 유효 코드 — generating_snapshot 가 throw 만 하므로 unreachable, T16c land 시 활성.
+      void snapshot;
+      return { meetingId, outcome: 'committed' };
+    } catch (err) {
+      if (err instanceof DesignatedWorkerNotFoundError) {
+        return {
+          meetingId,
+          outcome: 'aborted',
+          abortReason: {
+            kind: 'designated_task_failed',
+            taskKind: 'wireframe_drafting',
+            meetingOrdinal: 1,
+            message: err.message,
+          },
+        };
+      }
+      const designWorkflowMod = await import('../workflows/design-workflow');
+      if (err instanceof designWorkflowMod.DesignatedTaskFailedError) {
+        return {
+          meetingId,
+          outcome: 'aborted',
+          abortReason: {
+            kind: 'designated_task_failed',
+            taskKind: err.taskKind,
+            meetingOrdinal: err.meetingOrdinal,
+            message: err.message,
+          },
+        };
+      }
+      // generating_snapshot placeholder throw 또는 임의 throw — snapshot_failed 로 매핑.
+      return {
+        meetingId,
+        outcome: 'aborted',
+        abortReason: {
+          kind: 'snapshot_failed',
+          message: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
+  }
+
+  /**
+   * 회의 #N (ordinal) 의 회의록 본문을 디스크에서 읽어 step 5 priorContent
+   * 로 활용. compose 결과는 caller 에 반환되지만 별도 in-memory cache 없이
+   * 재읽기 — 회의록 service 단일 진실 원천 유지.
+   */
+  private async readMinutesBody(ordinal: 1 | 2): Promise<string> {
+    return this.meetingMinutesService.readMinutesBody({
+      meetingId: this.session.meetingId,
+      ordinal,
+    });
+  }
+
+  /**
+   * 회의 #2 시드 = `design_implementation` root opinion. opinion 트리에서
+   * 가장 마지막 root (kind='root', author=design.ui 직원) 의 uuid 를 반환.
+   * runDesignWorkflow 가 step 6 직후 step 7a 회의 #2 가 끝난 후 snapshot 호출
+   * 에 사용.
+   *
+   * 트리 구조: design 부서 회의는 root 3 개 누적 — step 1 (drafting), step 5
+   * (revision), step 6 (implementation). 마지막 root (created_at 기준) 를
+   * implementation 으로 가정 (design-workflow 진행 순서).
+   */
+  private async findLatestDesignImplementationOpinion(): Promise<string> {
+    const tally = this.opinionService.tally(this.session.meetingId);
+    if (tally.tree.length === 0) {
+      throw new Error(
+        `[MeetingOrchestrator] design-workflow snapshot — no root opinion found for meeting ${this.session.meetingId}`,
+      );
+    }
+    // tally tree 가 created_at 오름차순으로 정렬되어 있다고 가정 — 마지막 root 가 step 6.
+    const last = tally.tree[tally.tree.length - 1]!;
+    return last.opinion.id;
+  }
+
+  private async runComposeMinutesPhase(options?: {
+    ordinal?: 1 | 2;
+  }): Promise<void> {
     this.transitionToPhase('compose_minutes');
     const channel = this.lookupChannel();
     const maxRounds = resolveMaxRounds(channel);
@@ -970,6 +1383,7 @@ export class MeetingOrchestrator {
     try {
       const result = await this.meetingMinutesService.compose({
         meetingId: this.session.meetingId,
+        ordinal: options?.ordinal,
       });
       composed = true;
       // 채팅창 회의록 카드 — meta.minutesPath / meta.minutesSource 로 renderer 가

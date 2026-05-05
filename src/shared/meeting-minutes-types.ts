@@ -34,6 +34,18 @@ export type MeetingMinutesSource =
 /** compose() 입력. */
 export interface MeetingMinutesComposeInput {
   meetingId: string;
+  /**
+   * R12-C2 T16b — 디자인 부서 한정 회의 ordinal. 디자인 부서는 한 회의
+   * lifetime 안에서 회의 #1 (와이어프레임) + 회의 #2 (디자인) 두 번 진행 —
+   * 회의록 두 파일 (`minutes-1.md` + `minutes-2.md`) 분리 저장.
+   *
+   *   - undefined / 0 / 다른 부서: `minutes.md` (단일)
+   *   - 1 = 회의 #1 (와이어프레임): `minutes-1.md`
+   *   - 2 = 회의 #2 (디자인): `minutes-2.md`
+   *
+   * 풀세트 / idea 부서는 ordinal 미지정 → 기존 단일 파일 그대로 (영향 없음).
+   */
+  ordinal?: 1 | 2;
 }
 
 /**

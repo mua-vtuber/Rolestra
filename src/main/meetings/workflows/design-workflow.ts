@@ -31,6 +31,11 @@ import type {
   DesignedTaskKind,
   Step6DesignedTaskSchemaType,
 } from '../../../shared/meeting-flow-types';
+import type { RoleId } from '../../../shared/role-types';
+
+// Re-export for callers that import design-workflow as the single entry point
+// (orchestrator / turn-executor) — same convention as idea-workflow.
+export type { DesignedTaskKind } from '../../../shared/meeting-flow-types';
 
 // ── 결과 타입 ─────────────────────────────────────────────────────
 
@@ -222,6 +227,116 @@ function contentHintForKind(kind: DesignedTaskKind): string {
 function escapeForPrompt(value: string): string {
   // \ → \\ + " → \" 만 — JSON literal 안 안전 noun.
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+// ── designated-worker resolver — capability-first-match (T16b 임시) ──
+
+/**
+ * 디자인 부서 채널 안에서 `assigning_designated_task` phase 가 호명할 직원의
+ * 최소 컨트랙트. T23 (E. designated-worker-resolver) 가 정식 알고리즘을 land
+ * 하기 전까지 본 인터페이스로 capability-first-match 를 수행한다.
+ *
+ * orchestrator (T16b) 가 `session.aiParticipants` 와 `ProviderRegistry` 를
+ * join 한 결과를 본 형태로 변환해서 resolver 에 전달.
+ */
+export interface DesignatedWorkerCandidate {
+  /** Participant.id (= providerId for AI). */
+  providerId: string;
+  /** UI 표시 / prompt 안 발화자 이름. */
+  displayName: string;
+  /** 직원에게 부여된 능력 (R12-S 카탈로그 RoleId list). */
+  roles: readonly RoleId[];
+}
+
+/**
+ * `wireframe_drafting` → `design.ux`, `wireframe_revision` /
+ * `design_implementation` → `design.ui`. spec §5.2 / §11.18.9a 매트릭스.
+ */
+export function capabilityForKind(kind: DesignedTaskKind): RoleId {
+  switch (kind) {
+    case 'wireframe_drafting':
+      return 'design.ux';
+    case 'wireframe_revision':
+    case 'design_implementation':
+      return 'design.ui';
+  }
+}
+
+/**
+ * T16b 임시 designated-worker resolver — capability 매칭 *첫* 직원 반환.
+ *
+ *   - drag_order 무시 (T23 정식 resolver 가 부서장 핀 + drag_order + fallback
+ *     순서로 통합한 다음에 본 helper 는 deletion target).
+ *   - 매칭 직원 0 명 → throw {@link DesignatedWorkerNotFoundError}.
+ *     orchestrator 는 즉시 회의 abort + outcome='aborted' +
+ *     abortReason='designated_task_failed' 반환.
+ *
+ * candidates 배열 순서는 caller 가 결정 (orchestrator 는 `aiParticipants`
+ * 순서 = 초기 회의 소집 시 멤버 순서). 동일 capability 직원이 여럿이면 *첫*
+ * 직원이 결정 — 본 임시 규칙은 두 명 이상 매칭 시 비결정성 회피용.
+ */
+export function resolveDesignatedWorker(
+  candidates: readonly DesignatedWorkerCandidate[],
+  capability: RoleId,
+): DesignatedWorkerCandidate {
+  for (const candidate of candidates) {
+    if (candidate.roles.includes(capability)) {
+      return candidate;
+    }
+  }
+  throw new DesignatedWorkerNotFoundError(capability);
+}
+
+/**
+ * `resolveDesignatedWorker` 가 capability 매칭 직원 0 명 시 throw — orchestrator
+ * 가 catch 후 회의 abort.
+ *
+ * `capability` 필드는 디버그 / 사용자 알림 메시지 작성 용도. abortReason 은
+ * orchestrator 가 별도 분기 처리 (`designated_task_failed`).
+ */
+export class DesignatedWorkerNotFoundError extends Error {
+  readonly capability: RoleId;
+  constructor(capability: RoleId) {
+    super(
+      `[DesignatedWorker] no candidate matched capability '${capability}' — design-workflow cannot proceed`,
+    );
+    this.name = 'DesignatedWorkerNotFoundError';
+    this.capability = capability;
+  }
+}
+
+/**
+ * 지정 직원이 두 번 모두 빈 opinions / schema mismatch / provider error 응답
+ * 시 orchestrator 가 회의 abort 직전 throw. spec §11.18.9c — "1 회 재요청 +
+ * 2 회 실패 시 회의 abort + outcome='aborted' + abortReason='designated_task_failed'".
+ *
+ * orchestrator 가 catch 시 design-workflow 의 outcome='aborted' +
+ * abortReason={kind:'designated_task_failed', taskKind, meetingOrdinal,
+ * message} 매핑 + finalize('aborted').
+ */
+export class DesignatedTaskFailedError extends Error {
+  readonly taskKind: DesignedTaskKind;
+  readonly meetingOrdinal: 1 | 2;
+  /**
+   * 실패 분기 — `'empty-opinions'` (두 번 다 빈 응답) / `'turn-skipped'`
+   * (provider-error / invalid-schema / work-status-gate / aborted 로 인한
+   * skip 두 번 누적). orchestrator 의 stream payload + 회의록 fallback 에 활용.
+   */
+  readonly cause:
+    | 'empty-opinions'
+    | 'turn-skipped';
+  constructor(
+    taskKind: DesignedTaskKind,
+    meetingOrdinal: 1 | 2,
+    cause: 'empty-opinions' | 'turn-skipped',
+    message: string,
+  ) {
+    super(message);
+    this.name = 'DesignatedTaskFailedError';
+    this.taskKind = taskKind;
+    this.meetingOrdinal = meetingOrdinal;
+    this.cause = cause;
+  }
 }
 
 // ── opinion 추출 — Step6 response → OpinionGather 입력 ──────────────

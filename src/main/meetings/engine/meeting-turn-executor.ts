@@ -61,7 +61,12 @@ import {
   type Step1OpinionGatherSchemaType,
   type Step25QuickVoteSchemaType,
   type Step3FreeDiscussionSchemaType,
+  type Step6DesignedTaskSchemaType,
 } from '../../../shared/meeting-flow-types';
+import {
+  buildDesignedTaskPromptBody,
+  type DesignedTaskContext,
+} from '../workflows/design-workflow';
 import { buildPermissionRules } from '../../members/persona-permission-rules';
 import { tryGetLogger } from '../../log/logger-accessor';
 import type { BaseProvider } from '../../providers/provider-interface';
@@ -229,10 +234,36 @@ export class MeetingTurnExecutor {
     });
   }
 
+  /**
+   * R12-C2 T16b — design-workflow 의 시스템→지정 직원 단일 turn 지시. spec
+   * §11.18.9. 응답 schema = Step6DesignedTaskSchema (= Step1 alias).
+   *
+   * runPhaseTurn 의 turn-executor 자체 retry (1차 + 1회 재시도) 가 schema
+   * 부합 여부에만 적용 — *빈 opinions* (직원 거부) 응답은 schema 통과 시
+   * 'ok' 로 반환. orchestrator 가 결과를 보고 빈 opinions 면 한 번 더
+   * requestAssigningDesignatedTask 호출 → 두 번째도 빈이면 회의 abort
+   * (spec §11.18.9c).
+   */
+  async requestAssigningDesignatedTask(
+    speaker: Participant,
+    ctx: DesignedTaskContext,
+  ): Promise<MeetingTurnResult<Step6DesignedTaskSchemaType>> {
+    return this.runPhaseTurn({
+      phase: 'assigning_designated_task',
+      speaker,
+      schema: PHASE_RESPONSE_SCHEMAS.assigning_designated_task,
+      buildPromptBody: () => buildDesignedTaskPromptBody(ctx),
+    });
+  }
+
   // ── 공통 phase turn 흐름 ──────────────────────────────────────────
 
   private async runPhaseTurn<T>(args: {
-    phase: 'gather' | 'quick_vote' | 'free_discussion';
+    phase:
+      | 'gather'
+      | 'quick_vote'
+      | 'free_discussion'
+      | 'assigning_designated_task';
     speaker: Participant;
     schema: ZodType<T>;
     buildPromptBody: () => string;
@@ -445,7 +476,11 @@ export class MeetingTurnExecutor {
     provider: BaseProvider;
     speaker: Participant;
     promptBody: string;
-    phase: 'gather' | 'quick_vote' | 'free_discussion';
+    phase:
+      | 'gather'
+      | 'quick_vote'
+      | 'free_discussion'
+      | 'assigning_designated_task';
   }): Promise<
     | {
         kind: 'ok';

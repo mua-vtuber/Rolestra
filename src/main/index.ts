@@ -933,6 +933,7 @@ app.whenReady().then(async () => {
           opinionService,
           meetingMinutesService,
           runStepService,
+          providerRegistry,
           // R9-Task7: autonomy-queue run loop. When the finalised meeting
           // belongs to a project in `queue` mode, complete the owning
           // queue item and advance to the next pending item. Lookups miss

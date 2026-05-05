@@ -215,6 +215,13 @@ function buildDeps(
     listByTurn: vi.fn(() => []),
   } as unknown as RunStepService;
 
+  // T16b — design-workflow 가 ProviderRegistry 를 capability lookup 에 사용.
+  // 테스트 디폴트는 빈 registry (get → undefined) — design 부서 회의가 아닌
+  // 풀세트 / idea 흐름에서는 미사용. design 분기 테스트가 필요한 경우 override.
+  const providerRegistry = {
+    get: vi.fn(() => undefined),
+  } as unknown as MeetingOrchestratorDeps['providerRegistry'];
+
   return {
     session,
     turnExecutor: overrides.turnExecutor ?? turnExecutor,
@@ -228,6 +235,7 @@ function buildDeps(
     meetingMinutesService:
       overrides.meetingMinutesService ?? meetingMinutesService,
     runStepService: overrides.runStepService ?? runStepService,
+    providerRegistry: overrides.providerRegistry ?? providerRegistry,
     interTurnDelayMs: 0,
     onFinalized: overrides.onFinalized,
   };
@@ -344,6 +352,102 @@ describe('MeetingOrchestrator — abort handling', () => {
     );
     expect(deps.turnExecutor.requestFreeDiscussion).not.toHaveBeenCalled();
     expect(deps.meetingMinutesService.compose).not.toHaveBeenCalled();
+  });
+});
+
+describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
+  it('design 채널 + capability 매칭 직원 0 명 → designed_task_failed 분기 → finalize aborted', async () => {
+    // 디자인 부서 채널 (role='design.ux') 인데 모든 직원이 design 능력 미보유.
+    // runDesignWorkflow 가 step 1 wireframe_drafting 진입 시 resolveDesignatedWorker
+    // 가 throw DesignatedWorkerNotFoundError → outcome='aborted' / abortReason
+    // 'designated_task_failed' → finalize('aborted').
+    const session = buildSession();
+    const designChannel = makeChannel(5);
+    (designChannel as unknown as { role: string }).role = 'design.ux';
+
+    const channelService = {
+      get: vi.fn(() => designChannel),
+      list: vi.fn(() => [designChannel]),
+    } as unknown as ChannelService;
+
+    // providerRegistry.get → roles=['planning'] 만 (design 능력 X) — resolver 가 throw.
+    const providerRegistry = {
+      get: vi.fn(() => ({
+        id: 'ai-1',
+        type: 'api' as const,
+        displayName: 'AI 1',
+        model: 'm',
+        capabilities: [],
+        status: 'ready' as const,
+        config: {},
+        roles: ['planning'],
+        skill_overrides: null,
+      })),
+    } as unknown as MeetingOrchestratorDeps['providerRegistry'];
+
+    const deps = buildDeps({
+      session,
+      channelService,
+      providerRegistry,
+    });
+    const orchestrator = new MeetingOrchestrator(deps);
+    await orchestrator.run();
+
+    // gather phase 자체 진입 X (design 분기에서 우회).
+    expect(deps.turnExecutor.requestOpinionGather).not.toHaveBeenCalled();
+    // resolver 가 throw → assigning_designated_task turn 호출 X.
+    // (turn-executor mock 에 requestAssigningDesignatedTask 가 없어서 호출 시
+    //  TypeError — 본 분기에서는 호출 자체가 없어야 함을 검증.)
+    expect(deps.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'aborted',
+      null,
+    );
+  });
+
+  it('design 채널 + 풀세트 흐름 우회 — runQuickVotePhase 호출 안 됨 (step 1 진입 전 abort)', async () => {
+    const session = buildSession();
+    const designChannel = makeChannel(5);
+    (designChannel as unknown as { role: string }).role = 'design.ui';
+
+    const channelService = {
+      get: vi.fn(() => designChannel),
+      list: vi.fn(() => [designChannel]),
+    } as unknown as ChannelService;
+
+    // 모든 직원이 design 능력 미보유 → step 1 진입 시 즉시 abort.
+    const providerRegistry = {
+      get: vi.fn(() => ({
+        id: 'ai-1',
+        type: 'api' as const,
+        displayName: 'AI 1',
+        model: 'm',
+        capabilities: [],
+        status: 'ready' as const,
+        config: {},
+        roles: ['general'],
+        skill_overrides: null,
+      })),
+    } as unknown as MeetingOrchestratorDeps['providerRegistry'];
+
+    const deps = buildDeps({
+      session,
+      channelService,
+      providerRegistry,
+    });
+    const orchestrator = new MeetingOrchestrator(deps);
+    await orchestrator.run();
+
+    // 풀세트의 quick_vote / free_discussion / compose_minutes 통째 우회.
+    expect(deps.turnExecutor.requestQuickVote).not.toHaveBeenCalled();
+    expect(deps.turnExecutor.requestFreeDiscussion).not.toHaveBeenCalled();
+    expect(deps.meetingMinutesService.compose).not.toHaveBeenCalled();
+    // finalize aborted.
+    expect(deps.meetingService.finish).toHaveBeenCalledWith(
+      MEETING_ID,
+      'aborted',
+      null,
+    );
   });
 });
 

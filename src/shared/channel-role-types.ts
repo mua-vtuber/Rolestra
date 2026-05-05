@@ -27,3 +27,13 @@ export const ALL_HANDOFF_MODES = ['check', 'auto'] as const;
 export function isHandoffMode(value: unknown): value is HandoffMode {
   return typeof value === 'string' && (ALL_HANDOFF_MODES as readonly string[]).includes(value);
 }
+
+/**
+ * R12-C2 T16b — "디자인 부서" 식별. spec §3 line 86 (디자인 부서 = [design.ui,
+ * design.ux] 두 능력 묶음). 두 RoleId 중 하나면 design-workflow (T16) 가
+ * 실행되어야 함. design.character / design.background 는 별도 부서 — 본
+ * 분기에 포함 X.
+ */
+export function isDesignDepartmentRole(role: ChannelRole): boolean {
+  return role === 'design.ui' || role === 'design.ux';
+}

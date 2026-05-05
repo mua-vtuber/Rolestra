@@ -99,6 +99,20 @@ const TRUNCATE_SKIP_OPINION_LEN = 100;
 const MINUTES_SUBDIR = 'meetings';
 const MINUTES_FILENAME = 'minutes.md';
 
+/**
+ * R12-C2 T16b — ordinal 별 파일 이름. 디자인 부서 한정.
+ *
+ *   - undefined → 기존 단일 'minutes.md'
+ *   - 1 → 'minutes-1.md' (와이어프레임 회의 #1)
+ *   - 2 → 'minutes-2.md' (디자인 회의 #2)
+ *
+ * 다른 부서는 ordinal 미지정 → 기존 단일 파일 그대로 (영향 없음).
+ */
+function minutesFilenameForOrdinal(ordinal: 1 | 2 | undefined): string {
+  if (ordinal === undefined) return MINUTES_FILENAME;
+  return `minutes-${ordinal}.md`;
+}
+
 // ── Service ────────────────────────────────────────────────────────────
 
 export interface MeetingMinutesServiceDeps {
@@ -233,8 +247,12 @@ export class MeetingMinutesService {
       chosenSource = 'fallback';
     }
 
-    // 6. atomic write — `<consensus>/meetings/<meetingId>/minutes.md`
-    const minutesPath = await this.writeMinutes(input.meetingId, chosenBody);
+    // 6. atomic write — `<consensus>/meetings/<meetingId>/<filename>`
+    const minutesPath = await this.writeMinutes(
+      input.meetingId,
+      chosenBody,
+      input.ordinal,
+    );
 
     return {
       body: chosenBody,
@@ -252,10 +270,14 @@ export class MeetingMinutesService {
    * 모두 같은 디렉터리 안 rename 은 atomic. PathGuard 봉인 = consensusPath
    * prefix 일치 검증 (TOCTOU 안전 — path.resolve 후 startsWith).
    */
-  private async writeMinutes(meetingId: string, body: string): Promise<string> {
+  private async writeMinutes(
+    meetingId: string,
+    body: string,
+    ordinal: 1 | 2 | undefined,
+  ): Promise<string> {
     const consensusBase = path.resolve(this.deps.arenaRoot.consensusPath());
     const targetDir = path.resolve(consensusBase, MINUTES_SUBDIR, meetingId);
-    const targetFile = path.join(targetDir, MINUTES_FILENAME);
+    const targetFile = path.join(targetDir, minutesFilenameForOrdinal(ordinal));
 
     // PathGuard — resolved target 이 consensusBase 안인지 검증.
     const baseWithSep = consensusBase + path.sep;
@@ -273,6 +295,36 @@ export class MeetingMinutesService {
     await this.fs.rename(tmpFile, targetFile);
 
     return targetFile;
+  }
+
+  /**
+   * R12-C2 T16b — 회의록 본문 디스크 read. design-workflow 의 step 5
+   * (wireframe_revision) 가 priorContent 로 회의록 #1 본문을 읽기 위해 사용.
+   *
+   * 파일 경로 = `<consensus>/meetings/<meetingId>/<filename>`. PathGuard 봉인
+   * 동일 (TOCTOU 안전 — path.resolve 후 startsWith). 파일 미존재 / 읽기 실패
+   * 시 throw — caller (orchestrator) 가 abortReason 매핑.
+   */
+  async readMinutesBody(args: {
+    meetingId: string;
+    ordinal?: 1 | 2;
+  }): Promise<string> {
+    const consensusBase = path.resolve(this.deps.arenaRoot.consensusPath());
+    const targetDir = path.resolve(consensusBase, MINUTES_SUBDIR, args.meetingId);
+    const targetFile = path.join(
+      targetDir,
+      minutesFilenameForOrdinal(args.ordinal),
+    );
+
+    const baseWithSep = consensusBase + path.sep;
+    if (
+      targetDir !== consensusBase &&
+      !targetDir.startsWith(baseWithSep)
+    ) {
+      throw new MinutesPathOutsideConsensusError(targetDir, consensusBase);
+    }
+
+    return await fsp.readFile(targetFile, 'utf-8');
   }
 }
 
