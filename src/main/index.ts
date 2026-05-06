@@ -321,6 +321,7 @@ app.whenReady().then(async () => {
       channelRepo,
       meetingRepo,
       runStepRepo,
+      opinionRepo,
     );
     setRunStepAggregatorAccessor(() => runStepAggregator);
 

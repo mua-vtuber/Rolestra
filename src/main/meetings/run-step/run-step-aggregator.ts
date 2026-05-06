@@ -37,6 +37,9 @@ import {
   type DepartmentStatus,
 } from '../../../shared/dashboard-progress-types';
 import type { ChannelRepository } from '../../channels/channel-repository';
+import type { Channel } from '../../../shared/channel-types';
+import { isGeneralChannel } from '../../channels/general-channel-opinion-flow';
+import type { OpinionRepository } from '../opinion-repository';
 import type { MeetingRepository } from '../meeting-repository';
 import type { RunStepRepository } from './run-step-repository';
 
@@ -80,6 +83,7 @@ export class RunStepAggregator {
     private readonly channelRepo: ChannelRepository,
     private readonly meetingRepo: MeetingRepository,
     private readonly runStepRepo: RunStepRepository,
+    private readonly opinionRepo: OpinionRepository,
   ) {}
 
   /**
@@ -90,6 +94,14 @@ export class RunStepAggregator {
    * timestamp 만 돌려준다. 사용자가 갓 import 한 빈 프로젝트에서도 H1
    * 패널이 즉시 mount 되어야 하기 때문 (silent fallback 아님 — 도메인
    * 적으로 "역할 매핑된 채널이 0 개" 가 의미 있는 정상 상태).
+   *
+   * R12-C2 P4 T22 — 일반 채널 (system_general 전역 + user role='general')
+   * 분기:
+   *  - 회의 X 라 RunStep 0 건 → opinion 카드 수를 `cardCount` 로 별도 surface
+   *  - status='chatting' 고정 (회의 4 종 status 와 분리)
+   *  - `stream:dashboard-progress-changed` 신호 통로는 RunStep 'appended' 외
+   *    별도 신호 미연결 — 잡담은 가벼운 surface 라 mount 1 회 + zustand TTL 로
+   *    충분 (사용자 결정, 옵션 C)
    */
   getProgressSnapshot(projectId: string): DashboardProgressSnapshot {
     const generatedAt = Date.now();
@@ -97,9 +109,23 @@ export class RunStepAggregator {
 
     const departments: DepartmentProgress[] = [];
     for (const channel of channels) {
-      // role 미매핑 채널 (system / legacy user) 은 H1 surface 에서 제외.
-      // DM 은 listByProject 가 애초 돌려주지 않음 (project_id IS NULL).
+      // role 미매핑 채널 (system_approval / system_minutes / legacy user) 은
+      // H1 surface 에서 제외. DM 은 listByProject 가 애초 돌려주지 않음
+      // (project_id IS NULL).
       if (channel.role === null) continue;
+
+      // 일반 채널 (전역 #일반 또는 user role='general') = 회의 X. RunStep 안
+      // 적고 의견 카드 카운트만 surface. `channel.role` non-null 분기 직후
+      // 라 narrow 단언 가능.
+      if (isGeneralChannel(channel)) {
+        departments.push(
+          buildGeneralProgress(
+            channel as Channel & { role: RoleId },
+            this.opinionRepo,
+          ),
+        );
+        continue;
+      }
 
       const activeMeeting = this.meetingRepo.getActiveByChannel(channel.id);
       const allSteps = this.runStepRepo.listByChannel(channel.id);
@@ -126,6 +152,7 @@ export class RunStepAggregator {
         maxRounds: channel.maxRounds,
         stepKindCounts,
         totalSteps,
+        cardCount: null,
       });
     }
 
@@ -174,4 +201,40 @@ function maxRoundForMeeting(
     if (step.round > max) max = step.round;
   }
   return max < 0 ? null : max;
+}
+
+/**
+ * 일반 채널 (user role='general' / 프로젝트 안 잡담) 의 진행률 row. 회의 X
+ * 라 RunStep 안 적고 — opinion 카드 수만 surface (spec §11.21.2 위젯 라벨
+ * "잡담 (카드 N)" 의 N).
+ *
+ * 전역 #일반 (system_general, projectId NULL) 은 channelRepo.listByProject 가
+ * 애초 돌려주지 않으므로 본 helper 도달 X — 사이드바 entry 가 별 surface.
+ *
+ * 회의 부서와 같은 schema 를 채우지만 의미는 다름:
+ *  - status='chatting' 고정
+ *  - activeMeetingId / currentRound = null (회의 개념 없음)
+ *  - totalSteps = 0 / stepKindCounts = 모두 0 (RunStep 안 적음)
+ *  - cardCount = opinion row 수 (light 표는 별 surface — opinion 카드 자체에 카운터)
+ *
+ * 호출 측에서 `channel.role === null` 분기 직후 진입하므로 본 helper 안에서는
+ * channel.role 이 항상 non-null ('general' enum 값).
+ */
+function buildGeneralProgress(
+  channel: Channel & { role: RoleId },
+  opinionRepo: OpinionRepository,
+): DepartmentProgress {
+  const cardCount = opinionRepo.listByChannel(channel.id).length;
+  return {
+    channelId: channel.id,
+    channelName: channel.name,
+    role: channel.role,
+    status: 'chatting',
+    activeMeetingId: null,
+    currentRound: null,
+    maxRounds: channel.maxRounds,
+    stepKindCounts: emptyStepKindCounts(),
+    totalSteps: 0,
+    cardCount,
+  };
 }

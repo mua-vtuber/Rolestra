@@ -31,6 +31,8 @@ import {
 } from '../../../database/__tests__/_helpers';
 import { MeetingRepository } from '../../meeting-repository';
 import { MeetingService } from '../../meeting-service';
+import { OpinionRepository } from '../../opinion-repository';
+import { OpinionService } from '../../opinion-service';
 import { RunStepRepository } from '../run-step-repository';
 import { RunStepService } from '../run-step-service';
 import { RunStepAggregator } from '../run-step-aggregator';
@@ -79,6 +81,8 @@ describe('RunStepAggregator', () => {
   let meetingService: MeetingService;
   let runStepRepo: RunStepRepository;
   let runStepService: RunStepService;
+  let opinionRepo: OpinionRepository;
+  let opinionService: OpinionService;
   let aggregator: RunStepAggregator;
 
   const projectId = 'p-1';
@@ -102,7 +106,14 @@ describe('RunStepAggregator', () => {
     meetingService = new MeetingService(meetingRepo);
     runStepRepo = new RunStepRepository(db);
     runStepService = new RunStepService(runStepRepo);
-    aggregator = new RunStepAggregator(channelRepo, meetingRepo, runStepRepo);
+    opinionRepo = new OpinionRepository(db);
+    opinionService = new OpinionService(opinionRepo);
+    aggregator = new RunStepAggregator(
+      channelRepo,
+      meetingRepo,
+      runStepRepo,
+      opinionRepo,
+    );
   });
 
   afterEach(() => {
@@ -169,6 +180,8 @@ describe('RunStepAggregator', () => {
       expect(dept?.currentRound).toBeNull();
       expect(dept?.maxRounds).toBe(5);
       expect(dept?.totalSteps).toBe(0);
+      // 회의 부서는 cardCount=null (잡담 surface 아님).
+      expect(dept?.cardCount).toBeNull();
     });
 
     it('status=in-meeting when active meeting in non-handoff phase', () => {
@@ -325,11 +338,13 @@ describe('RunStepAggregator', () => {
   });
 
   it('currentRound=null when active meeting exists but RunStep rows still 0', () => {
-    insertChannel(db, 'ch-gen', projectId, 'user');
-    setChannelRole(db, 'ch-gen', 'general', null);
+    // T22 — 일반 채널 (role='general') 은 회의 X invariant 라 본 시나리오는
+    // 다른 회의 부서 (idea) 로 검증. maxRounds=null = 무제한 옵션.
+    insertChannel(db, 'ch-idea-fresh', projectId, 'user');
+    setChannelRole(db, 'ch-idea-fresh', 'idea', null);
     const meeting = meetingService.start({
-      channelId: 'ch-gen',
-      topic: 'general meeting',
+      channelId: 'ch-idea-fresh',
+      topic: 'idea meeting',
     });
     void meeting;
 
@@ -337,6 +352,98 @@ describe('RunStepAggregator', () => {
     expect(snap.departments[0]?.status).toBe('in-meeting');
     expect(snap.departments[0]?.currentRound).toBeNull();
     expect(snap.departments[0]?.maxRounds).toBeNull();
+  });
+
+  // ── 일반 채널 (T22 옵션 C) ────────────────────────────────────────────
+  //
+  // 일반 채널 = `user role='general'` 잡담방. 회의 X — RunStep 안 적고
+  // opinion 카드 카운트만 surface. 전역 #일반 (system_general, projectId
+  // NULL) 은 listByProject 가 애초 안 돌려주므로 본 surface 도달 X.
+  //
+  // 데이터 source:
+  //   - opinionService.postFromGeneralChannel (T20 wired) 또는 직접
+  //     opinionRepo.insert
+  //   - status='chatting' 고정 / activeMeetingId / currentRound = null
+  //   - totalSteps=0 / stepKindCounts 모두 0 / cardCount=의견 수
+
+  describe('general channel (T22 option C)', () => {
+    it('status=chatting + cardCount=0 when no opinions yet', () => {
+      insertChannel(db, 'ch-chat', projectId, 'user');
+      setChannelRole(db, 'ch-chat', 'general', null);
+
+      const snap = aggregator.getProgressSnapshot(projectId);
+      expect(snap.departments).toHaveLength(1);
+      const dept = snap.departments[0];
+      expect(dept?.role).toBe('general');
+      expect(dept?.status).toBe('chatting');
+      expect(dept?.activeMeetingId).toBeNull();
+      expect(dept?.currentRound).toBeNull();
+      expect(dept?.totalSteps).toBe(0);
+      expect(dept?.cardCount).toBe(0);
+      // RunStep 안 적으니 모든 step_kind 0.
+      expect(dept?.stepKindCounts.opinion_gather).toBe(0);
+    });
+
+    it('cardCount tracks opinion rows posted via postFromGeneralChannel', () => {
+      insertChannel(db, 'ch-chat', projectId, 'user');
+      setChannelRole(db, 'ch-chat', 'general', null);
+
+      // 사용자 1 카드 + 직원 [##본문] 카드 1 → 의견 2 row.
+      opinionService.postFromGeneralChannel({
+        channelId: 'ch-chat',
+        authorProviderId: null,
+        parts: [{ title: null, content: '잡담 의견 1' }],
+      });
+      opinionService.postFromGeneralChannel({
+        channelId: 'ch-chat',
+        authorProviderId: providerId,
+        parts: [{ title: '아이디어', content: '직원 카드 본문' }],
+      });
+
+      const snap = aggregator.getProgressSnapshot(projectId);
+      expect(snap.departments[0]?.cardCount).toBe(2);
+    });
+
+    it('does not append RunStep rows for general channel even if active meeting somehow exists', () => {
+      // 일반 채널 회의는 차단되어야 하지만, 만에 하나 RunStep row 가 있더라도
+      // aggregator 는 status='chatting' / totalSteps=0 으로 surface (회의
+      // 정체성 무시 — 옵션 C 의 invariant).
+      insertChannel(db, 'ch-chat', projectId, 'user');
+      setChannelRole(db, 'ch-chat', 'general', null);
+
+      const snap = aggregator.getProgressSnapshot(projectId);
+      expect(snap.departments[0]?.status).toBe('chatting');
+      expect(snap.departments[0]?.totalSteps).toBe(0);
+    });
+
+    it('isolates cardCount per channel (two general channels in same project)', () => {
+      insertChannel(db, 'ch-chat-a', projectId, 'user', 'chat-a');
+      setChannelRole(db, 'ch-chat-a', 'general', null);
+      insertChannel(db, 'ch-chat-b', projectId, 'user', 'chat-b');
+      setChannelRole(db, 'ch-chat-b', 'general', null);
+
+      opinionService.postFromGeneralChannel({
+        channelId: 'ch-chat-a',
+        authorProviderId: null,
+        parts: [{ title: null, content: 'A 카드' }],
+      });
+      opinionService.postFromGeneralChannel({
+        channelId: 'ch-chat-b',
+        authorProviderId: null,
+        parts: [{ title: null, content: 'B 카드 1' }],
+      });
+      opinionService.postFromGeneralChannel({
+        channelId: 'ch-chat-b',
+        authorProviderId: null,
+        parts: [{ title: null, content: 'B 카드 2' }],
+      });
+
+      const snap = aggregator.getProgressSnapshot(projectId);
+      const a = snap.departments.find((d) => d.channelId === 'ch-chat-a');
+      const b = snap.departments.find((d) => d.channelId === 'ch-chat-b');
+      expect(a?.cardCount).toBe(1);
+      expect(b?.cardCount).toBe(2);
+    });
   });
 
   // ── 정렬 ──────────────────────────────────────────────────────────────

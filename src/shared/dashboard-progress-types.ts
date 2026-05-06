@@ -33,14 +33,25 @@ import type { RunStepKind } from './run-step-types';
  *                        넘어가지 못한 단계)
  *  - `done`              과거 회의 산출물 있음 + 활성 회의 없음 (다음 라운드
  *                        대기 중 안식)
+ *  - `chatting`          일반 채널 (전역 #일반 + user role='general') 전용
+ *                        상태 (R12-C2 P4 T22). 회의 X — 의견 카드 누적 surface
+ *                        만 운영. 다른 4 종 status 는 RunStep 흐름 위에 정의돼
+ *                        있어 일반 채널 (RunStep 안 적음) 에 매핑되지 않으므로
+ *                        별도 상태로 분리.
  *
  * 매핑은 query-time 에 RunStepAggregator 가 결정 — `meetings.ended_at`
  * (활성 여부 source-of-truth) + `meetings.state` (phase) + `run_step` row
- * 존재 여부 3 신호 합성.
+ * 존재 여부 3 신호 합성. 일반 채널은 isGeneralChannel 분기 → 'chatting'
+ * 고정 + opinion 카운트 별도 surface.
  *
- * spec §11.21.2 / T19 작업 정의.
+ * spec §11.21.2 / T19 작업 정의 / T22 일반 채널 분기.
  */
-export type DepartmentStatus = 'idle' | 'in-meeting' | 'handoff-pending' | 'done';
+export type DepartmentStatus =
+  | 'idle'
+  | 'in-meeting'
+  | 'handoff-pending'
+  | 'done'
+  | 'chatting';
 
 /** {@link DepartmentStatus} 모든 값 — UI chip / zod enum 용. */
 export const ALL_DEPARTMENT_STATUSES: readonly DepartmentStatus[] = [
@@ -48,6 +59,7 @@ export const ALL_DEPARTMENT_STATUSES: readonly DepartmentStatus[] = [
   'in-meeting',
   'handoff-pending',
   'done',
+  'chatting',
 ] as const;
 
 // ── step_kind 분포 ──────────────────────────────────────────────────────
@@ -116,6 +128,19 @@ export interface DepartmentProgress {
   stepKindCounts: StepKindCounts;
   /** 채널 안 RunStep row 총 개수 (= step_kind 별 count 의 합). */
   totalSteps: number;
+  /**
+   * 일반 채널 (`status='chatting'`) 전용 — 채널 안 의견 카드 (opinion row)
+   * 누적 개수. 회의 부서 (`status` 4 종) 는 항상 `null`.
+   *
+   * 일반 채널은 RunStep 안 적기 때문에 `totalSteps=0` / `stepKindCounts` 모두
+   * 0 으로 surface — 잡담 활동량은 본 필드로 대신 표현 (spec §11.21.2 위젯
+   * 라벨 "잡담 (카드 N)" 의 N 출처).
+   *
+   * R12-C2 P4 T22 land — opinion 영속은 T20 ([##본문] 파서 + PostOpinionModal)
+   * + T21 (light vote) 가 이미 채워둠. aggregator 는 query-time 에
+   * `opinionRepo.listByChannel` 길이만 surface.
+   */
+  cardCount: number | null;
 }
 
 // ── 프로젝트 진행률 패널 ────────────────────────────────────────────────
