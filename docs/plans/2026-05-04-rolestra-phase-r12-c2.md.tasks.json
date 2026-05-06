@@ -217,13 +217,13 @@
     {
       "id": 23,
       "subject": "T22 — 일반 채널 RunStep 분기",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         13,
         20,
         21
       ],
-      "description": "**P4 진입 3 호.** 일반 채널 = 회의 X 라 step_kind 분포 다름. RunStepService 분기.\n\n**산출:**\n- RunStepService 의 일반 채널 분기 — meeting_id NULL 허용 (회의 외 발화 영속)\n- T19 aggregator 가 일반 채널 카운트 → 대시보드 위젯 (\"일반 — 잡담 카드 N\" 표시)\n\n**Verify:** vitest unit + integration. [후보 A]"
+      "description": "**P4 진입 4 호.** 일반 채널 = 회의 X 라 step_kind 분포 다름. RunStepService 분기.\n\n**산출:**\n- RunStepService 의 일반 채널 분기 — meeting_id NULL 허용 (회의 외 발화 영속)\n- T19 aggregator 가 일반 채널 카운트 → 대시보드 위젯 (\"일반 — 잡담 카드 N\" 표시)\n\n**Verify:** vitest unit + integration. [후보 A]\n\n**land 완료 (옵션 C 채택)** — production commit `236a20f` + work-log mirror `1d805bf`. 사용자 결정 = 옵션 C (잡담은 가벼운 surface, RunStep 안 적음). RunStepService 손대지 않고 RunStepAggregator 가 isGeneralChannel 분기 → opinion 폴더에서 카드 수만 직접 카운트. DashboardProgress.cardCount 필드 + DepartmentStatus 'chatting' 신규. 마이그레이션 0건 (옵션 C 의 미덕) — m022 ALTER 회피. typecheck:node + typecheck:web 0 / vitest 3572 PASS / inspect:safety 99 (T21 동일, +0). 신규 vitest 4 + 기존 시나리오 1건 role 변경 (general → idea, 회의 X invariant 와 충돌 회피)."
     },
     {
       "id": 24,
@@ -451,5 +451,5 @@
       "description": "**P8 R12-C2 종결.**\n\n**산출:**\n- tasks.json sync (T0~T41 모두 completed)\n- `docs/구현-현황.md` R12-C2 행 추가 (한글, 사무실 메타포)\n- ADR `r12-c2-reference-projects-absorb.md` 갱신 (실제 land 결과 + cross-cutting C8/C9 link)\n- `decisions/cross-cutting.md` 에 C8 (A RunStep) + C9 (F 검사관) 추가\n- main fast-forward merge (`feat/r12-c2-redesign-r2` → main)\n- worktree 정리 (Rolestra-r12c2-r2 제거 + branch 삭제)\n- 다음 phase (R12-W / R12-H) 진입 준비 + 메모리 ⚠️ 갱신\n\n**검증 게이트:** vitest 전체 PASS + typecheck 0 + lint baseline + Windows dogfooding 회귀 0."
     }
   ],
-  "lastUpdated": "2026-05-05"
+  "lastUpdated": "2026-05-07T00:30:00.000Z"
 }
