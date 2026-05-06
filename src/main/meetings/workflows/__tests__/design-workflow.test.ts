@@ -15,10 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDesignedTaskPromptBody,
   capabilityForKind,
-  DesignatedWorkerNotFoundError,
   extractDesignedTaskOpinion,
-  resolveDesignatedWorker,
-  type DesignatedWorkerCandidate,
   type DesignedTaskContext,
 } from '../design-workflow';
 import type { Step6DesignedTaskSchemaType } from '../../../../shared/meeting-flow-types';
@@ -159,7 +156,9 @@ describe('extractDesignedTaskOpinion', () => {
   });
 });
 
-// ── T16b 신규: capabilityForKind + resolveDesignatedWorker ───────────
+// ── T16b 신규: capabilityForKind ────────────────────────────────────
+// resolveDesignatedWorker 는 T23 에서 designated-worker-resolver.ts 로 이전 —
+// 본 함수의 단위 테스트는 designated-worker-resolver.test.ts 로 이전 완료.
 
 describe('capabilityForKind', () => {
   it('wireframe_drafting → design.ux', () => {
@@ -172,71 +171,5 @@ describe('capabilityForKind', () => {
 
   it('design_implementation → design.ui', () => {
     expect(capabilityForKind('design_implementation')).toBe('design.ui');
-  });
-});
-
-describe('resolveDesignatedWorker', () => {
-  const ux: DesignatedWorkerCandidate = {
-    providerId: 'codex',
-    displayName: 'Codex UX',
-    roles: ['design.ux', 'planning'],
-  };
-  const ui: DesignatedWorkerCandidate = {
-    providerId: 'gemini',
-    displayName: 'Gemini UI',
-    roles: ['design.ui'],
-  };
-  const generalist: DesignatedWorkerCandidate = {
-    providerId: 'claude',
-    displayName: 'Claude PM',
-    roles: ['planning', 'review'],
-  };
-
-  it('design.ux 매칭 첫 직원 반환', () => {
-    expect(resolveDesignatedWorker([generalist, ux, ui], 'design.ux')).toBe(ux);
-  });
-
-  it('design.ui 매칭 첫 직원 반환', () => {
-    expect(resolveDesignatedWorker([generalist, ux, ui], 'design.ui')).toBe(ui);
-  });
-
-  it('동일 capability 직원 둘 → 입력 순서 첫 건', () => {
-    const ux2: DesignatedWorkerCandidate = {
-      providerId: 'gpt5',
-      displayName: 'GPT-5 UX',
-      roles: ['design.ux'],
-    };
-    expect(resolveDesignatedWorker([ux, ux2], 'design.ux')).toBe(ux);
-    expect(resolveDesignatedWorker([ux2, ux], 'design.ux')).toBe(ux2);
-  });
-
-  it('design.ux 매칭 0 명 → DesignatedWorkerNotFoundError', () => {
-    expect(() => resolveDesignatedWorker([generalist, ui], 'design.ux'))
-      .toThrow(DesignatedWorkerNotFoundError);
-  });
-
-  it('design.ui 매칭 0 명 → DesignatedWorkerNotFoundError', () => {
-    expect(() => resolveDesignatedWorker([generalist, ux], 'design.ui'))
-      .toThrow(DesignatedWorkerNotFoundError);
-  });
-
-  it('빈 후보 → DesignatedWorkerNotFoundError', () => {
-    expect(() => resolveDesignatedWorker([], 'design.ux'))
-      .toThrow(DesignatedWorkerNotFoundError);
-  });
-
-  it('error.capability 필드 = 입력 capability', () => {
-    try {
-      resolveDesignatedWorker([generalist], 'design.ui');
-      expect.fail('should throw');
-    } catch (err) {
-      expect(err).toBeInstanceOf(DesignatedWorkerNotFoundError);
-      expect((err as DesignatedWorkerNotFoundError).capability).toBe('design.ui');
-    }
-  });
-
-  it('design.ux 직원이 다른 능력도 보유 — 매칭 통과', () => {
-    expect(resolveDesignatedWorker([ux], 'design.ux')).toBe(ux);
-    expect(ux.roles).toContain('planning');
   });
 });

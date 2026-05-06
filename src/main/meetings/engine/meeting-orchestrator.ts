@@ -83,15 +83,19 @@ import {
 } from '../workflows/idea-workflow';
 import {
   capabilityForKind,
-  DesignatedWorkerNotFoundError,
-  resolveDesignatedWorker,
   extractDesignedTaskOpinion,
   type DesignSnapshotPaths,
-  type DesignatedWorkerCandidate,
   type DesignedTaskContext,
   type DesignedTaskKind,
   type DesignWorkflowResult,
 } from '../workflows/design-workflow';
+// T23: resolver 본체는 designated-worker-resolver 모듈로 이전 — design-workflow 재export 도
+// 가능하지만 직접 참조가 호출 위치 분리에 더 명확.
+import {
+  DesignatedWorkerNotFoundError,
+  resolveDesignatedWorker,
+  type DesignatedWorkerCandidate,
+} from '../designated-worker-resolver';
 import type {
   IdeaFinalizeSelectionInput,
   IdeaFinalizeSelectionResult,
@@ -1037,10 +1041,16 @@ export class MeetingOrchestrator {
     for (const speaker of this.session.aiParticipants) {
       const provider = this.providerRegistry.get(speaker.id);
       if (!provider) continue;
+      // T23 wiring: 부서장 핀 (T36) / drag_order (T37) UI 가 P7 phase 에 진입하므로
+      // 본 시점에는 모든 후보에 빈 핀 + null dragOrder 전달 → resolver 가 step 4
+      // (capability fallback) 만 동작. T36 / T37 land 시 caller 갱신만으로
+      // 우선순위 발동.
       candidates.push({
         providerId: speaker.id,
         displayName: speaker.displayName,
         roles: provider.roles,
+        isDepartmentHead: {},
+        dragOrder: null,
       });
     }
     return candidates;
@@ -1071,7 +1081,11 @@ export class MeetingOrchestrator {
 
     const capability = capabilityForKind(kind);
     const candidates = this.collectDesignedWorkerCandidates();
-    const speaker = resolveDesignatedWorker(candidates, capability);
+    // T23: resolveDesignatedWorker 가 ResolvedDesignatedWorker 반환 → candidate 언래핑.
+    // source 필드 (department-head-pin / drag-order / capability-fallback) 는
+    // 본 호출 경로에서 미사용 (T36 / T37 land 후 telemetry / UI 노출 시 활용 예정).
+    const resolved = resolveDesignatedWorker(candidates, capability);
+    const speaker = resolved.candidate;
     const speakerParticipant = this.session.aiParticipants.find(
       (p) => p.id === speaker.providerId,
     );

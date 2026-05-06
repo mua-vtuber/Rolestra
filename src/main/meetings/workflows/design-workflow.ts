@@ -229,28 +229,14 @@ function escapeForPrompt(value: string): string {
   return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }
 
-// ── designated-worker resolver — capability-first-match (T16b 임시) ──
-
-/**
- * 디자인 부서 채널 안에서 `assigning_designated_task` phase 가 호명할 직원의
- * 최소 컨트랙트. T23 (E. designated-worker-resolver) 가 정식 알고리즘을 land
- * 하기 전까지 본 인터페이스로 capability-first-match 를 수행한다.
- *
- * orchestrator (T16b) 가 `session.aiParticipants` 와 `ProviderRegistry` 를
- * join 한 결과를 본 형태로 변환해서 resolver 에 전달.
- */
-export interface DesignatedWorkerCandidate {
-  /** Participant.id (= providerId for AI). */
-  providerId: string;
-  /** UI 표시 / prompt 안 발화자 이름. */
-  displayName: string;
-  /** 직원에게 부여된 능력 (R12-S 카탈로그 RoleId list). */
-  roles: readonly RoleId[];
-}
+// ── designated-worker resolver — T23 새 모듈로 이전 ────────────────
 
 /**
  * `wireframe_drafting` → `design.ux`, `wireframe_revision` /
  * `design_implementation` → `design.ui`. spec §5.2 / §11.18.9a 매트릭스.
+ *
+ * 본 헬퍼는 design-workflow 의 task kind → capability 매핑 책임만 보유 —
+ * resolver 알고리즘 자체는 designated-worker-resolver.ts 가 책임 (T23 land).
  */
 export function capabilityForKind(kind: DesignedTaskKind): RoleId {
   switch (kind) {
@@ -262,48 +248,18 @@ export function capabilityForKind(kind: DesignedTaskKind): RoleId {
   }
 }
 
-/**
- * T16b 임시 designated-worker resolver — capability 매칭 *첫* 직원 반환.
- *
- *   - drag_order 무시 (T23 정식 resolver 가 부서장 핀 + drag_order + fallback
- *     순서로 통합한 다음에 본 helper 는 deletion target).
- *   - 매칭 직원 0 명 → throw {@link DesignatedWorkerNotFoundError}.
- *     orchestrator 는 즉시 회의 abort + outcome='aborted' +
- *     abortReason='designated_task_failed' 반환.
- *
- * candidates 배열 순서는 caller 가 결정 (orchestrator 는 `aiParticipants`
- * 순서 = 초기 회의 소집 시 멤버 순서). 동일 capability 직원이 여럿이면 *첫*
- * 직원이 결정 — 본 임시 규칙은 두 명 이상 매칭 시 비결정성 회피용.
- */
-export function resolveDesignatedWorker(
-  candidates: readonly DesignatedWorkerCandidate[],
-  capability: RoleId,
-): DesignatedWorkerCandidate {
-  for (const candidate of candidates) {
-    if (candidate.roles.includes(capability)) {
-      return candidate;
-    }
-  }
-  throw new DesignatedWorkerNotFoundError(capability);
-}
-
-/**
- * `resolveDesignatedWorker` 가 capability 매칭 직원 0 명 시 throw — orchestrator
- * 가 catch 후 회의 abort.
- *
- * `capability` 필드는 디버그 / 사용자 알림 메시지 작성 용도. abortReason 은
- * orchestrator 가 별도 분기 처리 (`designated_task_failed`).
- */
-export class DesignatedWorkerNotFoundError extends Error {
-  readonly capability: RoleId;
-  constructor(capability: RoleId) {
-    super(
-      `[DesignatedWorker] no candidate matched capability '${capability}' — design-workflow cannot proceed`,
-    );
-    this.name = 'DesignatedWorkerNotFoundError';
-    this.capability = capability;
-  }
-}
+// designated-worker resolver 는 T23 에서 designated-worker-resolver.ts 로 이전 —
+// 본 모듈은 호환성 위해 재export. 기존 caller (orchestrator / 단위 테스트)
+// 는 import 경로 그대로 유지 가능.
+export {
+  DesignatedWorkerNotFoundError,
+  resolveDesignatedWorker,
+} from '../designated-worker-resolver';
+export type {
+  DesignatedWorkerCandidate,
+  DesignatedWorkerResolutionSource,
+  ResolvedDesignatedWorker,
+} from '../designated-worker-resolver';
 
 /**
  * 지정 직원이 두 번 모두 빈 opinions / schema mismatch / provider error 응답
