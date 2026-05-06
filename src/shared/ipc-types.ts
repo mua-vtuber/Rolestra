@@ -72,6 +72,7 @@ import type {
 } from './opinion-types';
 import type { MeetingMinutesComposeResult } from './meeting-minutes-types';
 import type { RunStep } from './run-step-types';
+import type { DashboardProgressSnapshot } from './dashboard-progress-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -880,6 +881,22 @@ export type IpcChannelMap = {
   'dashboard:get-kpis': {
     request: DashboardGetKpisInput;
     response: { snapshot: KpiSnapshot };
+  };
+
+  /**
+   * R12-C2 P3 T19: H1 진행률 패널 fetch entry (spec §11.21).
+   *
+   * 프로젝트 1 개의 부서별 진행률 snapshot. role=null 채널 (system / DM /
+   * legacy user) 은 응답에서 제외 — `departments` 배열은 ALL_ROLE_IDS
+   * 카탈로그 순서로 정렬된 role-매핑 채널만 포함.
+   *
+   * 갱신: `stream:dashboard-progress-changed` push 받으면 renderer 가
+   * invalidate → 본 채널 재호출 (1 분 TTL 내 caching 은 zustand 책임,
+   * spec §11.21.4).
+   */
+  'dashboard:progress-snapshot': {
+    request: { projectId: string };
+    response: { snapshot: DashboardProgressSnapshot };
   };
 
   // ── Database Management ─────────────────────────────────────────

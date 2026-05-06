@@ -32,6 +32,8 @@ import { setOpinionServiceAccessor } from './ipc/handlers/opinion-handler';
 import { RunStepRepository } from './meetings/run-step/run-step-repository';
 import { RunStepService } from './meetings/run-step/run-step-service';
 import { setRunStepServiceAccessor } from './ipc/handlers/run-step-handler';
+import { RunStepAggregator } from './meetings/run-step/run-step-aggregator';
+import { setRunStepAggregatorAccessor } from './ipc/handlers/dashboard-progress-handler';
 import { MeetingMinutesService } from './meetings/meeting-minutes-service';
 import { setMeetingMinutesServiceAccessor } from './ipc/handlers/meetings-minutes-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
@@ -310,6 +312,17 @@ app.whenReady().then(async () => {
     // ensureGlobalGeneralChannel). 사이드바 상단 entry 가 이 row 를
     // 참조하므로 service / IPC 활성 전에 land 되어야 한다.
     channelService.ensureGlobalGeneralChannel();
+
+    // R12-C2 P3 T19: RunStepAggregator — H1 dashboard 진행률 패널 데이터
+    // source. channelRepo / meetingRepo / runStepRepo 위 query-time 합성.
+    // `dashboard:progress-snapshot` IPC + `stream:dashboard-progress-changed`
+    // 두 surface 모두 본 인스턴스를 통해 응답. spec §11.21.
+    const runStepAggregator = new RunStepAggregator(
+      channelRepo,
+      meetingRepo,
+      runStepRepo,
+    );
+    setRunStepAggregatorAccessor(() => runStepAggregator);
 
     // R7-Task2: ApprovalService must be instantiated BEFORE StreamBridge
     // so `streamBridge.connect({ approvals })` can subscribe to the
@@ -867,6 +880,15 @@ app.whenReady().then(async () => {
         items: queueService.listByProject(projectId),
         paused: queueService.isPaused(projectId),
       }),
+      // R12-C2 T19: RunStep `'appended'` → stream:dashboard-progress-changed.
+      // lookup 은 channels.project_id 그대로 — DM / global system general
+      // (project_id IS NULL) 은 null 돌려주어 bridge 가 silent skip (H1
+      // 패널 surface 대상 아님).
+      runStep: runStepService,
+      runStepChannelToProject: (channelId) => {
+        const channel = channelRepo.get(channelId);
+        return channel?.projectId ?? null;
+      },
     });
     streamBridge.onOutbound((event) => {
       for (const win of BrowserWindow.getAllWindows()) {

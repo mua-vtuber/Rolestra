@@ -411,6 +411,90 @@ describe('StreamBridge — connect()', () => {
     expect(queueSnapshot).not.toHaveBeenCalled();
     expect(received).toHaveLength(0);
   });
+
+  // ── R12-C2 T19: RunStepService → stream:dashboard-progress-changed ──
+
+  it('RunStepService.emit("appended") + lookup → stream:dashboard-progress-changed', () => {
+    const runStep = new EventEmitter();
+    const runStepChannelToProject = vi.fn(
+      (channelId: string) => (channelId === 'ch-1' ? 'p-1' : null),
+    );
+    bridge.connect({ runStep, runStepChannelToProject });
+
+    runStep.emit('appended', {
+      id: 'rs-1',
+      meetingId: 'm-1',
+      channelId: 'ch-1',
+      round: 1,
+      turnIndex: 0,
+      actorKind: 'employee',
+      actorId: 'pv-codex',
+      stepKind: 'opinion_gather',
+      inputJson: '{}',
+      outputJson: '{}',
+      nextStepCard: null,
+      sideEffectSummary: null,
+      durationMs: 100,
+      createdAt: 1,
+    });
+
+    expect(runStepChannelToProject).toHaveBeenCalledWith('ch-1');
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('stream:dashboard-progress-changed');
+    expect(received[0].payload).toEqual({
+      projectId: 'p-1',
+      sourceChannelId: 'ch-1',
+    });
+  });
+
+  it('skips when runStepChannelToProject returns null (DM / global / unknown)', () => {
+    const runStep = new EventEmitter();
+    const runStepChannelToProject = vi.fn(() => null);
+    bridge.connect({ runStep, runStepChannelToProject });
+
+    runStep.emit('appended', {
+      id: 'rs-1',
+      meetingId: 'm-1',
+      channelId: 'ch-dm',
+      round: 0,
+      turnIndex: 0,
+      actorKind: 'system',
+      actorId: null,
+      stepKind: 'opinion_tally',
+      inputJson: '{}',
+      outputJson: '{}',
+      nextStepCard: null,
+      sideEffectSummary: null,
+      durationMs: 1,
+      createdAt: 1,
+    });
+
+    expect(runStepChannelToProject).toHaveBeenCalledWith('ch-dm');
+    expect(received).toHaveLength(0);
+  });
+
+  it('skips when lookup is missing — runStep alone does not emit (defensive)', () => {
+    const runStep = new EventEmitter();
+    bridge.connect({ runStep });
+
+    runStep.emit('appended', { id: 'rs-1', channelId: 'ch-1' });
+
+    expect(received).toHaveLength(0);
+  });
+
+  it('skips malformed appended payloads silently', () => {
+    const runStep = new EventEmitter();
+    const lookup = vi.fn(() => 'p-1');
+    bridge.connect({ runStep, runStepChannelToProject: lookup });
+
+    runStep.emit('appended', null);
+    runStep.emit('appended', undefined);
+    runStep.emit('appended', { id: 'rs-no-channel' });
+    runStep.emit('appended', { channelId: '' });
+
+    expect(lookup).not.toHaveBeenCalled();
+    expect(received).toHaveLength(0);
+  });
 });
 
 describe('StreamBridge — direct emit helpers', () => {
@@ -458,6 +542,26 @@ describe('StreamBridge — direct emit helpers', () => {
 
     expect(received).toHaveLength(0);
     warn.mockRestore();
+  });
+
+  // R12-C2 T19 — direct invalidate helper (RunStep wire 외 source 가
+  // 패널 갱신 신호를 보낼 때).
+  it('emitDashboardProgressChanged wraps + validates', () => {
+    const bridge = new StreamBridge();
+    const received: StreamEvent[] = [];
+    bridge.onOutbound((e) => received.push(e));
+
+    bridge.emitDashboardProgressChanged({
+      projectId: 'p-42',
+      sourceChannelId: 'ch-42',
+    });
+
+    expect(received).toHaveLength(1);
+    expect(received[0].type).toBe('stream:dashboard-progress-changed');
+    expect(received[0].payload).toEqual({
+      projectId: 'p-42',
+      sourceChannelId: 'ch-42',
+    });
   });
 });
 

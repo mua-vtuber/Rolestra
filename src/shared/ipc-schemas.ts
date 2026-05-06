@@ -437,6 +437,18 @@ export const dashboardGetKpisSchema = z.object({
   projectId: z.string().min(1).max(128).nullable().optional(),
 });
 
+/**
+ * R12-C2 P3 T19: `dashboard:progress-snapshot` 입력 schema. spec §11.21 H1
+ * 패널은 *프로젝트 1 개* scope 만 — projectId 필수.
+ *
+ * 응답 schema 는 dev runtime 검증 대상 X (large 분포 record 의 zod 비용
+ * 회피) — 응답 type-level 정합은 ipc-types.ts 와 RunStepAggregator 출력이
+ * 책임. 입력 검증만 본 schema.
+ */
+export const dashboardProgressSnapshotSchema = z.object({
+  projectId: z.string().min(1).max(128),
+});
+
 // ── R10 신규 zod schemas ──────────────────────────────────────────
 
 /**
@@ -790,6 +802,7 @@ export const meetingListRunStepsSchema = z.discriminatedUnion('scope', [
 export const v3ChannelSchemas = {
   'arena-root:set': arenaRootSetSchema,
   'dashboard:get-kpis': dashboardGetKpisSchema,
+  'dashboard:progress-snapshot': dashboardProgressSnapshotSchema,
   'project:create': projectCreateSchema,
   'project:link-external': projectLinkExternalSchema,
   'project:import': projectImportSchema,

@@ -367,6 +367,32 @@ export interface StreamDesignSnapshotReadyPayload {
   sourceOpinionUuid: string;
 }
 
+// ── dashboard 진행률 패널 (T19 land — spec §11.21) ───────────────────
+
+/**
+ * `stream:dashboard-progress-changed` 페이로드 — A RunStep 새 row 가
+ * append 될 때마다 1 회 push (spec §11.21.4).
+ *
+ * *signal-only* — payload 안에 진행률 데이터 자체는 없다. renderer 가
+ * 받으면 zustand store invalidate → `dashboard:progress-snapshot` IPC
+ * 재호출. 본 분리는:
+ *   - 같은 프로젝트 다중 채널 동시 갱신 시 stream payload 가 비대해지는 것
+ *     을 회피
+ *   - 1 분 TTL 캐시 + 사용자가 다른 프로젝트 보고 있으면 fetch skip 가능
+ *
+ * `projectId` 는 *어느 프로젝트의 패널을* invalidate 할지 식별 — renderer
+ * 의 dashboard store 가 `projectId === currentProjectId` 분기로 fetch.
+ *
+ * 발사 source = StreamBridge 가 RunStepService 의 `'appended'` 이벤트
+ * 구독 후 channelId → projectId 룩업으로 변환 (T19-D + T19-F).
+ */
+export interface StreamDashboardProgressChangedPayload {
+  /** 어느 프로젝트의 패널이 invalidate 되어야 하는지. */
+  projectId: string;
+  /** 변경 trigger 가 된 채널 (디버깅 / 룩업 confirm 용). */
+  sourceChannelId: string;
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -431,6 +457,10 @@ export type StreamEvent =
   | {
       type: 'stream:design-snapshot-ready';
       payload: StreamDesignSnapshotReadyPayload;
+    }
+  | {
+      type: 'stream:dashboard-progress-changed';
+      payload: StreamDashboardProgressChangedPayload;
     };
 
 export type StreamEventType = StreamEvent['type'];

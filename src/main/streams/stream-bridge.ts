@@ -65,7 +65,9 @@ import type {
   StreamIdeaPickSnapshotPayload,
   StreamDesignedTaskAssignedPayload,
   StreamDesignSnapshotReadyPayload,
+  StreamDashboardProgressChangedPayload,
 } from '../../shared/stream-events';
+import type { RunStep } from '../../shared/run-step-types';
 
 /** Renderer-delivery hook. */
 export type StreamOutboundListener = (event: StreamEvent) => void;
@@ -105,6 +107,7 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:idea-pick-snapshot',
   'stream:designed-task-assigned',
   'stream:design-snapshot-ready',
+  'stream:dashboard-progress-changed',
 ]);
 
 interface FailureState {
@@ -172,6 +175,27 @@ export interface StreamBridgeServices {
     items: QueueItem[];
     paused: boolean;
   };
+  /**
+   * R12-C2 T19: RunStepService whose `'appended'` event (RunStep payload)
+   * fans out as `stream:dashboard-progress-changed` — H1 패널의 1 분 TTL
+   * 캐시 invalidate 신호. payload 자체는 RunStep row 이지만 stream 으로
+   * 나가는 건 `{ projectId, sourceChannelId }` 뿐 (renderer 가 `dashboard:
+   * progress-snapshot` 로 별도 fetch — spec §11.21.4).
+   *
+   * `runStepProjectLookup` 가 channelId → projectId 변환을 담당. DM /
+   * legacy user 채널 (project_id IS NULL) 은 H1 패널 surface 대상이
+   * 아니므로 lookup 이 null 돌려주면 본 bridge 가 silent skip.
+   */
+  runStep?: EventEmitter;
+  /**
+   * 채널 → 프로젝트 룩업. RunStep `appended` 이벤트의 channelId 를
+   * dashboard 패널의 projectId 로 변환. null = 그 채널이 어떤 프로젝트에도
+   * 속하지 않음 (DM / legacy user / 글로벌 system) → bridge 는 본
+   * 이벤트 skip. lookup 없이 `runStep` 만 주입되면 connect 가 silent
+   * skip — 본 lookup 이 채널 진실원천 (NoSilentFallback 위반 X — 도메인
+   * 적으로 "해당 채널은 H1 surface 와 무관" 이 의미 있는 정상 분기).
+   */
+  runStepChannelToProject?: (channelId: string) => string | null;
 }
 
 export class StreamBridge {
@@ -337,6 +361,28 @@ export class StreamBridge {
         });
       });
     }
+
+    if (services.runStep) {
+      // R12-C2 T19: RunStepService.appended (RunStep row) → projectId 룩업
+      // → stream:dashboard-progress-changed (signal-only, payload는 projectId
+      // + sourceChannelId 만). lookup 없이 runStep 만 주입되면 silent skip
+      // (테스트 / 부분 wiring 안전망). projectId null 이면 dashboard 패널과
+      // 무관한 채널 (DM / legacy) 이므로 skip.
+      const lookup = services.runStepChannelToProject;
+      services.runStep.on('appended', (payload: unknown) => {
+        if (!lookup) return;
+        const step = payload as RunStep | null | undefined;
+        if (!step || typeof step !== 'object') return;
+        const channelId = step.channelId;
+        if (typeof channelId !== 'string' || channelId.length === 0) return;
+        const projectId = lookup(channelId);
+        if (projectId === null) return;
+        this.emit({
+          type: 'stream:dashboard-progress-changed',
+          payload: { projectId, sourceChannelId: channelId },
+        });
+      });
+    }
   }
 
   // ── Direct emit helpers (Task 20 side-effects) ────────────────────
@@ -427,6 +473,23 @@ export class StreamBridge {
     payload: StreamAutonomyModeChangedPayload,
   ): void {
     this.emit({ type: 'stream:autonomy-mode-changed', payload });
+  }
+
+  /**
+   * R12-C2 T19 — H1 dashboard 패널의 1 분 TTL 캐시 invalidate 신호.
+   *
+   * RunStepService 의 `'appended'` 이벤트가 자동으로 본 helper 를 호출
+   * (connect()) — 본 helper 의 직접 호출은 *비-RunStep 발사 source* 가
+   * 진행률을 invalidate 시켜야 할 때만 사용 (예: T22 일반 채널 RunStep
+   * 분기, T40 dashboard 첫 mount fan-out).
+   *
+   * payload 는 *signal-only* — renderer 가 받으면 `dashboard:progress-
+   * snapshot` IPC 재호출. spec §11.21.4.
+   */
+  emitDashboardProgressChanged(
+    payload: StreamDashboardProgressChangedPayload,
+  ): void {
+    this.emit({ type: 'stream:dashboard-progress-changed', payload });
   }
 
   /**
@@ -632,6 +695,13 @@ export class StreamBridge {
         return (
           typeof payload.projectId === 'string' &&
           typeof payload.mode === 'string'
+        );
+      case 'stream:dashboard-progress-changed':
+        // R12-C2 T19 — signal-only payload. projectId 식별자 + 디버깅용
+        // sourceChannelId 만 검증.
+        return (
+          typeof payload.projectId === 'string' &&
+          typeof payload.sourceChannelId === 'string'
         );
       default:
         return false;

@@ -35,8 +35,23 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import type { NewRunStep, RunStep } from '../../../shared/run-step-types';
 import type { RunStepRepository } from './run-step-repository';
+
+/**
+ * RunStepService 가 발사하는 이벤트 시그니처. R12-C2 T19 wire (StreamBridge
+ * 가 본 이벤트 구독 → `stream:dashboard-progress-changed` invalidate 신호
+ * 변환).
+ *
+ * `'appended'` 페이로드 = 영속된 RunStep row 그대로. 한 transaction 안에서
+ * 여러 row 가 insert 되면 `appendForTurn` 이 row 별로 *순차적으로* emit —
+ * subscriber 는 row 단위로 받는다 (단, transaction 자체는 atomic — 모든
+ * row commit 후에야 emit 호출 시작).
+ */
+export interface RunStepServiceEvents {
+  appended: (step: RunStep) => void;
+}
 
 // ── Error hierarchy ────────────────────────────────────────────────────
 
@@ -87,8 +102,14 @@ export class RunStepActorMismatchError extends RunStepError {
 
 // ── Service ────────────────────────────────────────────────────────────
 
-export class RunStepService {
-  constructor(private readonly repo: RunStepRepository) {}
+export class RunStepService extends EventEmitter {
+  constructor(private readonly repo: RunStepRepository) {
+    super();
+    // R12-C2 T19: subscribe 폭발 방지. dashboard 가 1 곳, 추후 H1 위젯 +
+    // observability sink 추가해도 기본 10 으로 충분 — 본 cap 은 EventEmitter
+    // 의 메모리누수 경고가 아니라 *코드 SSoT* 으로 둔다.
+    this.setMaxListeners(20);
+  }
 
   /**
    * 한 turn 의 RunStep row 들을 atomic 하게 insert. caller 는 `NewRunStep`
@@ -99,6 +120,10 @@ export class RunStepService {
    * 같은 turn 의 row 들이 *반쪽* 으로 영속될 일 없음.
    *
    * 빈 배열은 no-op (transaction 시작 X) — caller 의 무해한 호출.
+   *
+   * R12-C2 T19: transaction commit 성공 후 row 별로 `'appended'` emit —
+   * StreamBridge 가 구독 → `stream:dashboard-progress-changed` 변환.
+   * emit 은 transaction 밖 (commit 직후) — listener throw 가 영속에 영향 X.
    *
    * @returns insert 된 RunStep 배열 (id / createdAt 채워진 상태).
    */
@@ -122,7 +147,58 @@ export class RunStepService {
       }
     });
 
+    // commit 후 `'appended'` 발사. listener throw 는 isolate — 한 listener 의
+    // 실패가 다른 listener 또는 caller 흐름을 깨뜨리지 않는다 (StreamBridge
+    // 자체가 outbound listener throw 를 isolate 하지만, 본 service 도 한 번 더
+    // 방어).
+    for (const step of completed) {
+      try {
+        this.emit('appended', step);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        // TODO R2-log: swap for structured logger (src/main/log/)
+        console.warn(
+          '[rolestra.run-step] appended listener threw:',
+          {
+            stepId: step.id,
+            stepKind: step.stepKind,
+            name: err instanceof Error ? err.name : undefined,
+            message,
+          },
+        );
+      }
+    }
+
     return completed;
+  }
+
+  // ── typed EventEmitter overloads (member-profile-service 패턴) ──────
+
+  on<E extends keyof RunStepServiceEvents>(
+    event: E,
+    listener: RunStepServiceEvents[E],
+  ): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this {
+    return super.on(event, listener);
+  }
+
+  off<E extends keyof RunStepServiceEvents>(
+    event: E,
+    listener: RunStepServiceEvents[E],
+  ): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this {
+    return super.off(event, listener);
+  }
+
+  emit<E extends keyof RunStepServiceEvents>(
+    event: E,
+    ...args: Parameters<RunStepServiceEvents[E]>
+  ): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean {
+    return super.emit(event, ...args);
   }
 
   /**

@@ -329,4 +329,69 @@ describe('RunStepService', () => {
       expect(forbidden).toEqual([]);
     });
   });
+
+  // ── 'appended' 이벤트 (R12-C2 T19) ──────────────────────────────────
+
+  describe('appended event', () => {
+    it('emits appended after each persisted row in append order', () => {
+      const received: Array<{ id: string; stepKind: string }> = [];
+      svc.on('appended', (step) => {
+        received.push({ id: step.id, stepKind: step.stepKind });
+      });
+
+      const persisted = svc.appendForTurn([
+        makeStep({ stepKind: 'opinion_gather', turnIndex: 0 }),
+        makeStep({
+          stepKind: 'next_step_classify',
+          turnIndex: 0,
+          actorKind: 'system',
+          actorId: null,
+          nextStepCard: 'continue',
+        }),
+      ]);
+
+      expect(received).toHaveLength(2);
+      expect(received[0]?.id).toBe(persisted[0]?.id);
+      expect(received[0]?.stepKind).toBe('opinion_gather');
+      expect(received[1]?.id).toBe(persisted[1]?.id);
+      expect(received[1]?.stepKind).toBe('next_step_classify');
+    });
+
+    it('does not emit appended for empty input', () => {
+      let count = 0;
+      svc.on('appended', () => {
+        count += 1;
+      });
+      svc.appendForTurn([]);
+      expect(count).toBe(0);
+    });
+
+    it('does not emit appended when transaction rolls back (atomic)', () => {
+      let count = 0;
+      svc.on('appended', () => {
+        count += 1;
+      });
+
+      const goodStep = makeStep({ turnIndex: 7 });
+      const badStep = makeStep({
+        meetingId: 'meeting-does-not-exist',
+        turnIndex: 7,
+      });
+      expect(() => svc.appendForTurn([goodStep, badStep])).toThrow();
+
+      // emit 은 commit *후* 호출 — rollback 이면 0 회.
+      expect(count).toBe(0);
+    });
+
+    it('isolates listener throws — caller still receives persisted rows', () => {
+      svc.on('appended', () => {
+        throw new Error('listener boom');
+      });
+
+      const persisted = svc.appendForTurn([makeStep({ turnIndex: 9 })]);
+      expect(persisted).toHaveLength(1);
+      // listener throw 가 영속을 깨지 않음.
+      expect(svc.listByMeeting(meetingId)).toHaveLength(1);
+    });
+  });
 });

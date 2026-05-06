@@ -182,6 +182,7 @@ import {
   handleQueueResume,
 } from './handlers/queue-handler';
 import { handleDashboardGetKpis } from './handlers/dashboard-handler';
+import { handleDashboardProgressSnapshot } from './handlers/dashboard-progress-handler';
 import { handleLlmCostSummary } from './handlers/llm-handler';
 
 /** Envelope shape sent by preload's typedInvoke. */
@@ -519,8 +520,11 @@ export function registerIpcHandlers(): void {
   handle('notification:test', isDev, (data) => handleNotificationTest(data));
   handle('notification:set-locale', isDev, (data) => handleNotificationSetLocale(data));
 
-  // ── v3: Dashboard (R4) ──────────────────────────────────────────
+  // ── v3: Dashboard (R4 + R12-C2 T19) ─────────────────────────────
   handle('dashboard:get-kpis', isDev, (data) => handleDashboardGetKpis(data));
+  handle('dashboard:progress-snapshot', isDev, (data) =>
+    handleDashboardProgressSnapshot(data),
+  );
 
   // ── v3: Queue ───────────────────────────────────────────────────
   handle('queue:list', isDev, (data) => handleQueueList(data));
