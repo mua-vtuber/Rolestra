@@ -228,12 +228,12 @@
     {
       "id": 24,
       "subject": "T23 — E. 임무 카드 schema + designated-worker-resolver",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         14,
         18
       ],
-      "description": "**P5 진입 1 호.** 구현 부서 작업 단위 schema (capability manifest) + designated worker 결정 알고리즘.\n\n**산출:**\n- `src/shared/schema/mission-card.ts` 신규 — MissionCard discriminated union:\n  · kind: 'spec' (의견+기획서) | 'fix' (audit NG 보고) | 'change-request' (변경 요청)\n  · payload: 작업 본문 + 입력 파일 list + 출력 기대치\n  · assigned_provider_id: designated worker\n- `src/main/meetings/designated-worker-resolver.ts` 신규 — 부서장 핀 (T36) > drag_order 1 번 (T37) > fallback (자율 모드 default)\n\n**Verify:** vitest unit (3 우선순위 + fallback). [후보 E]"
+      "description": "**P5 진입 1 호.** 구현 부서 작업 단위 schema (capability manifest) + designated worker 결정 알고리즘.\n\n**산출:**\n- `src/shared/schema/mission-card.ts` 신규 — MissionCard discriminated union:\n  · kind: 'spec' (의견+기획서) | 'fix' (audit NG 보고) | 'change-request' (변경 요청)\n  · payload: 작업 본문 + 입력 파일 list + 출력 기대치\n  · assigned_provider_id: designated worker\n- `src/main/meetings/designated-worker-resolver.ts` 신규 — 부서장 핀 (T36) > drag_order 1 번 (T37) > fallback (자율 모드 default)\n\n**Verify:** vitest unit (3 우선순위 + fallback). [후보 E]\n\n**land 완료** — production commit `4bd94b7` + work-log mirror `492e817`. MissionCard discriminated union ('spec' / 'fix' / 'change-request') zod schema + buildMissionCard / parseMissionCardJson / serializeMissionCard 경계 helper + designated-worker-resolver 3-tier 알고리즘 (부서장 핀 → drag_order 최소값 → fallback) + ResolvedDesignatedWorker { candidate, source } 라벨 포함. T16b 임시 capability-first-match resolver 통째 흡수 → design-workflow 는 새 모듈 재export + capabilityForKind 만 책임. orchestrator 가 ResolvedDesignatedWorker.candidate 언래핑, isDepartmentHead={} + dragOrder=null 전달 (T36/T37 진입 시 caller wiring 갱신만으로 우선순위 발동). typecheck:node + typecheck:web 0 / vitest 3614 PASS (T22 baseline 3572 → +42, mission-card 30 + resolver 21 - design-workflow 제거 9). inspect:safety 99 (T22 동일, +0)."
     },
     {
       "id": 25,
@@ -451,5 +451,5 @@
       "description": "**P8 R12-C2 종결.**\n\n**산출:**\n- tasks.json sync (T0~T41 모두 completed)\n- `docs/구현-현황.md` R12-C2 행 추가 (한글, 사무실 메타포)\n- ADR `r12-c2-reference-projects-absorb.md` 갱신 (실제 land 결과 + cross-cutting C8/C9 link)\n- `decisions/cross-cutting.md` 에 C8 (A RunStep) + C9 (F 검사관) 추가\n- main fast-forward merge (`feat/r12-c2-redesign-r2` → main)\n- worktree 정리 (Rolestra-r12c2-r2 제거 + branch 삭제)\n- 다음 phase (R12-W / R12-H) 진입 준비 + 메모리 ⚠️ 갱신\n\n**검증 게이트:** vitest 전체 PASS + typecheck 0 + lint baseline + Windows dogfooding 회귀 0."
     }
   ],
-  "lastUpdated": "2026-05-07T00:30:00.000Z"
+  "lastUpdated": "2026-05-07T01:50:00.000Z"
 }
