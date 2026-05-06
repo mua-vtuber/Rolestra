@@ -212,7 +212,7 @@
         19,
         21
       ],
-      "description": "**P4 진입 2 호.** T19 GeneralVariant 의 final — 카드 누적 list + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼.\n\n**산출:**\n- GeneralVariant.tsx final — opinion (kind='self-raised'/'user-raised') 누적 + 카운터 (직원+사용자) + 자유 응답 누적\n- IPC `opinion:lightVote(opinionId, vote)` — opinion_vote 신규 round_kind='light'\n- 합의/회의록/인계 surface X (잡담 정체성)\n\n**Verify:** vitest snapshot + e2e.\n\n**land 완료** — production commit (TBD) + work-log mirror (TBD). migration 021 (round_kind \"light\" 추가, table rebuild) + GeneralVariant final + useGeneralOpinionCards + opinion:listGeneralCards/toggleLightVote IPC + 신규 vitest 30 (3538 → 3568). typecheck:node + typecheck:web 0 / inspect:safety 95 → 99 (+4: 신규 마이그레이션의 framework-managed false positive — m019/m020 와 동일 패턴)."
+      "description": "**P4 진입 2 호.** T19 GeneralVariant 의 final — 카드 누적 list + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼.\n\n**산출:**\n- GeneralVariant.tsx final — opinion (kind='self-raised'/'user-raised') 누적 + 카운터 (직원+사용자) + 자유 응답 누적\n- IPC `opinion:lightVote(opinionId, vote)` — opinion_vote 신규 round_kind='light'\n- 합의/회의록/인계 surface X (잡담 정체성)\n\n**Verify:** vitest snapshot + e2e.\n\n**land 완료** — production commit `9681c0b` + work-log mirror `23cc849`. migration 021 (round_kind \"light\" 추가, table rebuild) + GeneralVariant final + useGeneralOpinionCards + opinion:listGeneralCards/toggleLightVote IPC + 신규 vitest 30 (3538 → 3568). typecheck:node + typecheck:web 0 / inspect:safety 95 → 99 (+4: 신규 마이그레이션의 framework-managed false positive — m019/m020 와 동일 패턴)."
     },
     {
       "id": 23,

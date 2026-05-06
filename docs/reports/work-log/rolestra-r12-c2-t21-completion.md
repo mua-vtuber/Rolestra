@@ -6,7 +6,7 @@ originSessionId: 745d3321-cadb-4153-82f6-3ccf7d1188e9
 ---
 # R12-C2 T21 종결 (2026-05-06)
 
-worktree `feat/r12-c2-redesign-r2`, base `2a8cbdc` (= T20 work-log mirror, T20 production `409b8e5` 위). production commit (TBD) + work-log mirror (TBD).
+worktree `feat/r12-c2-redesign-r2`, base `2a8cbdc` (= T20 work-log mirror, T20 production `409b8e5` 위). production commit `9681c0b` + work-log mirror `23cc849`. 21 파일 / +1620 / -29 (4 신규 + 17 변경 — 본 메모리 자체는 mirror 가 별도 commit).
 
 **Why:** spec §11.13 general row — "카드 누적 list + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼. 합의/회의록/인계 surface 모두 X (잡담 정체성 유지)". T20 이 [##본문] 파서 + 모달 entry 를 land 했고, T21 이 그 카드를 *볼 수 있는* SsmBox 본체 + 사용자가 *반응* 할 수 있는 light vote toggle 을 land. P4 진입 2 호 = T20 의 backend surface 위에 UI surface 완성.
 
