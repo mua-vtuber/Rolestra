@@ -14,6 +14,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   handleOpinionFreeDiscussion,
   handleOpinionGather,
+  handleOpinionPostFromGeneral,
   handleOpinionQuickVote,
   handleOpinionTally,
   setOpinionServiceAccessor,
@@ -21,10 +22,12 @@ import {
 import { UnknownScreenIdError } from '../../../meetings/opinion-service';
 import type { OpinionService } from '../../../meetings/opinion-service';
 import type {
+  Opinion,
   OpinionFreeDiscussionResult,
   OpinionGatherResult,
   OpinionQuickVoteResult,
   OpinionTallyResult,
+  PostFromGeneralChannelResult,
 } from '../../../../shared/opinion-types';
 
 interface ServiceMock {
@@ -32,6 +35,7 @@ interface ServiceMock {
   tally: ReturnType<typeof vi.fn>;
   quickVote: ReturnType<typeof vi.fn>;
   freeDiscussionRound: ReturnType<typeof vi.fn>;
+  postFromGeneralChannel: ReturnType<typeof vi.fn>;
 }
 
 function makeMock(): ServiceMock {
@@ -40,6 +44,7 @@ function makeMock(): ServiceMock {
     tally: vi.fn(),
     quickVote: vi.fn(),
     freeDiscussionRound: vi.fn(),
+    postFromGeneralChannel: vi.fn(),
   };
 }
 
@@ -163,5 +168,46 @@ describe('opinion-handler', () => {
     expect(() =>
       handleOpinionQuickVote({ meetingId: 'm1', round: 1, responses: [] }),
     ).toThrow(UnknownScreenIdError);
+  });
+
+  // ── postFromGeneral (R12-C2 P4 T20) ─────────────────────────────────
+
+  it('handleOpinionPostFromGeneral forwards args and wraps result', () => {
+    const insertedOp: Opinion = {
+      id: 'op-1',
+      parentId: null,
+      meetingId: null,
+      channelId: 'ch-1',
+      kind: 'user-raised',
+      authorProviderId: null,
+      authorLabel: 'user_1',
+      title: '제목',
+      content: '본문',
+      rationale: null,
+      status: 'pending',
+      exclusionReason: null,
+      round: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const expected: PostFromGeneralChannelResult = {
+      channelId: 'ch-1',
+      inserted: [insertedOp],
+    };
+    const svc = makeMock();
+    svc.postFromGeneralChannel.mockReturnValue(expected);
+    setOpinionServiceAccessor(() => svc as unknown as OpinionService);
+
+    const res = handleOpinionPostFromGeneral({
+      channelId: 'ch-1',
+      authorProviderId: null,
+      parts: [{ title: '제목', content: '본문' }],
+    });
+    expect(res).toEqual({ result: expected });
+    expect(svc.postFromGeneralChannel).toHaveBeenCalledWith({
+      channelId: 'ch-1',
+      authorProviderId: null,
+      parts: [{ title: '제목', content: '본문' }],
+    });
   });
 });

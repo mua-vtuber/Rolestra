@@ -498,6 +498,7 @@
       "deleteDisabledSystem": "System channels cannot be deleted",
       "memberCount_one": "{{count}} participant",
       "memberCount_other": "{{count}} participants",
+      "postOpinion": "Post opinion",
       "readOnlyBadge": "Read-only",
       "rename": "Rename",
       "renameDisabledSystem": "System channels cannot be renamed",
@@ -578,6 +579,24 @@
       "channelRail": "Channel list",
       "memberPanel": "Participants and consensus",
       "thread": "Message thread"
+    },
+    "postOpinion": {
+      "cancel": "Cancel",
+      "contentLabel": "Body",
+      "contentPlaceholder": "Write your opinion freely…",
+      "description": "Registers as an opinion card on a general channel. No meeting, consensus, or hand-off — just a lightweight agree/disagree counter.",
+      "errors": {
+        "contentRequired": "Please enter the body.",
+        "contentTooLong": "Body must be no more than {{max}} characters.",
+        "generic": "Could not post the opinion.",
+        "titleTooLong": "Title must be no more than {{max}} characters.",
+        "validation": "Input is invalid."
+      },
+      "submit": "Post",
+      "title": "Post opinion",
+      "titleHint": "Leave empty to auto-derive from the first line of the body.",
+      "titleLabel": "Title (optional)",
+      "titlePlaceholder": "Opinion title"
     },
     "ssmBox": {
       "description": "Meeting in progress: \"{{topic}}\".",

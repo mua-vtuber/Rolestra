@@ -220,6 +220,44 @@ export interface OpinionFreeDiscussionResult {
   votesInserted: number;
 }
 
+// ── 일반 채널 [##본문] 카드 (T20 land — spec §4 일반 부서 새 정의) ─────
+
+/**
+ * 일반 채널 (`channel.kind === 'system_general'` 또는
+ * `channel.kind === 'user' && channel.role === 'general'`) 안에서 의견
+ * 카드 1+ 건을 등록하는 입력. caller (general-channel-opinion-flow 의 [##]
+ * 자동 파싱, PostOpinionModal 의 사용자 입력 모달 두 가지) 가 동일한
+ * surface 를 통해 호출.
+ *
+ * 룰 (T20, 2026-05-06):
+ *   - `parts.length === 0` → ValidationError throw (caller 가 파서 결과
+ *     0 건이면 호출 자체를 skip 해야 한다)
+ *   - 각 part 는 opinion row 1 건이 된다 — kind 는 authorProviderId 로 결정:
+ *     `null` = `'user-raised'`, 아니면 `'self-raised'`
+ *   - parentId=null, meetingId=null, status='pending', round=0
+ *   - authorLabel 자동 부여 — `${author}_${n}` (n = 채널 안 같은 author 의
+ *     기존 카드 수 + 1, batch 안 incremental)
+ *   - title null = service 가 content 첫 줄 / 80 자 cut 으로 derive
+ */
+export interface PostFromGeneralChannelInput {
+  channelId: string;
+  /** `null` = 사용자 발화. 아니면 직원 providerId. */
+  authorProviderId: string | null;
+  parts: Array<{
+    /** `null` 이면 service 가 content 에서 derive. 아니면 그대로 저장. */
+    title: string | null;
+    /** 의견 본문 (parser 결과 body 또는 모달 본문). 빈 문자열 throw. */
+    content: string;
+  }>;
+}
+
+/** OpinionService.postFromGeneralChannel 결과. */
+export interface PostFromGeneralChannelResult {
+  channelId: string;
+  /** 등장 순서대로 insert 된 opinion row N 개. */
+  inserted: Opinion[];
+}
+
 // ── idea-workflow USER_PICK (T15 land — spec §5.1) ─────────────────────
 
 /**

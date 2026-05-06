@@ -498,6 +498,7 @@
       "deleteDisabledSystem": "시스템 채널은 삭제할 수 없습니다",
       "memberCount_one": "{{count}}명 참여",
       "memberCount_other": "{{count}}명 참여",
+      "postOpinion": "의견 게시",
       "readOnlyBadge": "읽기 전용",
       "rename": "이름 변경",
       "renameDisabledSystem": "시스템 채널은 이름을 바꿀 수 없습니다",
@@ -578,6 +579,24 @@
       "channelRail": "채널 목록",
       "memberPanel": "참여자 및 합의 상태",
       "thread": "메시지 스레드"
+    },
+    "postOpinion": {
+      "cancel": "취소",
+      "contentLabel": "본문",
+      "contentPlaceholder": "어떤 의견인지 자유롭게 작성하세요…",
+      "description": "일반 채널의 의견 카드로 등록됩니다. 회의·합의·인계 없이 가벼운 동의/반대 카운터만 모입니다.",
+      "errors": {
+        "contentRequired": "본문을 입력하세요.",
+        "contentTooLong": "본문은 {{max}}자 이하여야 합니다.",
+        "generic": "의견을 등록하지 못했습니다.",
+        "titleTooLong": "제목은 {{max}}자 이하여야 합니다.",
+        "validation": "입력이 올바르지 않습니다."
+      },
+      "submit": "게시",
+      "title": "의견 게시",
+      "titleHint": "비워 두면 본문 첫 줄로 자동 생성됩니다.",
+      "titleLabel": "제목 (선택)",
+      "titlePlaceholder": "의견 제목"
     },
     "ssmBox": {
       "description": "\"{{topic}}\" 회의가 진행 중입니다.",

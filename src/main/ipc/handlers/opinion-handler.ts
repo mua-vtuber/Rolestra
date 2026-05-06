@@ -76,3 +76,15 @@ export function handleOpinionFreeDiscussion(
   });
   return { result };
 }
+
+/** opinion:postFromGeneral (R12-C2 P4 T20) */
+export function handleOpinionPostFromGeneral(
+  data: IpcRequest<'opinion:postFromGeneral'>,
+): IpcResponse<'opinion:postFromGeneral'> {
+  const result = getService().postFromGeneralChannel({
+    channelId: data.channelId,
+    authorProviderId: data.authorProviderId,
+    parts: data.parts,
+  });
+  return { result };
+}

@@ -696,6 +696,30 @@ app.whenReady().then(async () => {
       });
     });
 
+    // R12-C2 P4 T20 — 일반 채널 [##본문] 자동 파서 wire. system_general
+    // (전역) 과 user role='general' (per-project 잡담) 채널 모두 본 flow
+    // 의 대상. message-event 두 listener 는 책임 분리 — auto-trigger 는
+    // 회의 모델 라우팅 / 본 flow 는 카드 등록 (잡담 정체성).
+    const { GeneralChannelOpinionFlow } = await import(
+      './channels/general-channel-opinion-flow'
+    );
+    const generalChannelOpinionFlow = new GeneralChannelOpinionFlow({
+      channelService,
+      opinionService,
+    });
+    messageService.on('message', (msg) => {
+      try {
+        generalChannelOpinionFlow.onMessage(msg);
+      } catch (err) {
+        tryGetLogger()?.warn({
+          component: 'general-channel-opinion-flow',
+          action: 'listener-error',
+          result: 'failure',
+          metadata: { error: err instanceof Error ? err.message : String(err) },
+        });
+      }
+    });
+
     // Use a forward-declared queueService reference inside the starter so
     // the lookup hands back the just-claimed row's `targetChannelId`.
     let queueServiceRef: QueueService | null = null;

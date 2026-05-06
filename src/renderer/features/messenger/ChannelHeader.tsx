@@ -31,6 +31,13 @@ export interface ChannelHeaderProps {
   memberCount: number | null;
   onRename?: () => void;
   onDelete?: () => void;
+  /**
+   * R12-C2 P4 T20 — 일반 채널 (`system_general` 또는 user role='general')
+   * 만 노출되는 [의견 게시] 버튼 클릭 핸들러. caller (MessengerPage) 가
+   * PostOpinionModal 을 열도록 wire. 비-일반 채널에선 호출되지 않으며,
+   * undefined 면 일반 채널이라 해도 버튼을 렌더하지 않는다.
+   */
+  onPostOpinion?: () => void;
   className?: string;
 }
 
@@ -38,11 +45,23 @@ function isSystemKind(channel: Channel): boolean {
   return channel.kind.startsWith('system_');
 }
 
+/**
+ * 일반 채널 정체성 — system_general (전역 #일반) 또는 user role='general'
+ * (per-project 잡담). 두 surface 모두 [의견 게시] 버튼 + GeneralVariant
+ * SsmBox 책임 범위 (T18 / T20).
+ */
+function isGeneralChannel(channel: Channel): boolean {
+  if (channel.kind === 'system_general') return true;
+  if (channel.kind === 'user' && channel.role === 'general') return true;
+  return false;
+}
+
 export function ChannelHeader({
   channel,
   memberCount,
   onRename,
   onDelete,
+  onPostOpinion,
   className,
 }: ChannelHeaderProps): ReactElement {
   const { t } = useTranslation();
@@ -50,6 +69,8 @@ export function ChannelHeader({
 
   const system = isSystemKind(channel);
   const isDm = channel.kind === 'dm';
+  const showPostOpinion =
+    isGeneralChannel(channel) && onPostOpinion !== undefined;
 
   const renameDisabled = system;
   const renameTitle = system
@@ -123,6 +144,17 @@ export function ChannelHeader({
       >
         {memberCountLabel}
       </span>
+
+      {showPostOpinion ? (
+        <button
+          type="button"
+          onClick={onPostOpinion}
+          data-testid="channel-header-post-opinion"
+          className={actionBtnClasses}
+        >
+          {t('messenger.channelHeader.postOpinion')}
+        </button>
+      ) : null}
 
       {!isDm ? (
         <button

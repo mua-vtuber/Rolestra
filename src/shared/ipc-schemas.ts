@@ -766,6 +766,28 @@ export const opinionFreeDiscussionSchema = z.object({
 });
 
 /**
+ * opinion:postFromGeneral 입력 schema (R12-C2 P4 T20).
+ *
+ * 일반 채널 [##본문] 카드 + PostOpinionModal 공유 surface — 한 batch 안
+ * parts 1..32. authorProviderId null = 사용자 발화 / 그 외 = 직원 발화.
+ *
+ * 본문 / 제목 길이 cap 은 회의 카드와 동일 (title 400 / content 100,000).
+ */
+export const opinionPostFromGeneralSchema = z.object({
+  channelId: z.string().min(1).max(128),
+  authorProviderId: z.string().min(1).max(128).nullable(),
+  parts: z
+    .array(
+      z.object({
+        title: z.string().min(1).max(400).nullable(),
+        content: z.string().min(1).max(100_000),
+      }),
+    )
+    .min(1)
+    .max(32),
+});
+
+/**
  * meetings:composeMinutes 입력 schema (R12-C2 P2-3).
  * 단일 식별자 — service 가 회의 history + 의견 트리를 직접 조회한다.
  */
@@ -866,6 +888,7 @@ export const v3ChannelSchemas = {
   'opinion:tally': opinionTallySchema,
   'opinion:quickVote': opinionQuickVoteSchema,
   'opinion:freeDiscussion': opinionFreeDiscussionSchema,
+  'opinion:postFromGeneral': opinionPostFromGeneralSchema,
   // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ─────────────
   'meetings:composeMinutes': meetingsComposeMinutesSchema,
   // ── R12-C2 P2 T12: RunStep read (dev-only registration) ─────────

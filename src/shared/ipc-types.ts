@@ -66,6 +66,8 @@ import type {
   OpinionGatherResult,
   OpinionQuickVoteResult,
   OpinionTallyResult,
+  PostFromGeneralChannelInput,
+  PostFromGeneralChannelResult,
   Step1OpinionGatherResponse,
   Step25QuickVoteResponse,
   Step3FreeDiscussionResponse,
@@ -1066,6 +1068,23 @@ export type IpcChannelMap = {
       }>;
     };
     response: { result: OpinionFreeDiscussionResult };
+  };
+  /**
+   * R12-C2 P4 T20: 일반 채널 [##본문] 카드 또는 모달 의견 1+ 건 등록.
+   *
+   * caller:
+   *   - PostOpinionModal — 사용자가 별 entry 버튼으로 제목 + 본문 입력
+   *     (kind='user-raised', authorProviderId=null)
+   *   - general-channel-opinion-flow (main 측) — 메시지 안 [##본문] segment
+   *     자동 파싱 후 호출 (kind 는 author 에 따라 분기)
+   *
+   * meetingId=null, parentId=null, status='pending', round=0 으로 row insert.
+   * 회의 surface 는 일으키지 않는다 — 잡담 정체성 유지 (spec §4 일반 부서
+   * 새 정의 / §11.13 general row).
+   */
+  'opinion:postFromGeneral': {
+    request: PostFromGeneralChannelInput;
+    response: { result: PostFromGeneralChannelResult };
   };
 
   /**

@@ -32,6 +32,10 @@ function makeChannel(
     kind,
     readOnly: kind === 'system_approval' || kind === 'system_minutes',
     createdAt: 1_700_000_000_000,
+    role: null,
+    purpose: null,
+    handoffMode: 'check',
+    maxRounds: null,
     ...overrides,
   };
 }
@@ -218,6 +222,91 @@ describe('ChannelHeader — read-only badge + misc', () => {
     const root = screen.getByTestId('channel-header');
     expect(root.getAttribute('data-theme-variant')).toBe('tactical');
     expect(root.getAttribute('data-channel-kind')).toBe('user');
+  });
+});
+
+describe('ChannelHeader — postOpinion button (R12-C2 P4 T20)', () => {
+  it("system_general 채널 + onPostOpinion 정의 → [의견 게시] 버튼 노출 + 클릭 핸들러 호출", () => {
+    const onPost = vi.fn();
+    renderWithTheme(
+      'warm',
+      <ChannelHeader
+        channel={makeChannel('system_general', {
+          name: '#일반',
+          projectId: null,
+          role: null,
+          readOnly: false,
+        } as Partial<Channel>)}
+        memberCount={null}
+        onPostOpinion={onPost}
+      />,
+    );
+    const btn = screen.getByTestId('channel-header-post-opinion');
+    expect(btn).toBeTruthy();
+    fireEvent.click(btn);
+    expect(onPost).toHaveBeenCalledTimes(1);
+  });
+
+  it("user kind + role='general' → 버튼 노출", () => {
+    renderWithTheme(
+      'warm',
+      <ChannelHeader
+        channel={makeChannel('user', {
+          role: 'general',
+          name: 'general',
+        } as Partial<Channel>)}
+        memberCount={3}
+        onPostOpinion={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('channel-header-post-opinion')).toBeTruthy();
+  });
+
+  it("user kind + role='planning' → 버튼 미노출", () => {
+    renderWithTheme(
+      'warm',
+      <ChannelHeader
+        channel={makeChannel('user', {
+          role: 'planning',
+          name: 'planning',
+        } as Partial<Channel>)}
+        memberCount={3}
+        onPostOpinion={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId('channel-header-post-opinion')).toBeNull();
+  });
+
+  it('일반 채널이지만 onPostOpinion 미정의 → 버튼 미노출 (lift X 시 안전)', () => {
+    renderWithTheme(
+      'warm',
+      <ChannelHeader
+        channel={makeChannel('system_general', {
+          name: '#일반',
+          projectId: null,
+          role: null,
+          readOnly: false,
+        } as Partial<Channel>)}
+        memberCount={null}
+      />,
+    );
+    expect(screen.queryByTestId('channel-header-post-opinion')).toBeNull();
+  });
+
+  it('DM 채널 → 버튼 미노출 (잡담 정체성 X)', () => {
+    renderWithTheme(
+      'warm',
+      <ChannelHeader
+        channel={makeChannel('dm', {
+          name: 'dm:claude',
+          projectId: null,
+          role: null,
+        } as Partial<Channel>)}
+        memberCount={1}
+        onPostOpinion={() => {}}
+      />,
+    );
+    expect(screen.queryByTestId('channel-header-post-opinion')).toBeNull();
   });
 });
 

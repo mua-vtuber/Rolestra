@@ -44,6 +44,7 @@ import {
   OpinionDepthCapError,
   OpinionNotFoundError,
   OpinionService,
+  PostFromGeneralValidationError,
   UnknownScreenIdError,
 } from '../opinion-service';
 
@@ -868,6 +869,169 @@ describe('OpinionService', () => {
           userComment: 'hello',
         }),
       ).toThrow(/0 opinion rows/);
+    });
+  });
+
+  // ── postFromGeneralChannel (T20 — spec §4 일반 부서 새 정의) ─────────
+
+  describe('postFromGeneralChannel', () => {
+    it('user-raised — authorProviderId=null 이면 kind="user-raised" + label "user_1"', () => {
+      const result = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: '오늘 의견', content: '오늘 의견 본문' }],
+      });
+      expect(result.inserted).toHaveLength(1);
+      const opinion = result.inserted[0]!;
+      expect(opinion.kind).toBe('user-raised');
+      expect(opinion.authorProviderId).toBeNull();
+      expect(opinion.authorLabel).toBe('user_1');
+      expect(opinion.meetingId).toBeNull();
+      expect(opinion.parentId).toBeNull();
+      expect(opinion.status).toBe('pending');
+      expect(opinion.round).toBe(0);
+      expect(opinion.title).toBe('오늘 의견');
+      expect(opinion.content).toBe('오늘 의견 본문');
+      expect(opinion.rationale).toBeNull();
+      // DB persist 확인.
+      expect(repo.listByChannel(channelId)).toHaveLength(1);
+    });
+
+    it('self-raised — authorProviderId 있으면 kind="self-raised" + provider 별 카운터', () => {
+      const result = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: 'pv-codex',
+        parts: [
+          { title: null, content: 'codex 의견 1' },
+          { title: null, content: 'codex 의견 2' },
+        ],
+      });
+      expect(result.inserted).toHaveLength(2);
+      expect(result.inserted.every((o) => o.kind === 'self-raised')).toBe(true);
+      expect(result.inserted.every((o) => o.authorProviderId === 'pv-codex')).toBe(true);
+      expect(result.inserted.map((o) => o.authorLabel)).toEqual([
+        'pv-codex_1',
+        'pv-codex_2',
+      ]);
+    });
+
+    it('title=null 이면 content 첫 줄에서 derive', () => {
+      const result = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: null, content: '첫 줄 제목\n둘째 줄 본문' }],
+      });
+      expect(result.inserted[0]!.title).toBe('첫 줄 제목');
+    });
+
+    it('title=null + 80 자 초과 첫 줄 → 80 자 cut + 말줄임', () => {
+      const longLine = 'x'.repeat(120);
+      const result = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: null, content: longLine }],
+      });
+      // 77 chars + '...' = 80 chars
+      expect(result.inserted[0]!.title).toMatch(/^x{77}\.\.\.$/);
+    });
+
+    it('multiple parts — author 별 카운터 base 가 기존 row 기반', () => {
+      // 첫 번째 batch.
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: null, content: 'first' }],
+      });
+      // 두 번째 batch — base = 1 → 새 라벨 user_2 / user_3.
+      const result2 = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [
+          { title: null, content: 'second' },
+          { title: null, content: 'third' },
+        ],
+      });
+      expect(result2.inserted.map((o) => o.authorLabel)).toEqual([
+        'user_2',
+        'user_3',
+      ]);
+    });
+
+    it('서로 다른 author 의 카운터는 독립', () => {
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: null, content: 'user 1' }],
+      });
+      const codexResult = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: 'pv-codex',
+        parts: [{ title: null, content: 'codex 1' }],
+      });
+      expect(codexResult.inserted[0]!.authorLabel).toBe('pv-codex_1');
+      const userResult = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: null, content: 'user 2' }],
+      });
+      expect(userResult.inserted[0]!.authorLabel).toBe('user_2');
+    });
+
+    it('parts 빈 배열 → PostFromGeneralValidationError', () => {
+      expect(() =>
+        svc.postFromGeneralChannel({
+          channelId,
+          authorProviderId: null,
+          parts: [],
+        }),
+      ).toThrow(PostFromGeneralValidationError);
+    });
+
+    it('빈 content (whitespace only) → PostFromGeneralValidationError', () => {
+      expect(() =>
+        svc.postFromGeneralChannel({
+          channelId,
+          authorProviderId: null,
+          parts: [{ title: 'ok', content: '   \t\n  ' }],
+        }),
+      ).toThrow(PostFromGeneralValidationError);
+    });
+
+    it('content 앞뒤 whitespace trim — 저장 시점에 정리', () => {
+      const result = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: null, content: '   padded body   ' }],
+      });
+      expect(result.inserted[0]!.content).toBe('padded body');
+    });
+
+    it('회의록과 일반 카드 같은 author 면 카운터 합산 (label 표시 식별자라 분리 X)', () => {
+      // 회의 카드 추가 (gather).
+      svc.gather({
+        meetingId,
+        channelId,
+        round: 0,
+        responses: [
+          {
+            providerId: 'pv-codex',
+            payload: {
+              name: 'Codex',
+              label: 'codex_1',
+              opinions: [
+                { title: '회의 의견', content: '회의 본문', rationale: '근거' },
+              ],
+            },
+          },
+        ],
+      });
+      // 일반 카드 추가 — 같은 채널 + 같은 author → label='pv-codex_2' (회의 1 + 일반 1)
+      const result = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: 'pv-codex',
+        parts: [{ title: null, content: '잡담 의견' }],
+      });
+      expect(result.inserted[0]!.authorLabel).toBe('pv-codex_2');
     });
   });
 });

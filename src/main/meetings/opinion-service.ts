@@ -46,6 +46,8 @@ import type {
   OpinionQuickVoteResult,
   OpinionTallyResult,
   OpinionVote,
+  PostFromGeneralChannelInput,
+  PostFromGeneralChannelResult,
   Step1OpinionGatherResponse,
   Step25QuickVoteResponse,
   Step3FreeDiscussionResponse,
@@ -132,6 +134,18 @@ export class IdeaPickValidationError extends OpinionError {
         `button disabled in this state)`,
     );
     this.name = 'IdeaPickValidationError';
+  }
+}
+
+/**
+ * `postFromGeneralChannel` 입력 검증 실패 (T20). caller 가 파싱 결과 0 건
+ * 또는 빈 content 로 호출 시 throw — silent fallback 금지 (사용자 입력
+ * 흐름이 명백히 잘못된 상태이므로 에러로 surface 해 디버깅 가능하게).
+ */
+export class PostFromGeneralValidationError extends OpinionError {
+  constructor(reason: string) {
+    super(`OpinionService.postFromGeneralChannel: ${reason}`);
+    this.name = 'PostFromGeneralValidationError';
   }
 }
 
@@ -560,6 +574,100 @@ export class OpinionService {
     const firstLine = comment.split(/\r?\n/, 1)[0] ?? comment;
     if (firstLine.length <= 80) return firstLine;
     return firstLine.slice(0, 77) + '...';
+  }
+
+  // ── 일반 채널 [##본문] 카드 (T20 land — spec §4 일반 부서 새 정의) ──
+
+  /**
+   * 일반 채널 (잡담 정체성) 안 의견 카드 1+ 건 등록.
+   *
+   * 두 호출자가 같은 method 공유:
+   *   1. general-channel-opinion-flow — 메시지 안 [##본문] segment 자동 파싱
+   *   2. PostOpinionModal IPC — 사용자가 별 entry 모달로 직접 등록
+   *
+   * 동작:
+   *   - parts.length === 0 → PostFromGeneralValidationError (caller 책임)
+   *   - 빈 content / whitespace-only content → PostFromGeneralValidationError
+   *   - kind = authorProviderId === null ? 'user-raised' : 'self-raised'
+   *   - meetingId=null, parentId=null, status='pending', round=0
+   *   - authorLabel = `${author}_${n}` (n = 채널 안 같은 author 의 기존 카드
+   *     수 + 1, batch 안 incremental)
+   *   - title null → service 가 content 첫 줄 / 80 자 cut 으로 derive
+   *
+   * 회의 X — 합의 / 회의록 / 인계 surface 모두 일으키지 않는다 (잡담
+   * 정체성 유지). orchestrator 진입 X.
+   */
+  postFromGeneralChannel(
+    input: PostFromGeneralChannelInput,
+  ): PostFromGeneralChannelResult {
+    if (input.parts.length === 0) {
+      throw new PostFromGeneralValidationError(
+        `channelId "${input.channelId}" — parts is empty (caller must skip ` +
+          `when [##] parser yields 0 matches and modal must guard against ` +
+          `empty submissions)`,
+      );
+    }
+
+    // 빈 content fast-fail — 모달 / 파서 어느 caller 도 빈 content 를
+    // 보내선 안 됨 (파서는 trim 후 빈 본문 자체를 skip, 모달은 disabled
+    // 처리). 들어오면 silent fallback 금지 — 즉시 throw.
+    for (const [i, part] of input.parts.entries()) {
+      if (part.content.trim().length === 0) {
+        throw new PostFromGeneralValidationError(
+          `channelId "${input.channelId}" parts[${i}] — content is empty ` +
+            `or whitespace-only`,
+        );
+      }
+    }
+
+    const kind: Opinion['kind'] =
+      input.authorProviderId === null ? 'user-raised' : 'self-raised';
+    const authorIdentifier = input.authorProviderId ?? 'user';
+
+    // 같은 채널 + 같은 author 의 기존 카드 수 → label 카운터 base.
+    // listByChannel 은 회의 카드 + 일반 카드 통합 — 회의 안 카드도 같은
+    // authorProviderId 이면 카운터에 포함된다. label 은 진실원천이 아니라
+    // 표시용 식별자 (user_1 / codex_3 등) 라 회의 카드와 구분 X 가 의도
+    // 동작.
+    const existing = this.repo.listByChannel(input.channelId);
+    const baseCount = existing.filter((o) => {
+      if (kind === 'user-raised') return o.authorProviderId === null;
+      return o.authorProviderId === input.authorProviderId;
+    }).length;
+
+    const inserted: Opinion[] = [];
+    const baseNow = Date.now();
+
+    for (let i = 0; i < input.parts.length; i += 1) {
+      const part = input.parts[i]!;
+      const content = part.content.trim();
+      const title =
+        part.title !== null
+          ? part.title.trim()
+          : this.deriveUserCommentTitle(content);
+      const ts = baseNow + i;
+      const opinion: Opinion = {
+        id: randomUUID(),
+        parentId: null,
+        meetingId: null,
+        channelId: input.channelId,
+        kind,
+        authorProviderId: input.authorProviderId,
+        authorLabel: `${authorIdentifier}_${baseCount + i + 1}`,
+        title,
+        content,
+        rationale: null,
+        status: 'pending',
+        exclusionReason: null,
+        round: 0,
+        createdAt: ts,
+        updatedAt: ts,
+      };
+      this.repo.insert(opinion);
+      inserted.push(opinion);
+    }
+
+    return { channelId: input.channelId, inserted };
   }
 
   // ── 헬퍼 ──────────────────────────────────────────────────────────

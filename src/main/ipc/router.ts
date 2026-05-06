@@ -139,6 +139,7 @@ import {
   handleOpinionTally,
   handleOpinionQuickVote,
   handleOpinionFreeDiscussion,
+  handleOpinionPostFromGeneral,
 } from './handlers/opinion-handler';
 import { handleMeetingsComposeMinutes } from './handlers/meetings-minutes-handler';
 import { handleMeetingListRunSteps } from './handlers/run-step-handler';
@@ -474,6 +475,10 @@ export function registerIpcHandlers(): void {
   handle('opinion:quickVote', isDev, (data) => handleOpinionQuickVote(data));
   handle('opinion:freeDiscussion', isDev, (data) =>
     handleOpinionFreeDiscussion(data),
+  );
+  // R12-C2 P4 T20 — 일반 채널 [##본문] / 모달 의견 등록
+  handle('opinion:postFromGeneral', isDev, (data) =>
+    handleOpinionPostFromGeneral(data),
   );
 
   // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ────────────

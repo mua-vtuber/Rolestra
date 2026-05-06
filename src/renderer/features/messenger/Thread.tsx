@@ -29,6 +29,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   type ReactElement,
 } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,7 @@ import { DateSeparator } from './DateSeparator';
 import { MeetingBanner } from './MeetingBanner';
 import { Message, type MessageAuthorInfo } from './Message';
 import { MessageCardVariant, isCardMessage } from './MessageRenderer';
+import { PostOpinionModal } from './PostOpinionModal';
 import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
@@ -325,6 +327,16 @@ export function Thread({
     void refreshMessages();
   }, [refreshMessages]);
 
+  // R12-C2 P4 T20 — 일반 채널 [의견 게시] 모달 wiring. ChannelHeader 가
+  // showPostOpinion = isGeneralChannel(channel) && onPostOpinion 정의 둘
+  // 다 만족할 때만 버튼을 렌더하므로, 비-일반 채널에선 setOpen(true) 가
+  // 호출될 일이 없다. hooks rule — 모든 useState / useCallback 은 early
+  // return *위* 에 둬야 한다.
+  const [postOpinionOpen, setPostOpinionOpen] = useState(false);
+  const handlePostOpinion = useCallback((): void => {
+    setPostOpinionOpen(true);
+  }, []);
+
   if (activeChannel === null) {
     return (
       <div
@@ -363,6 +375,13 @@ export function Thread({
         memberCount={memberCount}
         onRename={handleRename}
         onDelete={handleDelete}
+        onPostOpinion={handlePostOpinion}
+      />
+
+      <PostOpinionModal
+        open={postOpinionOpen}
+        onOpenChange={setPostOpinionOpen}
+        channelId={activeChannel.id}
       />
 
       {activeChannel.kind === 'system_approval' ? (
