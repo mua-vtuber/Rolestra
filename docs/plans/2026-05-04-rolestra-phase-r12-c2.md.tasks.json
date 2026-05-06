@@ -247,12 +247,12 @@
     {
       "id": 26,
       "subject": "T25 — audit NG → 기획 인계 분기",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         18,
         25
       ],
-      "description": "**P5 진입 3 호.** T17 audit-workflow 의 NG → 기획 인계 분기 정식 wire.\n\n**산출:**\n- audit-workflow 종결 시 결과 분류 (status='agreed' = 문제 / status='excluded' = 수용 가능)\n- 문제 ≥ 1 → 기획 부서 자동 인계 (handoff target = 'planning'). 인계 payload = audit 회의록 통째\n- 기획 부서가 받아 새 회의 시작 (재기획) → chain 재진입\n\n**Verify:** vitest integration + e2e."
+      "description": "**P5 진입 3 호.** T17 audit-workflow 의 NG → 기획 인계 분기 정식 wire.\n\n**산출:**\n- audit-workflow 종결 시 결과 분류 (status='agreed' = 문제 / status='excluded' = 수용 가능)\n- 문제 ≥ 1 → 기획 부서 자동 인계 (handoff target = 'planning'). 인계 payload = audit 회의록 통째\n- 기획 부서가 받아 새 회의 시작 (재기획) → chain 재진입\n\n**Verify:** vitest integration + e2e.\n\n**land 완료** — production commit `9208202` + work-log mirror `d908729`. T16a (design) / T17 (audit / review) / T24 (implement) 와 같은 thin module 패턴 — orchestrator wire X, types + 순수 helper 만. 신규 2 파일 / +810 lines (audit-handoff-dispatch.ts 401 + test 409). 핵심 구성:\n- `AuditDispatchOutcome` discriminated union — `'end'` (verdict='ok' / chain 종료) | `'planning_handoff'` (verdict='ng' + payload + missionCard + targetRole='planning'). `verdict` 필드는 outcome.kind 와 중복 명시 — caller 가 단일 필드 비교만으로 verdict 추출 가능 + JSON 직렬화 self-describing.\n- `planAuditDispatch` single entry — T17 `classifyAuditVerdict` / `extractAuditProblemList` / `buildAuditHandoffPayload` + T23 `buildMissionCard` 합성. verdict='ok' branch 는 planning 채널 dummy 값을 *허용* (caller 가 verdict 모르는 상태에서 호출 가능). 'ng' branch 에서만 invariant 검증.\n- `buildFixMissionCardFromAuditPayload` — `AuditHandoffPayload` (T17) → `MissionCard` kind='fix' (T23). payload.targetPlanningChannelId → mission card.targetChannelId 매핑 + AuditProblem (rationale + authorLabel 포함) → mission card schema problemList (opinionId + title + content) 변환 (rationale + authorLabel *제거* — 회의록 본문에 이미 보존).\n- `composeFixMissionBody` 기본 body 합성 — problem 1-line 요약 (opinionId + title) + count 표기 + 안내문. caller 가 override 가능. blank title → '(제목 없음)' normalize.\n- `DEFAULT_FIX_MISSION_EXPECTED_OUTPUTS` 상수 — 기획 부서 designated worker 가 자유 해석 가능한 산출 형식 표현 2 종.\n- `AuditDispatchInvariantError` — `AuditHandoffPayloadInvariantError` (T17) 를 wrap + 자체 invariant (assignedProviderId blank / missionCardId blank / NaN epoch / classify↔extract divergence) 통합.\n\nverification: typecheck:node 0 / typecheck:web 0 / vitest 3677 PASS (T24 baseline 3653 → +24 신규) / inspect:safety 99 (T24 baseline +0). 미작업 (의도): handoff_dispatch row 영속 (T27) / planning 채널 lookup (caller) / assigned provider resolve (caller) / HandoffApprovalModal + handoff_mode wire (T28) / HandoffPackageCard (T29) — 모두 P6 후속 sub-task 책임."
     },
     {
       "id": 27,
