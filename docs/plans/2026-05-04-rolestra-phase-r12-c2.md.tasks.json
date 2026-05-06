@@ -176,13 +176,13 @@
     {
       "id": 19,
       "subject": "T18 — SsmBox 부서별 5 variant 통합",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         16,
         17,
         18
       ],
-      "description": "**P3 진입 5 호.** SsmBox 컴포넌트 5 variant (idea/planning/design/implement/general) 통합 — channel.role 분기.\n\n**산출:**\n- `src/renderer/features/messenger/SsmBox/index.tsx` — props { channelId } 만, 내부 channel.role 분기\n- 5 variant 파일 분리: IdeaVariant / PlanningVariant (review/audit 공유) / DesignVariant / ImplementVariant / GeneralVariant (T21 final)\n- spec §11.13 5 variant 부합\n\n**Verify:** vitest snapshot 5 variant + e2e (부서 채널 전환 시 SsmBox variant 전환)."
+      "description": "**P3 진입 5 호 종결.** SsmBox 5 variant 통합 — channel.role 분기.\n\n**Land 산출 (8 신규 + 2 변경 = 10):**\n- src/renderer/features/messenger/SsmBox/ 폴더 신설 + 7 파일\n  - index.tsx — props channelId + 테스트 우회 channelOverride/meetingOverride. role → variant 분기 (idea / planning|review|audit / design.ui|design.ux / implement / general / legacy fallback)\n  - shared.tsx — SsmBoxFrame (2-way clip + panelRadius + 형태 토큰 분기 한 곳)\n  - IdeaVariant.tsx — 의견 list slot (kind=root, D-B-Light step 2 까지)\n  - PlanningVariant.tsx — 의견 트리 + 회의록 [합의]+[제외] 미리보기 footer (planning/review/audit 공유)\n  - DesignVariant.tsx — 디자인 7단계 + Playwright 미리보기 slot (design.ui + design.ux 통합)\n  - ImplementVariant.tsx — designated AI / 진행도 / 파일 list slot (회의 X surface)\n  - GeneralVariant.tsx — 카드 누적 list (T21 final)\n  - LegacyVariant.tsx — role=null / design.character / design.background fallback (옛 SSM N/TOTAL 표시 보존)\n- src/renderer/features/messenger/SsmBox.tsx 단일 파일 삭제\n- src/renderer/features/messenger/MemberPanel.tsx 갱신 — useActiveMeetings + activeMeeting 계산 제거 (SsmBox 가 자체 resolve), SsmBox channelId 호출\n- i18n ko/en 갱신 — messenger.ssmBox.variants.{idea/planning/review/audit/design/implement/general} 키 신규\n- 테스트 신규 1 + 갱신 1 = 28 항목 (12 SsmBox + 16 routing)\n\n**Verify:**\n- typecheck:web 0 / typecheck:node 0\n- vitest 3452 PASS / 13 skip (T17 baseline 3432 → +20: 새 테스트 28 - 기존 SsmBox 8)\n- inspect:safety 95 (T17 동일, 신규 코드 위반 0)\n\n**의존 / 후속:**\n- T19 (RunStep step_kind 집계 hook + dashboard:progress IPC) 가 본 5 variant 의 실 데이터 source. variant placeholder slot 들 (ssm-box-idea-list / ssm-box-opinion-tree / ssm-box-design-sequence / ssm-box-progress-slot 등) 이 hookup 지점.\n- T20 ([##본문] 파서 + 의견 게시 모달) → T21 (GeneralVariant final) 가 GeneralVariant skeleton 을 본격 surface 로 land.\n- DesignVariant 의 미리보기 slot 은 T16c land 된 DesignPreview 와 future hookup."
     },
     {
       "id": 20,

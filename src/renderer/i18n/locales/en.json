@@ -581,7 +581,51 @@
     },
     "ssmBox": {
       "description": "Meeting in progress: \"{{topic}}\".",
-      "empty": "No active meeting."
+      "empty": "No active meeting.",
+      "variants": {
+        "idea": {
+          "heading": "Idea department",
+          "empty": "No ideas registered yet.",
+          "placeholder": "Idea meeting on \"{{topic}}\" is in progress.",
+          "listAria": "Registered ideas",
+          "pendingDataNote": "Idea cards appear once the meeting data is wired."
+        },
+        "planning": {
+          "heading": "Planning department",
+          "empty": "No active meeting.",
+          "placeholder": "Meeting in progress: \"{{topic}}\".",
+          "treeAria": "Opinion tree",
+          "pendingDataNote": "The opinion tree appears once the meeting data is wired.",
+          "minutesPreviewPlaceholder": "Minutes [agreed]/[excluded] preview appears during the minutes phase."
+        },
+        "review": {
+          "heading": "Review department"
+        },
+        "audit": {
+          "heading": "Audit department"
+        },
+        "design": {
+          "heading": "Design department",
+          "empty": "No active design meeting.",
+          "placeholder": "Design 7-step flow on \"{{topic}}\" is in progress.",
+          "sequenceAria": "Design step sequence",
+          "pendingDataNote": "Step progress appears once the design workflow data is wired.",
+          "previewSlotPlaceholder": "Playwright snapshot preview slot."
+        },
+        "implement": {
+          "heading": "Implementation department",
+          "empty": "No active implementation work.",
+          "designatedPlaceholder": "Designated worker slot.",
+          "progressPlaceholder": "Progress gauge slot.",
+          "fileListPlaceholder": "Working file list slot."
+        },
+        "general": {
+          "heading": "General channel",
+          "empty": "No cards registered.",
+          "cardsAria": "Casual cards",
+          "pendingDataNote": "[##body] card list lights up once Phase 4 lands."
+        }
+      }
     },
     "startDm": {
       "ariaLabel": "Start a DM with {{name}}",

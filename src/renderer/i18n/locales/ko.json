@@ -581,7 +581,51 @@
     },
     "ssmBox": {
       "description": "\"{{topic}}\" 회의가 진행 중입니다.",
-      "empty": "진행 중인 회의가 없습니다."
+      "empty": "진행 중인 회의가 없습니다.",
+      "variants": {
+        "idea": {
+          "heading": "아이디어 부서",
+          "empty": "아직 등록된 아이디어가 없습니다.",
+          "placeholder": "\"{{topic}}\" 아이디어 회의 진행 중입니다.",
+          "listAria": "등록된 아이디어 목록",
+          "pendingDataNote": "아이디어 카드는 회의 단계 데이터 연결 후 표시됩니다."
+        },
+        "planning": {
+          "heading": "기획 부서",
+          "empty": "진행 중인 회의가 없습니다.",
+          "placeholder": "\"{{topic}}\" 회의가 진행 중입니다.",
+          "treeAria": "의견 트리",
+          "pendingDataNote": "의견 트리는 회의 데이터 연결 후 표시됩니다.",
+          "minutesPreviewPlaceholder": "회의록 [합의] / [제외] 미리보기는 회의록 작성 단계에서 노출됩니다."
+        },
+        "review": {
+          "heading": "리뷰 부서"
+        },
+        "audit": {
+          "heading": "검토 부서"
+        },
+        "design": {
+          "heading": "디자인 부서",
+          "empty": "진행 중인 디자인 회의가 없습니다.",
+          "placeholder": "\"{{topic}}\" 디자인 7 단계 진행 중입니다.",
+          "sequenceAria": "디자인 단계 순서",
+          "pendingDataNote": "단계 진행 표시는 디자인 워크플로우 데이터 연결 후 노출됩니다.",
+          "previewSlotPlaceholder": "Playwright 스냅샷 미리보기 자리입니다."
+        },
+        "implement": {
+          "heading": "구현 부서",
+          "empty": "진행 중인 구현 작업이 없습니다.",
+          "designatedPlaceholder": "지정 작업자 표시 자리입니다.",
+          "progressPlaceholder": "진행도 게이지 자리입니다.",
+          "fileListPlaceholder": "작업 중 파일 목록 자리입니다."
+        },
+        "general": {
+          "heading": "잡담 채널",
+          "empty": "등록된 카드가 없습니다.",
+          "cardsAria": "잡담 카드 목록",
+          "pendingDataNote": "[##본문] 카드 누적 표시는 P4 land 시점에 활성화됩니다."
+        }
+      }
     },
     "startDm": {
       "ariaLabel": "{{name}}와(과) 대화 시작",

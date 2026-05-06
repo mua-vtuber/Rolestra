@@ -18,9 +18,8 @@ import { useTranslation } from 'react-i18next';
 
 import { Card, CardHeader, CardBody } from '../../components/primitives';
 import { MemberRow } from './MemberRow';
-import { SsmBox } from './SsmBox';
+import { SsmBox } from './SsmBox/index';
 import { useActiveChannel } from '../../hooks/use-active-channel';
-import { useActiveMeetings } from '../../hooks/use-active-meetings';
 import { useChannelMembers } from '../../hooks/use-channel-members';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
@@ -67,17 +66,13 @@ export function MemberPanel({
     activeChannelId,
     allChannels,
   );
-  const { meetings } = useActiveMeetings();
 
-  const activeMeeting = useMemo(() => {
-    if (activeChannelId === null) return null;
-    // R12-C2 P1.5 — 일반 채널 (#일반) 은 회의 X (spec §11.3). 잔존 active
-    // meeting row 가 있어도 SsmBox empty 가 정직. 신규 생성은 backend
-    // 가드로 차단되지만 옛 row 즉시 회복은 frontend 분기.
-    if (isGeneralChannel) return null;
-    if (meetings === null) return null;
-    return meetings.find((m) => m.channelId === activeChannelId) ?? null;
-  }, [activeChannelId, isGeneralChannel, meetings]);
+  // R12-C2 T18 — SsmBox 가 자체적으로 `useActiveMeetings` 를 호출해 meeting
+  // resolve 를 한다. MemberPanel 은 channelId 만 넘기므로 본 컴포넌트 안에서
+  // activeMeeting 을 계산할 필요가 없어졌다. 일반 채널 (#일반) 분기는
+  // 아래 `!isGeneralChannel` gate 가 카드 자체를 hide 하므로 이전 R12-C2
+  // P1.5 의 "잔존 active meeting row 무시" 가드는 SsmBox 호출 진입 자체가
+  // 안 되어 자연스럽게 만족된다.
 
   const participantCount =
     members === null ? null : members.length;
@@ -169,7 +164,7 @@ export function MemberPanel({
         <Card data-testid="member-panel-consensus" className="flex flex-col">
           <CardHeader heading={t('messenger.memberPanel.consensusTitle')} />
           <CardBody>
-            <SsmBox meeting={activeMeeting} />
+            <SsmBox channelId={activeChannelId} />
           </CardBody>
         </Card>
       )}
