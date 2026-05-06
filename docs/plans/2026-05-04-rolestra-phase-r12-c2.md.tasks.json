@@ -257,12 +257,14 @@
     {
       "id": 27,
       "subject": "T26 — ExecutionService dryRun 의 RunStep 영속",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         13,
         25
       ],
-      "description": "**P5 진입 4 호.** ExecutionService dryRun/apply/rollback 모든 step → RunStep 영속 (`step_kind='tool_invoke'`).\n\n**산출:**\n- ExecutionService hook — 각 step 시점에 RunStepService 호출\n- side_effect_summary 1-line 작성 (\"파일 X 작성 (3 lines)\" / \"명령 Y 실행 (exit 0)\")\n\n**Verify:** vitest unit (dryRun/apply/rollback 모두 RunStep row 생성). [후보 A — ExecutionService 영속]"
+      "description": "**P5 진입 4 호.** ExecutionService dryRun/apply/rollback 모든 step → RunStep 영속 (`step_kind='tool_invoke'`).\n\n**산출:**\n- ExecutionService hook — 각 step 시점에 RunStepService 호출\n- side_effect_summary 1-line 작성 (\"파일 X 작성 (3 lines)\" / \"명령 Y 실행 (exit 0)\")\n\n**Verify:** vitest unit (dryRun/apply/rollback 모두 RunStep row 생성). [후보 A — ExecutionService 영속]",
+      "productionSha": "5155adb",
+      "workLogMirrorSha": "726290c"
     },
     {
       "id": 28,
