@@ -796,6 +796,28 @@ export const meetingsComposeMinutesSchema = z.object({
 });
 
 /**
+ * opinion:listGeneralCards 입력 schema (R12-C2 P4 T21).
+ *
+ * 일반 채널의 카드 list + light vote 카운터 read. channelId 만 받고
+ * service 가 해당 채널의 self-raised / user-raised opinion 통째 조회.
+ */
+export const opinionListGeneralCardsSchema = z.object({
+  channelId: z.string().min(1).max(128),
+});
+
+/**
+ * opinion:toggleLightVote 입력 schema (R12-C2 P4 T21).
+ *
+ * 사용자 1 인 voter (voter_provider_id NULL) 의 light vote 토글. UI 미노출
+ * 인 'abstain' 은 schema 측에서 차단 — 'agree' / 'oppose' 만 허용. 같은
+ * vote 재요청 시 service 가 DELETE (취소), 반대 vote 시 REPLACE 처리.
+ */
+export const opinionToggleLightVoteSchema = z.object({
+  opinionId: z.string().min(1).max(128),
+  vote: z.enum(['agree', 'oppose']),
+});
+
+/**
  * meeting:list-run-steps 입력 schema (R12-C2 P2 T12).
  *
  * 3 scope discriminated union — caller 가 회의 단위 / 채널 단위 / turn 단위
@@ -889,6 +911,9 @@ export const v3ChannelSchemas = {
   'opinion:quickVote': opinionQuickVoteSchema,
   'opinion:freeDiscussion': opinionFreeDiscussionSchema,
   'opinion:postFromGeneral': opinionPostFromGeneralSchema,
+  // ── R12-C2 P4 T21: 일반 채널 가벼운 투표 ─────────────────────────
+  'opinion:listGeneralCards': opinionListGeneralCardsSchema,
+  'opinion:toggleLightVote': opinionToggleLightVoteSchema,
   // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ─────────────
   'meetings:composeMinutes': meetingsComposeMinutesSchema,
   // ── R12-C2 P2 T12: RunStep read (dev-only registration) ─────────

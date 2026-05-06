@@ -110,7 +110,7 @@ describe('v3 migrations 008-011 — schema contract', () => {
       }
     });
 
-    it('records all 20 migration ids in the migrations tracking table', () => {
+    it('records all 21 migration ids in the migrations tracking table', () => {
       const rows = db
         .prepare('SELECT id FROM migrations ORDER BY rowid')
         .all() as Array<{ id: string }>;
@@ -135,6 +135,7 @@ describe('v3 migrations 008-011 — schema contract', () => {
         '018-channels-role-purpose-handoff',
         '019-opinion-tables',
         '020-run-step',
+        '021-opinion-vote-light',
       ]);
     });
   });
@@ -486,9 +487,10 @@ describe('v3 migrations 008-011 — schema contract', () => {
       // 016-meeting-paused-and-kind, R12-S Task 1 added
       // 017-providers-roles-skills, R12-C Task 1 added
       // 018-channels-role-purpose-handoff, R12-C2 P2-1 added
-      // 019-opinion-tables, R12-C2 P2 T12 added 020-run-step. The
-      // test stays at "no-op on re-run" — only the absolute count changes.
-      expect(before.c).toBe(20);
+      // 019-opinion-tables, R12-C2 P2 T12 added 020-run-step,
+      // R12-C2 P4 T21 added 021-opinion-vote-light. The test stays at
+      // "no-op on re-run" — only the absolute count changes.
+      expect(before.c).toBe(21);
 
       // A second pass must not throw (would throw on duplicate CREATE TABLE
       // because v3 migrations omit IF NOT EXISTS, so this proves the migrator
@@ -498,7 +500,7 @@ describe('v3 migrations 008-011 — schema contract', () => {
       const after = db
         .prepare('SELECT COUNT(*) AS c FROM migrations')
         .get() as { c: number };
-      expect(after.c).toBe(20);
+      expect(after.c).toBe(21);
     });
   });
 });

@@ -49,8 +49,10 @@ export type OpinionVoteValue = 'agree' | 'oppose' | 'abstain';
  * 투표 라운드 종류 (`opinion_vote.round_kind` CHECK 제약):
  * - `quick_vote`       step 2.5 일괄 동의 투표 (의견 list 통째 한 번에)
  * - `free_discussion`  step 3 자유 토론 (의견 1 건씩 round-by-round)
+ * - `light`            R12-C2 P4 T21 — 일반 채널 가벼운 동의/반대 (회의 X)
+ *                      voter_provider_id NULL (사용자 1 인) / round 0 / comment NULL
  */
-export type OpinionRoundKind = 'quick_vote' | 'free_discussion';
+export type OpinionRoundKind = 'quick_vote' | 'free_discussion' | 'light';
 
 // ── DB row 매핑 ─────────────────────────────────────────────────────────
 
@@ -309,4 +311,77 @@ export interface IdeaFinalizeSelectionResult {
   excludedIds: string[];
   /** 사용자 자유 코멘트로 insert 된 신규 opinion row (kind='user-raised'). 코멘트 0 자 면 null. */
   userOpinion: Opinion | null;
+}
+
+// ── 일반 채널 가벼운 투표 (T21 land — spec §11.13 general row) ──────────
+
+/**
+ * 일반 채널 SsmBox (GeneralVariant) 의 카드 1 건. T20 에서 영속된
+ * `kind='self-raised' | 'user-raised'` opinion row 에 light vote 집계
+ * (`agreeCount`/`opposeCount`) + 사용자 현재 투표 (`userVote`) 를 덧붙인
+ * read-only projection. 회의 X — meetingId NULL row 만 대상.
+ *
+ * 정렬: `Opinion.createdAt` 오름차순 (등록 순서). 화면에서 최신을 위에
+ * 두고 싶으면 renderer 가 reverse 한다 — backend 는 안정 정렬만 보장.
+ */
+export interface GeneralOpinionCard {
+  /** opinion 도메인 row 통째 (kind/title/content/authorLabel 등). */
+  opinion: Opinion;
+  /** light round 의 'agree' 표 누적 — voter 통합 (사용자 + 직원). */
+  agreeCount: number;
+  /** light round 의 'oppose' 표 누적. */
+  opposeCount: number;
+  /**
+   * 사용자 (voter_provider_id NULL) 의 현재 light 투표 — `null` = 미투표.
+   * 사용자는 카드별 0 또는 1 row 만 유지 (service 가 toggle/replace 로 강제).
+   */
+  userVote: OpinionVoteValue | null;
+}
+
+/**
+ * `opinion:listGeneralCards` IPC 결과 — 일반 채널의 카드 N 건 + 카운터
+ * 묶음. SsmBox GeneralVariant 가 한 번 호출 후 토글 시마다 refetch.
+ */
+export interface ListGeneralCardsResult {
+  channelId: string;
+  cards: GeneralOpinionCard[];
+}
+
+/**
+ * `opinion:toggleLightVote` IPC 입력 — 사용자가 카드의 동의/반대 버튼
+ * 토글. caller 는 같은 vote 재요청 (취소) / 다른 vote (대체) 둘 다
+ * 같은 채널로 호출. backend 가 DELETE-or-REPLACE 로 1 row 미만 유지.
+ *
+ * `vote` semantics:
+ *   - `'agree'` / `'oppose'` — 해당 vote 토글 (없으면 INSERT, 있으면 DELETE,
+ *     반대 vote 가 있으면 REPLACE)
+ *   - `'abstain'` 은 일반 채널 light round 에서 사용 X (UI 미노출).
+ *     IPC 측에서 zod 가 `'agree'` / `'oppose'` 만 허용.
+ */
+export interface ToggleLightVoteInput {
+  /** 투표 대상 카드 UUID. opinion.id. meetingId 가 NULL 인 카드만 허용. */
+  opinionId: string;
+  /** 사용자가 클릭한 버튼 — 'agree' 또는 'oppose'. */
+  vote: 'agree' | 'oppose';
+}
+
+/**
+ * `OpinionService.toggleLightVote` / `opinion:toggleLightVote` 결과.
+ *
+ * 동작 결과 effect:
+ *   - `'inserted'`  사용자가 처음 vote (이전 row 0 건)
+ *   - `'removed'`   같은 vote 재클릭 (취소)
+ *   - `'replaced'`  반대 vote 가 있어 교체 (이전 DELETE + 신규 INSERT)
+ */
+export type ToggleLightVoteEffect = 'inserted' | 'removed' | 'replaced';
+
+export interface ToggleLightVoteResult {
+  opinionId: string;
+  effect: ToggleLightVoteEffect;
+  /** 토글 후 사용자 vote — `'removed'` 면 `null`, 나머지는 input.vote 와 동일. */
+  userVote: OpinionVoteValue | null;
+  /** 토글 후 light round 의 카드 누적 카운터 (agree). */
+  agreeCount: number;
+  /** 토글 후 light round 의 카드 누적 카운터 (oppose). */
+  opposeCount: number;
 }

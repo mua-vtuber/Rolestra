@@ -38,19 +38,24 @@
 
 import { randomUUID } from 'node:crypto';
 import type {
+  GeneralOpinionCard,
   IdeaFinalizeSelectionInput,
   IdeaFinalizeSelectionResult,
+  ListGeneralCardsResult,
   Opinion,
   OpinionFreeDiscussionResult,
   OpinionGatherResult,
   OpinionQuickVoteResult,
   OpinionTallyResult,
   OpinionVote,
+  OpinionVoteValue,
   PostFromGeneralChannelInput,
   PostFromGeneralChannelResult,
   Step1OpinionGatherResponse,
   Step25QuickVoteResponse,
   Step3FreeDiscussionResponse,
+  ToggleLightVoteInput,
+  ToggleLightVoteResult,
 } from '../../shared/opinion-types';
 import type { OpinionRepository } from './opinion-repository';
 import { OPINION_DEPTH_CAP, buildScreenIdMap, mapToRecord } from './screen-id';
@@ -146,6 +151,21 @@ export class PostFromGeneralValidationError extends OpinionError {
   constructor(reason: string) {
     super(`OpinionService.postFromGeneralChannel: ${reason}`);
     this.name = 'PostFromGeneralValidationError';
+  }
+}
+
+/**
+ * `toggleLightVote` 호출 대상이 light vote 적용 불가능한 카드일 때 throw
+ * (T21). 일반 채널 카드 (kind='self-raised'/'user-raised', meeting_id NULL)
+ * 만 light vote 허용. caller (UI) 가 회의 중 카드를 light vote 토글 시
+ * 즉시 surface — silent fallback 금지.
+ */
+export class LightVoteTargetError extends OpinionError {
+  constructor(opinionId: string, reason: string) {
+    super(
+      `OpinionService.toggleLightVote: opinion "${opinionId}" — ${reason}`,
+    );
+    this.name = 'LightVoteTargetError';
   }
 }
 
@@ -690,5 +710,169 @@ export class OpinionService {
     const opinions = this.repo.listByMeeting(meetingId);
     const map = buildScreenIdMap(opinions);
     return mapToRecord(map.screenToUuid);
+  }
+
+  // ── 일반 채널 가벼운 투표 (T21 land — spec §11.13 general row) ─────
+
+  /**
+   * 일반 채널의 카드 list + light vote 카운터 + 사용자 현재 투표 묶음.
+   * SsmBox GeneralVariant (T21) 의 단일 read source.
+   *
+   * 필터:
+   *   - 채널 안 모든 opinion row 중 kind ∈ {'self-raised', 'user-raised'}
+   *     만 (root/revise/block/addition 회의 카드는 제외 — 일반 채널은 회의
+   *     X 라 정상 흐름에서는 들어오지 않지만 방어적 필터)
+   *   - 카드 정렬 = createdAt 오름차순 (등록 순서). renderer 가 reverse
+   *     원하면 거기서 처리 — backend 는 안정 정렬만 보장.
+   *
+   * 카운터 산정:
+   *   - light round 의 모든 voter (사용자 NULL + 직원) 통합 — UI 가 "직원
+   *     + 사용자 모두 합산" 표시
+   *   - `userVote` = voter_provider_id IS NULL 의 vote (없으면 null)
+   *   - 'abstain' light vote 는 현재 IPC 에서 차단되지만, 미래 확장 대비
+   *     카운터에는 포함 X (agree/oppose 만 누적)
+   */
+  listGeneralCards(channelId: string): ListGeneralCardsResult {
+    const opinions = this.repo
+      .listByChannel(channelId)
+      .filter(
+        (o) => o.kind === 'self-raised' || o.kind === 'user-raised',
+      );
+
+    const lightVotes = this.repo.listLightVotesByChannel(channelId);
+
+    // 카드별 카운터 + 사용자 vote 집계.
+    const aggregateByOpinion = new Map<
+      string,
+      { agree: number; oppose: number; userVote: OpinionVoteValue | null }
+    >();
+    for (const o of opinions) {
+      aggregateByOpinion.set(o.id, { agree: 0, oppose: 0, userVote: null });
+    }
+    for (const v of lightVotes) {
+      const agg = aggregateByOpinion.get(v.targetId);
+      if (!agg) continue; // join 의 race — 정상 흐름에서는 발생 X
+      if (v.vote === 'agree') agg.agree += 1;
+      else if (v.vote === 'oppose') agg.oppose += 1;
+      // abstain 은 카운터 미반영 (UI 미노출)
+      if (v.voterProviderId === null) {
+        agg.userVote = v.vote;
+      }
+    }
+
+    const cards: GeneralOpinionCard[] = opinions.map((o) => {
+      const agg = aggregateByOpinion.get(o.id)!;
+      return {
+        opinion: o,
+        agreeCount: agg.agree,
+        opposeCount: agg.oppose,
+        userVote: agg.userVote,
+      };
+    });
+
+    return { channelId, cards };
+  }
+
+  /**
+   * 사용자 light vote 토글. 같은 vote 재요청 = DELETE (취소), 반대 vote =
+   * REPLACE (이전 row DELETE + 신규 INSERT). 사용자 voter 1 인 가정 —
+   * 카드별 voter_provider_id IS NULL 의 light vote row 가 0 또는 1 건만
+   * 존재한다는 invariant 를 service 가 강제.
+   *
+   * 호출 시점:
+   *   - SsmBox GeneralVariant 의 동의/반대 버튼 클릭 (T21)
+   *
+   * 차단:
+   *   - opinion 이 존재하지 않으면 OpinionNotFoundError
+   *   - opinion.kind 가 'self-raised'/'user-raised' 가 아니면 LightVoteTargetError
+   *     (회의 카드에는 light vote 차단 — meeting_id 가 NULL 이 아니어도 동일)
+   *   - opinion.meetingId 가 NULL 이 아니면 LightVoteTargetError (이중 방어)
+   *
+   * 후속 카운터 = repository 의 light vote 집계 1 회 더 호출 (1 카드 query 라
+   * 비용 무시 가능) — caller 가 별도 list refetch 안 해도 새 상태 알 수 있게.
+   */
+  toggleLightVote(input: ToggleLightVoteInput): ToggleLightVoteResult {
+    const target = this.repo.get(input.opinionId);
+    if (!target) {
+      throw new OpinionNotFoundError(input.opinionId);
+    }
+    if (target.kind !== 'self-raised' && target.kind !== 'user-raised') {
+      throw new LightVoteTargetError(
+        input.opinionId,
+        `kind='${target.kind}' is not eligible for light vote ` +
+          `(only 'self-raised' / 'user-raised' allowed)`,
+      );
+    }
+    if (target.meetingId !== null) {
+      throw new LightVoteTargetError(
+        input.opinionId,
+        `meetingId='${target.meetingId}' — light vote is restricted to ` +
+          `general channel cards (meetingId NULL)`,
+      );
+    }
+
+    const existing = this.repo.findUserLightVote(input.opinionId);
+
+    let effect: ToggleLightVoteResult['effect'];
+    let userVote: OpinionVoteValue | null;
+    const now = Date.now();
+
+    if (existing === null) {
+      // 처음 vote — INSERT.
+      const inserted: OpinionVote = {
+        id: randomUUID(),
+        targetId: input.opinionId,
+        voterProviderId: null,
+        vote: input.vote,
+        comment: null,
+        round: 0,
+        roundKind: 'light',
+        createdAt: now,
+      };
+      this.repo.insertVote(inserted);
+      effect = 'inserted';
+      userVote = input.vote;
+    } else if (existing.vote === input.vote) {
+      // 같은 vote 재클릭 — DELETE (취소).
+      const ok = this.repo.deleteVote(existing.id);
+      if (!ok) throw new OpinionNotFoundError(existing.id);
+      effect = 'removed';
+      userVote = null;
+    } else {
+      // 반대 vote — REPLACE (DELETE 후 INSERT, 마이크로 ts 분리해 정렬 안정).
+      const ok = this.repo.deleteVote(existing.id);
+      if (!ok) throw new OpinionNotFoundError(existing.id);
+      const replaced: OpinionVote = {
+        id: randomUUID(),
+        targetId: input.opinionId,
+        voterProviderId: null,
+        vote: input.vote,
+        comment: null,
+        round: 0,
+        roundKind: 'light',
+        createdAt: now,
+      };
+      this.repo.insertVote(replaced);
+      effect = 'replaced';
+      userVote = input.vote;
+    }
+
+    // 후속 카운터 — 영속 후 채널 단위 집계 재계산보다 1 카드 query 가 싸다.
+    const allVotes = this.repo.listLightVotesByChannel(target.channelId);
+    let agreeCount = 0;
+    let opposeCount = 0;
+    for (const v of allVotes) {
+      if (v.targetId !== input.opinionId) continue;
+      if (v.vote === 'agree') agreeCount += 1;
+      else if (v.vote === 'oppose') opposeCount += 1;
+    }
+
+    return {
+      opinionId: input.opinionId,
+      effect,
+      userVote,
+      agreeCount,
+      opposeCount,
+    };
   }
 }

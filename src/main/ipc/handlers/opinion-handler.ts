@@ -88,3 +88,22 @@ export function handleOpinionPostFromGeneral(
   });
   return { result };
 }
+
+/** opinion:listGeneralCards (R12-C2 P4 T21) */
+export function handleOpinionListGeneralCards(
+  data: IpcRequest<'opinion:listGeneralCards'>,
+): IpcResponse<'opinion:listGeneralCards'> {
+  const result = getService().listGeneralCards(data.channelId);
+  return { result };
+}
+
+/** opinion:toggleLightVote (R12-C2 P4 T21) */
+export function handleOpinionToggleLightVote(
+  data: IpcRequest<'opinion:toggleLightVote'>,
+): IpcResponse<'opinion:toggleLightVote'> {
+  const result = getService().toggleLightVote({
+    opinionId: data.opinionId,
+    vote: data.vote,
+  });
+  return { result };
+}

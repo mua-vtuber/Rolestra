@@ -280,6 +280,61 @@ export class OpinionRepository {
   }
 
   /**
+   * 채널 안 light round 투표 통째 — opinion 과 inner join 으로
+   * channel_id + round_kind='light' 필터. T21 listGeneralCards
+   * 의 단일 query source. 회의 카드 (round_kind='quick_vote' /
+   * 'free_discussion') 는 제외.
+   */
+  listLightVotesByChannel(channelId: string): OpinionVote[] {
+    const rows = this.db
+      .prepare(
+        `SELECT v.id AS id, v.target_id AS target_id,
+                v.voter_provider_id AS voter_provider_id,
+                v.vote AS vote, v.comment AS comment,
+                v.round AS round, v.round_kind AS round_kind,
+                v.created_at AS created_at
+         FROM opinion_vote v
+         JOIN opinion o ON v.target_id = o.id
+         WHERE o.channel_id = ? AND v.round_kind = 'light'
+         ORDER BY v.created_at ASC, v.id ASC`,
+      )
+      .all(channelId) as OpinionVoteRow[];
+    return rows.map(rowToVote);
+  }
+
+  /**
+   * 사용자 (voter_provider_id IS NULL) 의 light round 투표 — 카드 1 건당
+   * 0 또는 1 row 만 존재한다는 invariant 유지. T21 toggleLightVote 의
+   * 기존 row 검사용. SQLite 의 NULL 비교 특성상 IS NULL 사용 필수.
+   */
+  findUserLightVote(opinionId: string): OpinionVote | null {
+    const row = this.db
+      .prepare(
+        `SELECT id, target_id, voter_provider_id, vote, comment,
+                round, round_kind, created_at
+         FROM opinion_vote
+         WHERE target_id = ?
+           AND voter_provider_id IS NULL
+           AND round_kind = 'light'
+         LIMIT 1`,
+      )
+      .get(opinionId) as OpinionVoteRow | undefined;
+    return row ? rowToVote(row) : null;
+  }
+
+  /**
+   * voteId 로 row 1 건 삭제 — T21 toggleLightVote 의 취소 (DELETE) /
+   * 대체 (DELETE-then-INSERT) path 에서 사용. 삭제된 row 가 있으면
+   * true (없으면 false — 알 수 없는 id).
+   */
+  deleteVote(voteId: string): boolean {
+    const result = this.db
+      .prepare(`DELETE FROM opinion_vote WHERE id = ?`)
+      .run(voteId);
+    return result.changes > 0;
+  }
+
+  /**
    * 회의 안 모든 투표 row — opinion 과 inner join 으로 meeting_id 필터.
    * roundKind / round 필터 optional.
    */

@@ -22,7 +22,7 @@
  * font) 시각 검증은 SsmBox.test.tsx 가 LegacyVariant 위에서 처리.
  */
 
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SsmBox } from '../SsmBox/index';
@@ -38,7 +38,7 @@ import type { ChannelRole } from '../../../../shared/channel-role-types';
 import type { ActiveMeetingSummary } from '../../../../shared/meeting-types';
 
 function installArenaStub(): void {
-  const invoke = vi.fn(async (channel: string) => {
+  const invoke = vi.fn(async (channel: string, payload?: unknown) => {
     switch (channel) {
       case 'channel:list':
         return { channels: [] };
@@ -46,6 +46,15 @@ function installArenaStub(): void {
         return { channel: null };
       case 'meeting:list-active':
         return { meetings: [] };
+      // T21 — GeneralVariant 가 mount 시 호출. 라우팅 테스트는 빈 카드만 단언.
+      case 'opinion:listGeneralCards':
+        return {
+          result: {
+            channelId:
+              (payload as { channelId?: string } | undefined)?.channelId ?? '',
+            cards: [],
+          },
+        };
       default:
         return undefined;
     }
@@ -237,10 +246,13 @@ describe('SsmBox routing — meeting=null 시 각 variant 의 빈 상태', () =>
     },
   );
 
-  it("role='general' → meeting 유무 무관하게 ssm-box-empty 표시 (잡담 정체성)", () => {
+  it("role='general' → meeting 유무 무관하게 ssm-box-empty 표시 (잡담 정체성)", async () => {
     renderWith('general', false);
     const box = screen.getByTestId('ssm-box');
     expect(box.getAttribute('data-has-meeting')).toBe('false');
-    expect(screen.getByTestId('ssm-box-empty')).toBeTruthy();
+    // GeneralVariant 는 opinion:listGeneralCards async 응답 대기 후 empty 표시.
+    await waitFor(() => {
+      expect(screen.getByTestId('ssm-box-empty')).toBeTruthy();
+    });
   });
 });

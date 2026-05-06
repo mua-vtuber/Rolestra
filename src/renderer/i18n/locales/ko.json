@@ -642,7 +642,24 @@
           "heading": "잡담 채널",
           "empty": "등록된 카드가 없습니다.",
           "cardsAria": "잡담 카드 목록",
-          "pendingDataNote": "[##본문] 카드 누적 표시는 P4 land 시점에 활성화됩니다."
+          "pendingDataNote": "[##본문] 카드 누적 표시는 P4 land 시점에 활성화됩니다.",
+          "loading": "카드를 불러오는 중...",
+          "error": "카드를 불러오지 못했습니다 — {{message}}",
+          "cardCount": "{{count}} 건",
+          "untitled": "(제목 없음)",
+          "voteGroupAria": "동의 / 반대 버튼",
+          "agreeButton": "동의 {{count}}",
+          "agreeButtonAria": "동의 ({{count}} 표). 클릭하면 토글됩니다.",
+          "opposeButton": "반대 {{count}}",
+          "opposeButtonAria": "반대 ({{count}} 표). 클릭하면 토글됩니다.",
+          "kind": {
+            "self-raised": "직원 의견",
+            "user-raised": "내 의견",
+            "root": "회의 의견",
+            "revise": "수정안",
+            "block": "반대안",
+            "addition": "보강안"
+          }
         }
       }
     },

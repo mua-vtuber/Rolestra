@@ -62,6 +62,7 @@ import type {
   ApprovalDiffPreview,
 } from './approval-detail-types';
 import type {
+  ListGeneralCardsResult,
   OpinionFreeDiscussionResult,
   OpinionGatherResult,
   OpinionQuickVoteResult,
@@ -71,6 +72,7 @@ import type {
   Step1OpinionGatherResponse,
   Step25QuickVoteResponse,
   Step3FreeDiscussionResponse,
+  ToggleLightVoteResult,
 } from './opinion-types';
 import type { MeetingMinutesComposeResult } from './meeting-minutes-types';
 import type { RunStep } from './run-step-types';
@@ -1085,6 +1087,34 @@ export type IpcChannelMap = {
   'opinion:postFromGeneral': {
     request: PostFromGeneralChannelInput;
     response: { result: PostFromGeneralChannelResult };
+  };
+  /**
+   * R12-C2 P4 T21: 일반 채널의 카드 list + light vote 카운터 + 사용자
+   * 현재 투표 묶음 — SsmBox GeneralVariant 가 한 번 호출, 토글 시마다
+   * refetch. 회의 카드 (kind='root'/...) 는 결과에서 제외 — 일반 채널의
+   * `'self-raised'` / `'user-raised'` 카드만 read.
+   *
+   * spec docs/superpowers/specs/2026-05-01-rolestra-channel-roles-design.md
+   *  §11.13 general row "카드 누적 list (kind='self-raised' / 'user-raised'
+   *  도 표시) + 가벼운 동의/반대 카운터 + 사용자 동의/반대 버튼".
+   */
+  'opinion:listGeneralCards': {
+    request: { channelId: string };
+    response: { result: ListGeneralCardsResult };
+  };
+  /**
+   * R12-C2 P4 T21: 사용자 light vote 토글. 같은 vote 재요청 = DELETE,
+   * 반대 vote = REPLACE. round=0, round_kind='light', voter_provider_id=NULL.
+   *
+   * `vote` 는 `'agree'` / `'oppose'` 만 허용 ('abstain' 은 light round 에서
+   * UI 미노출 — 미래 확장 시 schema 측에서 분기). caller 가 회의 카드
+   * (kind='root'/etc) 또는 meeting_id 가 NULL 이 아닌 카드를 호출하면
+   * service 가 LightVoteTargetError throw — caller (UI) 가 회의 채널 SsmBox
+   * 에서 button 을 노출하지 않으므로 정상 흐름에서는 발생 X.
+   */
+  'opinion:toggleLightVote': {
+    request: { opinionId: string; vote: 'agree' | 'oppose' };
+    response: { result: ToggleLightVoteResult };
   };
 
   /**

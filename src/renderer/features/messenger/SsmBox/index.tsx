@@ -124,7 +124,13 @@ export function SsmBox({
     );
   }
   if (role === 'general') {
-    return <GeneralVariant meeting={resolvedMeeting} className={className} />;
+    return (
+      <GeneralVariant
+        channelId={resolvedChannel?.id ?? null}
+        meeting={resolvedMeeting}
+        className={className}
+      />
+    );
   }
 
   return (

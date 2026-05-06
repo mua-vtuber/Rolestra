@@ -642,7 +642,24 @@
           "heading": "General channel",
           "empty": "No cards registered.",
           "cardsAria": "Casual cards",
-          "pendingDataNote": "[##body] card list lights up once Phase 4 lands."
+          "pendingDataNote": "[##body] card list lights up once Phase 4 lands.",
+          "loading": "Loading cards...",
+          "error": "Failed to load cards — {{message}}",
+          "cardCount": "{{count}} cards",
+          "untitled": "(Untitled)",
+          "voteGroupAria": "Agree / oppose buttons",
+          "agreeButton": "Agree {{count}}",
+          "agreeButtonAria": "Agree ({{count}} votes). Click to toggle.",
+          "opposeButton": "Oppose {{count}}",
+          "opposeButtonAria": "Oppose ({{count}} votes). Click to toggle.",
+          "kind": {
+            "self-raised": "Staff opinion",
+            "user-raised": "My opinion",
+            "root": "Meeting opinion",
+            "revise": "Revision",
+            "block": "Objection",
+            "addition": "Addition"
+          }
         }
       }
     },

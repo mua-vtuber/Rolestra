@@ -41,6 +41,7 @@ import {
   IDEA_USER_NOT_PICKED_REASON,
   IDEA_USER_OPINION_AUTHOR_LABEL,
   IdeaPickValidationError,
+  LightVoteTargetError,
   OpinionDepthCapError,
   OpinionNotFoundError,
   OpinionService,
@@ -1032,6 +1033,170 @@ describe('OpinionService', () => {
         parts: [{ title: null, content: '잡담 의견' }],
       });
       expect(result.inserted[0]!.authorLabel).toBe('pv-codex_2');
+    });
+  });
+
+  // T21 — listGeneralCards + toggleLightVote. spec §11.13 general row.
+  describe('listGeneralCards (T21)', () => {
+    it('빈 채널 → cards 0 건', () => {
+      const result = svc.listGeneralCards(channelId);
+      expect(result.channelId).toBe(channelId);
+      expect(result.cards).toEqual([]);
+    });
+
+    it('user-raised + self-raised 카드만 반환 — 회의 카드 (kind=root) 는 제외', () => {
+      // 일반 카드 2 건.
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: 'user', content: 'user body' }],
+      });
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: 'pv-codex',
+        parts: [{ title: 'staff', content: 'staff body' }],
+      });
+      // 회의 카드 (kind='root') — listGeneralCards 결과에서 빠져야 함.
+      svc.gather({
+        meetingId,
+        channelId,
+        round: 0,
+        responses: [
+          {
+            providerId: 'pv-claude',
+            payload: {
+              name: 'Claude',
+              label: 'claude_1',
+              opinions: [
+                { title: '회의 의견', content: '회의 본문', rationale: '근거' },
+              ],
+            },
+          },
+        ],
+      });
+
+      const result = svc.listGeneralCards(channelId);
+      expect(result.cards.length).toBe(2);
+      const kinds = result.cards.map((c) => c.opinion.kind).sort();
+      expect(kinds).toEqual(['self-raised', 'user-raised']);
+    });
+
+    it('카드 정렬 = createdAt 오름차순 안정', () => {
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: 'first', content: 'first body' }],
+      });
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: 'second', content: 'second body' }],
+      });
+      const result = svc.listGeneralCards(channelId);
+      expect(result.cards.map((c) => c.opinion.title)).toEqual([
+        'first',
+        'second',
+      ]);
+    });
+
+    it('초기 카드 light vote 카운터 = 0 / 0, userVote = null', () => {
+      svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: 'card', content: 'card body' }],
+      });
+      const result = svc.listGeneralCards(channelId);
+      expect(result.cards[0]!.agreeCount).toBe(0);
+      expect(result.cards[0]!.opposeCount).toBe(0);
+      expect(result.cards[0]!.userVote).toBe(null);
+    });
+  });
+
+  describe('toggleLightVote (T21)', () => {
+    let cardId: string;
+
+    beforeEach(() => {
+      const r = svc.postFromGeneralChannel({
+        channelId,
+        authorProviderId: null,
+        parts: [{ title: 't', content: 'body' }],
+      });
+      cardId = r.inserted[0]!.id;
+    });
+
+    it('처음 vote → effect=inserted + userVote 갱신 + agree 카운터 1', () => {
+      const r = svc.toggleLightVote({ opinionId: cardId, vote: 'agree' });
+      expect(r.effect).toBe('inserted');
+      expect(r.userVote).toBe('agree');
+      expect(r.agreeCount).toBe(1);
+      expect(r.opposeCount).toBe(0);
+    });
+
+    it('같은 vote 재요청 → effect=removed + userVote=null + 카운터 0', () => {
+      svc.toggleLightVote({ opinionId: cardId, vote: 'agree' });
+      const r = svc.toggleLightVote({ opinionId: cardId, vote: 'agree' });
+      expect(r.effect).toBe('removed');
+      expect(r.userVote).toBe(null);
+      expect(r.agreeCount).toBe(0);
+      expect(r.opposeCount).toBe(0);
+    });
+
+    it('반대 vote → effect=replaced + userVote 갱신 + 카운터 교차', () => {
+      svc.toggleLightVote({ opinionId: cardId, vote: 'agree' });
+      const r = svc.toggleLightVote({ opinionId: cardId, vote: 'oppose' });
+      expect(r.effect).toBe('replaced');
+      expect(r.userVote).toBe('oppose');
+      expect(r.agreeCount).toBe(0);
+      expect(r.opposeCount).toBe(1);
+    });
+
+    it('listGeneralCards 가 토글 결과 반영 (DB 진실원천)', () => {
+      svc.toggleLightVote({ opinionId: cardId, vote: 'agree' });
+      const result = svc.listGeneralCards(channelId);
+      expect(result.cards[0]!.agreeCount).toBe(1);
+      expect(result.cards[0]!.userVote).toBe('agree');
+    });
+
+    it('알 수 없는 opinionId → OpinionNotFoundError', () => {
+      expect(() =>
+        svc.toggleLightVote({
+          opinionId: '00000000-0000-0000-0000-000000000000',
+          vote: 'agree',
+        }),
+      ).toThrow(OpinionNotFoundError);
+    });
+
+    it('회의 카드 (kind=root) 대상 → LightVoteTargetError', () => {
+      const gather = svc.gather({
+        meetingId,
+        channelId,
+        round: 0,
+        responses: [
+          {
+            providerId: 'pv-codex',
+            payload: {
+              name: 'Codex',
+              label: 'codex_1',
+              opinions: [
+                { title: '회의', content: '회의 본문', rationale: '근거' },
+              ],
+            },
+          },
+        ],
+      });
+      const meetingCardId = gather.inserted[0]!.id;
+      expect(() =>
+        svc.toggleLightVote({ opinionId: meetingCardId, vote: 'agree' }),
+      ).toThrow(LightVoteTargetError);
+    });
+
+    it('사용자 voter 1 인 invariant — 같은 카드에 row 1 건 미만 유지 (DB 검증)', () => {
+      svc.toggleLightVote({ opinionId: cardId, vote: 'agree' });
+      svc.toggleLightVote({ opinionId: cardId, vote: 'oppose' });
+      svc.toggleLightVote({ opinionId: cardId, vote: 'oppose' });
+      // 마지막 = removed → DB 안 voter NULL 의 light vote 0 건
+      const userVote = repo.findUserLightVote(cardId);
+      expect(userVote).toBe(null);
     });
   });
 });

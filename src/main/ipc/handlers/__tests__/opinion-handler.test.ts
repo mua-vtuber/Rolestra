@@ -14,20 +14,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   handleOpinionFreeDiscussion,
   handleOpinionGather,
+  handleOpinionListGeneralCards,
   handleOpinionPostFromGeneral,
   handleOpinionQuickVote,
   handleOpinionTally,
+  handleOpinionToggleLightVote,
   setOpinionServiceAccessor,
 } from '../opinion-handler';
 import { UnknownScreenIdError } from '../../../meetings/opinion-service';
 import type { OpinionService } from '../../../meetings/opinion-service';
 import type {
+  ListGeneralCardsResult,
   Opinion,
   OpinionFreeDiscussionResult,
   OpinionGatherResult,
   OpinionQuickVoteResult,
   OpinionTallyResult,
   PostFromGeneralChannelResult,
+  ToggleLightVoteResult,
 } from '../../../../shared/opinion-types';
 
 interface ServiceMock {
@@ -36,6 +40,8 @@ interface ServiceMock {
   quickVote: ReturnType<typeof vi.fn>;
   freeDiscussionRound: ReturnType<typeof vi.fn>;
   postFromGeneralChannel: ReturnType<typeof vi.fn>;
+  listGeneralCards: ReturnType<typeof vi.fn>;
+  toggleLightVote: ReturnType<typeof vi.fn>;
 }
 
 function makeMock(): ServiceMock {
@@ -45,6 +51,8 @@ function makeMock(): ServiceMock {
     quickVote: vi.fn(),
     freeDiscussionRound: vi.fn(),
     postFromGeneralChannel: vi.fn(),
+    listGeneralCards: vi.fn(),
+    toggleLightVote: vi.fn(),
   };
 }
 
@@ -208,6 +216,45 @@ describe('opinion-handler', () => {
       channelId: 'ch-1',
       authorProviderId: null,
       parts: [{ title: '제목', content: '본문' }],
+    });
+  });
+
+  // ── listGeneralCards / toggleLightVote (R12-C2 P4 T21) ─────────────
+
+  it('handleOpinionListGeneralCards forwards channelId and wraps result', () => {
+    const expected: ListGeneralCardsResult = {
+      channelId: 'ch-1',
+      cards: [],
+    };
+    const svc = makeMock();
+    svc.listGeneralCards.mockReturnValue(expected);
+    setOpinionServiceAccessor(() => svc as unknown as OpinionService);
+
+    const res = handleOpinionListGeneralCards({ channelId: 'ch-1' });
+    expect(res).toEqual({ result: expected });
+    expect(svc.listGeneralCards).toHaveBeenCalledWith('ch-1');
+  });
+
+  it('handleOpinionToggleLightVote forwards args and wraps result', () => {
+    const expected: ToggleLightVoteResult = {
+      opinionId: 'op-1',
+      effect: 'inserted',
+      userVote: 'agree',
+      agreeCount: 1,
+      opposeCount: 0,
+    };
+    const svc = makeMock();
+    svc.toggleLightVote.mockReturnValue(expected);
+    setOpinionServiceAccessor(() => svc as unknown as OpinionService);
+
+    const res = handleOpinionToggleLightVote({
+      opinionId: 'op-1',
+      vote: 'agree',
+    });
+    expect(res).toEqual({ result: expected });
+    expect(svc.toggleLightVote).toHaveBeenCalledWith({
+      opinionId: 'op-1',
+      vote: 'agree',
     });
   });
 });
