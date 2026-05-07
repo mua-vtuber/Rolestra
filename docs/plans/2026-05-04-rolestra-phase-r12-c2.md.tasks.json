@@ -269,14 +269,14 @@
     {
       "id": 28,
       "subject": "T27 — G. handoff_dispatch 테이블 (migration 021) + 외주 의뢰서 schema",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         12,
         13,
         18,
         27
       ],
-      "description": "**P6 진입 1 호.** 부서 → 부서 인계 정형 외주 의뢰서 + handoff_dispatch 테이블.\n\n**산출:**\n- `migrations/021-handoff-dispatch.ts` 신규 — handoff_dispatch 테이블:\n  · id (UUID) / meeting_id (보낸) / from_channel_id / to_channel_id / reason / minutes_id / mission_card_json / mode ('auto'|'check') / dispatched_at / opened_at / created_at\n- `src/shared/schema/handoff-package.ts` 신규 — HandoffPackage 정식 schema (sender / minutes 통째 / reason / next_actions[] / mission_card)\n- `HandoffDispatchService` — dispatch / open / track\n\n**Verify:** spec §11.16 부서 lock + §11.22 H2 부합. T11 mig-non-forward-only 검사관 통과. [후보 G]"
+      "description": "**P6 진입 1 호.** 부서 → 부서 인계 정형 외주 의뢰서 + handoff_dispatch 테이블.\n\n**산출:**\n- `migrations/021-handoff-dispatch.ts` 신규 — handoff_dispatch 테이블:\n  · id (UUID) / meeting_id (보낸) / from_channel_id / to_channel_id / reason / minutes_id / mission_card_json / mode ('auto'|'check') / dispatched_at / opened_at / created_at\n- `src/shared/schema/handoff-package.ts` 신규 — HandoffPackage 정식 schema (sender / minutes 통째 / reason / next_actions[] / mission_card)\n- `HandoffDispatchService` — dispatch / open / track\n\n**Verify:** spec §11.16 부서 lock + §11.22 H2 부합. T11 mig-non-forward-only 검사관 통과. [후보 G]\n\n---\n\n**Land summary (2026-05-07):**\n- production commit `0a8e4f3` (8 파일 / +1754 lines, worktree feat/r12-c2-redesign-r2 base a76ce66 = T26 sync)\n- work-log mirror commit `afdae74` (docs/reports/work-log/rolestra-r12-c2-t27-completion.md, +149)\n- 산출:\n  - migration **022**-handoff-dispatch.ts (021 표기는 plan 작성 시점 기준, T21 이 021 점유 → 022 사용. number drift)\n  - handoff_dispatch 테이블 11 컬럼 + mode CHECK + FK CASCADE 3 + 인덱스 2\n  - src/shared/schema/handoff-package.ts — HandoffPackage zod schema (옵션 B = 회의록 본문 *파일 한 곳* SSoT, schema 안에는 minutesMeetingId 식별자만)\n  - src/main/handoff/ thin module — types + repository + service (dispatch / open / trackByMeeting / trackByChannel + serializeRowToPackage helper)\n  - 단위 테스트 3 종 (migration-022 + handoff-package + handoff-dispatch-service) +917\n- thin module 패턴 보존 (T15/T16a/T17/T24/T25/T26 동일) — orchestrator wire X, IPC handler 미생성. T28 / T29 가 caller.\n- 검증: typecheck:node + typecheck:web 0 / vitest 3771 PASS / inspect:safety 102 (T26 baseline 99 → +3, 모두 framework-managed false positive).\n- 다음 = T28 (HandoffApprovalModal + B handoff_mode 우회 룰 wire). 의존 = T13 + T27 모두 충족.\n"
     },
     {
       "id": 29,
@@ -453,5 +453,5 @@
       "description": "**P8 R12-C2 종결.**\n\n**산출:**\n- tasks.json sync (T0~T41 모두 completed)\n- `docs/구현-현황.md` R12-C2 행 추가 (한글, 사무실 메타포)\n- ADR `r12-c2-reference-projects-absorb.md` 갱신 (실제 land 결과 + cross-cutting C8/C9 link)\n- `decisions/cross-cutting.md` 에 C8 (A RunStep) + C9 (F 검사관) 추가\n- main fast-forward merge (`feat/r12-c2-redesign-r2` → main)\n- worktree 정리 (Rolestra-r12c2-r2 제거 + branch 삭제)\n- 다음 phase (R12-W / R12-H) 진입 준비 + 메모리 ⚠️ 갱신\n\n**검증 게이트:** vitest 전체 PASS + typecheck 0 + lint baseline + Windows dogfooding 회귀 0."
     }
   ],
-  "lastUpdated": "2026-05-07T01:50:00.000Z"
+  "lastUpdated": "2026-05-07T07:53:31Z"
 }
