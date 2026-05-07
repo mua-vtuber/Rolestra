@@ -38,7 +38,19 @@
  */
 
 import type { Channel } from '../../../shared/channel-types';
-import { isDesignDepartmentRole } from '../../../shared/channel-role-types';
+import {
+  isDesignDepartmentRole,
+  type ChannelRole,
+} from '../../../shared/channel-role-types';
+import {
+  resolveHandoffChain,
+  type ChainResolverOutcome,
+  type ResolvedReceiverChannel,
+  type WorkflowChainKind,
+} from '../../handoff/handoff-chain-resolver';
+import type { HandoffPendingState } from '../../handoff/handoff-pending-state';
+import type { HandoffDispatchService } from '../../handoff/handoff-dispatch-service';
+import { serializeHandoffPackage } from '../../../shared/schema/handoff-package';
 import type {
   MeetingPhase,
   Step1OpinionGatherSchemaType,
@@ -157,6 +169,35 @@ export interface MeetingOrchestratorDeps {
       sourceOpinionUuid: string;
     }>;
   };
+  /**
+   * R12-C2 T28 — 'check' 분기 사용자 결재 모달이 [확인] / [취소] 결정 *전* 까지
+   * 합성된 HandoffPackage 를 잠시 보관하는 회의 단위 휘발성 boundary. orchestrator
+   * 가 chain resolver 결과 + receiver channel.handoff_mode='check' 분기에서 put,
+   * IPC handler (handoff:approve / cancel) 가 take.
+   */
+  handoffPendingState: HandoffPendingState;
+  /**
+   * R12-C2 T28 — handoff_dispatch row 영속 service (T27 land). 'auto' 분기에서
+   * orchestrator 가 즉시 호출. 'check' 분기 [확인] 후는 IPC handler 가 호출 — 본
+   * deps 는 'auto' path 전용.
+   */
+  handoffDispatchService: HandoffDispatchService;
+  /**
+   * R12-C2 T28 — chain resolver 의 받는 채널 lookup helper. role + projectId 로
+   * 단일 채널 식별 + handoff_mode + designated worker provider 를 caller (factory)
+   * 가 channelService 통해 wire. role 별 multiple 채널 (R13+) 는 R12-C2 가정 X.
+   * null 반환 = 받는 부서 채널 0 건 (chain unhandled 또는 invariant 위반 — chain
+   * resolver 가 분기).
+   */
+  resolveReceiverChannel: (
+    projectId: string,
+    role: ChannelRole,
+  ) => ResolvedReceiverChannel | null;
+  /**
+   * R12-C2 T28 — chain resolver 가 합성하는 mission card 의 UUID 생성 factory.
+   * 보통 `crypto.randomUUID`, 테스트는 fixed UUID stub.
+   */
+  missionCardIdFactory: () => string;
   /** Opt-out hook for tests — disables the inter-turn delay. */
   interTurnDelayMs?: number;
   /**
@@ -272,6 +313,59 @@ function isAllResolved(tree: OpinionTreeNode[]): boolean {
   return true;
 }
 
+/**
+ * R12-C2 T28 — channel.role → chain resolver workflowKind 매핑. design.* 4 종은
+ * 'design' 으로 압축 (chain resolver 입력 단위), 'idea' / 'planning' / 'implement' /
+ * 'audit' / 'review' 는 1:1 매핑, system 채널 (role=null) 은 'general'.
+ *
+ * 매핑 안 되는 role (이론적으로 null + system) 은 null 반환 — caller (orchestrator)
+ * 가 chain resolver 호출 자체 skip.
+ */
+function mapChannelRoleToWorkflowKind(
+  channel: Channel,
+): WorkflowChainKind | null {
+  if (channel.role === null) return 'general';
+  switch (channel.role) {
+    case 'idea':
+      return 'idea';
+    case 'planning':
+      return 'planning';
+    case 'implement':
+      return 'implement';
+    case 'audit':
+      return 'audit';
+    case 'review':
+      return 'review';
+    case 'general':
+      return 'general';
+    case 'design.ui':
+    case 'design.ux':
+    case 'design.character':
+    case 'design.background':
+      return 'design';
+    default: {
+      // exhaustive 가드 — 새 role 추가 시 case 누락 검출.
+      const _exhaustive: never = channel.role;
+      void _exhaustive;
+      return null;
+    }
+  }
+}
+
+/**
+ * R12-C2 T28 — opinion tree 통째 flat list 변환. audit chain 의 verdict 분류 +
+ * problem 추출 입력으로 사용. depth 무제한 (현재 cap 3) recursive walk.
+ */
+function collectOpinionsFromTree(tree: OpinionTreeNode[]): Opinion[] {
+  const result: Opinion[] = [];
+  const walk = (node: OpinionTreeNode): void => {
+    result.push(node.opinion);
+    for (const child of node.children) walk(child);
+  };
+  for (const root of tree) walk(root);
+  return result;
+}
+
 /** tally 결과의 전체 트리에서 노드 1 개를 UUID 로 검색. */
 function findNodeByUuid(
   tree: OpinionTreeNode[],
@@ -303,8 +397,26 @@ export class MeetingOrchestrator {
   private readonly runStepService: RunStepService;
   private readonly providerRegistry: ProviderRegistry;
   private readonly designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'];
+  private readonly handoffPendingState: HandoffPendingState;
+  private readonly handoffDispatchService: HandoffDispatchService;
+  private readonly resolveReceiverChannel: MeetingOrchestratorDeps['resolveReceiverChannel'];
+  private readonly missionCardIdFactory: MeetingOrchestratorDeps['missionCardIdFactory'];
   private readonly interTurnDelayMs: number;
   private readonly onFinalized?: MeetingOrchestratorDeps['onFinalized'];
+
+  /**
+   * R12-C2 T28 — runComposeMinutesPhase 직후 회의의 chain target 을 1 회 resolve
+   * 한 결과 cache. classifier hasNextChain 컨텍스트 + runHandoffPhase 분기에서
+   * 동일 outcome 재사용. null = 아직 미산출 (compose_minutes 진입 전 또는
+   * 회의 abort).
+   */
+  private resolvedChain: ChainResolverOutcome | null = null;
+  /**
+   * R12-C2 T28 — 회의록 markdown 파일 절대 경로 cache. compose_minutes 단계에서
+   * meetingMinutesService 가 path 반환 시점에 set, runHandoffPhase / stream emit
+   * 시 재사용. null = 회의록 미작성 (fallback 도 실패).
+   */
+  private cachedMinutesPath: string | null = null;
 
   private running = false;
   private terminalHandled = false;
@@ -339,6 +451,10 @@ export class MeetingOrchestrator {
     this.runStepService = deps.runStepService;
     this.providerRegistry = deps.providerRegistry;
     this.designSnapshotService = deps.designSnapshotService;
+    this.handoffPendingState = deps.handoffPendingState;
+    this.handoffDispatchService = deps.handoffDispatchService;
+    this.resolveReceiverChannel = deps.resolveReceiverChannel;
+    this.missionCardIdFactory = deps.missionCardIdFactory;
     this.interTurnDelayMs = deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
     this.onFinalized = deps.onFinalized;
   }
@@ -1473,6 +1589,10 @@ export class MeetingOrchestrator {
         ordinal: options?.ordinal,
       });
       composed = true;
+      // R12-C2 T28 — chain resolver 의 audit chain 호출 시 회의록 본문 read 위해
+      // path cache. file 본문 read 는 service 의 별 helper (`readMinutesBody`) 가
+      // 책임 — 본 helper 는 path 보존만.
+      this.cachedMinutesPath = result.minutesPath;
       // 채팅창 회의록 카드 — meta.minutesPath / meta.minutesSource 로 renderer 가
       // 카드 컴포넌트 (T12) 와 매핑. 본 sub-task 는 system message 1 건.
       try {
@@ -1502,9 +1622,19 @@ export class MeetingOrchestrator {
       );
     }
 
+    // R12-C2 T28 — chain resolver 1 회 호출. minutesComposed=true 시점에서
+    // workflowKind 별 chain target 결정. resolved 결과를 cache 해서 (a)
+    // classifier hasNextChain 컨텍스트 (b) runHandoffPhase 분기에서 재사용.
+    //
+    // R12-C2 시점 actual wire = audit chain 만 — 다른 workflowKind 는 chain
+    // resolver 안 placeholder branches 가 'no_chain' 반환 → hasNextChain=false →
+    // classifier 룰 6 'end' 카드 발행 (현재 동작 유지).
+    if (composed) {
+      this.resolvedChain = await this.tryResolveChain();
+    }
+
     // R12-C2 T13 — minutes 작성 직후 boundary 분류. minutesComposed=true 로
-    // §11.18.8b 룰 5 / 6 분기 (chain 정의 → handoff / 미정의 → end). 본 sub-task
-    // 의 hasNextChain 은 항상 false (chain DB 컬럼 미land — T28+ 작업).
+    // §11.18.8b 룰 5 / 6 분기 (chain 정의 → handoff / 미정의 → end).
     if (composed) {
       const composeEndedAt = Date.now();
       this.classifyAndPersistTurn({
@@ -1516,7 +1646,7 @@ export class MeetingOrchestrator {
           ...this.snapshotTreeFlags(),
           currentRound: 0,
           maxRounds,
-          hasNextChain: false,
+          hasNextChain: this.resolvedChain?.kind === 'chain_resolved',
           minutesComposed: true,
         },
         durationMs: composeEndedAt - composeStartedAt,
@@ -1524,46 +1654,267 @@ export class MeetingOrchestrator {
     }
   }
 
+  /**
+   * R12-C2 T28 — chain resolver 1 회 호출 helper. workflowKind 매핑 + caller
+   * injection (resolveReceiverChannel / missionCardIdFactory / generatedAt) 합성.
+   *
+   * 본 helper 는 *try/catch* — chain resolver 가 throw 해도 회의 흐름은 멈추지
+   * 않는다. throw 시 null 반환 → caller 가 hasNextChain=false 로 진행 (회의 종결
+   * path). 실제 user-facing 인계가 막혀도 회의록 자체는 land 되므로 사용자 정보
+   * 손실 없음.
+   *
+   * R12-C2 시점 audit 채널만 actual chain wire — 다른 채널은 chain resolver 안
+   * placeholder branches 가 'no_chain' 반환.
+   */
+  private async tryResolveChain(): Promise<ChainResolverOutcome | null> {
+    const channel = this.lookupChannel();
+    if (channel === null) return null;
+    const workflowKind = mapChannelRoleToWorkflowKind(channel);
+    if (workflowKind === null) return null;
+
+    try {
+      // audit chain 만 auditInput 채워야 함 — opinions 통째 + minutes markdown.
+      let auditInput:
+        | { opinions: readonly Opinion[]; auditMinutesMarkdown: string }
+        | undefined;
+      if (workflowKind === 'audit') {
+        const tally = this.opinionService.tally(this.session.meetingId);
+        const opinions = collectOpinionsFromTree(tally.tree);
+        const minutesBody = (await this.tryReadCachedMinutesBody()) ?? '';
+        if (minutesBody.trim().length === 0) {
+          // 회의록 본문 빈 = chain resolver invariant 위반 (T25 buildAuditHandoffPayload
+          // 가 throw). 본 시점 chain 결정 자체를 skip — runHandoffPhase 가 fallback
+          // path (system message + Notification) 진행.
+          return null;
+        }
+        auditInput = { opinions, auditMinutesMarkdown: minutesBody };
+      }
+
+      return resolveHandoffChain({
+        workflowKind,
+        sender: {
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          channelRole: channel.role,
+          projectId: this.session.projectId,
+        },
+        auditInput,
+        resolveReceiverChannel: (role: ChannelRole) =>
+          this.resolveReceiverChannel(this.session.projectId, role),
+        missionCardIdFactory: this.missionCardIdFactory,
+        generatedAt: Date.now(),
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] resolveHandoffChain threw',
+        errorPayload(err),
+      );
+      return null;
+    }
+  }
+
+  /**
+   * R12-C2 T28 — 회의록 markdown 파일 본문 읽기. cachedMinutesPath 가 set 되어 있
+   * 어야 호출 (compose 직후 — 본 helper 는 그 직후 1 회만 사용). meetingMinutesService
+   * 가 ordinal 별 파일 read 를 담당하므로 본 helper 는 1 회 호출 wrap.
+   *
+   * R12-C2 시점 audit chain 의 회의는 단일 회의 (ordinal=1) — design 두 회의
+   * (#1 wireframe + #2 implementation) 와 다름. 본 helper 는 *audit chain 전용* —
+   * design / 다른 chain 추가 시 ordinal 분기 필요 (T28 시점 audit 만 actual wire).
+   */
+  private async tryReadCachedMinutesBody(): Promise<string | null> {
+    if (this.cachedMinutesPath === null) return null;
+    try {
+      return await this.meetingMinutesService.readMinutesBody({
+        meetingId: this.session.meetingId,
+        ordinal: 1,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] cached minutes read threw',
+        errorPayload(err),
+      );
+      return null;
+    }
+  }
+
   private async runHandoffPhase(): Promise<void> {
     this.transitionToPhase('handoff');
-    const channel = this.lookupChannel();
-    const handoffMode = channel?.handoffMode ?? 'check';
-    if (handoffMode === 'check') {
-      try {
-        const title = resolveNotificationLabel('meetingMinutes.handoffTitle');
-        const body = resolveNotificationLabel('meetingMinutes.handoffBody', {
-          topic: this.session.topic,
-        });
-        this.notificationService.show({
-          kind: 'meeting_state',
-          title,
-          body,
-          channelId: this.session.channelId,
-        });
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] handoff notify threw',
-          errorPayload(err),
-        );
-      }
-      try {
-        this.messageService.append({
-          channelId: this.session.channelId,
-          meetingId: this.session.meetingId,
-          authorId: 'system',
-          authorKind: 'system',
-          role: 'system',
-          content: '회의가 끝났습니다 — 다음 부서 인계는 사용자 승인 대기 중입니다.',
-          meta: { handoff: 'check' },
-        });
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] handoff system message append failed',
-          errorPayload(err),
-        );
-      }
+
+    // R12-C2 T28 — chain resolver outcome 분기.
+    //
+    //   no_chain (또는 미산출 fallback)
+    //     → 회의 종결만 surface (이전 fallback path 유지: Notification + system msg).
+    //
+    //   chain_resolved + receiver mode='check'
+    //     → HandoffPendingState.put + emitHandoffRequired
+    //       사용자 결재 모달이 열리면 [확인] / [취소] 결정. dispatch 호출 X (IPC
+    //       handler 가 책임).
+    //
+    //   chain_resolved + receiver mode='auto'
+    //     → HandoffDispatchService.dispatch + emitHandoffDispatched
+    //       사용자 확인 없이 즉시 dispatch. Notification 발송은 T30 책임.
+    //
+    // 회의 자체는 모든 분기에서 phase='handoff' transition 후 finalize('accepted')
+    // 로 종결 — pending 분기에서도 회의는 종결, dispatch 만 보류.
+    const outcome = this.resolvedChain;
+
+    if (outcome === null || outcome.kind === 'no_chain') {
+      this.runHandoffFallback();
+      return;
     }
-    // 'auto' 는 P6 R12-H 책임 — 본 sub-task no-op.
+
+    // chain_resolved branch — outcome.package 사용.
+    const pkg = outcome.package;
+
+    if (pkg.mode === 'auto') {
+      // 즉시 dispatch.
+      try {
+        const row = this.handoffDispatchService.dispatch(pkg);
+        try {
+          this.streamBridge.emitHandoffDispatched({
+            meetingId: this.session.meetingId,
+            dispatchRowId: row.id,
+            senderChannelId: pkg.sender.channelId,
+            targetChannelId: pkg.target.channelId,
+            mode: pkg.mode,
+            dispatchedAt: row.dispatchedAt,
+          });
+        } catch (err) {
+          console.warn(
+            '[MeetingOrchestrator] emitHandoffDispatched threw',
+            errorPayload(err),
+          );
+        }
+        try {
+          this.messageService.append({
+            channelId: this.session.channelId,
+            meetingId: this.session.meetingId,
+            authorId: 'system',
+            authorKind: 'system',
+            role: 'system',
+            content: '회의 종결 — 받는 부서로 자동 인계 완료.',
+            meta: { handoff: 'auto', dispatchRowId: row.id },
+          });
+        } catch (err) {
+          console.warn(
+            '[MeetingOrchestrator] auto handoff system message append failed',
+            errorPayload(err),
+          );
+        }
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] handoffDispatchService.dispatch threw',
+          errorPayload(err),
+        );
+        // dispatch 실패 시 fallback path — 회의 종결만 알림.
+        this.runHandoffFallback();
+      }
+      return;
+    }
+
+    // mode === 'check' — pending state 등록 + stream emit.
+    try {
+      this.handoffPendingState.put(this.session.meetingId, pkg);
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] handoffPendingState.put threw',
+        errorPayload(err),
+      );
+      // pending 등록 실패 시 fallback — chain 정보 손실 안되게 system message 만.
+      this.runHandoffFallback();
+      return;
+    }
+
+    try {
+      this.streamBridge.emitHandoffRequired({
+        meetingId: this.session.meetingId,
+        senderChannelId: pkg.sender.channelId,
+        targetChannelId: pkg.target.channelId,
+        packageJson: serializeHandoffPackage(pkg),
+        minutesPath: this.cachedMinutesPath,
+        dispatchedAt: pkg.dispatchedAt,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] emitHandoffRequired threw',
+        errorPayload(err),
+      );
+    }
+
+    try {
+      const title = resolveNotificationLabel('meetingMinutes.handoffTitle');
+      const body = resolveNotificationLabel('meetingMinutes.handoffBody', {
+        topic: this.session.topic,
+      });
+      this.notificationService.show({
+        kind: 'meeting_state',
+        title,
+        body,
+        channelId: this.session.channelId,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] handoff notify threw',
+        errorPayload(err),
+      );
+    }
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: '회의 종결 — 다음 부서 인계는 사용자 승인 대기 중입니다.',
+        meta: { handoff: 'check' },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] check handoff system message append failed',
+        errorPayload(err),
+      );
+    }
+  }
+
+  /**
+   * R12-C2 T28 — chain resolver 가 'no_chain' 반환 또는 dispatch / pending put
+   * 실패 시 fallback path. 사용자에게 회의 종결만 알림 — 받는 부서 진입 X.
+   */
+  private runHandoffFallback(): void {
+    try {
+      const title = resolveNotificationLabel('meetingMinutes.handoffTitle');
+      const body = resolveNotificationLabel('meetingMinutes.handoffBody', {
+        topic: this.session.topic,
+      });
+      this.notificationService.show({
+        kind: 'meeting_state',
+        title,
+        body,
+        channelId: this.session.channelId,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] handoff fallback notify threw',
+        errorPayload(err),
+      );
+    }
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: '회의가 끝났습니다.',
+        meta: { handoff: 'no_chain' },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] handoff fallback system message append failed',
+        errorPayload(err),
+      );
+    }
   }
 
   // ── helpers ──────────────────────────────────────────────────────────

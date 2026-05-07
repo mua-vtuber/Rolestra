@@ -34,3 +34,14 @@ export async function handleMeetingsComposeMinutes(
   const result = await getService().compose({ meetingId: data.meetingId });
   return { result };
 }
+
+/** R12-C2 T28 — 회의록 본문 read. HandoffApprovalModal 가 모달 본문 표시 시 호출. */
+export async function handleMeetingsReadMinutesBody(
+  data: IpcRequest<'meetings:readMinutesBody'>,
+): Promise<IpcResponse<'meetings:readMinutesBody'>> {
+  const body = await getService().readMinutesBody({
+    meetingId: data.meetingId,
+    ordinal: data.ordinal ?? 1,
+  });
+  return { body };
+}

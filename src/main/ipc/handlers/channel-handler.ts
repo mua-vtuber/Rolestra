@@ -200,6 +200,19 @@ export function handleChannelDelete(
 }
 
 /**
+ * R12-C2 T28 — `channel:update-handoff-mode` 채널 인계 모드 갱신. spec §11.18.8c.
+ *
+ * 'check' (디폴트) = 부서 인계 직전 사용자 결재 모달 / 'auto' = 자동 인계 +
+ * Notification (T30 책임). 시스템 채널은 service 가 거부 (system_* kind 가드).
+ */
+export function handleChannelUpdateHandoffMode(
+  data: IpcRequest<'channel:update-handoff-mode'>,
+): IpcResponse<'channel:update-handoff-mode'> {
+  const channel = getChannel().updateHandoffMode(data.id, data.handoffMode);
+  return { channel };
+}
+
+/**
  * R12-C T9 — `channel:archive-conversation` "새 대화 시작" 버튼.
  *
  * 일반 채널 (전역 system_general) 의 모든 메시지를 ArenaRoot 의

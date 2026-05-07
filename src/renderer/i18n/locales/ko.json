@@ -580,6 +580,30 @@
       "memberPanel": "참여자 및 합의 상태",
       "thread": "메시지 스레드"
     },
+    "handoff": {
+      "modal": {
+        "title": "부서 인계 결재",
+        "description": "다음 부서로 인계하기 전 사용자 승인이 필요합니다.",
+        "routing": "인계 흐름",
+        "routingValue": "{{sender}} → {{target}}",
+        "reason": "인계 사유",
+        "minutes": "회의록",
+        "minutesLoading": "회의록을 불러오는 중...",
+        "minutesError": "회의록을 불러오지 못했습니다 ({{error}})",
+        "spawnReview": "+ 리뷰 부서도 시작",
+        "spawnReviewHint": "검토 부서가 인계한 결과를 리뷰 부서에서도 평가합니다.",
+        "submitError": "처리 실패: {{error}}",
+        "approve": "확인 — 인계",
+        "cancel": "취소"
+      },
+      "toggle": {
+        "label": "인계 모드",
+        "check": "확인 (사용자 결재)",
+        "auto": "자동 (Notification 만)",
+        "saved": "저장됨",
+        "error": "변경 실패: {{error}}"
+      }
+    },
     "postOpinion": {
       "cancel": "취소",
       "contentLabel": "본문",

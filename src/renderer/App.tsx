@@ -10,6 +10,7 @@ import { MessengerPage } from './features/messenger/MessengerPage';
 import { OnboardingPage } from './features/onboarding/OnboardingPage';
 import { ChannelCreateModal } from './features/channels/ChannelCreateModal';
 import { StartMeetingModal } from './features/meetings/StartMeetingModal';
+import { HandoffApprovalModal } from './features/handoff/HandoffApprovalModal';
 import { notifyChannelsChanged } from './hooks/channel-invalidation-bus';
 import { AutonomyModeToggle } from './features/projects/AutonomyModeToggle';
 import { ProjectCreateModal } from './features/projects/ProjectCreateModal';
@@ -591,6 +592,7 @@ export function App() {
         channelName={startMeetingChannel?.name ?? null}
         onStarted={handleMeetingStarted}
       />
+      <HandoffApprovalModal />
     </Shell>
   );
 }

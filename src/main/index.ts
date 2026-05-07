@@ -1,4 +1,5 @@
 import { app, BrowserWindow, session } from 'electron';
+import { randomUUID } from 'node:crypto';
 import { join } from 'path';
 import { runMigrations } from './database/migrator';
 import { closeDatabase, initDatabaseRoot } from './database/connection';
@@ -856,6 +857,31 @@ app.whenReady().then(async () => {
     });
     setMeetingMinutesServiceAccessor(() => meetingMinutesService);
 
+    // R12-C2 T28: HandoffDispatchService + HandoffPendingState 부팅. 'auto' 분기
+    // = orchestrator 가 dispatch 즉시 호출 / 'check' 분기 = pending state 등록 후
+    // IPC handler (handoff:approve / cancel) 가 결정. spec §11.18.8c.
+    const { HandoffDispatchRepository } = await import(
+      './handoff/handoff-dispatch-repository'
+    );
+    const { HandoffDispatchService } = await import(
+      './handoff/handoff-dispatch-service'
+    );
+    const { HandoffPendingState } = await import(
+      './handoff/handoff-pending-state'
+    );
+    const handoffDispatchService = new HandoffDispatchService(
+      new HandoffDispatchRepository(db),
+    );
+    const handoffPendingState = new HandoffPendingState();
+
+    const {
+      setHandoffPendingStateAccessor,
+      setHandoffDispatchServiceAccessor,
+      setHandoffStreamBridgeAccessor,
+    } = await import('./ipc/handlers/handoff-handler');
+    setHandoffPendingStateAccessor(() => handoffPendingState);
+    setHandoffDispatchServiceAccessor(() => handoffDispatchService);
+
     // R12-C2 T16c: DesignSnapshotService 부팅. design-workflow step 7b
     // (generating_snapshot) 의 본체 — 회의 #2 합의 직후 design_implementation
     // root opinion (HTML+CSS) 을 desktop 1280x720 + mobile 375x812 PNG 로
@@ -925,6 +951,8 @@ app.whenReady().then(async () => {
     // Exported for MeetingOrchestrator DI (R6-Task4).
     // For now the bridge is reachable via `getStreamBridge()` accessor.
     setStreamBridgeInstance(streamBridge);
+    // R12-C2 T28 — handoff IPC handler 가 stream emit 시 사용.
+    setHandoffStreamBridgeAccessor(() => streamBridge);
 
     // Meeting orchestrator factory — channel-handler calls this on
     // `channel:start-meeting` after MeetingService.start() has created
@@ -984,6 +1012,54 @@ app.whenReady().then(async () => {
           circuitBreaker,
         });
 
+        // R12-C2 T28 — chain resolver 의 받는 채널 lookup helper. role + projectId
+        // 로 단일 채널 매칭 + listMembers 로 후보 합성 + designated-worker-resolver
+        // 호출. R12-C2 시점 audit→planning chain 에서만 actual 호출, 다른 chain 은
+        // chain resolver 내부에서 'no_chain' 분기라 호출 자체 미발생. role 매칭 0
+        // 또는 candidate 0 시 null 반환 → chain resolver 가 invariant throw 분기.
+        const {
+          resolveDesignatedWorker,
+          DesignatedWorkerNotFoundError,
+        } = await import('./meetings/designated-worker-resolver');
+        const resolveReceiverChannel = (
+          targetProjectId: string,
+          role: import('../shared/channel-role-types').ChannelRole,
+        ) => {
+          if (role === null) return null;
+          const channels = channelService.listByProject(targetProjectId);
+          const target = channels.find((c) => c.role === role);
+          if (!target) return null;
+          const members = channelService.listMembers(target.id);
+          const candidates: Array<
+            import('./meetings/designated-worker-resolver').DesignatedWorkerCandidate
+          > = [];
+          for (const m of members) {
+            const provider = providerRegistry.get(m.providerId);
+            if (!provider) continue;
+            candidates.push({
+              providerId: m.providerId,
+              displayName: provider.displayName ?? m.providerId,
+              roles: provider.roles,
+              isDepartmentHead: {},
+              dragOrder: m.dragOrder ?? null,
+            });
+          }
+          if (candidates.length === 0) return null;
+          // ChannelRole 와 RoleId 가 같은 string union — design.* / 다른 role 모두
+          // 매핑 동일. T28 시점 actual 호출은 audit→'planning' chain 만.
+          try {
+            const resolved = resolveDesignatedWorker(candidates, role);
+            return {
+              channelId: target.id,
+              handoffMode: target.handoffMode,
+              assignedProviderId: resolved.candidate.providerId,
+            };
+          } catch (err) {
+            if (err instanceof DesignatedWorkerNotFoundError) return null;
+            throw err;
+          }
+        };
+
         const orchestrator = new MeetingOrchestrator({
           session,
           turnExecutor,
@@ -992,6 +1068,10 @@ app.whenReady().then(async () => {
           meetingService,
           channelService,
           projectService,
+          handoffPendingState,
+          handoffDispatchService,
+          resolveReceiverChannel,
+          missionCardIdFactory: () => randomUUID(),
           notificationService,
           circuitBreaker,
           opinionService,

@@ -606,6 +606,37 @@ export type IpcChannelMap = {
     request: { channelId: string; topic: string };
     response: { meeting: Meeting };
   };
+  /**
+   * R12-C2 T28 — 채널의 `handoff_mode` ('check' | 'auto') 갱신. spec §11.18.8c.
+   * 채널 설정 모달 / 사이드바 ⚙ 진입점에서 호출. 시스템 채널은 service 가 거부.
+   */
+  'channel:update-handoff-mode': {
+    request: { id: string; handoffMode: 'check' | 'auto' };
+    response: { channel: Channel };
+  };
+
+  // ── v3: Handoff (R12-C2 P6 T28) ─────────────────────────────────
+  /**
+   * 'check' 분기 사용자 결재 모달 [확인] 호출. HandoffPendingState 에서 의뢰서
+   * take + HandoffDispatchService.dispatch + stream:handoff-dispatched emit. 미존재
+   * meetingId / 이미 take 된 경우는 invariant — caller (renderer) 가 stream
+   * 갱신 따라 재시도 안 함.
+   *
+   * `spawnReview` = audit→planning 인계 모달 안 *"+리뷰 부서도 시작"* 체크박스
+   * 결과. true 시 caller 의 후속 처리 (T30 책임) — T28 시점은 IPC payload 보존만.
+   */
+  'handoff:approve': {
+    request: { meetingId: string; spawnReview: boolean };
+    response: { dispatchRowId: string };
+  };
+  /**
+   * 'check' 분기 [취소] — 의뢰서 take 후 dispatch 호출 X. 메모리에서 제거 +
+   * stream:handoff-rejected emit (reason='user_canceled').
+   */
+  'handoff:cancel': {
+    request: { meetingId: string };
+    response: { success: true };
+  };
 
   // ── v3: Message ─────────────────────────────────────────────────
   'message:append': {
@@ -1127,6 +1158,17 @@ export type IpcChannelMap = {
   'meetings:composeMinutes': {
     request: { meetingId: string };
     response: { result: MeetingMinutesComposeResult };
+  };
+
+  /**
+   * R12-C2 T28 — 회의록 markdown 본문 read. HandoffApprovalModal 가 모달 열릴 때
+   * stream payload 의 `meetingId` 로 회의록 본문을 fetch (별 IPC `composeMinutes`
+   * 와 분리 — compose 는 작성 / read 는 단순 file read). minutesPath 가 미존재
+   * 또는 read 실패 시 throw — caller 가 catch 후 사용자 노출 에러.
+   */
+  'meetings:readMinutesBody': {
+    request: { meetingId: string; ordinal?: 1 | 2 };
+    response: { body: string };
   };
 
   /**

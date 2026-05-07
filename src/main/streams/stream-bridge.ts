@@ -108,6 +108,9 @@ const KNOWN_EVENT_TYPES: ReadonlySet<StreamEventType> = new Set<StreamEventType>
   'stream:designed-task-assigned',
   'stream:design-snapshot-ready',
   'stream:dashboard-progress-changed',
+  'stream:handoff-required',
+  'stream:handoff-dispatched',
+  'stream:handoff-rejected',
 ]);
 
 interface FailureState {
@@ -493,6 +496,39 @@ export class StreamBridge {
   }
 
   /**
+   * R12-C2 T28 — `handoff_mode='check'` 분기 시 사용자 결재 모달 trigger.
+   * orchestrator 가 chain resolver outcome.kind='chain_resolved' + receiver
+   * channel.handoff_mode='check' 분기에서 1 회 발사. renderer 가
+   * HandoffApprovalModal 을 stream subscribe → 자동 surface. spec §11.18.8c.
+   */
+  emitHandoffRequired(
+    payload: import('../../shared/stream-events').StreamHandoffRequiredPayload,
+  ): void {
+    this.emit({ type: 'stream:handoff-required', payload });
+  }
+
+  /**
+   * R12-C2 T28 — handoff_dispatch row 영속 직후 통지. 'auto' 분기 (orchestrator
+   * 가 즉시 dispatch) + 'check' 분기 [확인] 후 (IPC handler 가 dispatch) 모두
+   * 동일 emit. 받는 채널 unread badge / sidebar dot 갱신 trigger.
+   */
+  emitHandoffDispatched(
+    payload: import('../../shared/stream-events').StreamHandoffDispatchedPayload,
+  ): void {
+    this.emit({ type: 'stream:handoff-dispatched', payload });
+  }
+
+  /**
+   * R12-C2 T28 — 'check' 분기 모달 [취소] 또는 회의 abort 시 pending state cleanup
+   * + 모달 닫기 trigger. dispatch 호출 X.
+   */
+  emitHandoffRejected(
+    payload: import('../../shared/stream-events').StreamHandoffRejectedPayload,
+  ): void {
+    this.emit({ type: 'stream:handoff-rejected', payload });
+  }
+
+  /**
    * R12-C2 T15 — idea-workflow awaiting_user_pick phase 진입 시 1 회 push.
    * UI (renderer SsmBox idea variant — T18) 가 카드 list + 선택 체크 +
    * 코멘트 textarea 활성화. spec §11.13 / §5.1.
@@ -702,6 +738,34 @@ export class StreamBridge {
         return (
           typeof payload.projectId === 'string' &&
           typeof payload.sourceChannelId === 'string'
+        );
+      case 'stream:handoff-required':
+        // R12-C2 T28 — 'check' 분기 결재 모달 trigger.
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.senderChannelId === 'string' &&
+          typeof payload.targetChannelId === 'string' &&
+          typeof payload.packageJson === 'string' &&
+          (payload.minutesPath === null ||
+            typeof payload.minutesPath === 'string') &&
+          typeof payload.dispatchedAt === 'number'
+        );
+      case 'stream:handoff-dispatched':
+        // R12-C2 T28 — dispatch 직후 받는 채널 unread badge 갱신.
+        return (
+          typeof payload.meetingId === 'string' &&
+          typeof payload.dispatchRowId === 'string' &&
+          typeof payload.senderChannelId === 'string' &&
+          typeof payload.targetChannelId === 'string' &&
+          (payload.mode === 'check' || payload.mode === 'auto') &&
+          typeof payload.dispatchedAt === 'number'
+        );
+      case 'stream:handoff-rejected':
+        // R12-C2 T28 — 'check' 분기 [취소] 또는 회의 abort 시 pending cleanup.
+        return (
+          typeof payload.meetingId === 'string' &&
+          (payload.reason === 'user_canceled' ||
+            payload.reason === 'meeting_aborted')
         );
       default:
         return false;

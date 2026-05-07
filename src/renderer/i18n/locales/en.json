@@ -580,6 +580,30 @@
       "memberPanel": "Participants and consensus",
       "thread": "Message thread"
     },
+    "handoff": {
+      "modal": {
+        "title": "Department handoff approval",
+        "description": "User approval is required before handoff to the next department.",
+        "routing": "Routing",
+        "routingValue": "{{sender}} → {{target}}",
+        "reason": "Reason",
+        "minutes": "Minutes",
+        "minutesLoading": "Loading minutes...",
+        "minutesError": "Failed to load minutes ({{error}})",
+        "spawnReview": "+ Also start review department",
+        "spawnReviewHint": "Review department also evaluates the audit result.",
+        "submitError": "Failed: {{error}}",
+        "approve": "Confirm — Handoff",
+        "cancel": "Cancel"
+      },
+      "toggle": {
+        "label": "Handoff mode",
+        "check": "Check (user approval)",
+        "auto": "Auto (notification only)",
+        "saved": "Saved",
+        "error": "Update failed: {{error}}"
+      }
+    },
     "postOpinion": {
       "cancel": "Cancel",
       "contentLabel": "Body",

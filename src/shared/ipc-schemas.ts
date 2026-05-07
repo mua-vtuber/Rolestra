@@ -250,6 +250,26 @@ export const channelArchiveConversationSchema = z.object({
   channelId: z.string().min(1).max(128),
 });
 
+/**
+ * R12-C2 T28 — 채널의 handoff_mode ('check' | 'auto') 갱신. spec §11.18.8c.
+ * 'check' = 디폴트 사용자 결재 모달 / 'auto' = 자동 인계 + Notification.
+ */
+export const channelUpdateHandoffModeSchema = z.object({
+  id: z.string().min(1).max(128),
+  handoffMode: z.enum(['check', 'auto']),
+});
+
+/** R12-C2 T28 — 'check' 분기 사용자 결재 모달 [확인]. */
+export const handoffApproveSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  spawnReview: z.boolean(),
+});
+
+/** R12-C2 T28 — 'check' 분기 [취소]. */
+export const handoffCancelSchema = z.object({
+  meetingId: z.string().min(1).max(128),
+});
+
 export const messageAppendSchema = z.object({
   channelId: z.string().min(1).max(128),
   meetingId: z.string().min(1).max(128).nullable().optional(),
@@ -861,6 +881,9 @@ export const v3ChannelSchemas = {
   'channel:remove-members': channelMembersPatchSchema,
   'channel:start-meeting': channelStartMeetingSchema,
   'channel:archive-conversation': channelArchiveConversationSchema,
+  'channel:update-handoff-mode': channelUpdateHandoffModeSchema,
+  'handoff:approve': handoffApproveSchema,
+  'handoff:cancel': handoffCancelSchema,
   'message:append': messageAppendSchema,
   'message:search': messageSearchSchema,
   'message:list-recent': messageListRecentSchema,

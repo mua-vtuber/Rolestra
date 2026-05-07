@@ -9,6 +9,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { MeetingSession } from '../meeting-session';
+import { HandoffPendingState } from '../../../handoff/handoff-pending-state';
 import {
   MeetingOrchestrator,
   type MeetingOrchestratorDeps,
@@ -250,10 +251,47 @@ function buildDeps(
     providerRegistry: overrides.providerRegistry ?? providerRegistry,
     designSnapshotService:
       overrides.designSnapshotService ?? designSnapshotService,
+    // R12-C2 T28 — handoff_mode 우회 wire 의존성. 테스트 디폴트:
+    //   - handoffPendingState: 실 instance (in-memory Map, 테스트 재진입 시 초기화)
+    //   - handoffDispatchService: vi.fn 으로 wrapped — runHandoffPhase 의 dispatch
+    //     호출 시 throw 안 함. 실 dispatch 검증이 필요한 테스트는 override.
+    //   - resolveReceiverChannel: 디폴트 = null (chain resolver 가 'no_chain' 분기
+    //     또는 invariant throw — fallback path). audit chain 검증 시 override.
+    //   - missionCardIdFactory: fixed UUID — 테스트 결정 가능성.
+    handoffPendingState:
+      overrides.handoffPendingState ?? new HandoffPendingState(),
+    handoffDispatchService:
+      overrides.handoffDispatchService ?? handoffDispatchServiceStub,
+    resolveReceiverChannel:
+      overrides.resolveReceiverChannel ?? (() => null),
+    missionCardIdFactory:
+      overrides.missionCardIdFactory ??
+      (() => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'),
     interTurnDelayMs: 0,
     onFinalized: overrides.onFinalized,
   };
 }
+
+const handoffDispatchServiceStub = {
+  dispatch: vi.fn(() => ({
+    id: 'stub-row-id',
+    fromMeetingId: 'm',
+    fromChannelId: 'sender',
+    toChannelId: 'receiver',
+    reason: 'stub',
+    minutesId: null,
+    missionCardJson: '{}',
+    mode: 'check' as const,
+    dispatchedAt: 0,
+    openedAt: null,
+    createdAt: 0,
+  })),
+  open: vi.fn(() => null),
+  findById: vi.fn(() => null),
+  trackByMeeting: vi.fn(() => []),
+  trackByChannel: vi.fn(() => []),
+  serializeRowToPackage: vi.fn(() => '{}'),
+} as unknown as MeetingOrchestratorDeps['handoffDispatchService'];
 
 describe('MeetingOrchestrator — happy-path phase loop', () => {
   it('runs gather → tally → quick_vote → compose_minutes → handoff → done', async () => {

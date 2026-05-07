@@ -393,6 +393,70 @@ export interface StreamDashboardProgressChangedPayload {
   sourceChannelId: string;
 }
 
+// ── R12-C2 P6 T28: handoff_mode 우회 룰 wire (spec §11.18.8c) ──────────
+
+/**
+ * 'check' 분기 — 회의 종결 직후 사용자 결재 모달 등장 trigger. orchestrator 가
+ * chain resolver 결과 + receiver channel.handoff_mode='check' 분기에서 발사.
+ *
+ * payload 의 `package` 는 검증된 HandoffPackage JSON 직렬화 (renderer 가
+ * `parseHandoffPackage` 로 다시 검증 — IPC boundary 안 unknown 통제).
+ *
+ *   - `meetingId`        보낸 회의 식별자 (= pkg.sender.meetingId). HandoffPendingState
+ *                        의 키와 동일.
+ *   - `senderChannelId`  보낸 부서 채널 (= pkg.sender.channelId). 사이드바 highlight.
+ *   - `targetChannelId`  받는 부서 채널 (= pkg.target.channelId). 모달 라벨.
+ *   - `packageJson`      `serializeHandoffPackage(pkg)` 결과 — IPC 안전 wire 위해
+ *                        문자열로 dispatch. renderer 가 `parseHandoffPackage` 로 검증.
+ *   - `minutesPath`      회의록 markdown 파일 절대 경로 — renderer 가 별 IPC
+ *                        호출 없이 모달에서 본문 read 가능. NULL = 회의록 없음
+ *                        (fallback path 시 — caller 가 별 분기).
+ *   - `dispatchedAt`     모달 trigger 시점 epoch ms.
+ */
+export interface StreamHandoffRequiredPayload {
+  meetingId: string;
+  senderChannelId: string;
+  targetChannelId: string;
+  packageJson: string;
+  minutesPath: string | null;
+  dispatchedAt: number;
+}
+
+/**
+ * 'auto' 분기 — orchestrator 가 dispatch 즉시 호출 직후 발사. 또는 'check' 분기
+ * 모달 [확인] 후 IPC handler 가 dispatch 호출 직후 동일 payload 로 발사. 받는
+ * 채널의 unread badge 갱신 + sidebar dot 표시 trigger.
+ *
+ *   - `meetingId`        보낸 회의 식별자
+ *   - `dispatchRowId`    handoff_dispatch row 의 UUID (T27 service 반환)
+ *   - `senderChannelId`  보낸 부서 채널
+ *   - `targetChannelId`  받는 부서 채널
+ *   - `mode`             dispatch 시점의 receiver channel.handoff_mode
+ *                        ('check' 라도 사용자 [확인] 거친 후라 동일 dispatch 경로)
+ *   - `dispatchedAt`     row 영속 시점 epoch ms
+ */
+export interface StreamHandoffDispatchedPayload {
+  meetingId: string;
+  dispatchRowId: string;
+  senderChannelId: string;
+  targetChannelId: string;
+  mode: 'check' | 'auto';
+  dispatchedAt: number;
+}
+
+/**
+ * 'check' 분기 모달 [취소] 직후. 또는 사용자가 회의 진행 중 인계 자체를
+ * abort 한 경우. dispatch 호출 X — pending state 만 비움.
+ *
+ *   - `meetingId`        보낸 회의 식별자 (HandoffPendingState 의 키)
+ *   - `reason`           reject 사유 ('user_canceled' = 모달 [취소], 'meeting_aborted'
+ *                        = 회의 자체가 abort 되어 pending 도 같이 cleanup)
+ */
+export interface StreamHandoffRejectedPayload {
+  meetingId: string;
+  reason: 'user_canceled' | 'meeting_aborted';
+}
+
 /** Discriminated union of all Rolestra v3 push events. */
 export type StreamEvent =
   | { type: 'stream:channel-message'; payload: StreamChannelMessagePayload }
@@ -461,6 +525,18 @@ export type StreamEvent =
   | {
       type: 'stream:dashboard-progress-changed';
       payload: StreamDashboardProgressChangedPayload;
+    }
+  | {
+      type: 'stream:handoff-required';
+      payload: StreamHandoffRequiredPayload;
+    }
+  | {
+      type: 'stream:handoff-dispatched';
+      payload: StreamHandoffDispatchedPayload;
+    }
+  | {
+      type: 'stream:handoff-rejected';
+      payload: StreamHandoffRejectedPayload;
     };
 
 export type StreamEventType = StreamEvent['type'];

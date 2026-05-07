@@ -120,9 +120,14 @@ import {
   handleChannelRemoveMembers,
   handleChannelListMembers,
   handleChannelStartMeeting,
+  handleChannelUpdateHandoffMode,
   handleDmList,
   handleDmCreate,
 } from './handlers/channel-handler';
+import {
+  handleHandoffApprove,
+  handleHandoffCancel,
+} from './handlers/handoff-handler';
 import {
   handleMessageAppend,
   handleMessageListByChannel,
@@ -143,7 +148,10 @@ import {
   handleOpinionListGeneralCards,
   handleOpinionToggleLightVote,
 } from './handlers/opinion-handler';
-import { handleMeetingsComposeMinutes } from './handlers/meetings-minutes-handler';
+import {
+  handleMeetingsComposeMinutes,
+  handleMeetingsReadMinutesBody,
+} from './handlers/meetings-minutes-handler';
 import { handleMeetingListRunSteps } from './handlers/run-step-handler';
 import {
   handleMemberList,
@@ -449,6 +457,13 @@ export function registerIpcHandlers(): void {
   handle('channel:remove-members', isDev, (data) => handleChannelRemoveMembers(data));
   handle('channel:list-members', isDev, (data) => handleChannelListMembers(data));
   handle('channel:start-meeting', isDev, (data) => handleChannelStartMeeting(data));
+  handle('channel:update-handoff-mode', isDev, (data) =>
+    handleChannelUpdateHandoffMode(data),
+  );
+
+  // ── R12-C2 P6 T28: handoff_mode 우회 룰 (사용자 결재 모달 분기) ──
+  handle('handoff:approve', isDev, (data) => handleHandoffApprove(data));
+  handle('handoff:cancel', isDev, (data) => handleHandoffCancel(data));
 
   // ── R10-Task3: DM (사용자↔AI 1:1) ───────────────────────────────
   handle('dm:list', isDev, () => handleDmList());
@@ -493,6 +508,9 @@ export function registerIpcHandlers(): void {
   // ── R12-C2 P2-3: Meeting Minutes (모더레이터 회의록) ────────────
   handle('meetings:composeMinutes', isDev, (data) =>
     handleMeetingsComposeMinutes(data),
+  );
+  handle('meetings:readMinutesBody', isDev, (data) =>
+    handleMeetingsReadMinutesBody(data),
   );
 
   // ── R12-C2 P2 T12: RunStep read (dev-only registration) ────────
