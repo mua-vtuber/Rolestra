@@ -30,6 +30,7 @@ import { migration as m018 } from './018-channels-role-purpose-handoff';
 import { migration as m019 } from './019-opinion-tables';
 import { migration as m020 } from './020-run-step';
 import { migration as m021 } from './021-opinion-vote-light';
+import { migration as m022 } from './022-handoff-dispatch';
 
 /**
  * Ordered list of all v3 migrations.
@@ -57,4 +58,5 @@ export const migrations: Migration[] = [
   m019,
   m020,
   m021,
+  m022,
 ];
