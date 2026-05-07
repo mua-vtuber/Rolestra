@@ -270,6 +270,28 @@ export const handoffCancelSchema = z.object({
   meetingId: z.string().min(1).max(128),
 });
 
+/** R12-C2 T29 — 받는 채널 의뢰서 list. */
+export const handoffListByChannelSchema = z.object({
+  channelId: z.string().min(1).max(128),
+  unopenedOnly: z.boolean().optional(),
+});
+
+/** R12-C2 T29 — 의뢰서 열람 도장 (idempotent). */
+export const handoffOpenSchema = z.object({
+  dispatchRowId: z.string().min(1).max(128),
+});
+
+/** R12-C2 T29 — 의뢰서 1 통 + 회의록 본문 + nextActions 묶음 read. */
+export const handoffReadWithMinutesSchema = z.object({
+  dispatchRowId: z.string().min(1).max(128),
+});
+
+/** R12-C2 T29 — 의뢰서 기반 회의 시작. */
+export const handoffStartMeetingFromPackageSchema = z.object({
+  dispatchRowId: z.string().min(1).max(128),
+  topic: z.string().min(1).max(500),
+});
+
 export const messageAppendSchema = z.object({
   channelId: z.string().min(1).max(128),
   meetingId: z.string().min(1).max(128).nullable().optional(),
@@ -884,6 +906,10 @@ export const v3ChannelSchemas = {
   'channel:update-handoff-mode': channelUpdateHandoffModeSchema,
   'handoff:approve': handoffApproveSchema,
   'handoff:cancel': handoffCancelSchema,
+  'handoff:list-by-channel': handoffListByChannelSchema,
+  'handoff:open': handoffOpenSchema,
+  'handoff:read-with-minutes': handoffReadWithMinutesSchema,
+  'handoff:start-meeting-from-package': handoffStartMeetingFromPackageSchema,
   'message:append': messageAppendSchema,
   'message:search': messageSearchSchema,
   'message:list-recent': messageListRecentSchema,

@@ -48,6 +48,12 @@ export interface MeetingOrchestratorFactory {
      * meeting (dogfooding 2026-05-01).
      */
     roundSetting?: import('../../../shared/engine-types').RoundSetting;
+    /**
+     * R12-C2 T29 — 받는 부서 H2 진입 (handoff:start-meeting-from-package) 시 topic
+     * system message 직후에 추가로 주입되는 system message. 보낸 부서 회의록
+     * markdown 본문 + 받는 부서 작업 list 통째. 일반 회의 시작 path 는 undefined.
+     */
+    priorContextSystemMessage?: string;
   }): Promise<void> | void;
 }
 

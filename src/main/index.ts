@@ -857,6 +857,24 @@ app.whenReady().then(async () => {
     });
     setMeetingMinutesServiceAccessor(() => meetingMinutesService);
 
+    // R12-C2 T28 + T29 — handoff handler 의 모든 accessor 한 번에 wire.
+    const {
+      setHandoffPendingStateAccessor,
+      setHandoffDispatchServiceAccessor,
+      setHandoffStreamBridgeAccessor,
+      setHandoffMinutesServiceAccessor,
+      setHandoffMeetingServiceAccessor,
+      setHandoffChannelServiceAccessor,
+      setHandoffMeetingOrchestratorFactory,
+    } = await import('./ipc/handlers/handoff-handler');
+    setHandoffPendingStateAccessor(() => handoffPendingState);
+    setHandoffDispatchServiceAccessor(() => handoffDispatchService);
+    setHandoffMinutesServiceAccessor(() => meetingMinutesService);
+    setHandoffMeetingServiceAccessor(() => meetingService);
+    setHandoffChannelServiceAccessor(() => channelService);
+    // setHandoffStreamBridgeAccessor + setHandoffMeetingOrchestratorFactory 는
+    // streamBridge / meetingOrchestratorFactory 생성 *이후* 위치에서 wire.
+
     // R12-C2 T28: HandoffDispatchService + HandoffPendingState 부팅. 'auto' 분기
     // = orchestrator 가 dispatch 즉시 호출 / 'check' 분기 = pending state 등록 후
     // IPC handler (handoff:approve / cancel) 가 결정. spec §11.18.8c.
@@ -874,13 +892,8 @@ app.whenReady().then(async () => {
     );
     const handoffPendingState = new HandoffPendingState();
 
-    const {
-      setHandoffPendingStateAccessor,
-      setHandoffDispatchServiceAccessor,
-      setHandoffStreamBridgeAccessor,
-    } = await import('./ipc/handlers/handoff-handler');
-    setHandoffPendingStateAccessor(() => handoffPendingState);
-    setHandoffDispatchServiceAccessor(() => handoffDispatchService);
+    // handoff handler accessor 등록은 meetingMinutesService / orchestratorFactory
+    // 생성 이후 위치에서 한 번에 진행 (아래 setMeetingMinutesServiceAccessor 직후).
 
     // R12-C2 T16c: DesignSnapshotService 부팅. design-workflow step 7b
     // (generating_snapshot) 의 본체 — 회의 #2 합의 직후 design_implementation
@@ -964,7 +977,7 @@ app.whenReady().then(async () => {
     // `meetingStarter` (constructed earlier) can invoke it without a
     // direct import of the closure body.
     const meetingOrchestratorFactory: MeetingOrchestratorFactory = {
-      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx, roundSetting }) => {
+      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx, roundSetting, priorContextSystemMessage }) => {
         const { MeetingSession } = await import(
           './meetings/engine/meeting-session'
         );
@@ -990,6 +1003,7 @@ app.whenReady().then(async () => {
           topic,
           participants,
           ssmCtx,
+          priorContextSystemMessage,
         });
 
         const personaPrimedParticipants = new Set<string>();
@@ -1140,6 +1154,35 @@ app.whenReady().then(async () => {
     // handler is registered keeps the production path identical to a
     // manually-started meeting.
     orchestratorFactoryHolder.current = meetingOrchestratorFactory;
+
+    // R12-C2 T29 — handoff:start-meeting-from-package 가 사용. 기존 factory
+    // 재사용 + receiver 채널의 participants / ssmCtx 합성 helper 별도 wire.
+    setHandoffMeetingOrchestratorFactory(meetingOrchestratorFactory);
+    const { setHandoffStartMeetingResolver } = await import(
+      './ipc/handlers/handoff-handler'
+    );
+    // channel:start-meeting (channel-handler) 의 동일한 형식 — projectPath 빈
+    // 문자열 + permissionMode 'hybrid' + autonomyMode 'manual' (해당 channel /
+    // project 의 더 정확한 값으로 boot 시점 갱신은 기존 channel-handler 와 동일).
+    setHandoffStartMeetingResolver({
+      resolveParticipants: (channelId: string) => {
+        const members = channelService.listMembers(channelId);
+        return members.map((m) => ({
+          id: m.providerId,
+          providerId: m.providerId,
+          displayName: m.providerId,
+          isActive: true,
+        }));
+      },
+      buildSsmCtx: ({ meetingId, channelId, projectId }) => ({
+        meetingId,
+        channelId,
+        projectId,
+        projectPath: '',
+        permissionMode: 'hybrid',
+        autonomyMode: 'manual',
+      }),
+    });
 
     // Initialize consensus folder (fire-and-forget; non-blocking for window creation)
     try {

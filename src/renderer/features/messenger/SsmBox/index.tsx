@@ -36,6 +36,8 @@ import { useDms } from '../../../hooks/use-dms';
 import { useGlobalGeneralChannel } from '../../../hooks/use-global-general-channel';
 import type { Channel } from '../../../../shared/channel-types';
 import type { ActiveMeetingSummary } from '../../../../shared/meeting-types';
+import { HandoffPackageCard } from '../../handoff/HandoffPackageCard';
+import { useHandoffPackage } from '../../handoff/use-handoff-package';
 
 import { DesignVariant } from './DesignVariant';
 import { GeneralVariant } from './GeneralVariant';
@@ -96,6 +98,27 @@ export function SsmBox({
   }, [meetingOverride, channelId, meetings]);
 
   const role = resolvedChannel?.role ?? null;
+
+  // R12-C2 T29 — 받는 부서 unopened 의뢰서 lookup. 부서 채널 (role !== null +
+  // !== 'general') 에서만 surface — system_general / DM / legacy 는 제외.
+  const handoffEnabled =
+    role !== null && role !== 'general' && resolvedChannel !== null;
+  const { pending: handoffPending, dismiss: dismissHandoff } = useHandoffPackage(
+    handoffEnabled ? resolvedChannel?.id ?? null : null,
+  );
+
+  if (handoffPending !== null && resolvedChannel !== null) {
+    return (
+      <HandoffPackageCard
+        item={handoffPending.item}
+        minutesBody={handoffPending.minutesBody}
+        nextActions={handoffPending.nextActions}
+        receiverChannelId={resolvedChannel.id}
+        onClose={dismissHandoff}
+        className={className}
+      />
+    );
+  }
 
   if (role === 'idea') {
     return <IdeaVariant meeting={resolvedMeeting} className={className} />;

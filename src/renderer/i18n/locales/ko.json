@@ -581,6 +581,25 @@
       "thread": "메시지 스레드"
     },
     "handoff": {
+      "card": {
+        "title": "새 인계 — {{sender}} 부서로부터 도착",
+        "subtitle": "{{sender}} → {{target}} · {{time}}",
+        "reason": "인계 사유",
+        "minutesPreview": "회의록 미리보기",
+        "minutesUnavailable": "회의록을 불러올 수 없습니다.",
+        "viewFullMinutes": "회의록 통째 보기",
+        "nextActions": "받는 부서가 처리할 작업",
+        "nextActionsEmpty": "(작업 list 없음 — 회의록 본문에서 자체 분배)",
+        "actionError": "처리 실패: {{error}}",
+        "close": "닫기",
+        "startMeeting": "의견 모아 회의 시작",
+        "defaultTopic": "{{sender}} 부서 인계 처리"
+      },
+      "minutesViewer": {
+        "title": "회의록 통째 보기",
+        "unavailable": "회의록을 불러올 수 없습니다.",
+        "close": "닫기"
+      },
       "modal": {
         "title": "부서 인계 결재",
         "description": "다음 부서로 인계하기 전 사용자 승인이 필요합니다.",

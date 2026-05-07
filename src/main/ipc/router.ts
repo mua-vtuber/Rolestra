@@ -127,6 +127,10 @@ import {
 import {
   handleHandoffApprove,
   handleHandoffCancel,
+  handleHandoffListByChannel,
+  handleHandoffOpen,
+  handleHandoffReadWithMinutes,
+  handleHandoffStartMeetingFromPackage,
 } from './handlers/handoff-handler';
 import {
   handleMessageAppend,
@@ -464,6 +468,18 @@ export function registerIpcHandlers(): void {
   // ── R12-C2 P6 T28: handoff_mode 우회 룰 (사용자 결재 모달 분기) ──
   handle('handoff:approve', isDev, (data) => handleHandoffApprove(data));
   handle('handoff:cancel', isDev, (data) => handleHandoffCancel(data));
+
+  // ── R12-C2 P6 T29: H2 받는 부서 첫 화면 인계 패키지 ──────────────
+  handle('handoff:list-by-channel', isDev, (data) =>
+    handleHandoffListByChannel(data),
+  );
+  handle('handoff:open', isDev, (data) => handleHandoffOpen(data));
+  handle('handoff:read-with-minutes', isDev, (data) =>
+    handleHandoffReadWithMinutes(data),
+  );
+  handle('handoff:start-meeting-from-package', isDev, (data) =>
+    handleHandoffStartMeetingFromPackage(data),
+  );
 
   // ── R10-Task3: DM (사용자↔AI 1:1) ───────────────────────────────
   handle('dm:list', isDev, () => handleDmList());

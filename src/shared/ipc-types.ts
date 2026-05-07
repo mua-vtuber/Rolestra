@@ -75,6 +75,7 @@ import type {
   ToggleLightVoteResult,
 } from './opinion-types';
 import type { MeetingMinutesComposeResult } from './meeting-minutes-types';
+import type { HandoffDispatchRowSummary } from './handoff/dispatch-row-summary';
 import type { RunStep } from './run-step-types';
 import type { DashboardProgressSnapshot } from './dashboard-progress-types';
 
@@ -636,6 +637,49 @@ export type IpcChannelMap = {
   'handoff:cancel': {
     request: { meetingId: string };
     response: { success: true };
+  };
+  /**
+   * R12-C2 T29 — 받는 채널 단위 의뢰서 list. unopenedOnly=true 면 미열람만 (받는
+   * 부서 첫 진입 시 카드 표시 결정). 미열람 list 는 dispatched_at DESC 정렬 —
+   * 가장 최근 의뢰서가 첫 surface candidate.
+   */
+  'handoff:list-by-channel': {
+    request: { channelId: string; unopenedOnly?: boolean };
+    response: { items: HandoffDispatchRowSummary[] };
+  };
+  /**
+   * R12-C2 T29 — 받는 부서 채널이 의뢰서 카드를 *처음 본 시점*. opened_at 캐시
+   * (idempotent — 두 번째 이후 호출은 기존 값 유지). 사용자가 카드 surface 직후
+   * 1 회 호출 (renderer side-effect).
+   */
+  'handoff:open': {
+    request: { dispatchRowId: string };
+    response: { item: HandoffDispatchRowSummary };
+  };
+  /**
+   * R12-C2 T29 — 의뢰서 1 통의 회의록 본문 + 받는 부서 작업 list 묶음 read.
+   * H2 카드 단일 진입점 — list-by-channel 결과 row 1 건을 받아 회의록 + nextActions
+   * 까지 한 번에 fetch. UI 가 별 IPC 호출 안 하고 카드 1 회 render 가능.
+   */
+  'handoff:read-with-minutes': {
+    request: { dispatchRowId: string };
+    response: {
+      item: HandoffDispatchRowSummary;
+      minutesBody: string | null;
+      nextActions: string[];
+    };
+  };
+  /**
+   * R12-C2 T29 — 받는 부서 [의견 모아 회의 시작] 버튼 호출. 단일 entry — 내부
+   * 동작:
+   *   1. row read + handoff:open mark (idempotent)
+   *   2. MeetingService.start (받는 채널 + topic + handoff context)
+   *   3. orchestrator boot (gather phase prompt 안 회의록 본문 + 작업 list 주입)
+   * sender/target 정보는 row 자체에 있어 caller 가 별 인자 미지정.
+   */
+  'handoff:start-meeting-from-package': {
+    request: { dispatchRowId: string; topic: string };
+    response: { meeting: Meeting };
   };
 
   // ── v3: Message ─────────────────────────────────────────────────

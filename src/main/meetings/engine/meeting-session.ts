@@ -102,6 +102,17 @@ export interface MeetingSessionOptions {
   title?: string;
   /** Conversation/task mode policy settings. T10a 은 사용 X — 옛 호환 시그니처. */
   taskSettings?: ConversationTaskSettings;
+  /**
+   * R12-C2 T29 — 받는 부서 H2 진입 시 topic system message *직후* 에 추가로 주입
+   * 되는 system message. 보통 보낸 부서 회의록 markdown 본문 + 받는 부서 작업
+   * list 통째 — orchestrator gather phase 의 첫 turn provider history 안에 포함
+   * 되어 직원이 컨텍스트 잃지 않고 의견 제시.
+   *
+   * 일반 회의 (channel:start-meeting) 진입 시 undefined — topic 만 있는 평소 흐름.
+   * H2 진입 (handoff:start-meeting-from-package) 시 caller (handoff-handler) 가
+   * 합성한 markdown 본문 1 회 주입.
+   */
+  priorContextSystemMessage?: string;
 }
 
 export class MeetingSession {
@@ -188,6 +199,22 @@ export class MeetingSession {
       participantId: SYSTEM_TOPIC_PARTICIPANT_ID,
       participantName: SYSTEM_TOPIC_PARTICIPANT_NAME,
     });
+
+    // R12-C2 T29 — 받는 부서 H2 진입 시 보낸 부서 회의록 + 작업 list 를 topic
+    // 직후 system message 로 주입. provider history 안 두 번째 system 메시지로
+    // 들어가 직원이 첫 turn 시 컨텍스트 잃지 않음.
+    if (
+      typeof options.priorContextSystemMessage === 'string' &&
+      options.priorContextSystemMessage.trim().length > 0
+    ) {
+      this._messages.push({
+        id: randomUUID(),
+        role: 'system',
+        content: options.priorContextSystemMessage,
+        participantId: SYSTEM_TOPIC_PARTICIPANT_ID,
+        participantName: SYSTEM_TOPIC_PARTICIPANT_NAME,
+      });
+    }
   }
 
   // ── Identity / metadata ──────────────────────────────────────────

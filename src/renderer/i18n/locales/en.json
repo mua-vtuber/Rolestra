@@ -581,6 +581,25 @@
       "thread": "Message thread"
     },
     "handoff": {
+      "card": {
+        "title": "New handoff — from {{sender}}",
+        "subtitle": "{{sender}} → {{target}} · {{time}}",
+        "reason": "Reason",
+        "minutesPreview": "Minutes preview",
+        "minutesUnavailable": "Minutes unavailable.",
+        "viewFullMinutes": "View full minutes",
+        "nextActions": "Tasks for receiving department",
+        "nextActionsEmpty": "(No task list — derive from minutes body)",
+        "actionError": "Failed: {{error}}",
+        "close": "Close",
+        "startMeeting": "Start meeting from package",
+        "defaultTopic": "Handoff from {{sender}}"
+      },
+      "minutesViewer": {
+        "title": "Full minutes",
+        "unavailable": "Minutes unavailable.",
+        "close": "Close"
+      },
       "modal": {
         "title": "Department handoff approval",
         "description": "User approval is required before handoff to the next department.",
