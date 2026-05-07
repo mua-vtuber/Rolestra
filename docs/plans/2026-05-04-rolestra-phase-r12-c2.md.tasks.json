@@ -291,13 +291,13 @@
     {
       "id": 30,
       "subject": "T29 — H2. 받는 부서 첫 화면 인계 패키지",
-      "status": "pending",
+      "status": "completed",
       "blockedBy": [
         17,
         19,
         29
       ],
-      "description": "**P6 진입 3 호.** 인계 받은 부서 채널 *첫 진입* 시 외주 의뢰서 카드 표시.\n\n**산출:**\n- `<HandoffPackageCard>` — 받는 부서 SsmBox top:\n  · 보낸 부서 + 시각 + 인계 사유 + 회의록 미리보기 (truncate X scroll) + 받는 부서 작업 list\n  · [회의록 통째 보기] → 모달 / [의견 모아 회의 시작] → step 1 회의 자동 시작 (회의록 통째 컨텍스트로 동봉) / [닫기] → archive (collapsed)\n- 컨텍스트 주입 — step 1 prompt 안 인계 회의록 본문 통째 + 받는 부서 작업 list\n\n**Verify:** spec §11.22 부합 — truncate X + 컨텍스트 주입 정확 + chain 외 (review) 도 동작. vitest snapshot + e2e. [후보 H2]"
+      "description": "**P6 진입 3 호.** 인계 받은 부서 채널 *첫 진입* 시 외주 의뢰서 카드 표시.\n\n**산출:**\n- `<HandoffPackageCard>` — 받는 부서 SsmBox top:\n  · 보낸 부서 + 시각 + 인계 사유 + 회의록 미리보기 (truncate X scroll) + 받는 부서 작업 list\n  · [회의록 통째 보기] → 모달 / [의견 모아 회의 시작] → step 1 회의 자동 시작 (회의록 통째 컨텍스트로 동봉) / [닫기] → archive (collapsed)\n- 컨텍스트 주입 — step 1 prompt 안 인계 회의록 본문 통째 + 받는 부서 작업 list\n\n**Verify:** spec §11.22 부합 — truncate X + 컨텍스트 주입 정확 + chain 외 (review) 도 동작. vitest snapshot + e2e. [후보 H2]\n\n---\n\n**Land summary (2026-05-07):**\n- production commit `ad99d83` (14 파일 / +579 lines, base a166bc8 = T28 sync)\n- work-log mirror commit `bdeaa78`\n- 산출:\n  - IPC 4 신규: handoff:list-by-channel / open / read-with-minutes / start-meeting-from-package\n  - shared/handoff/ — next-actions extractor (kind 별 매핑) + dispatch-row-summary (IPC 경계)\n  - renderer/features/handoff/ — HandoffPackageCard + HandoffMinutesViewerModal + use-handoff-package hook + SsmBox 통합\n  - 회의 시작 wire — MeetingSession.priorContextSystemMessage + factory.createAndRun 옵션 추가 + composeHandoffContextSystemMessage helper + HandoffStartMeetingResolver wire\n  - i18n keys (handoff.card.* + handoff.minutesViewer.*)\n- 사용자 결정 (2 종):\n  1. 받는 부서 작업 list = mission card payload 의 expectedOutputs 재사용 (회의록 양식 재설계 X)\n  2. 회의 소집 = 새 전용 IPC handoff:start-meeting-from-package (책임 명확)\n- 검증: typecheck:node + typecheck:web 0 / vitest 3812 PASS (T28 baseline 3806 → +6 신규: nextActions extractor) / inspect:safety 102 (baseline 동일).\n- 미작업 (의도, 후속): HandoffModeToggle 진입점 mount (dogfooding 시점) / 'auto' Notification (T30) / 채널 헤더 [패키지 다시 보기] 버튼 (재 surface entry) / audit 외 chain actual wire.\n- 다음 = dogfooding + main ff merge 체크포인트 (사용자 사전 결정)."
     },
     {
       "id": 31,
