@@ -48,6 +48,10 @@ import {
   setProjectHandlerArenaRootAccessor,
 } from './ipc/handlers/project-handler';
 import { ProjectSkillSyncService } from './skills/project-skill-sync-service';
+import { SkillService } from './skills/skill-service';
+import { PromptComposer } from './skills/prompt-composer';
+import { ChannelPermissionResolver } from './permissions/channel-permission-resolver';
+import { setChannelPermissionServiceAccessor } from './ipc/handlers/channel-permission-handler';
 import {
   setChannelServiceAccessor,
   setChannelMemberServiceAccessor,
@@ -269,6 +273,17 @@ app.whenReady().then(async () => {
         // to 'offline-connection', so the message text isn't user-facing.
         await providerRegistry.getOrThrow(providerId).warmup();
       },
+      // R12-W T9 — 직원 roles / skillOverrides 는 BaseProvider.toInfo() 가
+      // ProviderInfo (roles + skill_overrides) 를 반환하므로 wire 단에서 그대로
+      // proxy. null = 알려지지 않은 providerId.
+      getRoles: (providerId) => {
+        const p = providerRegistry.get(providerId);
+        return p ? p.toInfo().roles : null;
+      },
+      getSkillOverrides: (providerId) => {
+        const p = providerRegistry.get(providerId);
+        return p ? p.toInfo().skill_overrides : null;
+      },
     });
     setMemberProfileServiceAccessor(() => memberProfileService);
     // R12-C dogfooding round 1 (2026-05-03): channel-handler 의
@@ -372,6 +387,14 @@ app.whenReady().then(async () => {
     });
     setProjectServiceAccessor(() => projectService);
     setChannelServiceAccessor(() => channelService);
+    // R12-W T9 + T7 — 채널 권한 IPC 와 PromptComposer wire-up 의 단일 인스턴스
+    // 공유. ChannelPermissionResolver 는 ChannelRepository 만 의존 (좁은 read
+    // 책임) 이라 동일 인스턴스를 turn-executor / IPC handler 양쪽이 안전하게
+    // 활용. PromptComposer 는 SkillService 가 stateless 라 단일 instance 충분.
+    setChannelPermissionServiceAccessor(() => channelService);
+    const skillService = new SkillService();
+    const promptComposer = new PromptComposer(skillService);
+    const channelPermissionResolver = new ChannelPermissionResolver(channelRepo);
 
     // R12-C Task 6 — SKILL.md auto-sync service
     const projectSkillSyncService = new ProjectSkillSyncService();
@@ -996,6 +1019,18 @@ app.whenReady().then(async () => {
         // max_rounds replaces the per-meeting setting, resolved by the
         // orchestrator from `Channel.maxRounds` at run-time.
         void roundSetting;
+        // R12-W T9 — 세션이 속한 채널 role 을 fetch 해 session 에 전달.
+        // 미존재 채널 (race 등) 은 명시 throw — silent null fallback 시
+        // PromptComposer 가 부서 회의 컨텍스트 없는 분기를 타게 되어
+        // 사용자가 "왜 회의가 정식 path 가 아니지?" 라는 미스터리를
+        // 디버깅해야 함.
+        const channelForSession = channelService.get(meeting.channelId);
+        if (!channelForSession) {
+          throw new Error(
+            `meeting-orchestrator-factory: channel not found for meeting ` +
+              `${meeting.id} (channelId=${meeting.channelId})`,
+          );
+        }
         const session = new MeetingSession({
           meetingId: meeting.id,
           channelId: meeting.channelId,
@@ -1003,6 +1038,7 @@ app.whenReady().then(async () => {
           topic,
           participants,
           ssmCtx,
+          channelRole: channelForSession.role,
           priorContextSystemMessage,
         });
 
@@ -1019,6 +1055,10 @@ app.whenReady().then(async () => {
           // not in `online` state get their turn skipped + a system
           // message + `stream:meeting-turn-skipped` event.
           memberProfileService,
+          // R12-W T9: PromptComposer + ChannelPermissionResolver wire — 회의
+          // turn 페르소나가 채널 단위 권한 snapshot 을 받아 합성.
+          promptComposer,
+          channelPermissionResolver,
           // R9-Task6: feed the `same_error` tripwire so N consecutive
           // same-category turn failures downgrade the project out of
           // auto_toggle / queue. Classification runs inside the

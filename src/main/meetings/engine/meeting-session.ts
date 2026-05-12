@@ -43,6 +43,7 @@ import type { Participant } from '../../../shared/engine-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
 import type { ConversationTaskSettings } from '../../../shared/config-types';
 import type { MeetingPhase } from '../../../shared/meeting-flow-types';
+import type { ChannelRole } from '../../../shared/channel-role-types';
 import type { PermissionSet } from '../../../shared/permission-set-types';
 import type {
   ChannelService,
@@ -105,6 +106,13 @@ export interface MeetingSessionOptions {
    * meetingId / channelId / projectId 정합성 체크는 생성자에서 enforce.
    */
   ssmCtx: SsmContext;
+  /**
+   * R12-W T9 — 세션이 속한 채널의 부서 role. ChannelService 가 채널 fetch
+   * 후 caller (meeting-orchestrator 또는 meeting-service) 가 전달.
+   * `null` = system 채널 / DM / legacy user 채널 (회의 컨텍스트 X — turn
+   * executor 가 PromptComposer 의 channelRole=null 분기로 라우팅).
+   */
+  channelRole: ChannelRole;
   /** Optional display title; defaults to the topic string. */
   title?: string;
   /** Conversation/task mode policy settings. T10a 은 사용 X — 옛 호환 시그니처. */
@@ -128,6 +136,13 @@ export class MeetingSession {
   readonly projectId: string;
   readonly topic: string;
   readonly ssmCtx: SsmContext;
+  /**
+   * R12-W T9 — 세션이 속한 채널의 부서 role. PromptComposer 의 channelRole
+   * 분기 source. session 생성 시점 한 번 캡쳐, life-cycle 동안 불변.
+   * 채널이 부서 재할당 (rare) 되면 새 회의를 시작해야 한다 — 회의 중간
+   * role 변경은 phase loop 의 의미를 깨므로 의도적으로 immutable.
+   */
+  readonly channelRole: ChannelRole;
 
   private _title: string;
   private _messages: ParticipantMessage[];
@@ -209,6 +224,7 @@ export class MeetingSession {
     this.projectId = projectId;
     this.topic = topic;
     this.ssmCtx = ssmCtx;
+    this.channelRole = options.channelRole;
     this._title = options.title ?? topic;
     this._messages = [];
     this._participants = [...participants];

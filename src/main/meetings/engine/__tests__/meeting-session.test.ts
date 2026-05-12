@@ -50,6 +50,9 @@ function buildOptions(
     topic: 'Discuss release plan',
     participants: buildParticipants(2),
     ssmCtx: buildCtx(),
+    // R12-W T9 — channelRole 은 required. 부서 컨텍스트 테스트가 별도로
+    // RoleId 를 override; default 는 system 채널 / DM 시뮬레이션의 null.
+    channelRole: null,
     ...overrides,
   };
 }

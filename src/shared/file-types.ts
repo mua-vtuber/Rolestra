@@ -1,33 +1,20 @@
 /**
- * File permission and workspace type definitions shared between main and renderer.
+ * File / workspace 도메인 타입 — main / renderer / preload 공유.
  *
- * Controls per-AI file access within a project folder.
- * The .arena/workspace/ directory is automatically granted full access to all participants.
+ * R12-W T10: `FilePermission` / `WorkspaceConfig` / `DEFAULT_FILE_PERMISSION` /
+ * `AccessCheckResult` 삭제. 직원 단위 파일 권한 모델이 채널 단위 권한
+ * (channels.permissions 5컬럼, ADR §D1) 으로 collapse 되며 옛 타입은 어느
+ * production 경로에서도 import 되지 않게 됐다.
+ *
+ * 남은 타입:
+ *   - WorkspaceInfo / WorkspaceSubdirectory / WORKSPACE_SUBDIRS — arena 워크스페이스
+ *     서브디렉토리 운영용. workspace-service.ts 가 사용.
+ *   - PermissionRequest — stream-types.ts 의 `StreamPermissionPendingEvent`
+ *     payload. R7-Task4 시점 emit 경로가 사라졌지만 타입은 stream event map
+ *     안에서 살아남아 있어 직접 삭제하려면 stream-types 도 같이 정리해야 함
+ *     (R12-W 범위 밖 — 후속 cleanup phase 가 묶음 정리할 영역).
+ *   - ConsensusFolderInfo — consensus-folder-service.ts 가 사용.
  */
-
-/** Per-AI permission set for a specific folder. */
-export interface FilePermission {
-  /** The AI participant this permission applies to. */
-  participantId: string;
-  /** The folder these permissions govern. */
-  folderPath: string;
-  /** Whether the AI can read files. */
-  read: boolean;
-  /** Whether the AI can write/modify files. */
-  write: boolean;
-  /** Whether the AI can execute commands in this folder. */
-  execute: boolean;
-}
-
-/** Workspace configuration for a work-mode conversation. */
-export interface WorkspaceConfig {
-  /** User-selected project folder path. */
-  projectFolder: string;
-  /** Auto-generated arena workspace path (.arena/workspace/ inside project). */
-  arenaFolder: string;
-  /** Per-AI permissions for the project folder. */
-  permissions: FilePermission[];
-}
 
 /** Serializable workspace info for IPC transport. */
 export interface WorkspaceInfo {
@@ -46,15 +33,6 @@ export const WORKSPACE_SUBDIRS: WorkspaceSubdirectory[] = [
   'proposals',
   'approved',
 ];
-
-/** Access check result for UI display. */
-export interface AccessCheckResult {
-  allowed: boolean;
-  reason?: string;
-  participantId: string;
-  targetPath: string;
-  action: 'read' | 'write' | 'execute';
-}
 
 /** A user-approvable runtime permission request raised during execution. */
 export interface PermissionRequest {
@@ -76,10 +54,3 @@ export interface ConsensusFolderInfo {
   /** Whether this is the platform default path (vs. user-customized). */
   isDefault: boolean;
 }
-
-/** Default permissions for a new participant (read-only). */
-export const DEFAULT_FILE_PERMISSION: Omit<FilePermission, 'participantId' | 'folderPath'> = {
-  read: true,
-  write: false,
-  execute: false,
-};

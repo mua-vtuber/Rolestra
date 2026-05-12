@@ -33,6 +33,7 @@ function session(): MeetingSession {
     topic: 'test topic',
     participants,
     ssmCtx: ctx,
+    channelRole: null,
   });
 }
 

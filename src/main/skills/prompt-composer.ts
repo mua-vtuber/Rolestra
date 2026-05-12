@@ -14,10 +14,12 @@
  * formatInstruction 만 결합 (예: 일반 채널 단순 응답).
  */
 
-import type { RoleId } from '../../shared/role-types';
+import type { RoleId, ToolGrant } from '../../shared/role-types';
 import type { ChannelRole } from '../../shared/channel-role-types';
 import type { SkillService } from './skill-service';
 import { SKILL_CATALOG } from '../../shared/skill-catalog';
+import type { PermissionSet } from '../../shared/permission-set-types';
+import { permissionSetToToolGrants } from '../../shared/permission-set-types';
 
 export interface ComposeInput {
   persona: string;
@@ -29,6 +31,16 @@ export interface ComposeInput {
    */
   channelRole: ChannelRole;
   formatInstruction: string;
+  /**
+   * R12-W T9 — 채널 단위 권한 snapshot. 활성 분기 (능력 부여 직원 + 부서 채널)
+   * 의 권한 단락 합성 시 카탈로그 toolGrants 대신 본 snapshot 을 우선 사용.
+   *
+   * 미제공 시 (undefined) 카탈로그 default 그대로 — 회귀 invariant (R12-C round 2
+   * fix 시점의 기존 행동). T9 wire-up 이 완료된 후 MeetingTurnExecutor 는 *항상*
+   * 본 인자를 채워 호출하지만, 다른 호출 경로 (예: 단위 테스트) 의 시그니처 호환
+   * 위해 optional 로 둔다.
+   */
+  permissionSnapshot?: PermissionSet;
 }
 
 const TOOL_GRANT_LABEL_KO: Record<string, string> = {
@@ -97,7 +109,14 @@ export class PromptComposer {
       `당신은 ${channelLabel} 부서에서 일하고 있습니다.\n${tpl.systemPromptKo}`,
     );
 
-    sections.push(`권한: ${this.summarizeTools(tpl.toolGrants)}`);
+    // R12-W T9 — 채널 단위 permissionSnapshot 이 카탈로그 toolGrants 보다 우선.
+    // 사용자가 채널 설정 모달에서 부서 default 를 미세조정한 결과가 즉시 AI
+    // 권한 안내에 반영. snapshot 미제공 시 (R12-W 이전 호출 경로 / 단위 테스트)
+    // 카탈로그 그대로.
+    const grantsForPrompt: Record<ToolGrant, boolean> = input.permissionSnapshot
+      ? permissionSetToToolGrants(input.permissionSnapshot)
+      : tpl.toolGrants;
+    sections.push(`권한: ${this.summarizeTools(grantsForPrompt)}`);
 
     // R12-C — SKILL.md 경로 주입. 3 provider (Claude / Codex / Gemini)
     // 가 각자 .claude/skills/<roleId>/SKILL.md 또는

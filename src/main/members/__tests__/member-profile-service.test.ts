@@ -88,6 +88,15 @@ function makeProviderLookup(
       return { id: providerId, displayName: meta.displayName, persona: meta.persona };
     },
     warmup: warmup ?? (async () => undefined),
+    // R12-W T9 — stub lookup 은 직원 roles / skillOverrides 가 없는 환경을
+    // 시뮬레이션. row 가 있으면 빈 배열 / null 반환 (테스트가 별도 케이스로
+    // override 가능), 없으면 null.
+    getRoles(providerId) {
+      return rows[providerId] ? [] : null;
+    },
+    getSkillOverrides(providerId) {
+      return rows[providerId] ? null : null;
+    },
   };
 }
 
@@ -818,6 +827,8 @@ describe('MemberProfileService', () => {
         // Lookup returns null — simulates a registry-mid-tear-down race.
         get: () => null,
         warmup: async () => undefined,
+        getRoles: () => null,
+        getSkillOverrides: () => null,
       };
       const service = new MemberProfileService(repo, lookup);
       const events = captureEvents(service);

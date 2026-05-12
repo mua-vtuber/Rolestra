@@ -67,7 +67,8 @@ import {
   buildDesignedTaskPromptBody,
   type DesignedTaskContext,
 } from '../workflows/design-workflow';
-import { buildPermissionRules } from '../../members/persona-permission-rules';
+import { PromptComposer } from '../../skills/prompt-composer';
+import type { ChannelPermissionResolver } from '../../permissions/channel-permission-resolver';
 import { tryGetLogger } from '../../log/logger-accessor';
 import type { BaseProvider } from '../../providers/provider-interface';
 import { CliProvider } from '../../providers/cli/cli-provider';
@@ -130,6 +131,17 @@ export interface MeetingTurnExecutorDeps {
   approvalCliAdapter: ApprovalCliAdapter;
   /** work-status gate + persona Identity block. */
   memberProfileService: import('../../members/member-profile-service').MemberProfileService;
+  /**
+   * R12-W T9 — 페르소나 합성 단일 진입점. 옛 `buildPermissionRules` 경로 폐기.
+   * channelRole + 직원 roles / skillOverrides + 채널 권한 snapshot 을 받아
+   * AI 시스템 프롬프트 본문을 빌드.
+   */
+  promptComposer: PromptComposer;
+  /**
+   * R12-W T9 — 채널 권한 단일 진입점. session.getPermissions(resolver) 가
+   * 캐시 hydration 시 호출.
+   */
+  channelPermissionResolver: ChannelPermissionResolver;
   /** R9-Task6 same_error tripwire. Optional. */
   circuitBreaker?: CircuitBreaker;
 }
@@ -175,6 +187,8 @@ export class MeetingTurnExecutor {
   private readonly personaPrimedParticipants: Set<string>;
   private readonly approvalCliAdapter: ApprovalCliAdapter;
   private readonly memberProfileService: MeetingTurnExecutorDeps['memberProfileService'];
+  private readonly promptComposer: PromptComposer;
+  private readonly channelPermissionResolver: ChannelPermissionResolver;
   private readonly circuitBreaker?: CircuitBreaker;
 
   private abortController: AbortController | null = null;
@@ -188,6 +202,8 @@ export class MeetingTurnExecutor {
     this.personaPrimedParticipants = deps.personaPrimedParticipants;
     this.approvalCliAdapter = deps.approvalCliAdapter;
     this.memberProfileService = deps.memberProfileService;
+    this.promptComposer = deps.promptComposer;
+    this.channelPermissionResolver = deps.channelPermissionResolver;
     this.circuitBreaker = deps.circuitBreaker;
   }
 
@@ -532,13 +548,26 @@ export class MeetingTurnExecutor {
 
       let persona = '';
       if (this.shouldIncludePersona(provider, speaker.id)) {
-        const permissionRules = buildPermissionRules({
-          permission: null,
-          projectFolder: this.session.ssmCtx.projectPath || null,
-          arenaFolder: this.arenaRootService.getPath(),
-        });
+        // R12-W T9 — 옛 `buildPermissionRules({permission:null})` 경로 폐기.
+        // PromptComposer 가 v3 단일 진입점이며, 채널 단위 권한 snapshot 을
+        // 합성 시 권한 단락에 우선 적용. 사용자 dogfooding 의 "본 회의 채널
+        // 규칙상 파일을 직접 읽지 못해" 자기검열은 본 경로 land 와 함께 종결.
         const v3Identity = this.memberProfileService.buildPersona(speaker.id);
-        persona = `${v3Identity}${permissionRules}`;
+        const providerRoles = this.memberProfileService.getRoles(speaker.id);
+        const skillOverrides = this.memberProfileService.getSkillOverrides(
+          speaker.id,
+        );
+        const permissionSnapshot = this.session.getPermissions(
+          this.channelPermissionResolver,
+        );
+        persona = this.promptComposer.compose({
+          persona: v3Identity,
+          providerRoles,
+          skillOverrides,
+          channelRole: this.session.channelRole,
+          formatInstruction: '',
+          permissionSnapshot,
+        });
       }
 
       if (provider instanceof CliProvider) {

@@ -56,6 +56,10 @@ function buildSession(): MeetingSession {
     topic: 'Release planning',
     participants: participants(2),
     ssmCtx: ctx(),
+    // R12-W T9 — channelRole=null 시뮬레이션 (system 채널 / DM / legacy user
+    // 경로). PromptComposer 가 channelRole=null 분기를 타며 resolver.resolve
+    // 는 호출되지 않으므로 단위 테스트의 turn 흐름에 영향 X.
+    channelRole: null,
   });
 }
 
@@ -116,7 +120,29 @@ function buildDeps(
   const memberProfileService = {
     getWorkStatus: vi.fn(() => 'online'),
     buildPersona: vi.fn(() => ''),
+    // R12-W T9 — getRoles / getSkillOverrides 가 turn 합성 path 에서 호출됨.
+    // 단위 테스트의 happy-path 는 직원이 어떤 부서 role 도 부여받지 않은
+    // 환경 (PromptComposer fallback 분기 또는 channelRole=null path) 을 가정.
+    getRoles: vi.fn(() => []),
+    getSkillOverrides: vi.fn(() => null),
   } as unknown as MeetingTurnExecutorDeps['memberProfileService'];
+
+  // R12-W T9 — promptComposer + channelPermissionResolver 가 새 deps.
+  // turn-executor 가 페르소나 합성 시 호출. session.channelRole=null 분기는
+  // resolver.resolve 를 부르지 않으므로 단위 테스트에선 throwing stub 도 안전.
+  const promptComposer = {
+    compose: vi.fn(() => ''),
+  } as unknown as MeetingTurnExecutorDeps['promptComposer'];
+
+  const channelPermissionResolver = {
+    resolve: vi.fn(() => ({
+      fileRead: true,
+      fileWrite: false,
+      commandExec: false,
+      webSearch: false,
+      dbRead: false,
+    })),
+  } as unknown as MeetingTurnExecutorDeps['channelPermissionResolver'];
 
   return {
     session: overrides.session ?? buildSession(),
@@ -129,6 +155,9 @@ function buildDeps(
     approvalCliAdapter: overrides.approvalCliAdapter ?? approvalCliAdapter,
     memberProfileService:
       overrides.memberProfileService ?? memberProfileService,
+    promptComposer: overrides.promptComposer ?? promptComposer,
+    channelPermissionResolver:
+      overrides.channelPermissionResolver ?? channelPermissionResolver,
     circuitBreaker: overrides.circuitBreaker,
   };
 }

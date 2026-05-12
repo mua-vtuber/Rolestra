@@ -107,6 +107,22 @@ export interface MemberProviderLookup {
    * single "점검 필요" label either way.
    */
   warmup(providerId: string): Promise<void>;
+
+  /**
+   * R12-W T9 — 직원에게 부여된 능력 (R12-S `RoleId[]`). 빈 배열 = 어떤 부서
+   * 채널 회의에도 능동 발화 불가 (PromptComposer fallback 분기로 라우팅).
+   * 알려지지 않은 providerId 면 `null`.
+   */
+  getRoles(providerId: string): import('../../shared/role-types').RoleId[] | null;
+
+  /**
+   * R12-W T9 — 직원 능력별 사용자 customize skill prompt. `null` = 모든 role
+   * 이 카탈로그 default 사용. Partial — 일부 role 만 override 한 경우 나머지
+   * 는 카탈로그 default 자동 fallback. 알려지지 않은 providerId 면 `null`.
+   */
+  getSkillOverrides(
+    providerId: string,
+  ): Partial<Record<import('../../shared/role-types').RoleId, string>> | null;
 }
 
 // ── Patch shapes ──────────────────────────────────────────────────────
@@ -596,6 +612,36 @@ export class MemberProfileService extends EventEmitter {
       expertise: profile.expertise,
       legacyPersona: providerMeta.persona,
     });
+  }
+
+  /**
+   * R12-W T9 — 직원에게 부여된 능력 (RoleId[]). lookup adapter 가 wire 단에서
+   * providerRegistry → ProviderInfo.roles 로 fetch. 알려지지 않은 providerId
+   * 면 {@link ProviderNotFoundError} throw (silent fallback 금지).
+   */
+  getRoles(
+    providerId: string,
+  ): import('../../shared/role-types').RoleId[] {
+    const roles = this.providers.getRoles(providerId);
+    if (roles === null) throw new ProviderNotFoundError(providerId);
+    return roles;
+  }
+
+  /**
+   * R12-W T9 — 직원 능력별 사용자 customize prompt. null = 모든 role 이
+   * 카탈로그 default. Partial — 일부 role 만 override.
+   */
+  getSkillOverrides(
+    providerId: string,
+  ): Partial<Record<import('../../shared/role-types').RoleId, string>> | null {
+    const overrides = this.providers.getSkillOverrides(providerId);
+    // adapter 는 알려지지 않은 providerId 에 대해 null 반환. roles 와 통일된
+    // 분류 (있음 vs 없음) 를 위해 throw 처리 — getRoles 가 throw 한다면 같은
+    // 라이프사이클에서 본 메서드도 throw 가 자연.
+    if (this.providers.getRoles(providerId) === null) {
+      throw new ProviderNotFoundError(providerId);
+    }
+    return overrides;
   }
 
   // ── Internals ────────────────────────────────────────────────────────
