@@ -484,6 +484,13 @@ export function App() {
           onActivateProject={handleSelectProject}
           onSelectChannel={(channel) => {
             if (channel.projectId !== null) {
+              // 다른 프로젝트 의 채널/부서 를 클릭한 경우, active project
+              // 도 함께 전환해야 MessengerPage 가 그 프로젝트 의 thread
+              // 를 렌더한다. activeChannelId 는 프로젝트별 슬롯에 저장돼
+              // 사이드바 강조는 그대로 유지.
+              if (channel.projectId !== activeProjectId) {
+                handleSelectProject(channel.projectId);
+              }
               setActiveChannelIdStore(channel.projectId, channel.id);
             }
             setView('messenger');

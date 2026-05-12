@@ -30,9 +30,18 @@ const STATUS_DOT_CLASS: Record<WorkStatus, string> = {
 export interface MemberRowProps {
   member: MemberView;
   className?: string;
+  /**
+   * 옵셔널 — 정의되면 행 우측에 × 버튼을 그린다. 채널 멤버 관리 UI 가
+   * 사용. DM / 일반 채널처럼 멤버 변경이 의미 없는 surface 는 prop 미전달.
+   */
+  onRemove?: (providerId: string) => void;
 }
 
-export function MemberRow({ member, className }: MemberRowProps): ReactElement {
+export function MemberRow({
+  member,
+  className,
+  onRemove,
+}: MemberRowProps): ReactElement {
   const { themeKey, token } = useTheme();
   const { t } = useTranslation();
   const statusClass = STATUS_DOT_CLASS[member.workStatus];
@@ -108,6 +117,20 @@ export function MemberRow({ member, className }: MemberRowProps): ReactElement {
           aria-hidden="true"
           className={clsx('h-2 w-2 shrink-0 rounded-full', statusClass)}
         />
+      )}
+      {onRemove !== undefined && (
+        <button
+          type="button"
+          data-testid="member-row-remove"
+          aria-label={t('messenger.memberPanel.removeMember', {
+            defaultValue: '{{name}} 제거',
+            name: member.displayName,
+          })}
+          onClick={() => onRemove(member.providerId)}
+          className="shrink-0 text-fg-muted hover:text-danger focus:outline-none focus:ring-1 focus:ring-danger rounded-sm px-1 leading-none text-xs"
+        >
+          <span aria-hidden="true">{'✕'}</span>
+        </button>
       )}
     </li>
   );

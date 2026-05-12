@@ -56,12 +56,11 @@ export function InitialMembersSelector({
     error: null,
     loading: true,
   });
-  const didFetchRef = useRef(false);
   // Capture the latest defaultSelectAll/value/onChange in refs so the
   // fetch effect can read them without re-running on every parent
   // render. Re-running the fetch every render would re-fire the IPC
   // and (via the prefill branch) clobber any toggle the user just
-  // made — refs let the effect stay strictly mount-only.
+  // made — refs let the effect read live values while staying mount-only.
   const defaultSelectAllRef = useRef(defaultSelectAll);
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
@@ -70,8 +69,14 @@ export function InitialMembersSelector({
   onChangeRef.current = onChange;
 
   useEffect(() => {
-    if (didFetchRef.current) return;
-    didFetchRef.current = true;
+    // 주의 — `didFetchRef` 같은 mount-once 가드는 React 18 Strict Mode
+    // 의 mount→cleanup→remount 패턴과 어울리지 않는다. ref 가 mount-1
+    // 에서 true 로 set 되면, remount-2 는 fetch 를 건너뛰고, mount-1
+    // 의 in-flight IPC 결과는 cleanup-1 이 set 한 cancelled=true 로
+    // setState 가 죽어 영구 loading 에 갇힌다. Strict Mode 에서 IPC
+    // 가 두 번 호출되는 비용보다 락업이 훨씬 비싸다 — 두 가드 중
+    // cancelled 만 남긴다 (`provider:list` 는 in-memory registry
+    // lookup 이라 idempotent · 비용 무시 가능).
     let cancelled = false;
 
     const run = async (): Promise<void> => {

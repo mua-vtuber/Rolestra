@@ -13,17 +13,22 @@
  * hex literal 금지.
  */
 import { clsx } from 'clsx';
-import { useMemo, type ReactElement } from 'react';
+import { useCallback, useMemo, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { Card, CardHeader, CardBody } from '../../components/primitives';
+import { Button } from '../../components/primitives/button';
+import { ChannelMemberPicker } from './ChannelMemberPicker';
 import { MemberRow } from './MemberRow';
 import { SsmBox } from './SsmBox/index';
+import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useChannelMembers } from '../../hooks/use-channel-members';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
 import { useGlobalGeneralChannel } from '../../hooks/use-global-general-channel';
+import { invoke } from '../../ipc/invoke';
+import { notifyError } from '../../components/ErrorBoundary';
 
 export interface MemberPanelProps {
   projectId: string;
@@ -65,6 +70,41 @@ export function MemberPanel({
   const { members, loading, error } = useChannelMembers(
     activeChannelId,
     allChannels,
+  );
+
+  // 현재 active 채널 객체 — kind 분기 (DM / 일반 / system / user) 에 사용.
+  const activeChannel = useMemo(() => {
+    if (activeChannelId === null || allChannels === null) return null;
+    return allChannels.find((c) => c.id === activeChannelId) ?? null;
+  }, [activeChannelId, allChannels]);
+
+  // 멤버 추가/제거 가능 채널: DM 도 아니고 전역 일반 채널 도 아닐 때.
+  // DM = 1:1 고정, 일반 = ProviderRegistry 자동 합성 — 둘 다 수동 변경 의미 X.
+  const editable =
+    activeChannel !== null &&
+    activeChannel.kind !== 'dm' &&
+    !isGeneralChannel;
+
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  const handleRemoveMember = useCallback(
+    (providerId: string): void => {
+      if (activeChannelId === null) return;
+      void (async (): Promise<void> => {
+        try {
+          await invoke('channel:remove-members', {
+            id: activeChannelId,
+            providerIds: [providerId],
+          });
+          await notifyChannelsChanged();
+        } catch (reason) {
+          const message =
+            reason instanceof Error ? reason.message : String(reason);
+          notifyError(message);
+        }
+      })();
+    },
+    [activeChannelId],
   );
 
   // R12-C2 T18 — SsmBox 가 자체적으로 `useActiveMeetings` 를 호출해 meeting
@@ -126,7 +166,11 @@ export function MemberPanel({
         className="flex flex-col gap-2"
       >
         {list.map((member) => (
-          <MemberRow key={member.providerId} member={member} />
+          <MemberRow
+            key={member.providerId}
+            member={member}
+            onRemove={editable ? handleRemoveMember : undefined}
+          />
         ))}
       </ul>
     );
@@ -149,6 +193,24 @@ export function MemberPanel({
                   count: participantCount,
                 })
           }
+          action={
+            editable ? (
+              <Button
+                type="button"
+                tone="ghost"
+                size="sm"
+                data-testid="member-panel-add-member"
+                aria-label={t('messenger.memberPanel.addMember', {
+                  defaultValue: '직원 추가',
+                })}
+                onClick={() => setPickerOpen(true)}
+              >
+                {t('messenger.memberPanel.addMember', {
+                  defaultValue: '+ 추가',
+                })}
+              </Button>
+            ) : undefined
+          }
         />
         <CardBody>{participantsBody}</CardBody>
       </Card>
@@ -167,6 +229,15 @@ export function MemberPanel({
             <SsmBox channelId={activeChannelId} />
           </CardBody>
         </Card>
+      )}
+
+      {editable && activeChannelId !== null && (
+        <ChannelMemberPicker
+          open={pickerOpen}
+          onOpenChange={setPickerOpen}
+          channelId={activeChannelId}
+          currentProviderIds={(members ?? []).map((m) => m.providerId)}
+        />
       )}
     </div>
   );
