@@ -5,7 +5,7 @@
  * stop 의존 테스트는 새 모델에서 의미 X — 통째 삭제. 새 surface 만 검증.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   MeetingSession,
   SYSTEM_TOPIC_PARTICIPANT_ID,
@@ -248,5 +248,164 @@ describe('MeetingSession — toInfo', () => {
     expect(info.currentRound).toBe(1);
     expect(info.currentOpinionScreenId).toBe('ITEM_001');
     expect(info.aborted).toBe(false);
+  });
+});
+
+// ── R12-W T8: 채널 권한 캐시 + invalidation ───────────────────────────
+
+describe('MeetingSession — permission snapshot + invalidation (R12-W T8)', () => {
+  // 좁은 fake — ChannelService 의 on/off 만 흉내. emit 흉내는 listener 를
+  // 직접 호출하는 형태 (실제 EventEmitter 의 emit 와 1:1 의미).
+  function buildFakeService(): {
+    on: ReturnType<typeof vi.fn>;
+    off: ReturnType<typeof vi.fn>;
+    emit: (channelId: string) => void;
+    listenerCount: () => number;
+  } {
+    const listeners: Array<(p: { channelId: string }) => void> = [];
+    return {
+      on: vi.fn(
+        (
+          _event: string | symbol,
+          listener: (p: { channelId: string }) => void,
+        ) => {
+          listeners.push(listener);
+        },
+      ),
+      off: vi.fn(
+        (
+          _event: string | symbol,
+          listener: (p: { channelId: string }) => void,
+        ) => {
+          const i = listeners.indexOf(listener);
+          if (i >= 0) listeners.splice(i, 1);
+        },
+      ),
+      emit: (channelId: string) => {
+        for (const l of [...listeners]) l({ channelId });
+      },
+      listenerCount: () => listeners.length,
+    };
+  }
+
+  function buildFakeResolver(channelId: string): {
+    resolve: ReturnType<typeof vi.fn>;
+  } {
+    return {
+      resolve: vi.fn((cid: string) => {
+        if (cid !== channelId) {
+          throw new Error(`unexpected channelId: ${cid}`);
+        }
+        return {
+          fileRead: true,
+          fileWrite: false,
+          commandExec: false,
+          webSearch: true,
+          dbRead: true,
+        };
+      }),
+    };
+  }
+
+  it('first getPermissions call hydrates from resolver', () => {
+    const session = new MeetingSession(buildOptions());
+    const resolver = buildFakeResolver(CHANNEL_ID);
+    const result = session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    expect(resolver.resolve).toHaveBeenCalledTimes(1);
+    expect(result.fileRead).toBe(true);
+    expect(result.webSearch).toBe(true);
+  });
+
+  it('second call (no invalidation) uses cache — resolver not called again', () => {
+    const session = new MeetingSession(buildOptions());
+    const resolver = buildFakeResolver(CHANNEL_ID);
+    session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    expect(resolver.resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('emit on matching channel marks dirty → next call re-resolves', () => {
+    const session = new MeetingSession(buildOptions());
+    const resolver = buildFakeResolver(CHANNEL_ID);
+    const svc = buildFakeService();
+
+    session.attachPermissionInvalidation(
+      svc as unknown as Parameters<typeof session.attachPermissionInvalidation>[0],
+    );
+    session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    expect(resolver.resolve).toHaveBeenCalledTimes(1);
+
+    svc.emit(CHANNEL_ID); // 사용자가 권한 변경
+
+    session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    expect(resolver.resolve).toHaveBeenCalledTimes(2);
+  });
+
+  it('emit on a different channel does NOT mark dirty', () => {
+    const session = new MeetingSession(buildOptions());
+    const resolver = buildFakeResolver(CHANNEL_ID);
+    const svc = buildFakeService();
+
+    session.attachPermissionInvalidation(
+      svc as unknown as Parameters<typeof session.attachPermissionInvalidation>[0],
+    );
+    session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    svc.emit('some-other-channel');
+
+    session.getPermissions(
+      resolver as unknown as Parameters<typeof session.getPermissions>[0],
+    );
+    expect(resolver.resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('attach is idempotent — second call does not double-subscribe', () => {
+    const session = new MeetingSession(buildOptions());
+    const svc = buildFakeService();
+    session.attachPermissionInvalidation(
+      svc as unknown as Parameters<typeof session.attachPermissionInvalidation>[0],
+    );
+    session.attachPermissionInvalidation(
+      svc as unknown as Parameters<typeof session.attachPermissionInvalidation>[0],
+    );
+    expect(svc.listenerCount()).toBe(1);
+  });
+
+  it('detach removes the listener (memory leak guard)', () => {
+    const session = new MeetingSession(buildOptions());
+    const svc = buildFakeService();
+    session.attachPermissionInvalidation(
+      svc as unknown as Parameters<typeof session.attachPermissionInvalidation>[0],
+    );
+    expect(svc.listenerCount()).toBe(1);
+    session.detachPermissionInvalidation(
+      svc as unknown as Parameters<typeof session.detachPermissionInvalidation>[0],
+    );
+    expect(svc.listenerCount()).toBe(0);
+  });
+
+  it('resolver throw propagates (silent fallback 금지)', () => {
+    const session = new MeetingSession(buildOptions());
+    const failing = {
+      resolve: vi.fn(() => {
+        throw new Error('unknown channel — wire-up bug');
+      }),
+    };
+    expect(() =>
+      session.getPermissions(
+        failing as unknown as Parameters<typeof session.getPermissions>[0],
+      ),
+    ).toThrow(/wire-up bug/);
   });
 });

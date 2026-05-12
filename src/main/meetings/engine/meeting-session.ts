@@ -43,6 +43,13 @@ import type { Participant } from '../../../shared/engine-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
 import type { ConversationTaskSettings } from '../../../shared/config-types';
 import type { MeetingPhase } from '../../../shared/meeting-flow-types';
+import type { PermissionSet } from '../../../shared/permission-set-types';
+import type {
+  ChannelService,
+  PermissionChangedPayload,
+} from '../../channels/channel-service';
+import { PERMISSION_CHANGED_EVENT } from '../../channels/channel-service';
+import type { ChannelPermissionResolver } from '../../permissions/channel-permission-resolver';
 import {
   adaptMessagesForProvider,
   type ParticipantMessage,
@@ -132,6 +139,23 @@ export class MeetingSession {
   private _round = 0;
   private _currentOpinionScreenId: string | null = null;
   private _aborted = false;
+
+  // ── R12-W T8: 채널 권한 캐시 + invalidation ─────────────────────────
+  /**
+   * 회의 시작 시 hydrate 되는 채널 권한 snapshot. null = 아직 미초기화.
+   * `getPermissions(resolver)` 첫 호출이 hydration + cache 입력. 사용자가
+   * 권한을 바꾸면 ChannelService 가 `'permission-changed'` 발사 →
+   * `_permissionSnapshotDirty = true` → 다음 turn 재조회.
+   */
+  private _permissionSnapshot: PermissionSet | null = null;
+  private _permissionSnapshotDirty = false;
+  /**
+   * 'permission-changed' listener 핸들. attach/detach 쌍으로만 다루며 외부에서
+   * 직접 호출하지 않는다. 메모리 누수 방지 — session dispose 시 detach 필수.
+   */
+  private _permissionListener:
+    | ((p: PermissionChangedPayload) => void)
+    | null = null;
   /**
    * 발화 ID 카운터 — provider 별 누적. 회의 종료 시 객체 통째 GC.
    * OpinionService.nextLabelHint 는 DB 진실원천 fallback (앱 재시작 시 복원용).
@@ -428,5 +452,47 @@ export class MeetingSession {
       currentOpinionScreenId: this._currentOpinionScreenId,
       aborted: this._aborted,
     };
+  }
+
+  // ── R12-W T8: 채널 권한 캐시 + invalidation ─────────────────────────
+
+  /**
+   * ChannelService 의 `'permission-changed'` event 를 구독해 본 세션
+   * 채널에 변경이 발생하면 cache dirty 마킹. 회의 시작 직후 (gather phase
+   * 첫 turn 전) 한 번 호출. 멱등 — 두 번째 호출 무시.
+   */
+  attachPermissionInvalidation(svc: ChannelService): void {
+    if (this._permissionListener !== null) return;
+    this._permissionListener = (p) => {
+      if (p.channelId === this.channelId) {
+        this._permissionSnapshotDirty = true;
+      }
+    };
+    svc.on(PERMISSION_CHANGED_EVENT, this._permissionListener);
+  }
+
+  /**
+   * 구독 해제. 회의 종료 / dispose 시 호출. 미부착 상태에서는 no-op.
+   * 같은 svc 인스턴스로 attach/detach 대칭이 invariant — 다른 svc 를 넘기면
+   * listener 가 영구히 살아남는다 (메모리 누수). 단위 테스트가 listenerCount
+   * 로 검증.
+   */
+  detachPermissionInvalidation(svc: ChannelService): void {
+    if (this._permissionListener === null) return;
+    svc.off(PERMISSION_CHANGED_EVENT, this._permissionListener);
+    this._permissionListener = null;
+  }
+
+  /**
+   * 채널 권한 set 을 반환. 첫 호출이면 resolver 통해 hydration 후 cache,
+   * 이후는 cache 사용. 사용자가 권한을 바꿔 dirty=true 이면 재조회 후 cache
+   * 갱신. resolver 에러는 propagate (silent fallback 금지).
+   */
+  getPermissions(resolver: ChannelPermissionResolver): PermissionSet {
+    if (this._permissionSnapshot === null || this._permissionSnapshotDirty) {
+      this._permissionSnapshot = resolver.resolve(this.channelId);
+      this._permissionSnapshotDirty = false;
+    }
+    return this._permissionSnapshot;
   }
 }
