@@ -40,7 +40,7 @@ production commit `409b8e5`.
 - `src/renderer/features/messenger/__tests__/ChannelHeader.test.tsx` — 5 항목 신규 (system_general 노출 + 클릭 / role='general' 노출 / role='planning' 미노출 / onPostOpinion 미정의 미노출 / DM 미노출) + makeChannel 디폴트 role/purpose/handoffMode/maxRounds 추가.
 - `src/renderer/features/messenger/Thread.tsx` — postOpinionOpen state (early return *위* hooks 룰 — `if (activeChannel === null)` 위) + handlePostOpinion useCallback + ChannelHeader.onPostOpinion + PostOpinionModal hosting (channelId=activeChannel.id).
 - `src/renderer/i18n/locales/ko.json` + `en.json` — `messenger.channelHeader.postOpinion` (버튼 라벨) + `messenger.postOpinion` 섹션 (title/cancel/submit/contentLabel/titleLabel/titleHint/titlePlaceholder/contentPlaceholder/description + errors 5 종 contentRequired/contentTooLong/generic/titleTooLong/validation).
-- `docs/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` — T20 status='completed' + land summary.
+- `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` — T20 status='completed' + land summary.
 
 ### Verify
 - typecheck:web 0 / typecheck:node 0

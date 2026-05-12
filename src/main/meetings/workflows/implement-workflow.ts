@@ -40,7 +40,7 @@
  *  - §4 line 143      구현 매트릭스 row (R12-C2 = simple 1 명, 회의 X, ExecutionService apply)
  *  - §11.13 line 883  ImplementVariant SsmBox layout (T18 land)
  *
- * plan docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * plan docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  *  - line 433-441  T24 산출 (implement-workflow, designated 1 명, dryRun + apply)
  */
 

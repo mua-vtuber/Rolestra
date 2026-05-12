@@ -2,7 +2,7 @@
 
 작성일: 2026-05-11
 최종 갱신: 2026-05-11 (사장 mental model 정정 — 권한 단위 = 채널 1:1)
-ADR: `docs/decisions/r12-w-member-file-permission.md`
+ADR: `docs/R12_c2_2R/decisions/r12-w-member-file-permission.md`
 목적: 사용자 보고 자기검열 발언 해소 (R12-S `PromptComposer` 미 wire-up 종결) + 채널 row 에 권한 5축 컬럼 직접 추가 + CLI argv 채널-권한 filter layer 도입.
 
 ---
@@ -514,7 +514,7 @@ test/docs 제외 production 본문 0건 확인.
 
 ### T10.5 — PathGuard wire 누락 hotfix block (G1+G2+G5) — **T11 진입 전 의무**
 
-**무엇:** R12-W T1~T10 dogfooding 중 사용자 보고로 발견된 spec §7.6 PathGuard 봉인 wire 누락 격차의 hotfix. audit 보고서 (`docs/reports/audit/2026-05-12-r12-w-pathguard-wire-audit.md`) 의 G1+G2+G5 세 격차 즉시 해결. **본 sub-block 은 T11 진입 전 의무** — T11~T19 의 가시 효과가 G1/G2 fix 없으면 *의도와 정반대* 로 surface (rolestra source repo 가 AI 에 노출).
+**무엇:** R12-W T1~T10 dogfooding 중 사용자 보고로 발견된 spec §7.6 PathGuard 봉인 wire 누락 격차의 hotfix. audit 보고서 (`docs/R12_c2_2R/reports/audit/2026-05-12-r12-w-pathguard-wire-audit.md`) 의 G1+G2+G5 세 격차 즉시 해결. **본 sub-block 은 T11 진입 전 의무** — T11~T19 의 가시 효과가 G1/G2 fix 없으면 *의도와 정반대* 로 surface (rolestra source repo 가 AI 에 노출).
 
 **audit 보고서의 격차 chain:**
 ```
@@ -946,7 +946,7 @@ Optimistic 흐름: 즉시 store 갱신 → IPC round-trip → 실패 시 rollbac
 Codex / Gemini 는 도구 단위 화이트리스트가 없어 prompt only 로
 대체된다 (PromptComposer 의 "권한: ..." 안내 단락).
 
-상세: `docs/decisions/r12-w-member-file-permission.md`.
+상세: `docs/R12_c2_2R/decisions/r12-w-member-file-permission.md`.
 ```
 
 **§7.6.1 방어 범위 표 갱신** — 표에 1행 추가:

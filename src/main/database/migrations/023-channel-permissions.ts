@@ -42,7 +42,7 @@
  * 가능 (T15).
  *
  * spec docs/specs/2026-04-18-rolestra-design.md §7.6 (R12-W §7.6.4 신설)
- * plan docs/plans/2026-05-11-rolestra-r12-w-member-file-permission.md T3
+ * plan docs/R12_c2_2R/plans/2026-05-11-rolestra-r12-w-member-file-permission.md T3
  *
  * Forward-only: 새 컬럼 + 기존 row UPDATE 만 — DROP / RENAME / ALTER DROP X.
  * 한 번 land 후 immutable.

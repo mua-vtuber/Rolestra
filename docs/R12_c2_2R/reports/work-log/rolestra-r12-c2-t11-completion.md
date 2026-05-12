@@ -124,8 +124,8 @@ T12 작업 중 inspect 가 **추가 hit** 보고할 수 있음 (정상):
 
 ## 핵심 참조
 
-- 진입 ADR: `docs/decisions/r12-c2-reference-projects-absorb.md` D5 + D8
+- 진입 ADR: `docs/R12_c2_2R/decisions/r12-c2-reference-projects-absorb.md` D5 + D8
 - spec: `docs/specs/2026-05-01-rolestra-channel-roles-design.md` §11.19
-- plan: `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` T12
+- plan: `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` T12
 - tasks.json: id=13 row
 - T11 reference: `tools/inspectors/README.md` (검사관 catalog 표)

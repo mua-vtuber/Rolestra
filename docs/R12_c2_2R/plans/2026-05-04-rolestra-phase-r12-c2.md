@@ -844,7 +844,7 @@ R12-C2 Round 1 = T0~T10b 통째 land + main fast-forward merge. Round 2 의 *기
 | 자산 | 위치 | 역할 |
 |------|------|------|
 | 옵션안 | `docs/reports/analysis/2026-05-05-참고프로젝트-반영-옵션안.md` | 4 결정 (R1/B1/H1+H2/F2) 근거 |
-| ADR | `docs/decisions/r12-c2-reference-projects-absorb.md` | 4 결정 + 8 후보 도입 + 진입 우선순위 D8 |
+| ADR | `docs/R12_c2_2R/decisions/r12-c2-reference-projects-absorb.md` | 4 결정 + 8 후보 도입 + 진입 우선순위 D8 |
 | spec §11.18.8 | channel-roles-design.md | B1 NextStep 카드 7 종 + handoff_mode 우회 + maxRounds cap 인터락 |
 | spec §11.19 | channel-roles-design.md | A. RunStep 영속 기록부 |
 | spec §11.20 | channel-roles-design.md | F. 6 헌법 + 검사관 catalog (12 카테고리, F2 정책) |

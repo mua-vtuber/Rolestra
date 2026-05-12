@@ -1,7 +1,7 @@
 /**
  * designated-worker-resolver 단위 테스트 — R12-C2 P5 T23 land. spec
  * docs/specs/2026-05-01-rolestra-channel-roles-design.md line 670-676 +
- * docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431.
+ * docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431.
  *
  * 검증 (순수 함수 — 3-tier 알고리즘):
  *

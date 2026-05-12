@@ -1,6 +1,6 @@
 /**
  * run-step-bridge — R12-C2 P5 T26 land. spec §11.19.2 / §11.19.4 +
- * docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 453-462.
+ * docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 453-462.
  *
  * ExecutionService 의 *결과* (PatchSet → ApplyResult, CommandRequest →
  * CommandResult / 실패) 를 RunStep row 1 개로 변환하는 thin module. T15
@@ -38,7 +38,7 @@
  *  - §11.19.2  RunStep 도메인 (step_kind / actor_kind / next_step_card)
  *  - §11.19.4  영속 정책 (truncate 금지 / atomic write / append-only)
  *
- * plan docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * plan docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  *  - line 453-462  T26 산출 (ExecutionService dryRun 의 RunStep 영속)
  */
 

@@ -21,7 +21,7 @@ worktree `feat/r12-c2-redesign-r2`, base `2a8cbdc` (= T20 work-log mirror, T20 p
 - `src/main/database/__tests__/migration-021.test.ts` — 11 항목 (CHECK 'light' accept 1 / quick_vote+free_discussion 호환 2 / 'lazy' 거부 1 / 인덱스 재생성 1 / 컬럼 8 보존 1 / FK CASCADE+SET NULL 보존 + voter NULL 허용 3 / migrations index 20 1 / idempotency 1).
 - `src/renderer/hooks/use-general-opinion-cards.ts` — `useGeneralOpinionCards(channelId)` hook. mount + channelId 변경 시 `opinion:listGeneralCards` 1 회 호출 + stream:channel-message 도착 시 같은 channelId refetch + `toggleLightVote(opinionId, vote)` 함수 — IPC 호출 후 결과의 카드 1 건만 in-place patch (전체 list refetch 없이). channelId=null → cards=null + loading=false (skip).
 - `src/renderer/features/messenger/__tests__/GeneralVariant.test.tsx` — 6 항목 (cards 0 → empty / cards 2 → 제목+본문+author label / 정렬 등록 역순 / userVote=agree 버튼 active / 동의 버튼 클릭 → IPC 호출 + 카운터 갱신 / 반대 버튼 클릭 → IPC 호출).
-- (work-log mirror — `docs/reports/work-log/rolestra-r12-c2-t21-completion.md`, T20 패턴.)
+- (work-log mirror — `docs/R12_c2_2R/reports/work-log/rolestra-r12-c2-t21-completion.md`, T20 패턴.)
 
 **변경 9:**
 - `src/main/database/migrations/index.ts` — `m021` import + migrations 배열 끝에 추가.
@@ -39,7 +39,7 @@ worktree `feat/r12-c2-redesign-r2`, base `2a8cbdc` (= T20 work-log mirror, T20 p
 - `src/renderer/features/messenger/__tests__/SsmBoxRouting.test.tsx` — installArenaStub 에 `'opinion:listGeneralCards'` mock 추가 (cards 빈 배열) + general empty 테스트를 async + waitFor 로 변경 (hook 가 비동기라 첫 렌더에 ssm-box-empty 가 X).
 - `src/main/database/__tests__/schema-008-011.test.ts` — migration count 단언 20 → 21 (text + tracking 표).
 - `src/renderer/i18n/locales/ko.json` + `en.json` — `messenger.ssmBox.variants.general` 안 신규 키 (loading / error / cardCount / untitled / voteGroupAria / agreeButton / agreeButtonAria / opposeButton / opposeButtonAria / kind { self-raised / user-raised / root / revise / block / addition }).
-- `docs/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` — T21 status='completed' + land summary.
+- `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` — T21 status='completed' + land summary.
 
 ### Verify
 - typecheck:web 0 / typecheck:node 0

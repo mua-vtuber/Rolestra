@@ -363,7 +363,7 @@ CliProvider 와 동일 패턴 — setter 정의만 있고 호출자 없음. G2 �
 **구조:**
 - R12-W 그대로 T11~T21 진행 (T11 진입 전 G1+G2 만 hotfix — argv filter 의 효과 보장 위해)
 - R12-X 신설: PathGuard wire-up 전면 (G1~G7 통합)
-- ADR 신규: `docs/decisions/r12-x-pathguard-wire-up.md`
+- ADR 신규: `docs/R12_c2_2R/decisions/r12-x-pathguard-wire-up.md`
 
 **Trade-off:**
 - (+) 책임 분리 명확 — R12-W = 도구 권한 (어느 도구를 쓰나), R12-X = 경로 봉인 (어느 폴더에서 쓰나).
@@ -414,8 +414,8 @@ CliProvider 와 동일 패턴 — setter 정의만 있고 호출자 없음. G2 �
 
 본 audit 결과 결재 후:
 - **R12-W plan 보정** — T10.5 sub-block 추가 (G1+G2+G5 hotfix). 영향 파일 / 신규 파일 / verify 명령 / acceptance 명세.
-- **`docs/decisions/r12-x-pathguard-wire-up.md` 초안** — G3+G4+G6+G7 + 회귀 가드.
-- **`docs/plans/2026-05-12-rolestra-r12-x-pathguard-wire-up.md` 초안** — T1~T? 분해.
+- **`docs/R12_c2_2R/decisions/r12-x-pathguard-wire-up.md` 초안** — G3+G4+G6+G7 + 회귀 가드.
+- **`docs/R12_c2_2R/plans/2026-05-12-rolestra-r12-x-pathguard-wire-up.md` 초안** — T1~T? 분해.
 
 본 audit 단계는 *보고서* 만. 코드 0 수정.
 

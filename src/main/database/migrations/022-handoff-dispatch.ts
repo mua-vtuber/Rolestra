@@ -12,7 +12,7 @@
  *  §11.22.3   handoff_dispatch 데이터 source — 컬럼 명세
  *  §11.16     부서 lock 사이클 (인계 시점 = lock 풀림)
  *
- * plan docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * plan docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  *  T27 line 469-482 — handoff_dispatch 테이블 + HandoffPackage schema +
  *                     HandoffDispatchService 3 method (dispatch / open / track)
  *

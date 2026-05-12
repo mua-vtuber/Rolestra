@@ -78,7 +78,7 @@ originSessionId: a6a13f35-c831-464e-8add-e612fa13c2e6
    - cross-cutting 영역에 A (RunStep ledger) / F (검사관 catalog) 도입
    - §11.x 신규 — H1 (대시보드 진행률 패널) + H2 (받는 부서 첫 화면 인계 패키지)
 2. **ADR 작성** — 통합 1 건 추천: `r12-c2-reference-projects-absorb.md`. 4 결정 + 8후보 도입 근거 + R12-C2 Round 1 종결 + Round 2 진입 정리.
-3. **R12-C2 plan 통째 재작성** (`docs/plans/2026-05-04-rolestra-phase-r12-c2.md`) — 8후보 단계 단위 (기반 → 시스템 → 화면 → 인계) sub-task 분해.
+3. **R12-C2 plan 통째 재작성** (`docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md`) — 8후보 단계 단위 (기반 → 시스템 → 화면 → 인계) sub-task 분해.
 4. **tasks.json sync** — 새 sub-task list.
 5. 새 sub-task 진입 — 첫 sub-task 는 *기반층* (A RunStep ledger + F 검사관 catalog).
 

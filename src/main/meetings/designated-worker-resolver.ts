@@ -1,7 +1,7 @@
 /**
  * designated-worker-resolver — R12-C2 P5 T23 land. spec
  * docs/specs/2026-05-01-rolestra-channel-roles-design.md line 670-676 +
- * docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431 (E. designated-worker-
+ * docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431 (E. designated-worker-
  * resolver) + line 605-623 (T36 부서장 핀 / T37 드래그 순서 wire scope).
  *
  * 사무실 메타포: 부서 안 *지정 작업자 (designated worker)* 결정 알고리즘. 회의
@@ -41,8 +41,8 @@
  * spec / plan reference:
  *   - docs/specs/2026-05-01-rolestra-channel-roles-design.md line 253-254 +
  *     line 670-676 (3-tier 알고리즘 카논 / drag_order / is_department_head 컬럼)
- *   - docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431 (T23 산출)
- *   - docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 605-623 (T36 / T37
+ *   - docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431 (T23 산출)
+ *   - docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 605-623 (T36 / T37
  *     P7 phase wire scope — 본 resolver caller 갱신만)
  */
 

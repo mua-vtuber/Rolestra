@@ -1,6 +1,6 @@
 /**
  * mission-card schema 단위 테스트 — R12-C2 P5 T23 land. spec / plan
- * docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431.
+ * docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 418-431.
  *
  * 검증 (순수 함수 + zod):
  *   - MissionCardKind 3 종 + ALL_MISSION_CARD_KINDS 정렬 invariant

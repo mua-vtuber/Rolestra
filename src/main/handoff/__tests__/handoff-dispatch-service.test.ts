@@ -1,6 +1,6 @@
 /**
  * HandoffDispatchService 단위 테스트 — R12-C2 P6 T27 land. spec / plan
- * docs/plans/2026-05-04-rolestra-phase-r12-c2.md line 469-482.
+ * docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md line 469-482.
  *
  * 검증 (in-memory SQLite + 마이그레이션 022 적용):
  *   - dispatch 정상       — 영속된 row 의 id (UUID) / openedAt (null) /

@@ -2,7 +2,7 @@
 
 R12-C2 Round 1 (T0~T10b) main land 후 — 참고 프로젝트 (Symphony / oa-py / alex-core) 의 8 후보 (A~H) 를 R12-C2 안에 흡수하는 결정 8 건. 사용자 결정 4 항 (R1 / B1 / H1+H2 / F2) 정식화 + 8 후보 도입 근거 + Round 1 종결 + Round 2 진입 정리.
 
-본 ADR 은 spec `2026-05-01-rolestra-channel-roles-design.md` §11.18.8 + §11.19~§11.22 의 *결정 근거* 를 묶는다. 구현 acceptance 는 plan `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` 에서 정의.
+본 ADR 은 spec `2026-05-01-rolestra-channel-roles-design.md` §11.18.8 + §11.19~§11.22 의 *결정 근거* 를 묶는다. 구현 acceptance 는 plan `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` 에서 정의.
 
 ---
 
@@ -11,7 +11,7 @@ R12-C2 Round 1 (T0~T10b) main land 후 — 참고 프로젝트 (Symphony / oa-py
 **결정:**
 - R12-C2 Round 1 (T0~T10b) 의 main land 자산은 보존
 - *미land 영역* (T10c + T11~T35) 을 모두 폐기 후 8 후보를 *반영 단계 단위* (기반 → 시스템 → 화면 → 인계) 로 sub-task 새로 분해
-- 새 plan = `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` 통째 재작성
+- 새 plan = `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` 통째 재작성
 
 **왜:**
 1. 8 후보의 *기반층* (A RunStep + F 검사관) 이 다른 후보 (B/C/D/E/G/H) 의 *전제 조건* — 기존 plan 의 부서 흐름 sub-task 안에 후보를 *추가 acceptance* 로 묻으면 (R2 옵션) 같은 후보가 여러 sub-task 에 분산됨.
@@ -243,7 +243,7 @@ R1 plan sub-task 분할 시 위 hyperedge / god nodes 를 *단서* 로 활용.
 ## 핵심 참조
 
 - spec: `docs/specs/2026-05-01-rolestra-channel-roles-design.md` §11.18.8 + §11.19 + §11.20 + §11.21 + §11.22
-- plan: `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` (통째 재작성 — 본 ADR D1 결정 따라)
+- plan: `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` (통째 재작성 — 본 ADR D1 결정 따라)
 - 옵션안 (Round 2 진입 입력): `docs/reports/analysis/2026-05-05-참고프로젝트-반영-옵션안.md`
 - Round 1 ADR: `docs/decisions/r12-c-channel-roles.md` (R12-C 1차 종결)
 - 메모리 (Round 2 진입 가이드): `rolestra-r12-c2-reference-projects-a3.md`

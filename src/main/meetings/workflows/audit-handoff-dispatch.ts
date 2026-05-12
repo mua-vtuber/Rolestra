@@ -46,7 +46,7 @@
  *  - §11.18.6          minutes.md 양식 ([합의] = 문제 / [제외] = 수용 가능)
  *  - §11.22.4          인계 패키지 = 회의록 본문 통째 + metadata
  *
- * plan docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * plan docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  *  - line 247-255      T25 산출 (audit 종결 분류 + 기획 인계 분기 정식 wire)
  */
 

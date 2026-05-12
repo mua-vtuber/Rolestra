@@ -34,7 +34,7 @@ production commit `209e97c`.
 - `src/shared/ipc-schemas.ts` — dashboardProgressSnapshotSchema + v3ChannelSchemas 등록
 - `src/main/ipc/router.ts` — handleDashboardProgressSnapshot 등록
 - `src/main/index.ts` — RunStepAggregator 인스턴스 + accessor + StreamBridge.connect 에 runStep + runStepChannelToProject (channelRepo.get 위) 주입
-- `docs/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` — T19 status='completed' + description 종결 매트릭스
+- `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` — T19 status='completed' + description 종결 매트릭스
 
 ### Status 매핑 (spec §11.21.2)
 ```

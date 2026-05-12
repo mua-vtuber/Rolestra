@@ -120,7 +120,7 @@ R12-C2 Round 2 *기반층 sub-task 2 호* (T12 — A. migration 020 + RunStepSer
 ## 핵심 참조
 
 - spec: `docs/specs/2026-05-01-rolestra-channel-roles-design.md` §11.18.8
-- plan: `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` T13 (line ~275)
+- plan: `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` T13 (line ~275)
 - tasks.json: id=14 row
 - T12 reference (skeleton API): `src/main/meetings/run-step/run-step-service.ts`
 - T10a/b reference (orchestrator skeleton): `src/main/meetings/engine/`

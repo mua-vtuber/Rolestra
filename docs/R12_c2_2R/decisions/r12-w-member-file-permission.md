@@ -399,7 +399,7 @@ UPDATE channels SET file_write = 1, command_exec = 1
 Codex / Gemini 는 도구 단위 화이트리스트가 없어 prompt only 로
 대체된다 (PromptComposer 의 "권한: ..." 안내 단락).
 
-상세: `docs/decisions/r12-w-member-file-permission.md`.
+상세: `docs/R12_c2_2R/decisions/r12-w-member-file-permission.md`.
 ```
 
 **spec 본문 수정 = §7.6.4 신설 1 페이지 + §7.6.1 표 1행 추가 + §7.6.4/§7.6.5 번호 시프트.**
@@ -497,5 +497,5 @@ Codex `--sandbox` 세부 옵션 (workspace-write / read-only / danger-full-acces
 - spec: `docs/specs/2026-04-18-rolestra-design.md` §7.6 — 본 ADR land 후 §7.6.4 신설 (Plan T)
 - ADR 선행: `docs/decisions/r12-s-persona-skills.md` (SKILL_CATALOG + PromptComposer), `docs/decisions/r12-c-channel-roles.md` (`channels.role` 컬럼 land)
 - ADR cross-cutting: `docs/decisions/cross-cutting.md` C3 / C4 / C6 / C7
-- plan: `docs/plans/2026-05-11-rolestra-r12-w-member-file-permission.md`
+- plan: `docs/R12_c2_2R/plans/2026-05-11-rolestra-r12-w-member-file-permission.md`
 - 사전 확인 결과 위치: `src/main/database/migrations/018-channels-role-purpose-handoff.ts` (`channels.role` 컬럼), `src/main/channels/channel-service.ts:227-236` (`DEFAULT_DEPARTMENT_BLUEPRINT`), `src/main/channels/channel-service.ts:795-839` (`createDepartmentChannels`), `src/shared/skill-catalog.ts` (카탈로그 default 정본)

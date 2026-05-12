@@ -13,10 +13,10 @@ R12-C2 Round 2 *설계 단계* 통째 land. 코드 변경 0 (docs 5 파일만). 
 | 파일 | 변경 | 핵심 |
 |------|------|------|
 | `docs/specs/2026-05-01-rolestra-channel-roles-design.md` | +341 lines | §11.18.8 (B1 카드 7종) + §11.19 (A RunStep) + §11.20 (F 검사관 catalog) + §11.21 (H1 대시보드) + §11.22 (H2 인계 패키지) 5 섹션 신규 |
-| `docs/decisions/r12-c2-reference-projects-absorb.md` | 신규 266 lines | ADR D1~D8 — 4 사용자 결정 (R1/B1/H1+H2/F2) + 8 후보 도입 + Round 1 종결 + 진입 우선순위 |
+| `docs/R12_c2_2R/decisions/r12-c2-reference-projects-absorb.md` | 신규 266 lines | ADR D1~D8 — 4 사용자 결정 (R1/B1/H1+H2/F2) + 8 후보 도입 + Round 1 종결 + 진입 우선순위 |
 | `docs/decisions/README.md` | +3 lines | R12-S / R12-C / R12-C2 ADR 3 row 추가 |
-| `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` | +407 lines | 통째 재작성 — Round 2 흡수 섹션 + P2~P8 sub-task 재분해 (T11~T42) + 의존 그래프 갱신 + Round 1 history + Round 2 진입 가이드 |
-| `docs/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` | 통째 재작성 | 44 entries (Round 1 완료 12 + Round 2 신규 32). planPath 정정. ID = 0~43 (id 12~ = T-number 11~ 매핑) |
+| `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` | +407 lines | 통째 재작성 — Round 2 흡수 섹션 + P2~P8 sub-task 재분해 (T11~T42) + 의존 그래프 갱신 + Round 1 history + Round 2 진입 가이드 |
+| `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md.tasks.json` | 통째 재작성 | 44 entries (Round 1 완료 12 + Round 2 신규 32). planPath 정정. ID = 0~43 (id 12~ = T-number 11~ 매핑) |
 
 ### 사용자 결정 cycle 적용
 
@@ -140,7 +140,7 @@ P8 closeout (T42)
 
 ## 컨텍스트 절약 팁 (다음 세션)
 
-- 본 메모리 + ADR (`docs/decisions/r12-c2-reference-projects-absorb.md`) 만 정독
+- 본 메모리 + ADR (`docs/R12_c2_2R/decisions/r12-c2-reference-projects-absorb.md`) 만 정독
 - spec 은 §11.20 (F 검사관 catalog) 만 read — 나머지 §11.18.8 / §11.19 / §11.21 / §11.22 는 T13 / T12 / T40 / T29 진입 시점에 read
 - plan 은 T11 단락만 read (line 별 jump)
 - tasks.json 의 id=12 (T11) row 만 read

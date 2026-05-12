@@ -151,5 +151,5 @@ T17 status: pending → completed.
   - §11.18.6 minutes.md 양식
   - §11.22.4 인계 패키지 = minutes.md 본문 통째 + metadata
   - §11.22.6 review 의 H2 surface (두 entry 별)
-- plan: `docs/plans/2026-05-04-rolestra-phase-r12-c2.md` line 343-352 T17 정의
+- plan: `docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md` line 343-352 T17 정의
 - 의존 reference: `rolestra-r12-c2-t16c-completion.md` (T16 직전 완료) / `rolestra-r12-c2-t15-completion.md` (T15 idea-workflow 패턴)

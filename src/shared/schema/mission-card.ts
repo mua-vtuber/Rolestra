@@ -1,5 +1,5 @@
 /**
- * MissionCard schema — R12-C2 P5 T23 land. spec docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * MissionCard schema — R12-C2 P5 T23 land. spec docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  * line 418-431 (E. 임무 카드 schema) + line 475 (handoff_dispatch.mission_card_json
  * persistence target).
  *

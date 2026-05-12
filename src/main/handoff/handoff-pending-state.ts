@@ -30,7 +30,7 @@
  * spec docs/specs/2026-05-01-rolestra-channel-roles-design.md
  *  - §11.18.8c   handoff_mode 우회 룰 (check = 모달, auto = 자동)
  *
- * plan docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * plan docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  *  - line 484-499  T28 산출 (HandoffApprovalModal + B handoff_mode 우회 wire)
  */
 

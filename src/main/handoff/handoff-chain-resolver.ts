@@ -36,7 +36,7 @@
  *  - §11.18.8c         handoff_mode 우회 룰 (B1 「인계」 카드 → 채널 정책 적용)
  *  - §11.22            H2. 받는 부서 첫 화면 인계 패키지
  *
- * plan docs/plans/2026-05-04-rolestra-phase-r12-c2.md
+ * plan docs/R12_c2_2R/plans/2026-05-04-rolestra-phase-r12-c2.md
  *  - line 484-499      T28 산출 (HandoffApprovalModal + B handoff_mode 우회 wire)
  */
 
