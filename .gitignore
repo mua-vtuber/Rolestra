@@ -70,3 +70,6 @@ graphify-out/
 # Inspector reports (R12-C2 T11 — gitignore + CI artifact 만)
 tools/inspectors/report.json
 tools/inspectors/report.precommit.json
+
+#문서안올리니까 자꾸 올리지마
+docs/
