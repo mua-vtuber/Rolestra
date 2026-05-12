@@ -1,9 +1,11 @@
 /**
  * Channel 도메인 타입 — migrations/003-channels.ts + 018-channels-role-purpose-handoff.ts
- * + 019-opinion-tables.ts (channels.max_rounds ALTER) 컬럼과 1:1 camelCase 매핑.
+ * + 019-opinion-tables.ts (channels.max_rounds ALTER) + 023-channel-permissions.ts
+ * (R12-W 권한 5컬럼) 와 1:1 camelCase 매핑.
  */
 
 import type { ChannelRole, ChannelPurpose, HandoffMode } from './channel-role-types';
+import type { PermissionSet } from './permission-set-types';
 
 export type ChannelKind = 'system_general' | 'system_approval' | 'system_minutes' | 'user' | 'dm';
 
@@ -32,6 +34,13 @@ export interface Channel {
    * 로 코드 fallback (`MEETING_DEFAULT_MAX_ROUNDS`).
    */
   maxRounds: number | null;
+  /**
+   * R12-W (migration 023) — 채널 권한 5 axis. 회의 turn 페르소나 합성 + CLI argv
+   * 2단계 filter 의 권한 source. 부서 채널은 SKILL_CATALOG 정본을 default 로
+   * 받으며 (T3 backfill), system 채널 / DM 은 D2 안전 측 (`fileRead=true, 나머지
+   * false`) 으로 시작. 사용자가 채널 설정 모달에서 row 단위로 override 가능.
+   */
+  permissions: PermissionSet;
 }
 
 export interface ChannelMember {

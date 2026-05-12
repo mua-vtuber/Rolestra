@@ -571,6 +571,37 @@ export type IpcChannelMap = {
     request: undefined;
     response: { channel: Channel | null };
   };
+  /**
+   * R12-W T7 — 채널 권한 5 axis 조회. 채널 설정 모달 prefill + Settings
+   * 보안 탭 미리보기 양쪽이 사용. 알려지지 않은 channelId 면 handler 가
+   * ChannelNotFoundError throw (silent fallback 금지).
+   */
+  'channel:get-permissions': {
+    request: { channelId: string };
+    response: {
+      fileRead: boolean;
+      fileWrite: boolean;
+      commandExec: boolean;
+      webSearch: boolean;
+      dbRead: boolean;
+    };
+  };
+  /**
+   * R12-W T7 — 채널 권한 5 axis 갱신. 채널 생성/설정 모달의 [저장] 액션.
+   * 변경 후 ChannelService 가 `'permission-changed'` event 발사 →
+   * MeetingSession invalidation → 다음 회의 turn 부터 새 권한 적용.
+   */
+  'channel:update-permissions': {
+    request: {
+      channelId: string;
+      fileRead: boolean;
+      fileWrite: boolean;
+      commandExec: boolean;
+      webSearch: boolean;
+      dbRead: boolean;
+    };
+    response: { ok: true };
+  };
   'channel:create': {
     request: ChannelCreateInput;
     response: { channel: Channel };

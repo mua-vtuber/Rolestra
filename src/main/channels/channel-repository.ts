@@ -34,6 +34,14 @@ import type {
 } from '../../shared/channel-role-types';
 import { isHandoffMode } from '../../shared/channel-role-types';
 import { isRoleId } from '../../shared/role-types';
+import type {
+  PermissionSet,
+  PermissionSetRow,
+} from '../../shared/permission-set-types';
+import {
+  permissionSetFromRow,
+  permissionSetToRow,
+} from '../../shared/permission-set-types';
 
 /** Snake-case row shape as returned by better-sqlite3. */
 interface ChannelRow {
@@ -48,6 +56,12 @@ interface ChannelRow {
   handoff_mode: string;
   /** R12-C2 (migration 019) — 회의 자유 토론 라운드 cap. NULL = 무제한. */
   max_rounds: number | null;
+  /** R12-W (migration 023) — 권한 5 axis. INTEGER 0|1. */
+  file_read: number;
+  file_write: number;
+  command_exec: number;
+  web_search: number;
+  db_read: number;
 }
 
 interface ChannelMemberRow {
@@ -102,7 +116,12 @@ const PATCH_KEY_TO_COLUMN: Record<keyof ChannelUpdatePatch, UpdatableColumn> = {
 
 /** SELECT projection — keep in sync between get/listByProject/listDms/getDmByProvider/getGlobalGeneralChannel. */
 const CHANNEL_COLUMNS =
-  'id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode, max_rounds';
+  'id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode, max_rounds, ' +
+  'file_read, file_write, command_exec, web_search, db_read';
+
+/** SELECT projection — 권한 5 axis 만 (getPermissions / sanity). */
+const PERMISSION_COLUMNS =
+  'file_read, file_write, command_exec, web_search, db_read';
 
 const MEMBER_COLUMNS = 'channel_id, project_id, provider_id, drag_order';
 
@@ -135,6 +154,13 @@ function rowToChannel(row: ChannelRow): Channel {
     purpose: row.purpose,
     handoffMode: parseHandoffMode(row.handoff_mode, row.id),
     maxRounds: row.max_rounds,
+    permissions: permissionSetFromRow({
+      file_read: row.file_read,
+      file_write: row.file_write,
+      command_exec: row.command_exec,
+      web_search: row.web_search,
+      db_read: row.db_read,
+    }),
   };
 }
 
@@ -255,11 +281,14 @@ export class ChannelRepository {
    * same transaction.
    */
   insert(channel: Channel): void {
+    const permRow = permissionSetToRow(channel.permissions);
     this.db
       .prepare(
         `INSERT INTO channels
-           (id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode, max_rounds)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, project_id, name, kind, read_only, created_at,
+            role, purpose, handoff_mode, max_rounds,
+            file_read, file_write, command_exec, web_search, db_read)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         channel.id,
@@ -272,7 +301,51 @@ export class ChannelRepository {
         channel.purpose,
         channel.handoffMode,
         channel.maxRounds,
+        permRow.file_read,
+        permRow.file_write,
+        permRow.command_exec,
+        permRow.web_search,
+        permRow.db_read,
       );
+  }
+
+  /**
+   * Returns the channel's permission set, or `null` when the id is unknown.
+   * R12-W T4. PromptComposer / ChannelPermissionResolver 가 호출.
+   */
+  getPermissions(channelId: string): PermissionSet | null {
+    const row = this.db
+      .prepare(
+        `SELECT ${PERMISSION_COLUMNS} FROM channels WHERE id = ?`,
+      )
+      .get(channelId) as PermissionSetRow | undefined;
+    return row ? permissionSetFromRow(row) : null;
+  }
+
+  /**
+   * Updates the channel's 5 permission columns atomically. Returns `true`
+   * when a row was modified (channel existed), `false` when `id` unknown.
+   * 부서 default 와의 동등 여부는 호출자 책임 — service 가 EventEmitter
+   * 'permission-changed' 발사를 차단할지 결정.
+   */
+  updatePermissions(channelId: string, patch: PermissionSet): boolean {
+    const permRow = permissionSetToRow(patch);
+    const result = this.db
+      .prepare(
+        `UPDATE channels
+            SET file_read = ?, file_write = ?, command_exec = ?,
+                web_search = ?, db_read = ?
+          WHERE id = ?`,
+      )
+      .run(
+        permRow.file_read,
+        permRow.file_write,
+        permRow.command_exec,
+        permRow.web_search,
+        permRow.db_read,
+        channelId,
+      );
+    return result.changes > 0;
   }
 
   /**

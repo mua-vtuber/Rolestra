@@ -516,6 +516,29 @@ export const providerTypeSchema = z.enum([
   'mock',
 ]);
 
+/**
+ * R12-W T7 — `channel:get-permissions` 입력. channelId 만 받음.
+ *
+ * channelId 길이 cap 128 — UUID v4 (36) 보다 넉넉, dev fixture / E2E 의
+ * 짧은 id 도 허용.
+ */
+export const channelGetPermissionsSchema = z.object({
+  channelId: z.string().min(1).max(128),
+});
+
+/**
+ * R12-W T7 — `channel:update-permissions` 입력. 5 axis flat (PermissionSet
+ * 의 wire 표현). zod 가 boolean 타입 / channelId 길이 검증.
+ */
+export const channelUpdatePermissionsSchema = z.object({
+  channelId: z.string().min(1).max(128),
+  fileRead: z.boolean(),
+  fileWrite: z.boolean(),
+  commandExec: z.boolean(),
+  webSearch: z.boolean(),
+  dbRead: z.boolean(),
+});
+
 export const permissionDryRunFlagsSchema = z
   .object({
     providerType: providerTypeSchema,
@@ -938,6 +961,9 @@ export const v3ChannelSchemas = {
   'dm:list': dmListSchema,
   'dm:create': dmCreateSchema,
   'permission:dry-run-flags': permissionDryRunFlagsSchema,
+  // ── R12-W T7: 채널 권한 IPC ─────────────────────────────────────
+  'channel:get-permissions': channelGetPermissionsSchema,
+  'channel:update-permissions': channelUpdatePermissionsSchema,
   'meeting:llm-summarize': meetingLlmSummarizeSchema,
   'meeting:idea-finalize-selection': meetingIdeaFinalizeSelectionSchema,
   // R11-Task4: dev hook (ROLESTRA_E2E=1 only — registration in router.ts

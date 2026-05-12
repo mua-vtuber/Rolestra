@@ -31,6 +31,7 @@ import { migration as m019 } from './019-opinion-tables';
 import { migration as m020 } from './020-run-step';
 import { migration as m021 } from './021-opinion-vote-light';
 import { migration as m022 } from './022-handoff-dispatch';
+import { migration as m023 } from './023-channel-permissions';
 
 /**
  * Ordered list of all v3 migrations.
@@ -59,4 +60,5 @@ export const migrations: Migration[] = [
   m020,
   m021,
   m022,
+  m023,
 ];

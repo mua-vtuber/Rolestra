@@ -125,6 +125,10 @@ import {
   handleDmCreate,
 } from './handlers/channel-handler';
 import {
+  handleChannelGetPermissions,
+  handleChannelUpdatePermissions,
+} from './handlers/channel-permission-handler';
+import {
   handleHandoffApprove,
   handleHandoffCancel,
   handleHandoffListByChannel,
@@ -463,6 +467,14 @@ export function registerIpcHandlers(): void {
   handle('channel:start-meeting', isDev, (data) => handleChannelStartMeeting(data));
   handle('channel:update-handoff-mode', isDev, (data) =>
     handleChannelUpdateHandoffMode(data),
+  );
+
+  // ── R12-W T7: 채널 권한 IPC ─────────────────────────────────────
+  handle('channel:get-permissions', isDev, (data) =>
+    handleChannelGetPermissions(data),
+  );
+  handle('channel:update-permissions', isDev, (data) =>
+    handleChannelUpdatePermissions(data),
   );
 
   // ── R12-C2 P6 T28: handoff_mode 우회 룰 (사용자 결재 모달 분기) ──

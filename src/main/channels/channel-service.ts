@@ -45,6 +45,7 @@
  *   Anything else bubbles as the raw SqliteError.
  */
 
+import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { promises as fsPromises } from 'node:fs';
 import path from 'node:path';
@@ -59,8 +60,34 @@ import { MEETING_DEFAULT_MAX_ROUNDS } from '../../shared/meeting-flow-types';
 import type { ProjectMember } from '../../shared/project-types';
 import type { Message } from '../../shared/message-types';
 import { SKILL_CATALOG } from '../../shared/skill-catalog';
+import type { PermissionSet } from '../../shared/permission-set-types';
+import {
+  catalogDefaultFor,
+  catalogDefaultForNullRole,
+} from '../../shared/permission-set-types';
 import { providerRegistry } from '../providers/registry';
 import { ChannelRepository } from './channel-repository';
+
+// ── R12-W T5 — Channel 권한 변경 EventEmitter 채널 ──────────────────────
+
+/**
+ * `'permission-changed'` event 이름. MeetingSession (T8) 이 자기 채널의
+ * 권한 변경 시 캐시 dirty 마킹을 위해 구독한다.
+ */
+export const PERMISSION_CHANGED_EVENT = 'permission-changed' as const;
+
+/** `'permission-changed'` 페이로드 — 변경된 채널 id 만 싣는다. 새 권한 값은
+ *  listener 가 필요 시 `getPermissions(channelId)` 재조회 (event 의 본 책임은
+ *  invalidation 신호이지 값 전달 아님). */
+export interface PermissionChangedPayload {
+  channelId: string;
+}
+
+/** 타입 overload 용 event map. EventEmitter 의 `'permission-changed'` 만
+ *  정식 등록. */
+export interface ChannelServiceEvents {
+  'permission-changed': (payload: PermissionChangedPayload) => void;
+}
 
 // ── Error hierarchy ────────────────────────────────────────────────────
 
@@ -267,6 +294,13 @@ export interface CreateUserChannelInput {
   purpose?: ChannelPurpose;
   /** R12-C — 부서 인계 confirm 모드. 디폴트 'check'. */
   handoffMode?: HandoffMode;
+  /**
+   * R12-W T5 — 채널 권한. 채널 생성 모달의 부서 template + 미세조정 결과.
+   * 미제공 시:
+   *   - role 이 RoleId 이면 `catalogDefaultFor(role)` (부서 기본값)
+   *   - role 이 null 이면 `catalogDefaultForNullRole()` (D2 안전 측)
+   */
+  permissions?: PermissionSet;
 }
 
 // ── Service ────────────────────────────────────────────────────────────
@@ -294,7 +328,14 @@ export interface ChannelServiceDeps {
   archiveRoot?: ArchiveRootProvider;
 }
 
-export class ChannelService {
+/**
+ * ChannelService — R12-W T5 에서 EventEmitter 로 승격.
+ * `'permission-changed'` event 만 정식 등록 (MeetingSession 가 활성 회의의
+ * 권한 캐시 invalidation 신호로 구독). 다른 service 패턴 (ApprovalService /
+ * MessageService / MemberProfileService) 과 일관 — typed overload 로
+ * compile-time safe + standard EventEmitter 호환.
+ */
+export class ChannelService extends EventEmitter {
   private readonly archiveMessages: ArchiveMessageAdapter | null;
   private readonly archiveRoot: ArchiveRootProvider | null;
 
@@ -303,6 +344,7 @@ export class ChannelService {
     private readonly projectMembers: ProjectMemberLookup,
     deps?: ChannelServiceDeps,
   ) {
+    super();
     this.archiveMessages = deps?.archiveMessages ?? null;
     this.archiveRoot = deps?.archiveRoot ?? null;
   }
@@ -316,6 +358,15 @@ export class ChannelService {
    * @throws {ChannelMemberFkError}     on composite-FK violation.
    */
   create(input: CreateUserChannelInput): Channel {
+    const resolvedRole = input.role ?? null;
+    // R12-W T5 — input 권한 우선, 없으면 role 기반 카탈로그 default,
+    // role 도 없으면 D2 안전 측 (읽기만).
+    const resolvedPermissions: PermissionSet =
+      input.permissions ??
+      (resolvedRole !== null
+        ? catalogDefaultFor(resolvedRole)
+        : catalogDefaultForNullRole());
+
     const channel: Channel = {
       id: randomUUID(),
       projectId: input.projectId,
@@ -324,13 +375,14 @@ export class ChannelService {
       readOnly: false,
       createdAt: Date.now(),
       // R12-C — input 에 명시 시 우선, 없으면 NULL/check default.
-      role: input.role ?? null,
+      role: resolvedRole,
       purpose: input.purpose ?? null,
       handoffMode: input.handoffMode ?? DEFAULT_HANDOFF_MODE,
       // R12-C2 — 사용자 자유 채널 디폴트 = NULL (잡담 — 회의 X). 사용자가
       // 명시적으로 부서 role 지정 시 P3 채널 설정 모달이 5 입력. input
       // 받아도 본 sub-task 시점에서는 별 channel:create input 확장 X — P3.
       maxRounds: null,
+      permissions: resolvedPermissions,
     };
 
     try {
@@ -392,6 +444,9 @@ export class ChannelService {
       handoffMode: 'check',
       // R12-C2 — system 채널은 회의 X (회의록 / 승인 / 일반 모두) 라 NULL.
       maxRounds: null,
+      // R12-W T5 — system 채널은 회의 컨텍스트 X 라 권한 단락이 surface 되지
+      // 않지만 schema 일관성 위해 D2 안전 측 값 (읽기만) 으로 채움.
+      permissions: catalogDefaultForNullRole(),
     }));
 
     try {
@@ -438,6 +493,9 @@ export class ChannelService {
       handoffMode: 'check',
       // R12-C2 — DM 은 회의 X (개별 지시 방) 라 NULL.
       maxRounds: null,
+      // R12-W T5 — DM 도 회의 X 라 권한 단락이 surface 되지 않지만 schema
+      // 일관성 위해 D2 안전 측 값 (읽기만) 으로 채움.
+      permissions: catalogDefaultForNullRole(),
     };
 
     try {
@@ -772,6 +830,8 @@ export class ChannelService {
       handoffMode: DEFAULT_HANDOFF_MODE,
       // R12-C2 — 일반 채널 (system_general, 전역) 은 회의 X (잡담 정체성) 라 NULL.
       maxRounds: null,
+      // R12-W T5 — system 채널은 회의 컨텍스트 X. D2 안전 측 default.
+      permissions: catalogDefaultForNullRole(),
     };
     this.repo.insert(channel);
     return channel;
@@ -803,22 +863,35 @@ export class ChannelService {
     // Department channels go AFTER system channels in `created_at` so
     // listByProject 정렬이 system → department 자연 순.
     const createdAt = Date.now() + 1000;
-    const channels: Channel[] = blueprint.map((spec, idx) => ({
-      id: randomUUID(),
-      projectId,
-      name: spec.name,
-      kind: 'user' as const,
-      readOnly: false,
-      createdAt: createdAt + idx,
-      role: spec.role,
-      purpose: null,
-      handoffMode: DEFAULT_HANDOFF_MODE,
-      // R12-C2 — 부서 채널 default = 5 라운드 (사용자 결정 2026-05-04 ④).
-      // 사용자가 P3 채널 설정 모달에서 무제한 (NULL) 또는 다른 정수로 변경
-      // 가능. 아이디어 부서 (idea) 는 자유 토론 X 라 max_rounds 무의미하지만
-      // 컬럼 자체는 일관성 위해 5 로 채움.
-      maxRounds: MEETING_DEFAULT_MAX_ROUNDS,
-    }));
+    const channels: Channel[] = blueprint.map((spec, idx) => {
+      // R12-W T5 — 부서 channel default 권한 = SKILL_CATALOG 정본
+      // (T3 마이그레이션 023 의 backfill 과 동일 source). blueprint 의
+      // role 은 항상 RoleId 이지만 ChannelRole 타입 (RoleId | null) 의
+      // null 케이스를 코드로 가드.
+      if (spec.role === null) {
+        throw new Error(
+          `createDepartmentChannels: blueprint role is null for '${spec.name}' — ` +
+            `DEFAULT_DEPARTMENT_BLUEPRINT / OPTIONAL_DEPARTMENT_BLUEPRINT 정의 확인`,
+        );
+      }
+      return {
+        id: randomUUID(),
+        projectId,
+        name: spec.name,
+        kind: 'user' as const,
+        readOnly: false,
+        createdAt: createdAt + idx,
+        role: spec.role,
+        purpose: null,
+        handoffMode: DEFAULT_HANDOFF_MODE,
+        // R12-C2 — 부서 채널 default = 5 라운드 (사용자 결정 2026-05-04 ④).
+        // 사용자가 P3 채널 설정 모달에서 무제한 (NULL) 또는 다른 정수로 변경
+        // 가능. 아이디어 부서 (idea) 는 자유 토론 X 라 max_rounds 무의미하지만
+        // 컬럼 자체는 일관성 위해 5 로 채움.
+        maxRounds: MEETING_DEFAULT_MAX_ROUNDS,
+        permissions: catalogDefaultFor(spec.role),
+      };
+    });
 
     try {
       this.repo.transaction(() => {
@@ -837,5 +910,73 @@ export class ChannelService {
     }
 
     return channels;
+  }
+
+  // ── R12-W T5: 채널 권한 조회 / 갱신 ─────────────────────────────────────
+
+  /**
+   * 채널 권한 set 을 반환. 알려지지 않은 channelId 면 throw — silent fallback
+   * 금지 (CLAUDE.md 절대 위반 금지). MeetingSession (T8) 가 회의 시작 시
+   * 채널 권한 캐시 hydration 에 호출.
+   *
+   * @throws {ChannelNotFoundError} unknown id.
+   */
+  getPermissions(channelId: string): PermissionSet {
+    const perm = this.repo.getPermissions(channelId);
+    if (!perm) throw new ChannelNotFoundError(channelId);
+    return perm;
+  }
+
+  /**
+   * 채널 권한 5 axis 를 patch 로 덮어쓴 뒤 `'permission-changed'` event 를
+   * 발사. MeetingSession 이 활성 회의의 cache dirty 마킹을 위해 구독.
+   *
+   * listener throw 는 try/catch 로 격리 — service caller 의 호출 contract
+   * (UPDATE 적용 후 정상 return) 를 보장 (ApprovalService 동일 패턴).
+   *
+   * @throws {ChannelNotFoundError} unknown id.
+   */
+  updatePermissions(channelId: string, patch: PermissionSet): void {
+    const updated = this.repo.updatePermissions(channelId, patch);
+    if (!updated) throw new ChannelNotFoundError(channelId);
+    try {
+      this.emit(PERMISSION_CHANGED_EVENT, { channelId });
+    } catch (err) {
+      // TODO R2-log: structured logger.
+      console.warn('[rolestra.channels] permission-changed listener threw:', {
+        channelId,
+        name: err instanceof Error ? err.name : undefined,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // ── typed EventEmitter overloads (ApprovalService 패턴) ────────────────
+
+  on<E extends keyof ChannelServiceEvents>(
+    event: E,
+    listener: ChannelServiceEvents[E],
+  ): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  on(event: string | symbol, listener: (...args: unknown[]) => void): this {
+    return super.on(event, listener);
+  }
+
+  off<E extends keyof ChannelServiceEvents>(
+    event: E,
+    listener: ChannelServiceEvents[E],
+  ): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this;
+  off(event: string | symbol, listener: (...args: unknown[]) => void): this {
+    return super.off(event, listener);
+  }
+
+  emit<E extends keyof ChannelServiceEvents>(
+    event: E,
+    ...args: Parameters<ChannelServiceEvents[E]>
+  ): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean;
+  emit(event: string | symbol, ...args: unknown[]): boolean {
+    return super.emit(event, ...args);
   }
 }
