@@ -42,6 +42,7 @@ data/
 .claude/
 .codex/
 CLAUDE.md
+AGENTS.md
 
 # oh-my-claudecode
 .omc/
