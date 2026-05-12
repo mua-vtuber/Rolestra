@@ -71,8 +71,16 @@ export class PromptComposer {
       // 한다 (직원이 그 능력을 갖고 있다는 보증이 없으니 권한 안내가
       // 거짓이 됨). 능력 부여 UI (RolesSkillsTab) 흐름이 사용자에게
       // 정착되면 옵션으로 throw 모드를 다시 강화할 수 있다.
+      // R12-W T1 — fallback 분기에서도 D2 (미설정 시 읽기 허용) 안내와
+      // 회의록 권한 무관성을 명시. 능력 미부여 직원이 채널 회의에 들어와도
+      // "권한이 전혀 없으니 어떤 파일도 못 본다" 로 오해해 회의 본질 (문서
+      // 읽고 의견 내기) 을 자기검열하던 회귀를 차단한다. 정식 경로 (line
+      // 92 의 `권한: …`) 는 카탈로그 toolGrants 를 그대로 노출하므로 이
+      // fallback 단락만 추가 안내 책임이 있다.
       sections.push(
-        `이 채널은 ${channelLabel} 부서입니다. 부서의 일반 업무 맥락으로 응답하세요.`,
+        `이 채널은 ${channelLabel} 부서입니다. 부서의 일반 업무 맥락으로 응답하세요.\n` +
+          `권한: 작업장 폴더 안 파일 읽기 (쓰기 / 명령 실행은 사용자가 명시적으로 지시한 경우에만).\n` +
+          `참고: 회의록(#회의록 채널)은 시스템 기록이므로 파일 권한과 무관합니다.`,
       );
       if (input.formatInstruction.trim().length > 0) {
         sections.push(input.formatInstruction.trim());

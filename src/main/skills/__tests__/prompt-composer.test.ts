@@ -58,10 +58,16 @@ describe('PromptComposer.compose', () => {
     expect(out).toContain('나는 PM 입니다');
     expect(out).toContain('구현 부서');
     expect(out).toContain('JSON 으로 응답');
-    // skill template 본문 / 권한 / SKILL.md 경로는 들어가지 않아야 함.
+    // skill template 본문 / SKILL.md 경로는 들어가지 않아야 함 — 직원이
+    // 그 능력을 부여받았다는 보증이 없으니 카탈로그 권한 표 합성은 생략.
     expect(out).not.toMatch(/\.claude\/skills\//);
     expect(out).not.toMatch(/\.agents\/skills\//);
-    expect(out).not.toContain('권한:');
+    // R12-W T1 — fallback 도 D2 안내 (작업장 폴더 안 읽기) + 회의록 무관
+    // 명시는 포함해야 한다. 능력 미부여 직원이 "파일 접근 금지" 로
+    // 자기검열하던 회귀 차단.
+    expect(out).toContain('권한: 작업장 폴더 안 파일 읽기');
+    expect(out).toContain('회의록');
+    expect(out).toContain('시스템 기록');
   });
 
   it('summarizes tool grants for implement', () => {
