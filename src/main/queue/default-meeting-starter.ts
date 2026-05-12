@@ -36,8 +36,10 @@ import type { Project } from '../../shared/project-types';
 import type { ChannelService } from '../channels/channel-service';
 import type { MeetingService } from '../meetings/meeting-service';
 import type { ProjectService } from '../projects/project-service';
+import type { ArenaRootService } from '../arena/arena-root-service';
 import type { MeetingOrchestratorFactory } from '../ipc/handlers/channel-handler';
 import type { QueueMeetingStarter, QueueService } from './queue-service';
+import { resolveProjectPaths } from '../arena/resolve-project-paths';
 
 /**
  * Topic snippet length cap for the meeting row. The full prompt is
@@ -55,6 +57,13 @@ export interface DefaultMeetingStarterDeps {
   channelService: Pick<ChannelService, 'get' | 'listByProject' | 'listMembers'>;
   meetingService: Pick<MeetingService, 'start'>;
   projectService: Pick<ProjectService, 'get'>;
+  /**
+   * R12-W T10.5.G2 — queue 회의 spawn 시 ssmCtx.projectPath 를 작업장 안
+   * 프로젝트 폴더의 절대 cwd 로 흘리기 위해 ArenaRoot 의 getPath() 가
+   * 필요. 옛 코드는 `projectPath: ''` 하드코딩이라 CliProvider 가 앱 실행
+   * 위치 (= rolestra source repo) 를 spawn cwd 로 사용하던 격차.
+   */
+  arenaRoot: Pick<ArenaRootService, 'getPath'>;
   /**
    * Function-typed access to the queue so the starter can read the
    * `targetChannelId` of the just-claimed row. Passing the lookup
@@ -142,6 +151,14 @@ export function createDefaultMeetingStarter(
         `project not found: ${projectId}`,
       );
     }
+    // R12-W T10.5.G2 — folder_missing 프로젝트로 회의 시작하면 spawn cwd 가
+    // 유령 경로가 되어 CLI 가 즉시 fail. 큐 row 를 fail 로 surface 해
+    // queue runner 가 last_error 로 표시.
+    if (project.status === 'folder_missing') {
+      throw new QueueMeetingStarterError(
+        `project folder missing: ${project.slug}`,
+      );
+    }
 
     // 4. Open the meeting row. The topic is a slice of the prompt — the
     //    full prompt remains on the queue row + (eventually) on the
@@ -153,7 +170,12 @@ export function createDefaultMeetingStarter(
     //    run lifecycle + side-effect disposers. The `meetingId` is
     //    handed back to QueueService so `started_meeting_id` is
     //    stamped before the orchestrator emits its first state event.
-    const ssmCtx: SsmContext = buildSsmCtx(meeting.id, channelId, project);
+    const ssmCtx: SsmContext = buildSsmCtx(
+      meeting.id,
+      channelId,
+      project,
+      deps.arenaRoot.getPath(),
+    );
     await Promise.resolve(
       deps.orchestratorFactory.createAndRun({
         meeting,
@@ -198,21 +220,25 @@ function sliceTopic(prompt: string): string {
 }
 
 /**
- * Construct the SSM context for a queue-spawned meeting. Mirrors the
- * shape used by `channel:start-meeting` (project_path is a placeholder
- * empty string until R10-Task5 lands the permission-flag matrix wiring
- * — none of the autonomy-queue paths consume it today).
+ * Construct the SSM context for a queue-spawned meeting. R12-W T10.5.G2 —
+ * `projectPath` is the project folder cwd resolved through
+ * `resolveProjectPaths` so the downstream CLI provider spawns inside the
+ * ArenaRoot-sealed surface (not the app exec directory). The legacy
+ * placeholder `''` is forbidden — silent fallback is the very class of
+ * defect the hotfix closes.
  */
 function buildSsmCtx(
   meetingId: string,
   channelId: string,
   project: Project,
+  arenaRootPath: string,
 ): SsmContext {
+  const paths = resolveProjectPaths(project, arenaRootPath);
   return {
     meetingId,
     channelId,
     projectId: project.id,
-    projectPath: '',
+    projectPath: paths.cwdPath,
     permissionMode: project.permissionMode,
     autonomyMode: project.autonomyMode,
   };

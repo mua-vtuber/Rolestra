@@ -94,9 +94,20 @@ T9: MeetingTurnExecutor — buildPermissionRules 호출 폐기, PromptComposer
 T10: 옛 buildPermissionRules + FilePermission 타입 삭제
      └─ T9 의존 (모든 호출자 제거 확인 후)
 
+─────────── 3.5차 (PathGuard wire 누락 hotfix — T11 진입 전 의무) ─
+T10.5.G1: CliProvider.setProjectPath 호출 wire (meeting-turn-executor)
+          └─ T9 land 후 (turn-executor 안정화 후)
+T10.5.G2: ssmCtx.projectPath 하드코딩 4곳 → resolveProjectPaths 직접 호출
+          └─ 독립 (T9 와 병렬 가능)
+T10.5.G5: permissionMode/autonomyMode 하드코딩 4곳 → project row 동기화
+          └─ T10.5.G2 와 한 commit 묶음 (project lookup 둘 다 필요)
+
+   ▶ T10.5 통합 검증 PASS 후 T11 진입 — audit 보고서 §8 옵션 C 변형
+
 ─────────── 4차 (argv filter layer) ───────────────────────────
 T11: permission-flag-filter (Claude allowedTools 좁히기)
-     └─ T2 의존 (PermissionSet)
+     └─ T2 의존 (PermissionSet) + **T10.5 land 의무** (입력 source = ssmCtx.projectPath
+        + project.permissionMode 가 정확해야 filter 의 효과 보장)
 
 T12: cli-provider spawn 경로 wire-up (base → filter → spawn)
      └─ T6 (resolver), T11 (filter) 의존
@@ -134,10 +145,11 @@ T21: 문서 정합 (구현현황 / decision README / R12-S log 후속 표시)
 
 병렬 가능:
 - 1차: T1 + T2 동시
+- 3.5차 (T10.5 hotfix block): G2+G5 가 한 commit, G1 은 T9 후. **T11 진입 전 의무**.
 - 5차 (T13~T16) 는 2차 T7 만 만족하면 3/4차와 병렬 가능
-- 4차 (T11/T12) 와 3차 (T8~T10) 병렬 가능
+- 4차 (T11/T12) 와 3차 (T8~T10) 병렬 가능 — 단 T11 은 T10.5 land 의무
 
-크리티컬 패스: T2 → T3 → T4 → T5 → T6 → T8 → T9 → T17 → T18 → T19 → T20 → T21 (12 단계)
+크리티컬 패스 (T10.5 포함): T2 → T3 → T4 → T5 → T6 → T8 → T9 → T10.5 → T11 → T12 → T17 → T18 → T19 → T20 → T21 (15 단계)
 
 ---
 
@@ -497,6 +509,173 @@ test/docs 제외 production 본문 0건 확인.
 **verify:** `npm run build` PASS + 전체 vitest PASS
 
 **acceptance:** 유령 export 0건.
+
+---
+
+### T10.5 — PathGuard wire 누락 hotfix block (G1+G2+G5) — **T11 진입 전 의무**
+
+**무엇:** R12-W T1~T10 dogfooding 중 사용자 보고로 발견된 spec §7.6 PathGuard 봉인 wire 누락 격차의 hotfix. audit 보고서 (`docs/reports/audit/2026-05-12-r12-w-pathguard-wire-audit.md`) 의 G1+G2+G5 세 격차 즉시 해결. **본 sub-block 은 T11 진입 전 의무** — T11~T19 의 가시 효과가 G1/G2 fix 없으면 *의도와 정반대* 로 surface (rolestra source repo 가 AI 에 노출).
+
+**audit 보고서의 격차 chain:**
+```
+[큐 회의 시작]
+  ↓ default-meeting-starter.ts:215 — projectPath:'' 하드코딩 (G2)
+[SSM 생성]
+  ↓ ssmCtx.projectPath = '', permissionMode='hybrid' 하드코딩 (G5)
+[CliProvider.streamCompletion]
+  ↓ _projectPath = '.' (G1 — setProjectPath 호출자 0)
+[CLI spawn]
+  cwd = process.cwd() = 앱 실행 위치 = rolestra source repo
+  → 사용자가 의도한 ArenaRoot/projects/<slug>/ 가 아닌 다른 폴더 노출
+```
+
+**범위 한정:**
+- G3 (PermissionService 인스턴스화 자체 X) 의 *정식 fix* 는 R12-X (별도 phase). 본 hotfix 는 `resolveProjectPaths` 직접 호출로 *우회* — G3 wire 가 land 되기 전까지의 임시 cwd source.
+- G4 (ExecutionService singleton) / G6 (MeetingSession.setProjectPath dead method) / G7 (ensureAccess silent skip) 은 R12-X.
+- 본 hotfix 는 *사용자 가시 critical* 만. 회귀 가드 (brand type / integration test / invariant) 도 R12-X.
+
+---
+
+#### T10.5.G1 — `CliProvider.setProjectPath` 호출 wire
+
+**무엇:** CLI spawn 직전 `setProjectPath` 호출. CliProvider 인스턴스는 registry singleton 으로 회의 간 재사용되므로 *매 turn 시작 직전* 갱신.
+
+**영향 파일:**
+- `src/main/meetings/engine/meeting-turn-executor.ts` — `callProviderOnce` 또는 `runPhaseTurn` 의 spawn 직전, `provider instanceof CliProvider` 분기에서 `setProjectPath(this.session.ssmCtx.projectPath)` 호출.
+- `src/main/meetings/engine/__tests__/meeting-turn-executor.test.ts` — CliProvider mock 에 setProjectPath spy 추가, 호출 검증.
+
+**변경 본문 (스케치):**
+```ts
+// meeting-turn-executor.ts: callProviderOnce 내부, wireCliPermissionCallback 직전
+if (provider instanceof CliProvider) {
+  // R12-W T10.5.G1 — spawn cwd 동기화. ssmCtx.projectPath 는 T10.5.G2 가
+  // resolveProjectPaths 로 채워준다. 빈 문자열일 경우 명시 throw (silent fallback 금지).
+  const projectPath = this.session.ssmCtx.projectPath;
+  if (!projectPath || projectPath === '.' || !path.isAbsolute(projectPath)) {
+    throw new Error(
+      `[meeting-turn-executor] ssmCtx.projectPath invalid for CLI spawn: ` +
+      `value='${projectPath}' (must be absolute path inside ArenaRoot)`,
+    );
+  }
+  provider.setProjectPath(projectPath);
+  this.wireCliPermissionCallback(provider, speaker);
+}
+```
+
+**verify:**
+- `npx vitest run src/main/meetings/engine/__tests__/meeting-turn-executor.test.ts`
+- 호스트가 dogfooding — 회의 시작 후 `ps`/`/proc/<pid>/cwd` 또는 ROLESTRA_E2E hook 으로 spawn cwd 가 `<arena>/projects/<slug>/` 확인.
+
+**acceptance:**
+- mock CliProvider 의 setProjectPath spy 가 *spawn 직전* 정확한 cwd 로 호출.
+- ssmCtx.projectPath 가 빈 문자열 / `'.'` / 상대 경로면 명시 throw (silent fallback 금지).
+- 사용자 dogfooding — AI 가 ArenaRoot 안 프로젝트 폴더만 인식.
+
+**리스크:**
+- CliProvider 가 *registry singleton* 이라 동시 2개 회의 진행 시 race 가능 — 한 회의의 setProjectPath 가 다른 회의에 leak. 본 hotfix 의 한계 (R12-X 에서 *per-call cwd injection* 으로 구조 개선).
+
+---
+
+#### T10.5.G2 — `ssmCtx.projectPath` 4곳 하드코딩 → `resolveProjectPaths` 직접 호출
+
+**무엇:** SSM ctx 생성 4 곳의 `projectPath: ''` 를 `resolveProjectPaths(project, arenaRoot.getPath()).cwdPath` 로 교체. G3 정식 fix 전이라 PermissionService 우회 + helper 직접 호출.
+
+**영향 파일:**
+- `src/main/index.ts:608-615` — channel:start-meeting 분기 ssmCtx 생성
+- `src/main/index.ts:1217-1224` — handoff:start-meeting-from-package buildSsmCtx
+- `src/main/ipc/handlers/channel-handler.ts:350` 부근 — channel:start-meeting handler
+- `src/main/queue/default-meeting-starter.ts:215` 부근 — 큐 자동 회의 시작
+- 각 호출처는 *project row 와 arenaRoot 를 이미 가지고 있거나* 가져올 수 있어야 함 — 못 가져오면 사전 dependency injection 추가.
+
+**변경 본문 (스케치 — channel-handler.ts 패턴 예시):**
+```ts
+import { resolveProjectPaths } from '../../arena/resolve-project-paths';
+
+// channel:start-meeting handler 내부, channel.projectId 알고 있는 시점
+const project = projectRepo.get(channel.projectId);
+if (!project) {
+  throw new Error(`[channel-handler] project not found: ${channel.projectId}`);
+}
+if (project.status === 'folder_missing') {
+  throw new Error(`[channel-handler] project folder missing: ${project.slug}`);
+}
+const paths = resolveProjectPaths(project, arenaRoot.getPath());
+
+const ssmCtx: SsmContext = {
+  meetingId,
+  channelId,
+  projectId: channel.projectId,
+  projectPath: paths.cwdPath,         // ← G2 fix
+  permissionMode: project.permissionMode,   // ← G5 fix
+  autonomyMode: project.autonomyMode,       // ← G5 fix
+};
+```
+
+**4 곳 변경 모두 *동일 패턴*:**
+1. projectRepo / arenaRoot accessor 가 이미 closure 에 있으면 그대로 사용
+2. 없으면 setHandoff*Resolver / setDefaultMeetingStarter*Deps 같은 wire 함수에 1개 추가
+3. project row 가 *folder_missing* 이거나 *kind=external* 인데 link realpath mismatch 시 — 본 hotfix 는 *resolveProjectPaths* 만 호출 (TOCTOU 재검증 X). 그건 R12-X 의 PermissionService.resolveForCli 정식 wire 책임.
+
+**verify:**
+- `npx vitest run` — 4 곳의 unit test 가 ssmCtx.projectPath 가 *비어 있지 않은 절대 경로* 임을 단언 (CLAUDE.md silent fallback 금지 정신, 회귀 가드 최소판).
+- 통합 smoke — 4 회의 시작 path 각각에 대해 회의 시작 후 ssmCtx 캡처 (ROLESTRA_E2E dev hook 또는 logger snapshot).
+
+**acceptance:**
+- 4 곳 모두 production code 에 `projectPath: ''` 또는 `projectPath: '.'` 리터럴 0건 (grep 검증).
+- 회의 시작 시 project lookup 실패 / folder_missing → 명시 throw (사용자 가시 에러).
+- dogfooding — 사용자가 4 회의 시작 path 각각에서 AI 가 ArenaRoot 안 프로젝트 폴더만 인식.
+
+**리스크:**
+- 본 hotfix 가 `resolveProjectPaths` 직접 호출이라 *external 프로젝트의 junction TOCTOU 재검증 X*. external + 누군가 junction 을 swap 한 경우 spawn cwd 가 *원 target* 이 아닌 *swap target* 으로 갈 가능성 — spec §7.6.4 CA-3. R12-X 가 PermissionService.resolveForCli 정식 wire 로 close.
+- 본 hotfix 후에도 *external + auto* 거부는 PermissionFlagBuilder 의 zod 단계에서 막힘 — 본 hotfix 와 무관.
+
+---
+
+#### T10.5.G5 — `permissionMode`/`autonomyMode` 하드코딩 → project row 동기화
+
+**무엇:** T10.5.G2 와 *같은 4 곳* 의 `'hybrid' as const` / `'manual' as const` 하드코딩을 `project.permissionMode` / `project.autonomyMode` 로 교체. G2 와 *한 commit* 으로 묶어 처리 (project lookup 이 둘 다 필요).
+
+**영향 파일:** T10.5.G2 와 동일 4 파일 — `index.ts:613-614`, `:1222-1223`, `channel-handler.ts:351-352`, `default-meeting-starter.ts:216-217`.
+
+**변경 본문:** T10.5.G2 의 스케치 안에 이미 포함 (`permissionMode: project.permissionMode`, `autonomyMode: project.autonomyMode`).
+
+**verify:**
+- mode 변경 시나리오 — `ProjectService.applyPermissionModeChange` 로 `auto` 로 바꾼 후 회의 시작 → ssmCtx.permissionMode 가 `auto` 인지 단언.
+
+**acceptance:**
+- 4 곳 production code 에 `'hybrid' as const` / `'manual' as const` 리터럴 0건 (ssmCtx 분기 한정 grep).
+- 사용자가 mode 변경 후 새 회의 시작 시 SSM 분기 (AutonomyGate / ApprovalService 정책) 가 새 mode 반영.
+
+**리스크:**
+- 진행 중 회의는 *옛 mode 유지* (SsmContext immutability 원칙 — `ssm-context-types.ts:37` "If a field needs to change, rebuild the SSM"). 사용자가 *진행 중 회의에 mode 변경 즉시 반영* 을 기대하면 별 follow-up (R12-X 외 별도 ADR).
+
+---
+
+#### T10.5 통합 검증
+
+**Verify chain:**
+1. `npm run build` PASS
+2. `npx vitest run` 전체 PASS — meeting-turn-executor / channel-handler / default-meeting-starter unit test 모두 GREEN
+3. **호스트 dogfooding 재현** — 사용자 보고 시나리오 (큐 회의 → "docs/ 읽기" 요청) 재실행 → AI 가 `<arena>/projects/<slug>/docs/` 또는 *해당 위치에 파일 없음* 응답, *rolestra source repo* dump X
+4. grep 단언:
+   ```bash
+   grep -rn "projectPath:\s*''\|projectPath:\s*'\.'" src/ | grep -v __tests__ | grep -v ssm-context-types.ts
+   # → 0건 (test factory 의 default 만 허용)
+   ```
+
+**Definition of Done (T10.5):**
+- G1 + G2 + G5 grep 단언 0건
+- 사용자 dogfooding 재현 시 surface 부재
+- 호스트 + 사장 spot check PASS — T11 진입 승인
+
+**T10.5 의 한계 명시 (R12-X 가 이어받을 책임):**
+- G3 (PermissionService 인스턴스화 + 호출 wire) — `resolveProjectPaths` 우회는 임시. PermissionService 정식 wire 가 진짜 fix.
+- G4 (ExecutionService singleton boot) — apply path 가 throw 인 상태 그대로.
+- G6 (MeetingSession.setProjectPath dead method) — 본 hotfix 가 ssmCtx 로 충분히 해결하면 R12-X 에서 dead method 자체 삭제.
+- G7 (ensureAccess silent skip) — `if (this.ensureAccess) {...}` 패턴 그대로. R12-X 가 *required* 로 변경.
+- **brand type / runtime invariant / integration test** — 회귀 가드 셋 모두 R12-X. 본 hotfix 는 *최소 unit test* 만.
+
+→ T11 진입 시점에 *위 5건은 여전히 미해결*. 사장이 사용자 dogfooding 검증 후 R12-W 종결 → R12-X 진행 결재.
 
 ---
 
