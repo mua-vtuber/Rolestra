@@ -62,10 +62,15 @@ output/
 # Playwright Electron E2E artifacts (generated per run)
 e2e/test-results/
 e2e/report/
+# Playwright root fallback output dir (.last-run.json 등)
+test-results/
 
 # Graphify knowledge graph (local-only, regenerated on demand)
 graphify-out/
 .graphifyignore
+# Graphify auto-rebuild git hooks (installed by `graphify hook install`, host-local — Python 경로 탐지 로직이 호스트별로 다름)
+.githooks/post-checkout
+.githooks/post-commit
 
 # Inspector reports (R12-C2 T11 — gitignore + CI artifact 만)
 tools/inspectors/report.json
