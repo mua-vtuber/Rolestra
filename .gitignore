@@ -38,8 +38,10 @@ data/
 *.db-journal
 *.db-wal
 
-# Claude Code
+# AI
 .claude/
+.codex/
+CLAUDE.md
 
 # oh-my-claudecode
 .omc/

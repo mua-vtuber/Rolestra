@@ -30,3 +30,4 @@
 *.node binary
 *.sqlite binary
 *.db binary
+graphify-out/graph.json merge=graphify-merge
