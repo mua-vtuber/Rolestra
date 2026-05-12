@@ -571,6 +571,13 @@ export class MeetingTurnExecutor {
       }
 
       if (provider instanceof CliProvider) {
+        // R12-W T10.5.G1 — CLI spawn cwd = 작업장 안 프로젝트 폴더 동기화.
+        // CliProvider 인스턴스는 ProviderRegistry singleton 으로 회의 간 +
+        // turn 간 재사용되므로 *매 turn 직전* setProjectPath 호출 필수.
+        // (한 회의 안에서도 사용자가 다른 채널/프로젝트 회의를 평행 시작
+        // 하면 직전 회의의 cwd 가 leak 되는 race — 구조 개선은 R12-X 의
+        // per-call cwd injection 책임.)
+        provider.setProjectPath(this.session.ssmCtx.projectPath);
         this.wireCliPermissionCallback(provider, speaker);
       }
 
