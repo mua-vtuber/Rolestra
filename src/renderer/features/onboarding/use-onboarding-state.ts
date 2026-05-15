@@ -253,7 +253,12 @@ export function useOnboardingState(): UseOnboardingStateResult {
     if (didFetchDetectionRef.current) return;
     didFetchDetectionRef.current = true;
     if (!bridgeAvailable()) return;
-    void refreshDetection();
+    const timer = setTimeout(() => {
+      void refreshDetection();
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [refreshDetection]);
 
   return {

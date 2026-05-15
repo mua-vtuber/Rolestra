@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/* eslint-disable i18next/no-literal-string */
 
 /**
  * theme-shape-tokens — R10 Task 7 form-level branching invariants.

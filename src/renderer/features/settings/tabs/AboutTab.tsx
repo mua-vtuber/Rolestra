@@ -13,6 +13,9 @@ import { Button } from '../../../components/primitives/button';
 import { invoke } from '../../../ipc/invoke';
 import { useAppViewStore } from '../../../stores/app-view-store';
 
+const APP_NAME = 'Rolestra';
+const DESIGN_SIGN_OFF_STATUS = 'R10 polish · pending';
+
 interface ArenaPlatform {
   readonly platform: string;
   readonly version?: string;
@@ -67,7 +70,7 @@ export function AboutTab(): ReactElement {
       </header>
 
       <dl className="text-xs space-y-2">
-        <Row label={t('settings.about.appName')}>Rolestra</Row>
+        <Row label={t('settings.about.appName')}>{APP_NAME}</Row>
         <Row label={t('settings.about.platform')}>
           <span data-testid="settings-about-platform" className="font-mono">
             {arena?.platform ?? 'unknown'}
@@ -83,7 +86,7 @@ export function AboutTab(): ReactElement {
             data-testid="settings-about-design-signoff"
             className="font-mono text-fg-muted"
           >
-            R10 polish · pending
+            {DESIGN_SIGN_OFF_STATUS}
           </span>
         </Row>
       </dl>

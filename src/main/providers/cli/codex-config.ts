@@ -100,7 +100,8 @@ export const CODEX_CLI_CONFIG: CliRuntimeConfig = {
         i += 1; // skip the option's value too
         continue;
       }
-      afterExec.push(tail[i]!);
+      const arg = tail[i];
+      if (arg !== undefined) afterExec.push(arg);
     }
     return [...beforeExec, 'resume', sessionId, ...afterExec];
   },

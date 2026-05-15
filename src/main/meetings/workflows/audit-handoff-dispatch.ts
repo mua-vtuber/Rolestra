@@ -175,8 +175,7 @@ export function composeFixMissionBody(input: {
   );
   lines.push('');
   lines.push('[발견된 문제]');
-  for (let i = 0; i < input.problemList.length; i++) {
-    const p = input.problemList[i]!;
+  for (const [i, p] of input.problemList.entries()) {
     const title = p.title.trim().length > 0 ? p.title : '(제목 없음)';
     lines.push(`${i + 1}. (${p.opinionId}) ${title}`);
   }

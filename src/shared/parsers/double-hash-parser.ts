@@ -46,13 +46,22 @@ const DOUBLE_HASH_PATTERN = /\[##([^\]]*)\]/g;
 export function parseDoubleHash(text: string): DoubleHashMatch[] {
   const matches: DoubleHashMatch[] = [];
   for (const m of text.matchAll(DOUBLE_HASH_PATTERN)) {
-    const body = m[1]!.trim();
+    const rawBody = m[1];
+    const start = m.index;
+    const rawMatch = m[0];
+    if (
+      rawBody === undefined ||
+      start === undefined ||
+      rawMatch === undefined
+    ) {
+      continue;
+    }
+    const body = rawBody.trim();
     if (body.length === 0) continue;
-    const start = m.index!;
     matches.push({
       body,
       start,
-      end: start + m[0]!.length,
+      end: start + rawMatch.length,
     });
   }
   return matches;

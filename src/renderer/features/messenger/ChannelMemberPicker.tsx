@@ -66,13 +66,13 @@ export function ChannelMemberPicker({
   const fetchTokenRef = useRef(0);
   useEffect(() => {
     if (!open) return;
-    setSelected(new Set());
-    setSubmitError(null);
-    setState({ providers: null, error: null, loading: true });
 
     const myToken = ++fetchTokenRef.current;
     let cancelled = false;
     const run = async (): Promise<void> => {
+      setSelected(new Set());
+      setSubmitError(null);
+      setState({ providers: null, error: null, loading: true });
       try {
         const { providers } = await invoke('provider:list', undefined);
         if (cancelled || fetchTokenRef.current !== myToken) return;
@@ -83,9 +83,12 @@ export function ChannelMemberPicker({
         setState({ providers: null, error: err, loading: false });
       }
     };
-    void run();
+    const timer = setTimeout(() => {
+      void run();
+    }, 0);
     return () => {
       cancelled = true;
+      clearTimeout(timer);
     };
   }, [open]);
 

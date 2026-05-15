@@ -68,7 +68,9 @@ export class DmAutoResponder {
       return;
     }
 
-    await this.respondAs(channel, members[0]!);
+    const member = members[0];
+    if (member === undefined) return;
+    await this.respondAs(channel, member);
   }
 
   /**

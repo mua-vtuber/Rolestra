@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/* eslint-disable i18next/no-literal-string */
 
 /**
  * MemberProfileTrigger — wraps an arbitrary clickable element with the

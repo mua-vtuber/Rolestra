@@ -64,9 +64,12 @@ export function InitialMembersSelector({
   const defaultSelectAllRef = useRef(defaultSelectAll);
   const valueRef = useRef(value);
   const onChangeRef = useRef(onChange);
-  defaultSelectAllRef.current = defaultSelectAll;
-  valueRef.current = value;
-  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    defaultSelectAllRef.current = defaultSelectAll;
+    valueRef.current = value;
+    onChangeRef.current = onChange;
+  }, [defaultSelectAll, value, onChange]);
 
   useEffect(() => {
     // 주의 — `didFetchRef` 같은 mount-once 가드는 React 18 Strict Mode

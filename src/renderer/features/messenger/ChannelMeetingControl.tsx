@@ -28,6 +28,8 @@ import { useTheme } from '../../theme/use-theme';
 import type { Channel } from '../../../shared/channel-types';
 import type { ActiveMeetingSummary } from '../../../shared/meeting-types';
 
+const ACTIVE_DOT = '●';
+
 export interface ChannelMeetingControlProps {
   channel: Channel;
   /** The meeting active in this channel, if any. */
@@ -93,7 +95,7 @@ export function ChannelMeetingControl({
           )}
           aria-label={t('messenger.channelRail.meetingActive')}
         >
-          <span aria-hidden="true">●</span>
+          <span aria-hidden="true">{ACTIVE_DOT}</span>
           <span className="hidden xl:inline">
             {t('messenger.channelRail.meetingActive')}
           </span>

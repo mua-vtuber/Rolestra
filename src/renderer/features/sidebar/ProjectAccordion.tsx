@@ -196,23 +196,20 @@ function ProjectAccordionContent({
     return map;
   }, [meetings]);
 
-  const meetingControlReady =
-    meetingByChannel !== null &&
-    onStartMeeting !== undefined &&
-    onAbortMeeting !== undefined;
-
   const renderFreeChannel = (channel: Channel): ReactElement => {
     const activeMeeting = meetingByChannel?.get(channel.id) ?? null;
     // R12-C: 자유 user 채널만 회의 시작 컨트롤 (부서 채널은 T11 에서 hide).
-    const showControl = meetingControlReady;
-    const rightSlot = showControl ? (
-      <ChannelMeetingControl
-        channel={channel}
-        activeMeeting={activeMeeting}
-        onStartMeeting={onStartMeeting!}
-        onAbortMeeting={onAbortMeeting!}
-      />
-    ) : undefined;
+    const rightSlot =
+      meetingByChannel !== null &&
+      onStartMeeting !== undefined &&
+      onAbortMeeting !== undefined ? (
+        <ChannelMeetingControl
+          channel={channel}
+          activeMeeting={activeMeeting}
+          onStartMeeting={onStartMeeting}
+          onAbortMeeting={onAbortMeeting}
+        />
+      ) : undefined;
     return (
       <ChannelRow
         key={channel.id}

@@ -83,7 +83,12 @@ export function useHandoffPackage(
   }, [channelId, dismissedIds]);
 
   useEffect(() => {
-    void fetchPending();
+    const timer = setTimeout(() => {
+      void fetchPending();
+    }, 0);
+    return () => {
+      clearTimeout(timer);
+    };
   }, [fetchPending]);
 
   // stream:handoff-dispatched 도착 시 받는 채널 일치하면 재 fetch.

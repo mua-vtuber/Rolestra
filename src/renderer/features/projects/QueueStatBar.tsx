@@ -21,6 +21,8 @@ import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../../theme/use-theme';
 
+const RETRO_SUMMARY_PROMPT = '$ queue --summary';
+
 export interface QueueStatBarCounts {
   pending: number;
   inProgress: number;
@@ -89,7 +91,7 @@ export function QueueStatBar({ counts, className }: QueueStatBarProps): ReactEle
         )}
       >
         <span data-testid="queue-stat-bar-ascii" className="text-fg-muted">
-          $ queue --summary
+          {RETRO_SUMMARY_PROMPT}
         </span>
         {STAT_ORDER.map((key) => (
           <span

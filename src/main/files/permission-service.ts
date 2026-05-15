@@ -157,7 +157,7 @@ export function normalizePathForCompare(
       normalized = normalized.slice(4);
     }
     if (/^[a-z]:/.test(normalized)) {
-      normalized = normalized[0]!.toUpperCase() + normalized.slice(1);
+      normalized = normalized.charAt(0).toUpperCase() + normalized.slice(1);
     }
     normalized = normalized.replace(/\//g, '\\');
   }

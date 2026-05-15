@@ -75,15 +75,16 @@ export function DmListView({
       )}
       <ul data-testid="dm-list-items" className="flex flex-col gap-0.5">
         {existingDms.map((row) => {
-          if (row.channel === null) return null;
-          const isActive = row.channel.id === activeChannelId;
+          const channel = row.channel;
+          if (channel === null) return null;
+          const isActive = channel.id === activeChannelId;
           return (
-            <li key={row.channel.id}>
+            <li key={channel.id}>
               <button
                 type="button"
                 data-testid={`dm-list-item-${row.providerId}`}
                 data-active={isActive ? 'true' : 'false'}
-                onClick={() => onSelectDm(row.channel!.id)}
+                onClick={() => onSelectDm(channel.id)}
                 className={clsx(
                   'flex w-full items-center gap-2 rounded-panel px-2 py-1 text-sm text-left',
                   'hover:bg-sunk focus:outline-none focus:ring-1 focus:ring-brand',

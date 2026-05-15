@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/* eslint-disable i18next/no-literal-string */
 
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

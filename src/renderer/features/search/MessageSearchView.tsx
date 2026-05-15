@@ -108,6 +108,9 @@ export function MessageSearchView({
   useEffect(() => {
     if (!open) return;
     search.clear();
+    // This reset must happen before the user can type into the newly opened
+    // dialog; deferring it races with tests and real fast input.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setInputValue('');
     composingRef.current = false;
     const nextScope = resolveScope(

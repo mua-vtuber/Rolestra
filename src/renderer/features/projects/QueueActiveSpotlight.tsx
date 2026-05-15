@@ -26,6 +26,10 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/use-theme';
 import type { QueueItem } from '../../../shared/queue-types';
 
+const RETRO_CORNER = '┌─';
+const RETRO_LIVE_PATH = './live';
+const RETRO_LIVE_BADGE = '[LIVE]';
+
 export interface QueueActiveSpotlightProps {
   item: QueueItem | null;
   className?: string;
@@ -62,14 +66,14 @@ export function QueueActiveSpotlight({
         )}
       >
         <div className="flex items-center gap-2 border-b border-border-soft px-3 py-1.5 text-xs">
-          <span className="text-fg-subtle">┌─</span>
-          <span className="text-fg-muted">./live</span>
+          <span className="text-fg-subtle">{RETRO_CORNER}</span>
+          <span className="text-fg-muted">{RETRO_LIVE_PATH}</span>
           <span className="flex-1" />
           <span
             data-testid="queue-active-spotlight-live"
             className="text-warning animate-pulse"
           >
-            [LIVE]
+            {RETRO_LIVE_BADGE}
           </span>
         </div>
         <div className="px-3 py-2 text-sm">

@@ -15,6 +15,8 @@ import { useTranslation } from 'react-i18next';
 import { useTheme } from '../../theme/use-theme';
 import { type StaffCandidate } from './onboarding-data';
 
+const RETRO_PROMPT = '$ onboarding --staff';
+
 export interface OBSummaryStripProps {
   candidates: ReadonlyArray<StaffCandidate>;
   className?: string;
@@ -52,7 +54,7 @@ export function OBSummaryStrip({
           className,
         )}
       >
-        <div className="text-fg-muted">$ onboarding --staff</div>
+        <div className="text-fg-muted">{RETRO_PROMPT}</div>
         <div className="flex items-center gap-3 text-fg">
           <span data-testid="onboarding-summary-cell" data-stat="selected">
             <span className="text-brand font-semibold">

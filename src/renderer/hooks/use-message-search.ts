@@ -87,10 +87,14 @@ export function useMessageSearch(
     if (trimmed.length === 0) {
       // 입력 비면 즉시 clear + 요청 스킵.
       tokenRef.current += 1;
-      setHits([]);
-      setLoading(false);
-      setError(null);
-      return;
+      const timer = setTimeout(() => {
+        setHits([]);
+        setLoading(false);
+        setError(null);
+      }, 0);
+      return () => {
+        clearTimeout(timer);
+      };
     }
 
     const myToken = ++tokenRef.current;

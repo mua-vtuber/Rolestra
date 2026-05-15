@@ -3,6 +3,8 @@ import { forwardRef, type CSSProperties, type HTMLAttributes } from 'react';
 
 import { useTheme } from '../../theme/use-theme';
 
+const ASCII_TITLE_PREFIX = '┌─';
+
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
   /**
    * Apply theme `panelClip` token (clip-path polygon). Defaults to true so
@@ -122,7 +124,7 @@ export const CardHeader = forwardRef<HTMLDivElement, CardHeaderProps>(
       >
         {isAscii && (
           <span aria-hidden="true" className="select-none font-mono text-xs text-fg-subtle">
-            ┌─
+            {ASCII_TITLE_PREFIX}
           </span>
         )}
         {heading !== undefined && heading !== null && heading !== false && (

@@ -32,6 +32,8 @@ import { getSkillTemplate } from '../../../shared/skill-catalog';
 import type { Channel } from '../../../shared/channel-types';
 import type { RoleId } from '../../../shared/role-types';
 
+const DRAG_HANDLE_LABEL = '⋮⋮';
+
 /**
  * R12-C round 4 (큐 정리): 큐 패널의 input 영역에서 직접 시작 부서를
  * 선택해 워크플로우를 시작한다. 아이디어 / 기획만 entry 시작 가능 —
@@ -412,7 +414,7 @@ export function QueuePanel({
                       aria-hidden="true"
                       className="cursor-grab text-fg-muted select-none"
                     >
-                      ⋮⋮
+                      {DRAG_HANDLE_LABEL}
                     </span>
                     <span className="flex-1 text-sm truncate">{item.prompt}</span>
                     <span data-testid="queue-panel-item-status">

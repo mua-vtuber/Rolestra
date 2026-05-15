@@ -82,6 +82,7 @@ export function HandoffPackageCard({
     busy: false,
     error: null,
   });
+  const [now] = useState(() => Date.now());
 
   const handleStartMeeting = useCallback(async (): Promise<void> => {
     if (action.busy) return;
@@ -111,7 +112,7 @@ export function HandoffPackageCard({
   const target = item.package.target.channelRole ?? '—';
   const dispatchedAtLabel = formatRelativeTime(
     item.package.dispatchedAt,
-    Date.now(),
+    now,
   );
 
   return (

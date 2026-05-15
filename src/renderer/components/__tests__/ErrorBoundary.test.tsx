@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+/* eslint-disable i18next/no-literal-string */
 
 /**
  * ErrorBoundary tests — R10-Task8.

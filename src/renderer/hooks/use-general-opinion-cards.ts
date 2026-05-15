@@ -56,7 +56,10 @@ export function useGeneralOpinionCards(
 
   const mountedRef = useRef(true);
   const channelIdRef = useRef(channelId);
-  channelIdRef.current = channelId;
+
+  useEffect(() => {
+    channelIdRef.current = channelId;
+  }, [channelId]);
 
   const runFetch = useCallback(
     async (isInitial: boolean): Promise<void> => {
@@ -92,9 +95,12 @@ export function useGeneralOpinionCards(
 
   useEffect(() => {
     mountedRef.current = true;
-    void runFetch(true);
+    const timer = setTimeout(() => {
+      void runFetch(true);
+    }, 0);
     return () => {
       mountedRef.current = false;
+      clearTimeout(timer);
     };
   }, [runFetch]);
 

@@ -26,6 +26,8 @@ import { Button } from '../../../components/primitives/button';
 import type { ProviderInfo } from '../../../../shared/provider-types';
 import type { DetectedCli } from '../../../../shared/ipc-types';
 
+const WSL_PREFIX = '[WSL:';
+
 export function CliTab(): ReactElement {
   const { t } = useTranslation();
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
@@ -206,7 +208,7 @@ export function CliTab(): ReactElement {
                   <span className="text-fg-muted ml-2">{entry.path}</span>
                   {entry.wslDistro !== undefined && (
                     <span className="text-fg-subtle ml-2">
-                      [WSL: {entry.wslDistro}]
+                      {`${WSL_PREFIX} ${entry.wslDistro}]`}
                     </span>
                   )}
                 </li>
