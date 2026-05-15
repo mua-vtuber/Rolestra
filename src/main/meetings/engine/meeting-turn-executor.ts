@@ -52,6 +52,7 @@ import { randomUUID } from 'node:crypto';
 import type { ZodType } from 'zod';
 import type { Participant } from '../../../shared/engine-types';
 import type {
+  CliWorkspaceContext,
   CliProviderConfig,
   Message as ProviderMessage,
 } from '../../../shared/provider-types';
@@ -76,6 +77,7 @@ import type { ParsedCliPermissionRequest } from '../../providers/cli/cli-permiss
 import type { StreamBridge } from '../../streams/stream-bridge';
 import type { MessageService } from '../../channels/message-service';
 import type { ArenaRootService } from '../../arena/arena-root-service';
+import type { PermissionService } from '../../files/permission-service';
 import type { providerRegistry } from '../../providers/registry';
 import type { ApprovalCliAdapter } from '../../approvals/approval-cli-adapter';
 import type { MeetingSession } from './meeting-session';
@@ -113,6 +115,16 @@ function classifyTurnError(err: unknown): TurnErrorCategory {
   return 'turn_error';
 }
 
+function isCliProvider(provider: BaseProvider): provider is CliProvider {
+  return (
+    provider instanceof CliProvider ||
+    (
+      provider.type === 'cli' &&
+      typeof (provider as CliProvider).setPermissionRequestCallback === 'function'
+    )
+  );
+}
+
 /**
  * Deps injected into the constructor — all mandatory.
  *
@@ -144,6 +156,8 @@ export interface MeetingTurnExecutorDeps {
   channelPermissionResolver: ChannelPermissionResolver;
   /** R9-Task6 same_error tripwire. Optional. */
   circuitBreaker?: CircuitBreaker;
+  /** Resolves fresh project cwd/consensus paths immediately before CLI spawn. */
+  cliWorkspaceResolver?: Pick<PermissionService, 'resolveForCli'>;
 }
 
 // ── Phase context shapes — orchestrator 가 turn-executor 에 넘기는 추가 정보 ─
@@ -190,6 +204,7 @@ export class MeetingTurnExecutor {
   private readonly promptComposer: PromptComposer;
   private readonly channelPermissionResolver: ChannelPermissionResolver;
   private readonly circuitBreaker?: CircuitBreaker;
+  private readonly cliWorkspaceResolver?: Pick<PermissionService, 'resolveForCli'>;
 
   private abortController: AbortController | null = null;
 
@@ -205,6 +220,7 @@ export class MeetingTurnExecutor {
     this.promptComposer = deps.promptComposer;
     this.channelPermissionResolver = deps.channelPermissionResolver;
     this.circuitBreaker = deps.circuitBreaker;
+    this.cliWorkspaceResolver = deps.cliWorkspaceResolver;
   }
 
   /** Abort the currently in-flight provider request, if any. */
@@ -570,23 +586,19 @@ export class MeetingTurnExecutor {
         });
       }
 
-      if (provider instanceof CliProvider) {
-        // R12-W T10.5.G1 — CLI spawn cwd = 작업장 안 프로젝트 폴더 동기화.
-        // CliProvider 인스턴스는 ProviderRegistry singleton 으로 회의 간 +
-        // turn 간 재사용되므로 *매 turn 직전* setProjectPath 호출 필수.
-        // (한 회의 안에서도 사용자가 다른 채널/프로젝트 회의를 평행 시작
-        // 하면 직전 회의의 cwd 가 leak 되는 race — 구조 개선은 R12-X 의
-        // per-call cwd injection 책임.)
-        provider.setProjectPath(this.session.ssmCtx.projectPath);
+      if (isCliProvider(provider)) {
         this.wireCliPermissionCallback(provider, speaker);
       }
 
+      const options = isCliProvider(provider)
+        ? { cliWorkspace: this.resolveCliWorkspace() }
+        : undefined;
       let sequence = 0;
       try {
         for await (const token of provider.streamCompletion(
           messages,
           persona,
-          undefined,
+          options,
           signal,
         )) {
           if (this.session.aborted) break;
@@ -601,7 +613,7 @@ export class MeetingTurnExecutor {
           });
         }
       } finally {
-        if (provider instanceof CliProvider) {
+        if (isCliProvider(provider)) {
           provider.setPermissionRequestCallback(null);
         }
       }
@@ -650,6 +662,29 @@ export class MeetingTurnExecutor {
     } finally {
       this.abortController = null;
     }
+  }
+
+  private resolveCliWorkspace(): CliWorkspaceContext {
+    const resolved = this.cliWorkspaceResolver?.resolveForCli(
+      this.session.projectId,
+    );
+    if (resolved) {
+      return {
+        cwd: resolved.cwd,
+        consensusPath: resolved.consensusPath,
+        projectId: resolved.project.id,
+        projectKind: resolved.project.kind,
+        permissionMode: resolved.project.permissionMode,
+      };
+    }
+
+    return {
+      cwd: this.session.ssmCtx.projectPath,
+      consensusPath: this.arenaRootService.consensusPath(),
+      projectId: this.session.projectId,
+      projectKind: 'new',
+      permissionMode: this.session.ssmCtx.permissionMode,
+    };
   }
 
   /**

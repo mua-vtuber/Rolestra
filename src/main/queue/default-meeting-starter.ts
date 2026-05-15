@@ -36,10 +36,9 @@ import type { Project } from '../../shared/project-types';
 import type { ChannelService } from '../channels/channel-service';
 import type { MeetingService } from '../meetings/meeting-service';
 import type { ProjectService } from '../projects/project-service';
-import type { ArenaRootService } from '../arena/arena-root-service';
+import type { PermissionService } from '../files/permission-service';
 import type { MeetingOrchestratorFactory } from '../ipc/handlers/channel-handler';
 import type { QueueMeetingStarter, QueueService } from './queue-service';
-import { resolveProjectPaths } from '../arena/resolve-project-paths';
 
 /**
  * Topic snippet length cap for the meeting row. The full prompt is
@@ -57,13 +56,8 @@ export interface DefaultMeetingStarterDeps {
   channelService: Pick<ChannelService, 'get' | 'listByProject' | 'listMembers'>;
   meetingService: Pick<MeetingService, 'start'>;
   projectService: Pick<ProjectService, 'get'>;
-  /**
-   * R12-W T10.5.G2 — queue 회의 spawn 시 ssmCtx.projectPath 를 작업장 안
-   * 프로젝트 폴더의 절대 cwd 로 흘리기 위해 ArenaRoot 의 getPath() 가
-   * 필요. 옛 코드는 `projectPath: ''` 하드코딩이라 CliProvider 가 앱 실행
-   * 위치 (= rolestra source repo) 를 spawn cwd 로 사용하던 격차.
-   */
-  arenaRoot: Pick<ArenaRootService, 'getPath'>;
+  /** Final path-guard resolver used for CLI spawn contexts. */
+  permissionService: Pick<PermissionService, 'resolveForCli'>;
   /**
    * Function-typed access to the queue so the starter can read the
    * `targetChannelId` of the just-claimed row. Passing the lookup
@@ -174,7 +168,7 @@ export function createDefaultMeetingStarter(
       meeting.id,
       channelId,
       project,
-      deps.arenaRoot.getPath(),
+      deps.permissionService,
     );
     await Promise.resolve(
       deps.orchestratorFactory.createAndRun({
@@ -222,23 +216,22 @@ function sliceTopic(prompt: string): string {
 /**
  * Construct the SSM context for a queue-spawned meeting. R12-W T10.5.G2 —
  * `projectPath` is the project folder cwd resolved through
- * `resolveProjectPaths` so the downstream CLI provider spawns inside the
- * ArenaRoot-sealed surface (not the app exec directory). The legacy
- * placeholder `''` is forbidden — silent fallback is the very class of
- * defect the hotfix closes.
+ * PermissionService so the downstream CLI provider spawns inside the
+ * ArenaRoot-sealed surface (not the app exec directory), with external
+ * project TOCTOU re-validation intact.
  */
 function buildSsmCtx(
   meetingId: string,
   channelId: string,
   project: Project,
-  arenaRootPath: string,
+  permissionService: Pick<PermissionService, 'resolveForCli'>,
 ): SsmContext {
-  const paths = resolveProjectPaths(project, arenaRootPath);
+  const paths = permissionService.resolveForCli(project.id);
   return {
     meetingId,
     channelId,
     projectId: project.id,
-    projectPath: paths.cwdPath,
+    projectPath: paths.cwd,
     permissionMode: project.permissionMode,
     autonomyMode: project.autonomyMode,
   };

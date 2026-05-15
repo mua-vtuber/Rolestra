@@ -61,6 +61,7 @@ function buildSession(): MeetingSession {
     topic: 'Release planning',
     participants: participants(2),
     ssmCtx: ctx(),
+    channelRole: null,
   });
 }
 
@@ -482,6 +483,7 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
         },
       ],
       ssmCtx: ctx(),
+      channelRole: 'design.ui',
     });
     const designChannel = makeChannel(5);
     (designChannel as unknown as { role: string }).role = 'design.ui';
@@ -717,6 +719,7 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
         },
       ],
       ssmCtx: ctx(),
+      channelRole: 'design.ui',
     });
     const designChannel = makeChannel(5);
     (designChannel as unknown as { role: string }).role = 'design.ui';

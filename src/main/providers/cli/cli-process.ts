@@ -6,6 +6,8 @@
  */
 
 import { execFile, type ChildProcess } from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import type { CliRuntimeConfig } from './cli-provider';
 import type { CliSessionState } from './cli-session-state';
 import { getCircuitBreaker } from '../../queue/circuit-breaker-accessor';
@@ -34,6 +36,20 @@ function wireCliElapsedRecorder(child: ChildProcess): void {
       breaker.recordCliElapsed(elapsed);
     }
   });
+}
+
+function resolveSpawnCwd(cwd: string | undefined): string {
+  if (!cwd || cwd.trim().length === 0) {
+    throw new Error('CLI spawn cwd required');
+  }
+  const resolved = path.resolve(cwd);
+  if (!fs.existsSync(resolved)) {
+    throw new Error(`CLI spawn cwd does not exist: ${resolved}`);
+  }
+  if (!fs.statSync(resolved).isDirectory()) {
+    throw new Error(`CLI spawn cwd is not a directory: ${resolved}`);
+  }
+  return resolved;
 }
 
 /**
@@ -147,6 +163,7 @@ export class CliProcessManager {
 
     return new Promise<void>((resolve, reject) => {
       try {
+        const cwd = resolveSpawnCwd(config.cwd);
         // Add session ID flag for respawning with conversation continuity
         const args = [...config.args];
         if (config.sessionIdFlag && sessionState.sessionId) {
@@ -158,6 +175,7 @@ export class CliProcessManager {
           resolvedCommand,
           resolvedArgs,
           {
+            cwd,
             shell: false,
             maxBuffer: MAX_BUFFER_BYTES,
             windowsHide: true,
@@ -205,13 +223,16 @@ export class CliProcessManager {
 
   /** Spawn a per-turn child process. */
   spawnPerTurn(config: CliRuntimeConfig, args: string[]): ChildProcess {
+    const cwd = resolveSpawnCwd(config.cwd);
     const { resolvedCommand, resolvedArgs } = resolveWindowsCommand(config.command, args, config.wslDistro);
     const child = execFile(
       resolvedCommand,
       resolvedArgs,
       {
+        cwd,
         shell: false,
         maxBuffer: MAX_BUFFER_BYTES,
+        windowsHide: true,
       },
     );
     wireCliElapsedRecorder(child);

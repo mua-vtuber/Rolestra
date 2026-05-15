@@ -17,6 +17,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { Channel } from '../../../shared/channel-types';
+import { catalogDefaultForNullRole } from '../../../shared/permission-set-types';
 import type {
   Message,
   MessageAuthorKind,
@@ -33,7 +34,7 @@ import {
 } from '../general-channel-opinion-flow';
 
 function mkChannel(overrides: Partial<Channel> = {}): Channel {
-  return {
+  const base: Channel = {
     id: 'ch-1',
     projectId: null,
     name: '#일반',
@@ -44,7 +45,12 @@ function mkChannel(overrides: Partial<Channel> = {}): Channel {
     purpose: null,
     handoffMode: 'check',
     maxRounds: null,
+    permissions: catalogDefaultForNullRole(),
+  };
+  return {
+    ...base,
     ...overrides,
+    permissions: overrides.permissions ?? base.permissions,
   };
 }
 

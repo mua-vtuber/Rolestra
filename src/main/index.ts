@@ -18,7 +18,6 @@ import { tryGetLogger } from './log/logger-accessor';
 import { consensusFolderService } from './ipc/handlers/workspace-handler';
 import { getConfigService } from './config/instance';
 import { ArenaRootService } from './arena/arena-root-service';
-import { resolveProjectPaths } from './arena/resolve-project-paths';
 import { getDatabase } from './database/connection';
 import { ProjectRepository } from './projects/project-repository';
 import { MeetingRepository } from './meetings/meeting-repository';
@@ -43,6 +42,7 @@ import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
 import { ChannelService } from './channels/channel-service';
 import { ProjectService } from './projects/project-service';
+import { PermissionService } from './files/permission-service';
 import {
   setProjectServiceAccessor,
   setProjectSkillSyncAccessor,
@@ -58,7 +58,7 @@ import {
   setChannelMemberServiceAccessor,
   setMeetingServiceAccessor,
   setProjectServiceAccessor as setChannelHandlerProjectServiceAccessor,
-  setArenaRootAccessor as setChannelHandlerArenaRootAccessor,
+  setPermissionServiceAccessor as setChannelHandlerPermissionServiceAccessor,
 } from './ipc/handlers/channel-handler';
 import { StreamBridge } from './streams/stream-bridge';
 import { setStreamBridgeInstance } from './streams/stream-bridge-accessor';
@@ -388,6 +388,7 @@ app.whenReady().then(async () => {
           .listActive()
           .some((meeting) => meeting.projectId === projectId),
     });
+    const permissionService = new PermissionService(arenaRoot, projectService);
     setProjectServiceAccessor(() => projectService);
     setChannelServiceAccessor(() => channelService);
     // R12-W T10.5.G2+G5 — channel:start-meeting handler 가 ssmCtx.projectPath
@@ -395,7 +396,7 @@ app.whenReady().then(async () => {
     // 흘리기 위한 deps. dogfooding 2026-05-12 발견 — 옛 하드코딩이 CLI cwd
     // 를 앱 실행 위치 (= rolestra source repo) 로 보내 봉인 chain 무력화.
     setChannelHandlerProjectServiceAccessor(() => projectService);
-    setChannelHandlerArenaRootAccessor(() => arenaRoot);
+    setChannelHandlerPermissionServiceAccessor(() => permissionService);
     // R12-W T9 + T7 — 채널 권한 IPC 와 PromptComposer wire-up 의 단일 인스턴스
     // 공유. ChannelPermissionResolver 는 ChannelRepository 만 의존 (좁은 read
     // 책임) 이라 동일 인스턴스를 turn-executor / IPC handler 양쪽이 안전하게
@@ -615,9 +616,8 @@ app.whenReady().then(async () => {
           };
         });
         // R12-W T10.5.G2+G5 — project row + ArenaRoot 로 cwd / mode 동기화.
-        // 옛 하드코딩 (`projectPath: ''`, `'hybrid' as const`) 은 CliProvider
-        // 가 `_projectPath='.'` fallback (= 앱 실행 위치) 으로 spawn 해 사용자
-        // 의도와 다른 폴더 (rolestra source repo) 가 AI 에 노출되던 dogfooding
+        // 옛 하드코딩 (`projectPath: ''`, `'hybrid' as const`) 은 CLI spawn
+        // cwd 를 프로젝트와 분리해 source repo 가 노출되던 dogfooding
         // 2026-05-12 격차의 hotfix.
         const project = projectService.get(channel.projectId);
         if (!project) {
@@ -638,12 +638,12 @@ app.whenReady().then(async () => {
           });
           return;
         }
-        const projectPaths = resolveProjectPaths(project, arenaRoot.getPath());
+        const projectPaths = permissionService.resolveForCli(project.id);
         const ssmCtx = {
           meetingId,
           channelId,
           projectId: channel.projectId,
-          projectPath: projectPaths.cwdPath,
+          projectPath: projectPaths.cwd,
           permissionMode: project.permissionMode,
           autonomyMode: project.autonomyMode,
         };
@@ -787,8 +787,7 @@ app.whenReady().then(async () => {
       channelService,
       meetingService,
       projectService,
-      // R12-W T10.5.G2 — queue 회의 spawn cwd = 작업장 안 프로젝트 폴더
-      arenaRoot,
+      permissionService,
       queueItemLookup: {
         get: (id) => (queueServiceRef ? queueServiceRef.get(id) : null),
       },
@@ -1095,6 +1094,7 @@ app.whenReady().then(async () => {
           // turn 페르소나가 채널 단위 권한 snapshot 을 받아 합성.
           promptComposer,
           channelPermissionResolver,
+          cliWorkspaceResolver: permissionService,
           // R9-Task6: feed the `same_error` tripwire so N consecutive
           // same-category turn failures downgrade the project out of
           // auto_toggle / queue. Classification runs inside the
@@ -1237,11 +1237,8 @@ app.whenReady().then(async () => {
     const { setHandoffStartMeetingResolver } = await import(
       './ipc/handlers/handoff-handler'
     );
-    // R12-W T10.5.G2+G5 — handoff:start-meeting-from-package 도 작업장 안
-    // 프로젝트 폴더 cwd + project row 의 permission/autonomy mode 로 ssmCtx
-    // 합성. 옛 코드는 channel-handler 와 똑같이 `projectPath: ''`, `'hybrid'`,
-    // `'manual'` 하드코딩이라 같은 PathGuard 봉인 무력화 격차. 정식 wire
-    // (PermissionService.resolveForCli 경유) 는 R12-X.
+    // P0 — handoff:start-meeting-from-package 도 PermissionService 경유 cwd
+    // 를 사용한다. 외부 프로젝트 link swap 은 회의 시작 전 여기서 차단된다.
     setHandoffStartMeetingResolver({
       resolveParticipants: (channelId: string) => {
         const members = channelService.listMembers(channelId);
@@ -1264,12 +1261,12 @@ app.whenReady().then(async () => {
             `handoff:start-meeting-from-package: project folder missing — slug=${project.slug}`,
           );
         }
-        const paths = resolveProjectPaths(project, arenaRoot.getPath());
+        const paths = permissionService.resolveForCli(project.id);
         return {
           meetingId,
           channelId,
           projectId,
-          projectPath: paths.cwdPath,
+          projectPath: paths.cwd,
           permissionMode: project.permissionMode,
           autonomyMode: project.autonomyMode,
         };

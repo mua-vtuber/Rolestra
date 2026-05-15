@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Channel } from '../../../shared/channel-types';
+import { catalogDefaultForNullRole } from '../../../shared/permission-set-types';
 import type { Message } from '../../../shared/message-types';
 import { AlreadyActiveMeetingError } from '../meeting-service';
 import {
@@ -13,6 +14,7 @@ const R12C_DEFAULTS = {
   purpose: null,
   handoffMode: 'check' as const,
   maxRounds: null,
+  permissions: catalogDefaultForNullRole(),
 };
 
 const userChannel: Channel = {

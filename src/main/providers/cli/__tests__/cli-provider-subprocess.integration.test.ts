@@ -9,6 +9,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import type { ChildProcess } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 // ── Mock child_process ───────────────────────────────────────────────
 
@@ -185,6 +188,45 @@ describe('CliProvider Subprocess Integration', () => {
 
     const tokens = await tokenPromise;
     expect(tokens).toEqual(['Hello', ' from CLI']);
+  });
+
+  it('passes explicit cliWorkspace cwd to subprocess spawn', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'rolestra-cli-provider-cwd-'));
+    try {
+      const config = makeCliConfig({ outputFormat: 'stream-json' });
+      const provider = new CliProvider(makeProviderInit(config));
+
+      const tokenPromise = collectTokens(provider.streamCompletion(
+        MESSAGES,
+        '',
+        {
+          cliWorkspace: {
+            cwd,
+            consensusPath: cwd,
+            projectId: 'project-1',
+            projectKind: 'new',
+            permissionMode: 'approval',
+          },
+        },
+      ));
+
+      await new Promise(r => setTimeout(r, 10));
+      const proc = spawnedProcesses[0];
+      emitOutputAndExit(proc, ['{"text":"ok"}']);
+
+      await expect(tokenPromise).resolves.toEqual(['ok']);
+      const spawnCall = mockExecFile.mock.calls.find(
+        (call) => typeof call[call.length - 1] !== 'function',
+      );
+      expect(spawnCall?.[2]).toEqual(
+        expect.objectContaining({
+          cwd: path.resolve(cwd),
+          shell: false,
+        }),
+      );
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
   });
 
   // ── 2. jsonl output parsing ────────────────────────────────────────

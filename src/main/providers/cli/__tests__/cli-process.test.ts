@@ -1,4 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { resolveWindowsCommand, escapeWindowsArg, CliProcessManager } from '../cli-process';
 
 // ---------------------------------------------------------------------------
@@ -340,5 +343,74 @@ describe('CliProcessManager.ping', () => {
 
     const result = await manager.ping(makeConfig({ command: 'quirky-cli' }));
     expect(result).toBe(true);
+  });
+});
+
+// ===========================================================================
+// CliProcessManager cwd enforcement
+// ===========================================================================
+
+describe('CliProcessManager cwd enforcement', () => {
+  let manager: CliProcessManager;
+  let mockExecFile: ReturnType<typeof vi.fn>;
+  let cwd: string;
+  let filePath: string;
+
+  function makeConfig(overrides: Partial<import('../cli-provider').CliRuntimeConfig> = {}): import('../cli-provider').CliRuntimeConfig {
+    return {
+      command: 'echo',
+      args: [],
+      inputFormat: 'pipe',
+      outputFormat: 'raw-stdout',
+      sessionStrategy: 'per-turn',
+      hangTimeout: { first: 1000, subsequent: 1000 },
+      cwd,
+      ...overrides,
+    };
+  }
+
+  beforeEach(async () => {
+    const cp = await import('node:child_process');
+    mockExecFile = cp.execFile as unknown as ReturnType<typeof vi.fn>;
+    mockExecFile.mockReset();
+    manager = new CliProcessManager();
+    cwd = mkdtempSync(path.join(tmpdir(), 'rolestra-cli-cwd-'));
+    filePath = path.join(cwd, 'not-a-dir.txt');
+    writeFileSync(filePath, 'file');
+    mockExecFile.mockReturnValue({
+      on: vi.fn(),
+    });
+  });
+
+  afterEach(() => {
+    rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it('passes resolved cwd to per-turn execFile', () => {
+    manager.spawnPerTurn(makeConfig(), ['hello']);
+
+    expect(mockExecFile).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.objectContaining({
+        cwd: path.resolve(cwd),
+        shell: false,
+        windowsHide: true,
+      }),
+    );
+  });
+
+  it('rejects missing cwd before spawning', () => {
+    expect(() => manager.spawnPerTurn(makeConfig({ cwd: '' }), [])).toThrow(
+      /cwd required/,
+    );
+    expect(mockExecFile).not.toHaveBeenCalled();
+  });
+
+  it('rejects file cwd before spawning', () => {
+    expect(() => manager.spawnPerTurn(makeConfig({ cwd: filePath }), [])).toThrow(
+      /not a directory/,
+    );
+    expect(mockExecFile).not.toHaveBeenCalled();
   });
 });

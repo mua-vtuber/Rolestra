@@ -109,6 +109,7 @@ interface Harness {
   };
   meetingService: { start: ReturnType<typeof vi.fn> };
   projectService: { get: ReturnType<typeof vi.fn> };
+  permissionService: { resolveForCli: ReturnType<typeof vi.fn> };
   queueItemLookup: { get: ReturnType<typeof vi.fn> };
   orchestratorFactory: { createAndRun: ReturnType<typeof vi.fn> };
 }
@@ -143,6 +144,13 @@ function makeHarness(opts: HarnessOpts = {}): Harness {
     },
     projectService: {
       get: vi.fn().mockReturnValue(project),
+    },
+    permissionService: {
+      resolveForCli: vi.fn().mockReturnValue({
+        cwd: '/arena/projects/p-1',
+        consensusPath: '/arena/consensus',
+        project: project ?? makeProject(),
+      }),
     },
     queueItemLookup: {
       get: vi.fn().mockReturnValue(queueItem),
@@ -201,6 +209,7 @@ describe('createDefaultMeetingStarter — happy path', () => {
           meetingId: 'meet-1',
           channelId: 'c-plan',
           projectId: 'p-1',
+          projectPath: '/arena/projects/p-1',
           permissionMode: 'hybrid',
           autonomyMode: 'queue',
         }),

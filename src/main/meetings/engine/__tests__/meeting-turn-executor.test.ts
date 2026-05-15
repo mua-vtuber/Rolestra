@@ -159,6 +159,7 @@ function buildDeps(
     channelPermissionResolver:
       overrides.channelPermissionResolver ?? channelPermissionResolver,
     circuitBreaker: overrides.circuitBreaker,
+    cliWorkspaceResolver: overrides.cliWorkspaceResolver,
   };
 }
 
@@ -281,6 +282,81 @@ describe('MeetingTurnExecutor — ok happy-path', () => {
       opinionsMarkdown: '| ITEM_001 |',
     });
     expect(result.kind).toBe('ok');
+  });
+
+  it('passes fresh PermissionService workspace to CLI providers', async () => {
+    const validJson = JSON.stringify({
+      name: 'AI 1',
+      label: 'ai-1_1',
+      opinions: [
+        { title: 't', content: 'c', rationale: 'r' },
+      ],
+    });
+    const provider = {
+      type: 'cli',
+      config: {
+        type: 'cli',
+        command: 'test-cli',
+        args: [],
+        inputFormat: 'pipe',
+        outputFormat: 'raw-stdout',
+        sessionStrategy: 'per-turn',
+        hangTimeout: { first: 1000, subsequent: 1000 },
+        model: 'test-cli',
+      },
+      setPermissionRequestCallback: vi.fn(),
+      consumeLastTokenUsage: vi.fn(() => null),
+    };
+    const streamCompletion = vi.fn(async function* () {
+      yield validJson;
+    });
+    Object.assign(provider, { streamCompletion });
+
+    const providerRegistry = {
+      get: vi.fn(() => provider),
+    } as unknown as typeof ProviderRegistryInstance;
+    const cliWorkspaceResolver = {
+      resolveForCli: vi.fn(() => ({
+        cwd: '/arena/projects/alpha/link',
+        consensusPath: '/arena/consensus',
+        project: {
+          id: PROJECT_ID,
+          slug: 'alpha',
+          name: 'Alpha',
+          description: '',
+          kind: 'external' as const,
+          externalLink: '/real/alpha',
+          permissionMode: 'approval' as const,
+          autonomyMode: 'manual' as const,
+          status: 'active' as const,
+          createdAt: 1,
+          archivedAt: null,
+        },
+      })),
+    };
+
+    const deps = buildDeps({
+      providerRegistry,
+      cliWorkspaceResolver,
+    });
+    const executor = new MeetingTurnExecutor(deps);
+
+    const result = await executor.requestOpinionGather(speaker, {
+      suggestedLabel: 'ai-1_1',
+    });
+
+    expect(result.kind).toBe('ok');
+    expect(cliWorkspaceResolver.resolveForCli).toHaveBeenCalledWith(PROJECT_ID);
+    const callOptions = (streamCompletion.mock.calls[0] as unknown[])[2];
+    expect(callOptions).toEqual({
+      cliWorkspace: {
+        cwd: '/arena/projects/alpha/link',
+        consensusPath: '/arena/consensus',
+        projectId: PROJECT_ID,
+        projectKind: 'external',
+        permissionMode: 'approval',
+      },
+    });
   });
 });
 

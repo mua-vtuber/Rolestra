@@ -16,6 +16,7 @@
 
 import { BaseProvider, type BaseProviderInit } from '../provider-interface';
 import type {
+  CliWorkspaceContext,
   Message,
   CompletionOptions,
 } from '../../../shared/provider-types';
@@ -65,6 +66,10 @@ export interface CliRuntimeConfig {
   wslDistro?: string;
   /** Permission adapter for state-based CLI permission control. */
   permissionAdapter?: CliPermissionAdapter;
+  /** Native host cwd passed to child_process for this request. */
+  cwd?: string;
+  /** Workspace identity used to isolate persistent CLI sessions. */
+  workspaceKey?: string;
 }
 
 /** Init params for CliProvider, extending BaseProviderInit with CLI runtime config. */
@@ -107,8 +112,11 @@ export class CliProvider extends BaseProvider {
   /** Current permission mode (read-only by default). */
   private _permissionMode: CliPermissionMode = 'read-only';
 
-  /** Project path used by permission adapter to scope permissions. */
+  /** Legacy ambient fallback path. Project meetings pass per-call cliWorkspace. */
   private _projectPath = '.';
+
+  /** Workspace currently associated with the cached CLI conversation. */
+  private _activeWorkspaceKey: string | null = null;
 
   /** Callback for CLI-native permission requests. Set by TurnExecutor before each turn. */
   private _permissionRequestCallback: CliPermissionRequestCallback | null = null;
@@ -155,9 +163,6 @@ export class CliProvider extends BaseProvider {
     console.log(`[cli:warmup] starting: command=${cmd}, strategy=${this.cliConfig.sessionStrategy}`);
     this.setStatus('warming-up');
     try {
-      if (this.cliConfig.sessionStrategy === 'persistent') {
-        await this.processManager.spawnPersistent(this.getCliConfig(), this.sessionState);
-      }
       const valid = await this.validateConnection();
       console.log(`[cli:warmup] ping result: valid=${valid}, command=${cmd}`);
       this.setStatus(valid ? 'ready' : 'not-installed');
@@ -191,8 +196,14 @@ export class CliProvider extends BaseProvider {
 
     this._permissionMode = mode;
 
-    // For persistent sessions, kill and respawn so new args take effect
-    if (this.cliConfig.sessionStrategy === 'persistent') {
+    // For a live persistent session, kill and respawn so new args take effect.
+    // If no process is alive, the next streamCompletion call will spawn with
+    // its explicit per-call workspace instead of booting an ambient process.
+    if (
+      this.cliConfig.sessionStrategy === 'persistent' &&
+      this.processManager.process &&
+      !this.processManager.process.killed
+    ) {
       const prevSessionId = this.sessionState.sessionId;
       this.processManager.kill();
       await this.processManager.spawnPersistent(this.getCliConfig(), this.sessionState);
@@ -207,8 +218,8 @@ export class CliProvider extends BaseProvider {
   }
 
   /**
-   * Set the project path used by the permission adapter to scope permissions.
-   * Call this before respawnWithPermissions for accurate permission scoping.
+   * Legacy fallback for non-meeting callers that have not migrated to
+   * CompletionOptions.cliWorkspace. Meeting turns must pass per-call context.
    */
   setProjectPath(projectPath: string): void {
     this._projectPath = projectPath;
@@ -267,7 +278,8 @@ export class CliProvider extends BaseProvider {
     }
 
     // Warmup delay on first call (e.g., Gemini 429 avoidance)
-    const config = this.getCliConfig();
+    const config = this.buildCliConfig(options);
+    this.ensureWorkspaceIsolation(config);
     if (!this.sessionState.warmedUp && config.warmupDelay) {
       this.sessionState.warmedUp = true;
       await new Promise<void>((r) => setTimeout(r, config.warmupDelay ?? 0));
@@ -280,9 +292,9 @@ export class CliProvider extends BaseProvider {
 
     try {
       if (this.cliConfig.sessionStrategy === 'per-turn') {
-        yield* this.streamPerTurn(messages, persona, options, signal);
+        yield* this.streamPerTurn(config, messages, persona, options, signal);
       } else {
-        yield* this.streamPersistent(messages, persona, options, signal);
+        yield* this.streamPersistent(config, messages, persona, options, signal);
       }
     } finally {
       this.sanitizer.reset();
@@ -299,10 +311,16 @@ export class CliProvider extends BaseProvider {
    * Subclasses may override for additional dynamic config.
    */
   protected getCliConfig(): CliRuntimeConfig {
-    const adapter = this.cliConfig.permissionAdapter;
-    if (!adapter) return this.cliConfig;
+    return this.buildCliConfig();
+  }
 
-    const consensusPath = consensusFolderService.getFolderPath() ?? '';
+  private buildCliConfig(options?: CompletionOptions): CliRuntimeConfig {
+    const workspace = this.resolveWorkspace(options);
+    const workspaceKey = this.workspaceKey(workspace);
+    const adapter = this.cliConfig.permissionAdapter;
+    if (!adapter) {
+      return { ...this.cliConfig, cwd: workspace.cwd, workspaceKey };
+    }
 
     // R2-Task21 cleanup (dogfooding 2026-04-30 #5 root cause): the v2
     // adapter signature `buildReadOnlyArgs(projectPath, consensusPath)`
@@ -317,30 +335,103 @@ export class CliProvider extends BaseProvider {
     // belongs to the higher-level caller that knows the project, not
     // the provider.
     const ctx: import('./permission-adapter').AdapterContext = {
-      permissionMode: 'approval',
-      projectKind: 'new',
-      cwd: this._projectPath,
-      consensusPath,
-      dangerousAutonomyOptIn: false,
+      permissionMode: workspace.permissionMode,
+      projectKind: workspace.projectKind,
+      cwd: this.toCliVisiblePath(workspace.cwd),
+      consensusPath: this.toCliVisiblePath(workspace.consensusPath),
+      dangerousAutonomyOptIn: workspace.dangerousAutonomyOptIn ?? false,
     };
     const permArgs = this._permissionMode === 'worker'
       ? adapter.buildArgs(ctx)
       : adapter.buildReadOnlyArgs(ctx);
 
-    if (permArgs.length === 0) return this.cliConfig;
+    if (permArgs.length === 0) {
+      return { ...this.cliConfig, cwd: workspace.cwd, workspaceKey };
+    }
 
-    return { ...this.cliConfig, args: [...this.cliConfig.args, ...permArgs] };
+    return {
+      ...this.cliConfig,
+      args: [...this.cliConfig.args, ...permArgs],
+      cwd: workspace.cwd,
+      workspaceKey,
+    };
+  }
+
+  private resolveWorkspace(options?: CompletionOptions): CliWorkspaceContext {
+    const explicit = options?.cliWorkspace;
+    if (explicit) return explicit;
+
+    const consensusPath =
+      consensusFolderService.getFolderPath() ??
+      process.cwd();
+
+    return {
+      cwd: this._projectPath === '.' ? consensusPath : this._projectPath,
+      consensusPath,
+      projectId: null,
+      projectKind: 'new',
+      permissionMode: 'approval',
+      dangerousAutonomyOptIn: false,
+    };
+  }
+
+  private workspaceKey(workspace: CliWorkspaceContext): string {
+    return [
+      workspace.projectId ?? 'ambient',
+      workspace.cwd,
+      workspace.consensusPath,
+      workspace.projectKind,
+      workspace.permissionMode,
+      workspace.dangerousAutonomyOptIn === true ? 'dangerous' : 'normal',
+    ].join('|');
+  }
+
+  private ensureWorkspaceIsolation(config: CliRuntimeConfig): void {
+    const nextKey = config.workspaceKey ?? null;
+    if (
+      nextKey &&
+      this._activeWorkspaceKey &&
+      this._activeWorkspaceKey !== nextKey
+    ) {
+      this.sessionState.clearSession();
+      this.sessionState.resetForTurn();
+      this.processManager.kill();
+    }
+    this._activeWorkspaceKey = nextKey;
+  }
+
+  private toCliVisiblePath(nativePath: string): string {
+    if (!this.cliConfig.wslDistro || process.platform !== 'win32') {
+      return nativePath;
+    }
+    if (nativePath.startsWith('/')) return nativePath;
+
+    const normalized = nativePath.replace(/\//g, '\\');
+    const drive = /^([A-Za-z]):\\?(.*)$/.exec(normalized);
+    if (!drive) {
+      throw new Error(
+        `WSL CLI workspace path must be a drive path or WSL path: ${nativePath}`,
+      );
+    }
+    const driveLetter = drive[1];
+    if (!driveLetter) {
+      throw new Error(
+        `WSL CLI workspace path is missing a drive letter: ${nativePath}`,
+      );
+    }
+    const tail = drive[2]?.replace(/\\/g, '/') ?? '';
+    return `/mnt/${driveLetter.toLowerCase()}${tail ? `/${tail}` : ''}`;
   }
 
   // ── Private streaming strategies ──────────────────────────
 
   private async *streamPerTurn(
+    config: CliRuntimeConfig,
     messages: Message[],
     persona: string,
     options?: CompletionOptions,
     signal?: AbortSignal,
   ): AsyncGenerator<string> {
-    const config = this.getCliConfig();
     const args = this.promptBuilder.buildArgs(messages, persona, options, config, this.sessionState.sessionId);
     const child = this.processManager.spawnPerTurn(config, args);
 
@@ -462,13 +553,12 @@ export class CliProvider extends BaseProvider {
   }
 
   private async *streamPersistent(
+    config: CliRuntimeConfig,
     messages: Message[],
     persona: string,
     options?: CompletionOptions,
     signal?: AbortSignal,
   ): AsyncGenerator<string> {
-    const config = this.getCliConfig();
-
     for (let attempt = 0; attempt < 2; attempt++) {
       // Ensure persistent process is alive
       if (!this.processManager.process || this.processManager.process.killed) {
@@ -528,7 +618,7 @@ export class CliProvider extends BaseProvider {
 
     // Persistent failed -- fallback to per-turn --print mode
     console.warn(`[cli:${config.command}] persistent failed, falling back to per-turn`);
-    yield* this.streamFallbackPerTurn(messages, persona, options, signal);
+    yield* this.streamFallbackPerTurn(config, messages, persona, options, signal);
   }
 
   /**
@@ -536,12 +626,12 @@ export class CliProvider extends BaseProvider {
    * Used when the persistent process hangs or fails repeatedly.
    */
   private async *streamFallbackPerTurn(
+    config: CliRuntimeConfig,
     messages: Message[],
     persona: string,
     _options?: CompletionOptions,
     signal?: AbortSignal,
   ): AsyncGenerator<string> {
-    const config = this.getCliConfig();
     // Strip --input-format and its value: --print takes plain text input, not stream-json
     const filteredArgs = config.args.filter(
       (arg, i, arr) => arg !== '--input-format' && !(i > 0 && arr[i - 1] === '--input-format'),

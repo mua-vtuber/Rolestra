@@ -19,7 +19,7 @@ import type { ChannelService } from '../../channels/channel-service';
 import type { MeetingService } from '../../meetings/meeting-service';
 import type { MemberProfileService } from '../../members/member-profile-service';
 import type { ProjectService } from '../../projects/project-service';
-import type { ArenaRootService } from '../../arena/arena-root-service';
+import type { PermissionService } from '../../files/permission-service';
 import type { Meeting } from '../../../shared/meeting-types';
 import type { Participant } from '../../../shared/engine-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
@@ -27,7 +27,6 @@ import type { Channel } from '../../../shared/channel-types';
 import type { DmSummary } from '../../../shared/dm-types';
 import type { MemberView } from '../../../shared/member-profile-types';
 import { providerRegistry } from '../../providers/registry';
-import { resolveProjectPaths } from '../../arena/resolve-project-paths';
 
 /**
  * Factory surface used by `channel:start-meeting` to kick off a
@@ -64,7 +63,7 @@ let channelAccessor: (() => ChannelService) | null = null;
 let meetingAccessor: (() => MeetingService) | null = null;
 let memberAccessor: (() => MemberProfileService) | null = null;
 let projectAccessor: (() => ProjectService) | null = null;
-let arenaRootAccessor: (() => ArenaRootService) | null = null;
+let permissionAccessor: (() => PermissionService) | null = null;
 let orchestratorFactory: MeetingOrchestratorFactory | null = null;
 
 export function setChannelServiceAccessor(fn: () => ChannelService): void {
@@ -91,19 +90,21 @@ export function setChannelMemberServiceAccessor(
 /**
  * R12-W T10.5.G2+G5 — channel:start-meeting 의 ssmCtx 가 *작업장 안 프로젝트
  * 폴더 cwd* 와 *project row 의 permission/autonomy mode* 를 정확히 흘리려면
- * project lookup + arenaRoot 가 필요. dogfooding 2026-05-12 발견 — 기존
+ * project lookup + PermissionService 가 필요. dogfooding 2026-05-12 발견 — 기존
  * 하드코딩 (`projectPath: ''`, `'hybrid' as const`, `'manual' as const`) 이
  * CLI provider 에 잘못된 cwd 를 흘려 rolestra source repo 가 노출.
  *
- * 정식 wire (PermissionService.resolveForCli 경유) 는 R12-X 책임 — 본 hotfix 는
- * `resolveProjectPaths` 직접 호출로 *우회*.
+ * P0 fix: `PermissionService.resolveForCli` 를 start 경계에서 호출해 external
+ * link TOCTOU 재검증까지 통과한 cwd 만 SSM context 로 넘긴다.
  */
 export function setProjectServiceAccessor(fn: () => ProjectService): void {
   projectAccessor = fn;
 }
 
-export function setArenaRootAccessor(fn: () => ArenaRootService): void {
-  arenaRootAccessor = fn;
+export function setPermissionServiceAccessor(
+  fn: () => PermissionService,
+): void {
+  permissionAccessor = fn;
 }
 
 export function setMeetingOrchestratorFactory(
@@ -140,11 +141,11 @@ function getProjectSvc(): ProjectService {
   return projectAccessor();
 }
 
-function getArenaRoot(): ArenaRootService {
-  if (!arenaRootAccessor) {
-    throw new Error('channel handler: arena root not initialized');
+function getPermissionSvc(): PermissionService {
+  if (!permissionAccessor) {
+    throw new Error('channel handler: permission service not initialized');
   }
-  return arenaRootAccessor();
+  return permissionAccessor();
 }
 
 /** channel:list — R12-C: projectId=null 은 DM 만 (전역 일반 채널은 별도 IPC). */
@@ -311,7 +312,9 @@ export function handleDmList(): IpcResponse<'dm:list'> {
   for (const channel of dms) {
     const members = svc.listMembers(channel.id);
     if (members.length === 0) continue; // 데이터 무결성 방어.
-    const providerId = members[0]!.providerId;
+    const firstMember = members[0];
+    if (!firstMember) continue;
+    const providerId = firstMember.providerId;
     channelByProvider.set(providerId, channel);
   }
 
@@ -382,9 +385,9 @@ export function handleChannelStartMeeting(
       if (participants.length >= 2) {
         // R12-W T10.5.G2+G5 — project row + ArenaRoot 로 cwd / mode 동기화.
         // 사용자 mental model: 회의 cwd = 작업장 안 프로젝트 폴더. 옛
-        // 하드코딩 (`projectPath: ''`, `'hybrid' as const`) 은 CLI provider 가
-        // `_projectPath='.'` fallback (= 앱 실행 위치) 로 spawn 해 rolestra
-        // source repo 를 노출하던 격차의 hotfix.
+        // 하드코딩 (`projectPath: ''`, `'hybrid' as const`) 은 CLI provider
+        // spawn cwd 를 프로젝트와 분리해 source repo 가 노출되던 격차의
+        // hotfix.
         const project = getProjectSvc().get(channel.projectId);
         if (!project) {
           throw new Error(
@@ -396,12 +399,12 @@ export function handleChannelStartMeeting(
             `channel:start-meeting: project folder missing — slug=${project.slug}`,
           );
         }
-        const paths = resolveProjectPaths(project, getArenaRoot().getPath());
+        const paths = getPermissionSvc().resolveForCli(project.id);
         const ssmCtx: SsmContext = {
           meetingId: meeting.id,
           channelId: meeting.channelId,
           projectId: channel.projectId,
-          projectPath: paths.cwdPath,
+          projectPath: paths.cwd,
           permissionMode: project.permissionMode,
           autonomyMode: project.autonomyMode,
         };

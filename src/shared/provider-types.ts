@@ -7,6 +7,7 @@
  */
 
 import type { RoleId } from './role-types';
+import type { PermissionMode, ProjectKind } from './project-types';
 
 /** Provider capability flags for runtime feature detection. */
 export type ProviderCapability =
@@ -89,7 +90,31 @@ export interface CompletionOptions {
   temperature?: number;
   maxTokens?: number;
   tools?: ToolDefinition[];
+  /**
+   * Explicit workspace for CLI-backed providers.
+   *
+   * Meeting turns must pass this per call instead of mutating provider
+   * singleton state; non-project calls may omit it and let the provider use
+   * its ambient fallback.
+   */
+  cliWorkspace?: CliWorkspaceContext;
   [key: string]: unknown;
+}
+
+/** Spawn and permission context for a single CLI provider request. */
+export interface CliWorkspaceContext {
+  /** Native host cwd passed to child_process. */
+  cwd: string;
+  /** Native host consensus folder path granted to CLI providers. */
+  consensusPath: string;
+  /** Project id when this request is scoped to a Rolestra project. */
+  projectId?: string | null;
+  /** Project kind used by the CLI permission matrix. */
+  projectKind: ProjectKind;
+  /** Project permission mode used by worker permission flags. */
+  permissionMode: PermissionMode;
+  /** User opt-in for dangerous auto-mode aliases. */
+  dangerousAutonomyOptIn?: boolean;
 }
 
 /** Tool definition for tool-capable providers. */

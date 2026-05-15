@@ -15,6 +15,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import path from 'node:path';
 import {
   MeetingMinutesService,
   MeetingNotFoundForMinutesError,
@@ -24,6 +25,7 @@ import {
 import type { Meeting } from '../../../shared/meeting-types';
 import type { Opinion, OpinionVote } from '../../../shared/opinion-types';
 import type { Channel } from '../../../shared/channel-types';
+import { catalogDefaultForNullRole } from '../../../shared/permission-set-types';
 import type { Project } from '../../../shared/project-types';
 import type { Message } from '../../../shared/message-types';
 
@@ -46,7 +48,7 @@ function makeMeeting(overrides: Partial<Meeting> = {}): Meeting {
 }
 
 function makeChannel(overrides: Partial<Channel> = {}): Channel {
-  return {
+  const base: Channel = {
     id: 'ch-1',
     projectId: 'p-1',
     name: '#planning',
@@ -57,7 +59,12 @@ function makeChannel(overrides: Partial<Channel> = {}): Channel {
     purpose: null,
     handoffMode: 'check',
     maxRounds: null,
+    permissions: catalogDefaultForNullRole(),
+  };
+  return {
+    ...base,
     ...overrides,
+    permissions: overrides.permissions ?? base.permissions,
   };
 }
 
@@ -354,13 +361,11 @@ describe('MeetingMinutesService.compose', () => {
 
     const result = await service.compose({ meetingId: 'm-1' });
 
-    expect(fsMocks.mkdir).toHaveBeenCalledWith(
-      `${consensusPath}/meetings/m-1`.replace(/\//g, expect.anything().constructor === String ? '/' : '/'),
-      { recursive: true },
-    );
-    // 정규화 — Linux 환경 가정 (path.sep = '/').
-    const expectedDir = `${consensusPath}/meetings/m-1`;
-    const expectedFile = `${expectedDir}/minutes.md`;
+    const expectedDir = path.resolve(consensusPath, 'meetings', 'm-1');
+    expect(fsMocks.mkdir).toHaveBeenCalledWith(expectedDir, {
+      recursive: true,
+    });
+    const expectedFile = path.join(expectedDir, 'minutes.md');
     const expectedTmp = `${expectedFile}.rand.tmp`;
 
     expect(fsMocks.writeFile.mock.calls[0]?.[0]).toBe(expectedTmp);

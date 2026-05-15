@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { Channel, ChannelMember } from '../../../shared/channel-types';
+import { catalogDefaultForNullRole } from '../../../shared/permission-set-types';
 import type { Message as ChannelMessage } from '../../../shared/message-types';
 import type { BaseProvider } from '../../providers/provider-interface';
 import { DmAutoResponder, type DmAutoResponderDeps } from '../dm-auto-responder';
@@ -16,6 +17,7 @@ const dmChannel: Channel = {
   purpose: null,
   handoffMode: 'check',
   maxRounds: null,
+  permissions: catalogDefaultForNullRole(),
 };
 
 const dmMember: ChannelMember = {
