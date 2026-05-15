@@ -40,10 +40,12 @@ import { DateSeparator } from './DateSeparator';
 import { MeetingBanner } from './MeetingBanner';
 import { Message, type MessageAuthorInfo } from './Message';
 import { MessageCardVariant, isCardMessage } from './MessageRenderer';
+import { IdeaPickCard } from './IdeaPickCard';
 import { PostOpinionModal } from './PostOpinionModal';
 import { SystemMessage } from './SystemMessage';
 import { ApprovalBlock } from './ApprovalBlock';
 import { ApprovalInboxView } from '../approvals/ApprovalInboxView';
+import { MeetingReviewPanel } from '../meeting-review/MeetingReviewPanel';
 import { GeneralChannelControls } from '../general/GeneralChannelControls';
 import { useChannelDisabledState } from '../../hooks/use-channel-disabled-state';
 import { useGlobalGeneralChannel } from '../../hooks/use-global-general-channel';
@@ -53,9 +55,30 @@ import { useChannelMembers } from '../../hooks/use-channel-members';
 import { useChannelMessages } from '../../hooks/use-channel-messages';
 import { useChannels } from '../../hooks/use-channels';
 import { useDms } from '../../hooks/use-dms';
+import { useIdeaPickSnapshot } from '../../hooks/use-idea-pick-snapshot';
 import { useMeetingStream } from '../../hooks/use-meeting-stream';
+import { invoke } from '../../ipc/invoke';
 import type { Channel } from '../../../shared/channel-types';
-import type { Message as ChannelMessage } from '../../../shared/message-types';
+import {
+  hasPlanningDesignCheckMeta,
+  hasReviewGateMeta,
+  hasWireframeCheckpointMeta,
+  type Message as ChannelMessage,
+} from '../../../shared/message-types';
+import type {
+  MeetingReviewGate,
+  MeetingReviewGateStatus,
+} from '../../../shared/meeting-review-types';
+import type {
+  DesignCheckpoint,
+  DesignCheckpointDecision,
+  DesignCheckpointStatus,
+} from '../../../shared/design-checkpoint-types';
+import type {
+  PlanningDesignCheckCardMeta,
+  PlanningDesignCheckRecord,
+  PlanningDesignCheckUserDecision,
+} from '../../../shared/planning-design-check-types';
 
 export interface ThreadProps {
   projectId: string;
@@ -143,6 +166,88 @@ function isSystemMessage(m: ChannelMessage): boolean {
   return m.authorKind === 'system' && !isApprovalMessage(m);
 }
 
+function withReviewGateStatusOverride(
+  message: ChannelMessage,
+  statusById: Readonly<Record<string, MeetingReviewGateStatus>>,
+): ChannelMessage {
+  const reviewGate = message.meta?.reviewGate;
+  if (reviewGate === undefined || typeof reviewGate.id !== 'string') {
+    return message;
+  }
+  const status = statusById[reviewGate.id];
+  if (status === undefined || status === reviewGate.status) return message;
+  return {
+    ...message,
+    meta: {
+      ...message.meta,
+      reviewGate: {
+        ...reviewGate,
+        status,
+      },
+    },
+  };
+}
+
+function withWireframeCheckpointStatusOverride(
+  message: ChannelMessage,
+  statusById: Readonly<Record<string, DesignCheckpointStatus>>,
+): ChannelMessage {
+  const checkpoint = message.meta?.wireframeCheckpoint;
+  if (checkpoint === undefined || typeof checkpoint.id !== 'string') {
+    return message;
+  }
+  const status = statusById[checkpoint.id];
+  if (status === undefined || status === checkpoint.status) return message;
+  return {
+    ...message,
+    meta: {
+      ...message.meta,
+      wireframeCheckpoint: {
+        ...checkpoint,
+        status,
+      },
+    },
+  };
+}
+
+function planningDesignCheckMetaFromRecord(
+  record: PlanningDesignCheckRecord,
+): PlanningDesignCheckCardMeta {
+  return {
+    id: record.id,
+    status: record.status,
+    verdict: record.verdict,
+    returnCount: record.returnCount,
+    sourceDesignMeetingId: record.sourceDesignMeetingId,
+    designChannelId: record.designChannelId,
+    planningChannelId: record.planningChannelId,
+    implementationChannelId: record.implementationChannelId,
+    title: record.requestTitle,
+    reason: record.reason,
+    revisionDirection: record.revisionDirection,
+    userDecision: record.userDecision,
+  };
+}
+
+function withPlanningDesignCheckRecordOverride(
+  message: ChannelMessage,
+  checkById: Readonly<Record<string, PlanningDesignCheckRecord>>,
+): ChannelMessage {
+  const check = message.meta?.planningDesignCheck;
+  if (check === undefined || typeof check.id !== 'string') {
+    return message;
+  }
+  const record = checkById[check.id];
+  if (record === undefined) return message;
+  return {
+    ...message,
+    meta: {
+      ...message.meta,
+      planningDesignCheck: planningDesignCheckMetaFromRecord(record),
+    },
+  };
+}
+
 export function Thread({
   projectId,
   onRenameChannel,
@@ -184,6 +289,7 @@ export function Thread({
   const { meetings } = useActiveMeetings();
   const { messages, refresh: refreshMessages } = useChannelMessages(activeChannelId);
   const meetingStream = useMeetingStream(activeChannelId);
+  const ideaPickSnapshot = useIdeaPickSnapshot(activeChannelId);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -333,9 +439,215 @@ export function Thread({
   // 호출될 일이 없다. hooks rule — 모든 useState / useCallback 은 early
   // return *위* 에 둬야 한다.
   const [postOpinionOpen, setPostOpinionOpen] = useState(false);
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
+  const [reviewStatusById, setReviewStatusById] = useState<
+    Record<string, MeetingReviewGateStatus>
+  >({});
+  const [wireframeStatusById, setWireframeStatusById] = useState<
+    Record<string, DesignCheckpointStatus>
+  >({});
+  const [planningCheckById, setPlanningCheckById] = useState<
+    Record<string, PlanningDesignCheckRecord>
+  >({});
   const handlePostOpinion = useCallback((): void => {
     setPostOpinionOpen(true);
   }, []);
+  const handleReviewLoadedOrDecided = useCallback(
+    (review: MeetingReviewGate): void => {
+      setReviewStatusById((prev) => {
+        if (prev[review.id] === review.status) return prev;
+        return { ...prev, [review.id]: review.status };
+      });
+    },
+    [],
+  );
+  const handleWireframeLoadedOrDecided = useCallback(
+    (checkpoint: DesignCheckpoint): void => {
+      setWireframeStatusById((prev) => {
+        if (prev[checkpoint.id] === checkpoint.status) return prev;
+        return { ...prev, [checkpoint.id]: checkpoint.status };
+      });
+    },
+    [],
+  );
+  const handlePlanningDesignCheckDecided = useCallback(
+    (check: PlanningDesignCheckRecord): void => {
+      setPlanningCheckById((prev) => {
+        if (
+          prev[check.id]?.status === check.status &&
+          prev[check.id]?.userDecision === check.userDecision &&
+          prev[check.id]?.verdict === check.verdict &&
+          prev[check.id]?.reason === check.reason &&
+          prev[check.id]?.revisionDirection === check.revisionDirection
+        ) {
+          return prev;
+        }
+        return { ...prev, [check.id]: check };
+      });
+    },
+    [],
+  );
+  const decideWireframeCheckpoint = useCallback(
+    async (
+      checkpointId: string,
+      decision: DesignCheckpointDecision,
+      note?: string,
+    ): Promise<void> => {
+      const result = await invoke('design-checkpoint:decide', {
+        checkpointId,
+        decision,
+        note,
+      });
+      handleWireframeLoadedOrDecided(result.checkpoint);
+      void refreshMessages();
+    },
+    [handleWireframeLoadedOrDecided, refreshMessages],
+  );
+  const decidePlanningDesignCheck = useCallback(
+    async (
+      checkId: string,
+      decision: PlanningDesignCheckUserDecision,
+    ): Promise<void> => {
+      const result = await invoke('planning-design-check:decide', {
+        checkId,
+        decision,
+        userNote: '',
+      });
+      handlePlanningDesignCheckDecided(result.check);
+      void refreshMessages();
+    },
+    [handlePlanningDesignCheckDecided, refreshMessages],
+  );
+
+  useEffect(() => {
+    if (messages === null) return;
+    const reviewIds = new Set<string>();
+    for (const message of messages) {
+      const meta = message.meta;
+      if (hasReviewGateMeta(meta)) {
+        reviewIds.add(meta.reviewGate.id);
+      }
+    }
+    const ids = Array.from(reviewIds);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void Promise.all(
+      ids.map(async (reviewId) => {
+        try {
+          const result = await invoke('meeting-review:get', { reviewId });
+          return result.item;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((items) => {
+      if (cancelled) return;
+      setReviewStatusById((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const item of items) {
+          if (item === null) continue;
+          if (next[item.id] !== item.status) {
+            next[item.id] = item.status;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
+
+  useEffect(() => {
+    if (messages === null) return;
+    const checkpointIds = new Set<string>();
+    for (const message of messages) {
+      const meta = message.meta;
+      if (hasWireframeCheckpointMeta(meta)) {
+        checkpointIds.add(meta.wireframeCheckpoint.id);
+      }
+    }
+    const ids = Array.from(checkpointIds);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void Promise.all(
+      ids.map(async (checkpointId) => {
+        try {
+          const result = await invoke('design-checkpoint:get', { checkpointId });
+          return result.item;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((items) => {
+      if (cancelled) return;
+      setWireframeStatusById((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const item of items) {
+          if (item === null) continue;
+          if (next[item.id] !== item.status) {
+            next[item.id] = item.status;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
+
+  useEffect(() => {
+    if (messages === null) return;
+    const checkIds = new Set<string>();
+    for (const message of messages) {
+      const meta = message.meta;
+      if (hasPlanningDesignCheckMeta(meta)) {
+        checkIds.add(meta.planningDesignCheck.id);
+      }
+    }
+    const ids = Array.from(checkIds);
+    if (ids.length === 0) return;
+    let cancelled = false;
+    void Promise.all(
+      ids.map(async (checkId) => {
+        try {
+          const result = await invoke('planning-design-check:get', { checkId });
+          return result.item;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((items) => {
+      if (cancelled) return;
+      setPlanningCheckById((prev) => {
+        let changed = false;
+        const next = { ...prev };
+        for (const item of items) {
+          if (item === null) continue;
+          const before = next[item.id];
+          if (
+            before?.status !== item.status ||
+            before?.userDecision !== item.userDecision ||
+            before?.verdict !== item.verdict ||
+            before?.reason !== item.reason ||
+            before?.revisionDirection !== item.revisionDirection
+          ) {
+            next[item.id] = item;
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [messages]);
 
   if (activeChannel === null) {
     return (
@@ -362,6 +674,20 @@ export function Thread({
     onDeleteChannel === undefined
       ? undefined
       : (): void => onDeleteChannel(activeChannel.id);
+  const visibleIdeaPickSnapshot =
+    activeMeeting !== null &&
+    activeMeeting.stateName === 'awaiting_user_pick' &&
+    ideaPickSnapshot?.meetingId === activeMeeting.id
+      ? ideaPickSnapshot
+      : null;
+  const ideaPickSnapshotKey =
+    visibleIdeaPickSnapshot === null
+      ? null
+      : [
+          visibleIdeaPickSnapshot.meetingId,
+          visibleIdeaPickSnapshot.cards.map((card) => card.screenId).join('|'),
+          (visibleIdeaPickSnapshot.selectedScreenIds ?? []).join('|'),
+        ].join('::');
 
   return (
     <div
@@ -382,6 +708,15 @@ export function Thread({
         open={postOpinionOpen}
         onOpenChange={setPostOpinionOpen}
         channelId={activeChannel.id}
+      />
+      <MeetingReviewPanel
+        reviewId={activeReviewId}
+        onClose={() => setActiveReviewId(null)}
+        onLoaded={handleReviewLoadedOrDecided}
+        onDecided={(review) => {
+          handleReviewLoadedOrDecided(review);
+          void refreshMessages();
+        }}
       />
 
       {activeChannel.kind === 'system_approval' ? (
@@ -407,6 +742,13 @@ export function Thread({
               meeting={activeMeeting}
               memberCount={memberCount}
               onAbort={() => onAbortMeeting?.(activeMeeting.id)}
+            />
+          ) : null}
+
+          {visibleIdeaPickSnapshot !== null ? (
+            <IdeaPickCard
+              key={ideaPickSnapshotKey ?? 'idea-pick'}
+              snapshot={visibleIdeaPickSnapshot}
             />
           ) : null}
 
@@ -459,7 +801,44 @@ export function Thread({
             if (it.kind === 'card') {
               // R12-C2 P3 T14 — 의견 / 회의록 카드. 액션 버튼 핸들러는 본
               // sub-task 에서 미주입 — T15+ workflow sub-task 가 wire.
-              return <MessageCardVariant key={it.key} message={it.message} />;
+              const reviewAwareMessage = withReviewGateStatusOverride(
+                it.message,
+                reviewStatusById,
+              );
+              const message = withWireframeCheckpointStatusOverride(
+                reviewAwareMessage,
+                wireframeStatusById,
+              );
+              const planningAwareMessage =
+                withPlanningDesignCheckRecordOverride(
+                  message,
+                  planningCheckById,
+                );
+              return (
+                <MessageCardVariant
+                  key={it.key}
+                  message={planningAwareMessage}
+                  reviewGateHandlers={{
+                    onReviewOpen: (reviewId) => setActiveReviewId(reviewId),
+                  }}
+                  wireframeCheckpointHandlers={{
+                    onContinue: (checkpointId) =>
+                      decideWireframeCheckpoint(checkpointId, 'continue'),
+                    onRequestRevision: (checkpointId, note) =>
+                      decideWireframeCheckpoint(
+                        checkpointId,
+                        'request_revision',
+                        note,
+                      ),
+                    onAutoSkip: (checkpointId) =>
+                      decideWireframeCheckpoint(checkpointId, 'auto_skip'),
+                  }}
+                  planningDesignCheckHandlers={{
+                    onUserDecision: (checkId, decision) =>
+                      decidePlanningDesignCheck(checkId, decision),
+                  }}
+                />
+              );
             }
             if (it.kind === 'live') {
               const ssmLabel =

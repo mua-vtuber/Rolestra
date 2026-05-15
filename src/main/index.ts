@@ -37,6 +37,28 @@ import { RunStepAggregator } from './meetings/run-step/run-step-aggregator';
 import { setRunStepAggregatorAccessor } from './ipc/handlers/dashboard-progress-handler';
 import { MeetingMinutesService } from './meetings/meeting-minutes-service';
 import { setMeetingMinutesServiceAccessor } from './ipc/handlers/meetings-minutes-handler';
+import { MeetingReviewGateRepository } from './meeting-review/meeting-review-gate-repository';
+import { MeetingReviewGateService } from './meeting-review/meeting-review-gate-service';
+import { DesignCheckpointRepository } from './design-checkpoints/design-checkpoint-repository';
+import { DesignCheckpointService } from './design-checkpoints/design-checkpoint-service';
+import { PlanningDesignCheckRepository } from './planning-design-check/planning-design-check-repository';
+import { PlanningDesignCheckService } from './planning-design-check/planning-design-check-service';
+import {
+  setMeetingReviewChannelServiceAccessor,
+  setMeetingReviewDispatchServiceAccessor,
+  setMeetingReviewGateServiceAccessor,
+  setMeetingReviewMessageServiceAccessor,
+  setMeetingReviewStreamBridgeAccessor,
+} from './ipc/handlers/meeting-review-handler';
+import { setDesignCheckpointServiceAccessor } from './ipc/handlers/design-checkpoint-handler';
+import {
+  setPlanningDesignCheckChannelServiceAccessor,
+  setPlanningDesignCheckDispatchServiceAccessor,
+  setPlanningDesignCheckMessageServiceAccessor,
+  setPlanningDesignCheckMissionCardIdFactory,
+  setPlanningDesignCheckServiceAccessor,
+  setPlanningDesignCheckStreamBridgeAccessor,
+} from './ipc/handlers/planning-design-check-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
 import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
@@ -949,6 +971,26 @@ app.whenReady().then(async () => {
       new HandoffDispatchRepository(db),
     );
     const handoffPendingState = new HandoffPendingState();
+    const meetingReviewGateService = new MeetingReviewGateService(
+      new MeetingReviewGateRepository(db),
+    );
+    const designCheckpointService = new DesignCheckpointService(
+      new DesignCheckpointRepository(db),
+    );
+    const planningDesignCheckService = new PlanningDesignCheckService(
+      new PlanningDesignCheckRepository(db),
+      designCheckpointService,
+    );
+    setMeetingReviewGateServiceAccessor(() => meetingReviewGateService);
+    setMeetingReviewDispatchServiceAccessor(() => handoffDispatchService);
+    setMeetingReviewMessageServiceAccessor(() => messageService);
+    setMeetingReviewChannelServiceAccessor(() => channelService);
+    setDesignCheckpointServiceAccessor(() => designCheckpointService);
+    setPlanningDesignCheckServiceAccessor(() => planningDesignCheckService);
+    setPlanningDesignCheckDispatchServiceAccessor(() => handoffDispatchService);
+    setPlanningDesignCheckMessageServiceAccessor(() => messageService);
+    setPlanningDesignCheckChannelServiceAccessor(() => channelService);
+    setPlanningDesignCheckMissionCardIdFactory(() => randomUUID());
 
     // handoff handler accessor 등록은 meetingMinutesService / orchestratorFactory
     // 생성 이후 위치에서 한 번에 진행 (아래 setMeetingMinutesServiceAccessor 직후).
@@ -1024,6 +1066,8 @@ app.whenReady().then(async () => {
     setStreamBridgeInstance(streamBridge);
     // R12-C2 T28 — handoff IPC handler 가 stream emit 시 사용.
     setHandoffStreamBridgeAccessor(() => streamBridge);
+    setMeetingReviewStreamBridgeAccessor(() => streamBridge);
+    setPlanningDesignCheckStreamBridgeAccessor(() => streamBridge);
 
     // Meeting orchestrator factory — channel-handler calls this on
     // `channel:start-meeting` after MeetingService.start() has created
@@ -1035,7 +1079,7 @@ app.whenReady().then(async () => {
     // `meetingStarter` (constructed earlier) can invoke it without a
     // direct import of the closure body.
     const meetingOrchestratorFactory: MeetingOrchestratorFactory = {
-      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx, roundSetting, priorContextSystemMessage }) => {
+      createAndRun: async ({ meeting, projectId, participants, topic, ssmCtx, roundSetting, priorContextSystemMessage, sourceHandoffContext }) => {
         const { MeetingSession } = await import(
           './meetings/engine/meeting-session'
         );
@@ -1075,6 +1119,7 @@ app.whenReady().then(async () => {
           ssmCtx,
           channelRole: channelForSession.role,
           priorContextSystemMessage,
+          sourceHandoffContext,
         });
 
         const personaPrimedParticipants = new Set<string>();
@@ -1160,6 +1205,9 @@ app.whenReady().then(async () => {
           projectService,
           handoffPendingState,
           handoffDispatchService,
+          meetingReviewGateService,
+          designCheckpointService,
+          planningDesignCheckService,
           resolveReceiverChannel,
           missionCardIdFactory: () => randomUUID(),
           notificationService,

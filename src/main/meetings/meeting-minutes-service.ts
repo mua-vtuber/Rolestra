@@ -113,6 +113,23 @@ function minutesFilenameForOrdinal(ordinal: 1 | 2 | undefined): string {
   return `minutes-${ordinal}.md`;
 }
 
+function resolveMinutesPath(
+  consensusPath: string,
+  meetingId: string,
+  ordinal: 1 | 2 | undefined,
+): { targetDir: string; targetFile: string } {
+  const consensusBase = path.resolve(consensusPath);
+  const targetDir = path.resolve(consensusBase, MINUTES_SUBDIR, meetingId);
+  const targetFile = path.join(targetDir, minutesFilenameForOrdinal(ordinal));
+
+  const baseWithSep = consensusBase + path.sep;
+  if (targetDir !== consensusBase && !targetDir.startsWith(baseWithSep)) {
+    throw new MinutesPathOutsideConsensusError(targetDir, consensusBase);
+  }
+
+  return { targetDir, targetFile };
+}
+
 // ── Service ────────────────────────────────────────────────────────────
 
 export interface MeetingMinutesServiceDeps {
@@ -275,18 +292,11 @@ export class MeetingMinutesService {
     body: string,
     ordinal: 1 | 2 | undefined,
   ): Promise<string> {
-    const consensusBase = path.resolve(this.deps.arenaRoot.consensusPath());
-    const targetDir = path.resolve(consensusBase, MINUTES_SUBDIR, meetingId);
-    const targetFile = path.join(targetDir, minutesFilenameForOrdinal(ordinal));
-
-    // PathGuard — resolved target 이 consensusBase 안인지 검증.
-    const baseWithSep = consensusBase + path.sep;
-    if (
-      targetDir !== consensusBase &&
-      !targetDir.startsWith(baseWithSep)
-    ) {
-      throw new MinutesPathOutsideConsensusError(targetDir, consensusBase);
-    }
+    const { targetDir, targetFile } = resolveMinutesPath(
+      this.deps.arenaRoot.consensusPath(),
+      meetingId,
+      ordinal,
+    );
 
     await this.fs.mkdir(targetDir, { recursive: true });
 
@@ -309,22 +319,47 @@ export class MeetingMinutesService {
     meetingId: string;
     ordinal?: 1 | 2;
   }): Promise<string> {
-    const consensusBase = path.resolve(this.deps.arenaRoot.consensusPath());
-    const targetDir = path.resolve(consensusBase, MINUTES_SUBDIR, args.meetingId);
-    const targetFile = path.join(
-      targetDir,
-      minutesFilenameForOrdinal(args.ordinal),
-    );
-
-    const baseWithSep = consensusBase + path.sep;
-    if (
-      targetDir !== consensusBase &&
-      !targetDir.startsWith(baseWithSep)
-    ) {
-      throw new MinutesPathOutsideConsensusError(targetDir, consensusBase);
-    }
-
+    const { targetFile } = this.getMinutesPath(args);
     return await fsp.readFile(targetFile, 'utf-8');
+  }
+
+  getMinutesPath(args: {
+    meetingId: string;
+    ordinal?: 1 | 2;
+  }): { targetFile: string } {
+    const { targetFile } = resolveMinutesPath(
+      this.deps.arenaRoot.consensusPath(),
+      args.meetingId,
+      args.ordinal,
+    );
+    return { targetFile };
+  }
+
+  async readMinutesDocument(args: {
+    meetingId: string;
+    ordinal?: 1 | 2;
+  }): Promise<{ body: string; path: string }> {
+    const { targetFile } = this.getMinutesPath(args);
+    const body = await fsp.readFile(targetFile, 'utf-8');
+    return { body, path: targetFile };
+  }
+
+  async readMostRelevantMinutesDocument(args: {
+    meetingId: string;
+  }): Promise<{ body: string; path: string }> {
+    const candidates: Array<1 | 2 | undefined> = [undefined, 2, 1];
+    let lastError: unknown = null;
+    for (const ordinal of candidates) {
+      try {
+        return await this.readMinutesDocument({
+          meetingId: args.meetingId,
+          ordinal,
+        });
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    throw lastError;
   }
 }
 

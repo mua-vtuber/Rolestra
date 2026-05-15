@@ -41,6 +41,8 @@ import type {
   GeneralOpinionCard,
   IdeaFinalizeSelectionInput,
   IdeaFinalizeSelectionResult,
+  IdeaRequestMoreInput,
+  IdeaRequestMoreResult,
   ListGeneralCardsResult,
   Opinion,
   OpinionFreeDiscussionResult,
@@ -70,9 +72,9 @@ import { OPINION_DEPTH_CAP, buildScreenIdMap, mapToRecord } from './screen-id';
 export const IDEA_USER_NOT_PICKED_REASON = 'user_not_picked';
 
 /**
- * 사용자 자유 코멘트로 insert 되는 opinion row 의 authorLabel — 회의 단위
- * 카운터 1 회만 발급 (사용자가 한 번만 commit 하므로). 발화 ID 형식은
- * `<author>_<n>` (§11.18.1) — 사용자 = `user`.
+ * 사용자 자유 코멘트로 insert 되는 첫 opinion row 의 authorLabel. 추가 수집
+ * 요청을 여러 번 할 수 있으므로 실제 insert 시점에는 기존 user_* label 을
+ * 보고 다음 번호를 발급한다.
  */
 export const IDEA_USER_OPINION_AUTHOR_LABEL = 'user_1';
 
@@ -495,22 +497,21 @@ export class OpinionService {
 
     const opinions = this.repo.listByMeeting(meetingId);
     const map = buildScreenIdMap(opinions);
+    const selectableRootIds = this.selectableIdeaRootIds(opinions);
 
     // 화면 ID → UUID 매핑 검증 (alien ID 가 들어오면 즉시 throw — silent
     // skip 금지).
     const selectedUuids: string[] = [];
     for (const screenId of selectedScreenIds) {
       const uuid = map.screenToUuid.get(screenId);
-      if (!uuid) {
+      if (!uuid || !selectableRootIds.has(uuid)) {
         throw new UnknownScreenIdError(meetingId, screenId);
       }
       selectedUuids.push(uuid);
     }
 
     const selectedSet = new Set(selectedUuids);
-    const rootIds = opinions
-      .filter((o) => o.parentId === null)
-      .map((o) => o.id);
+    const rootIds = [...selectableRootIds];
 
     const baseNow = Date.now();
     let ordinal = 0;
@@ -550,10 +551,8 @@ export class OpinionService {
       // 자체가 gather 후라 의견 ≥ 0 보장. 0 인 케이스는 향후 IPC schema
       // 측에서 channelId 추가하는 선택지 — 본 sub-task 는 회의에 root 의견
       // 1 건 이상 보장 가정.
-      const channelId =
-        opinions.length > 0
-          ? opinions[0]!.channelId
-          : null;
+      const firstOpinion = opinions[0] ?? null;
+      const channelId = firstOpinion?.channelId ?? null;
       if (channelId === null) {
         throw new OpinionError(
           `OpinionService.finalizeIdeaSelection: meeting "${meetingId}" ` +
@@ -570,7 +569,7 @@ export class OpinionService {
         channelId,
         kind: 'user-raised',
         authorProviderId: null,
-        authorLabel: IDEA_USER_OPINION_AUTHOR_LABEL,
+        authorLabel: this.nextUserOpinionLabel(opinions),
         title: this.deriveUserCommentTitle(trimmedComment),
         content: trimmedComment,
         rationale: '',
@@ -584,6 +583,102 @@ export class OpinionService {
     }
 
     return { meetingId, agreedIds, excludedIds, userOpinion };
+  }
+
+  /**
+   * 추가 아이디어 수집 요청. 선택된 root 아이디어는 `agreed` 로 유지하고,
+   * 선택되지 않은 root 아이디어는 아직 최종 제외가 아니므로 `pending` 으로
+   * 돌려둔다. 사용자 지시는 다음 gather prompt 와 최종 묶음 문서에 남도록
+   * `user-raised` 의견으로 보존한다.
+   */
+  requestMoreIdeas(input: IdeaRequestMoreInput): IdeaRequestMoreResult {
+    const { meetingId, selectedScreenIds, userComment } = input;
+    const trimmedComment = (userComment ?? '').trim();
+    if (selectedScreenIds.length === 0 && trimmedComment.length === 0) {
+      throw new IdeaPickValidationError(meetingId);
+    }
+
+    const opinions = this.repo.listByMeeting(meetingId);
+    const map = buildScreenIdMap(opinions);
+    const selectableRootIds = this.selectableIdeaRootIds(opinions);
+
+    const selectedUuids: string[] = [];
+    for (const screenId of selectedScreenIds) {
+      const uuid = map.screenToUuid.get(screenId);
+      if (!uuid || !selectableRootIds.has(uuid)) {
+        throw new UnknownScreenIdError(meetingId, screenId);
+      }
+      selectedUuids.push(uuid);
+    }
+
+    const selectedSet = new Set(selectedUuids);
+    const baseNow = Date.now();
+    let ordinal = 0;
+
+    for (const id of selectableRootIds) {
+      const ts = baseNow + ordinal;
+      ordinal += 1;
+      const ok = this.repo.updateStatus(
+        id,
+        selectedSet.has(id) ? 'agreed' : 'pending',
+        null,
+        ts,
+      );
+      if (!ok) throw new OpinionNotFoundError(id);
+    }
+
+    let userOpinion: Opinion | null = null;
+    if (trimmedComment.length > 0) {
+      const firstOpinion = opinions[0] ?? null;
+      const channelId = firstOpinion?.channelId ?? null;
+      if (channelId === null) {
+        throw new OpinionError(
+          `OpinionService.requestMoreIdeas: meeting "${meetingId}" ` +
+            'has 0 opinion rows — cannot derive channelId for user comment.',
+        );
+      }
+      const ts = baseNow + ordinal;
+      userOpinion = {
+        id: randomUUID(),
+        parentId: null,
+        meetingId,
+        channelId,
+        kind: 'user-raised',
+        authorProviderId: null,
+        authorLabel: this.nextUserOpinionLabel(opinions),
+        title: this.deriveUserCommentTitle(trimmedComment),
+        content: trimmedComment,
+        rationale: '',
+        status: 'agreed',
+        exclusionReason: null,
+        round: 0,
+        createdAt: ts,
+        updatedAt: ts,
+      };
+      this.repo.insert(userOpinion);
+    }
+
+    return { meetingId, selectedIds: selectedUuids, userOpinion };
+  }
+
+  private selectableIdeaRootIds(opinions: readonly Opinion[]): Set<string> {
+    return new Set(
+      opinions
+        .filter((o) => o.parentId === null && o.kind === 'root')
+        .map((o) => o.id),
+    );
+  }
+
+  private nextUserOpinionLabel(opinions: readonly Opinion[]): string {
+    let max = 0;
+    for (const opinion of opinions) {
+      if (opinion.authorProviderId !== null) continue;
+      const match = opinion.authorLabel.match(/^user_(\d+)$/);
+      if (!match) continue;
+      max = Math.max(max, Number(match[1]));
+    }
+    if (max === 0) return IDEA_USER_OPINION_AUTHOR_LABEL;
+    return `user_${max + 1}`;
   }
 
   /**
@@ -658,8 +753,7 @@ export class OpinionService {
     const inserted: Opinion[] = [];
     const baseNow = Date.now();
 
-    for (let i = 0; i < input.parts.length; i += 1) {
-      const part = input.parts[i]!;
+    for (const [i, part] of input.parts.entries()) {
       const content = part.content.trim();
       const title =
         part.title !== null
@@ -761,7 +855,8 @@ export class OpinionService {
     }
 
     const cards: GeneralOpinionCard[] = opinions.map((o) => {
-      const agg = aggregateByOpinion.get(o.id)!;
+      const agg =
+        aggregateByOpinion.get(o.id) ?? { agree: 0, oppose: 0, userVote: null };
       return {
         opinion: o,
         agreeCount: agg.agree,

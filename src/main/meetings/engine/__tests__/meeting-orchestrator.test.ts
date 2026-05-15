@@ -29,6 +29,8 @@ import type { Channel } from '../../../../shared/channel-types';
 import type { Opinion } from '../../../../shared/opinion-types';
 import type { RunStepService } from '../../run-step/run-step-service';
 import type { RunStep, NewRunStep } from '../../../../shared/run-step-types';
+import type { PlanningDesignCheckRecord } from '../../../../shared/planning-design-check-types';
+import type { SourceHandoffContext } from '../../../../shared/handoff/source-handoff-context';
 
 const MEETING_ID = 'mt-1';
 const CHANNEL_ID = 'ch-1';
@@ -99,6 +101,47 @@ function makeOpinion(id: string, overrides: Partial<Opinion> = {}): Opinion {
     round: 0,
     createdAt: 0,
     updatedAt: 0,
+    ...overrides,
+  };
+}
+
+function makePlanningDesignCheckRecord(
+  overrides: Partial<PlanningDesignCheckRecord> = {},
+): PlanningDesignCheckRecord {
+  return {
+    id: 'planning-design-check-1',
+    projectId: PROJECT_ID,
+    sourceDesignMeetingId: MEETING_ID,
+    designChannelId: CHANNEL_ID,
+    designChannelRole: 'design.ui',
+    planningChannelId: 'ch-planning',
+    implementationChannelId: 'ch-implement',
+    requestTitle: '디자인 검수 요청서',
+    requestBody: '# 디자인 검수 요청서',
+    finalDesignMinutesPath: '/tmp/minutes-2.md',
+    finalDesignMinutesBody: '# final minutes',
+    snapshotDesktopPath: '/tmp/desktop.png',
+    snapshotMobilePath: '/tmp/mobile.png',
+    wireframeCheckpointsJson: '[]',
+    wireframeUserNotesJson: '[]',
+    workBundleKey: 'planning-minutes:planning-meeting-1',
+    originalPlanningMinutesId: 'planning-meeting-1',
+    originalPlanningMinutesPath: '/tmp/planning-minutes.md',
+    originalPlanningMinutesBody: '# original planning',
+    originalPlanningMinutesMissingReason: null,
+    returnCount: 0,
+    verdict: null,
+    status: 'request_created',
+    reason: null,
+    revisionDirection: null,
+    implementationDispatchId: null,
+    designReturnDispatchId: null,
+    userDecision: null,
+    userDecisionNote: null,
+    userDecisionDispatchId: null,
+    payloadJson: null,
+    createdAt: 1,
+    decidedAt: null,
     ...overrides,
   };
 }
@@ -285,6 +328,9 @@ function buildDeps(
       overrides.handoffPendingState ?? new HandoffPendingState(),
     handoffDispatchService:
       overrides.handoffDispatchService ?? handoffDispatchServiceStub,
+    meetingReviewGateService: overrides.meetingReviewGateService,
+    designCheckpointService: overrides.designCheckpointService,
+    planningDesignCheckService: overrides.planningDesignCheckService,
     resolveReceiverChannel:
       overrides.resolveReceiverChannel ?? (() => null),
     missionCardIdFactory:
@@ -334,6 +380,214 @@ describe('MeetingOrchestrator — happy-path phase loop', () => {
       null,
     );
     expect(deps.streamBridge.emitMeetingPhaseChanged).toHaveBeenCalled();
+  });
+
+  it('creates a pending planning minutes review instead of dispatching immediately', async () => {
+    const session = new MeetingSession({
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      projectId: PROJECT_ID,
+      topic: '기획 회의',
+      participants: participants(2),
+      ssmCtx: ctx(),
+      channelRole: 'planning',
+    });
+    const planningChannel = {
+      ...makeChannel(5),
+      role: 'planning',
+      name: '기획',
+    } as Channel;
+    const channelService = {
+      get: vi.fn(() => planningChannel),
+    } as unknown as ChannelService;
+    const reviewGate = {
+      id: 'review-1',
+      projectId: PROJECT_ID,
+      meetingId: MEETING_ID,
+      sourceChannelId: CHANNEL_ID,
+      targetChannelId: 'ch-design',
+      targetRole: 'design.ux' as const,
+      kind: 'planning_minutes' as const,
+      status: 'pending' as const,
+      title: '기획 회의록',
+      documentPath: '/tmp/minutes.md',
+      documentBodySnapshot: '# planning minutes',
+      userNote: null,
+      payloadJson: '{}',
+      createdAt: 1,
+      decidedAt: null,
+    };
+    const meetingReviewGateService = {
+      createPending: vi.fn(() => reviewGate),
+    };
+    const handoffDispatchService = {
+      dispatch: vi.fn(),
+      open: vi.fn(),
+      findById: vi.fn(),
+      trackByMeeting: vi.fn(() => []),
+      trackByChannel: vi.fn(() => []),
+      serializeRowToPackage: vi.fn(() => '{}'),
+    } as unknown as MeetingOrchestratorDeps['handoffDispatchService'];
+
+    const deps = buildDeps({
+      session,
+      channelService,
+      meetingReviewGateService:
+        meetingReviewGateService as unknown as MeetingOrchestratorDeps['meetingReviewGateService'],
+      handoffDispatchService,
+      resolveReceiverChannel: (_projectId, role) =>
+        role === 'design.ux'
+          ? {
+              channelId: 'ch-design',
+              handoffMode: 'check',
+              assignedProviderId: 'designer-1',
+            }
+          : null,
+    });
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(meetingReviewGateService.createPending).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: PROJECT_ID,
+        meetingId: MEETING_ID,
+        sourceChannelId: CHANNEL_ID,
+        targetChannelId: 'ch-design',
+        targetRole: 'design.ux',
+        kind: 'planning_minutes',
+        documentBodySnapshot: '# minutes',
+      }),
+    );
+    expect(handoffDispatchService.dispatch).not.toHaveBeenCalled();
+
+    const appendCalls = (
+      deps.messageService.append as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.map((call) => call[0] as Record<string, unknown>);
+    expect(
+      appendCalls.some((input) => {
+        const meta = input.meta as { reviewGate?: { id?: string } } | null;
+        return meta?.reviewGate?.id === 'review-1';
+      }),
+    ).toBe(true);
+    expect(
+      appendCalls.some((input) => input.content === '# minutes'),
+    ).toBe(false);
+  });
+
+  it('does not leave handoff blocked when planning review notice append fails', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    try {
+      const session = new MeetingSession({
+        meetingId: MEETING_ID,
+        channelId: CHANNEL_ID,
+        projectId: PROJECT_ID,
+        topic: '기획 회의',
+        participants: participants(2),
+        ssmCtx: ctx(),
+        channelRole: 'planning',
+      });
+      const planningChannel = {
+        ...makeChannel(5),
+        role: 'planning',
+        name: '기획',
+      } as Channel;
+      const channelService = {
+        get: vi.fn(() => planningChannel),
+      } as unknown as ChannelService;
+      const reviewGate = {
+        id: 'review-1',
+        projectId: PROJECT_ID,
+        meetingId: MEETING_ID,
+        sourceChannelId: CHANNEL_ID,
+        targetChannelId: 'ch-design',
+        targetRole: 'design.ux' as const,
+        kind: 'planning_minutes' as const,
+        status: 'pending' as const,
+        title: '기획 회의록',
+        documentPath: '/tmp/minutes.md',
+        documentBodySnapshot: '# planning minutes',
+        userNote: null,
+        payloadJson: '{}',
+        createdAt: 1,
+        decidedAt: null,
+      };
+      const meetingReviewGateService = {
+        createPending: vi.fn(() => reviewGate),
+      };
+      const messageService = {
+        append: vi.fn((input) => {
+          const meta = input.meta as { reviewGate?: { id?: string } } | null;
+          if (meta?.reviewGate?.id === 'review-1') {
+            throw new Error('review notice append failed');
+          }
+          return {
+            id: 'msg',
+            ...input,
+            meta: input.meta ?? null,
+            createdAt: Date.now(),
+          };
+        }),
+      } as unknown as MessageService;
+      const handoffDispatchService = {
+        dispatch: vi.fn(() => ({
+          id: 'dispatch-1',
+          fromMeetingId: MEETING_ID,
+          fromChannelId: CHANNEL_ID,
+          toChannelId: 'ch-design',
+          reason: '기획 승인',
+          minutesId: MEETING_ID,
+          missionCardJson: '{}',
+          mode: 'auto' as const,
+          dispatchedAt: 1,
+          openedAt: null,
+          createdAt: 1,
+        })),
+        open: vi.fn(),
+        findById: vi.fn(),
+        trackByMeeting: vi.fn(() => []),
+        trackByChannel: vi.fn(() => []),
+        serializeRowToPackage: vi.fn(() => '{}'),
+      } as unknown as MeetingOrchestratorDeps['handoffDispatchService'];
+
+      const deps = buildDeps({
+        session,
+        channelService,
+        messageService,
+        meetingReviewGateService:
+          meetingReviewGateService as unknown as MeetingOrchestratorDeps['meetingReviewGateService'],
+        handoffDispatchService,
+        resolveReceiverChannel: (_projectId, role) =>
+          role === 'design.ux'
+            ? {
+                channelId: 'ch-design',
+                handoffMode: 'check',
+                assignedProviderId: 'designer-1',
+              }
+            : null,
+      });
+      const orchestrator = new MeetingOrchestrator(deps);
+
+      await orchestrator.run();
+
+      expect(meetingReviewGateService.createPending).toHaveBeenCalledTimes(1);
+      expect(handoffDispatchService.dispatch).toHaveBeenCalledTimes(1);
+
+      const appendCalls = (
+        deps.messageService.append as unknown as ReturnType<typeof vi.fn>
+      ).mock.calls.map((call) => call[0] as Record<string, unknown>);
+      expect(
+        appendCalls.some((input) => input.content === '# minutes'),
+      ).toBe(true);
+      expect(
+        appendCalls.some((input) => {
+          const meta = input.meta as { handoff?: string } | null;
+          return meta?.handoff === 'review_gate_pending';
+        }),
+      ).toBe(false);
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('publishes gathered opinions as card messages, not raw assistant JSON', async () => {
@@ -508,6 +762,172 @@ describe('MeetingOrchestrator — happy-path phase loop', () => {
   });
 });
 
+describe('MeetingOrchestrator — idea request-more context', () => {
+  it('passes selected idea details and user instruction into the next gather turn and provider history', async () => {
+    const session = new MeetingSession({
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      projectId: PROJECT_ID,
+      topic: '새 제품 아이디어',
+      participants: participants(2),
+      ssmCtx: ctx(),
+      channelRole: 'idea',
+    });
+    let selectedStatus: Opinion['status'] = 'pending';
+    const selectedOpinion = (): Opinion =>
+      makeOpinion('op-selected', {
+        title: 'AI 회의 코치',
+        content: '회의 중 사용자의 결정을 놓치지 않고 다음 부서에 전달한다.',
+        rationale: '부서 간 인계 누락을 줄인다.',
+        status: selectedStatus,
+      });
+    const opinionService = {
+      nextLabelHint: vi.fn(() => 1),
+      gather: vi.fn(() => ({ meetingId: MEETING_ID, inserted: [] })),
+      tally: vi.fn(() => {
+        const opinion = selectedOpinion();
+        return {
+          meetingId: MEETING_ID,
+          rootCount: 1,
+          totalCount: 1,
+          tree: [
+            {
+              opinion,
+              screenId: 'ITEM_001',
+              depth: 0,
+              children: [],
+            },
+          ],
+          screenToUuid: { ITEM_001: opinion.id },
+          uuidToScreen: { [opinion.id]: 'ITEM_001' },
+        };
+      }),
+      requestMoreIdeas: vi.fn(() => {
+        selectedStatus = 'agreed';
+        return {
+          meetingId: MEETING_ID,
+          selectedIds: ['op-selected'],
+          userOpinion: null,
+        };
+      }),
+      finalizeIdeaSelection: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        agreedIds: ['op-selected'],
+        excludedIds: [],
+        userOpinion: null,
+      })),
+      quickVote: vi.fn(),
+      freeDiscussionRound: vi.fn(),
+    } as unknown as OpinionService;
+    const channelService = {
+      get: vi.fn(() => ({
+        ...makeChannel(5),
+        role: 'idea',
+        name: '#idea',
+      })),
+      listByProject: vi.fn(() => [
+        { ...makeChannel(5), role: 'idea', name: '#idea' },
+        {
+          ...makeChannel(5),
+          id: 'ch-minutes',
+          kind: 'system_minutes',
+          role: null,
+          name: '#회의록',
+        },
+      ]),
+    } as unknown as ChannelService;
+    let requestMore = (): void => {
+      throw new Error('requestMore called before orchestrator was created');
+    };
+    let submitPick = (): void => {
+      throw new Error('submitPick called before orchestrator was created');
+    };
+    let snapshotCount = 0;
+    const streamBridge = {
+      emitMeetingPhaseChanged: vi.fn(),
+      emitMeetingStateChanged: vi.fn(),
+      emitMeetingTurnStart: vi.fn(),
+      emitMeetingTurnToken: vi.fn(),
+      emitMeetingTurnDone: vi.fn(),
+      emitMeetingError: vi.fn(),
+      emitMeetingTurnSkipped: vi.fn(),
+      emitNextStepClassified: vi.fn(),
+      emitHandoffDispatched: vi.fn(),
+      emitHandoffRequired: vi.fn(),
+      emitIdeaPickSnapshot: vi.fn(() => {
+        snapshotCount += 1;
+        if (snapshotCount === 1) {
+          queueMicrotask(() => {
+            requestMore();
+          });
+        } else if (snapshotCount === 2) {
+          queueMicrotask(() => {
+            submitPick();
+          });
+        }
+      }),
+    } as unknown as StreamBridge;
+    const deps = buildDeps({
+      session,
+      opinionService,
+      channelService,
+      streamBridge,
+    });
+    const orchestrator = new MeetingOrchestrator(deps);
+    requestMore = () => {
+      orchestrator.requestMoreIdeas({
+        meetingId: MEETING_ID,
+        selectedScreenIds: ['ITEM_001'],
+        userComment: 'B2B 온보딩 관점으로 더 넓혀 주세요.',
+      });
+    };
+    submitPick = () => {
+      orchestrator.submitIdeaPick({
+        meetingId: MEETING_ID,
+        selectedScreenIds: ['ITEM_001'],
+        userComment: undefined,
+      });
+    };
+
+    await orchestrator.run();
+
+    const gatherCalls = (
+      deps.turnExecutor.requestOpinionGather as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls;
+    expect(gatherCalls).toHaveLength(4);
+
+    const firstCtx = gatherCalls[0][1] as { requestMoreContextMarkdown?: string | null };
+    const secondGatherCtx = gatherCalls[2][1] as {
+      requestMoreContextMarkdown?: string | null;
+    };
+    expect(firstCtx.requestMoreContextMarkdown).toBeNull();
+    expect(secondGatherCtx.requestMoreContextMarkdown).toContain('ITEM_001');
+    expect(secondGatherCtx.requestMoreContextMarkdown).toContain('AI 회의 코치');
+    expect(secondGatherCtx.requestMoreContextMarkdown).toContain(
+      '회의 중 사용자의 결정을 놓치지 않고 다음 부서에 전달한다.',
+    );
+    expect(secondGatherCtx.requestMoreContextMarkdown).toContain(
+      '부서 간 인계 누락을 줄인다.',
+    );
+    expect(secondGatherCtx.requestMoreContextMarkdown).toContain(
+      'B2B 온보딩 관점으로 더 넓혀 주세요.',
+    );
+    expect(secondGatherCtx.requestMoreContextMarkdown).toContain('반복하지 말고');
+
+    const providerHistory = session
+      .getMessagesForProvider('ai-1')
+      .map((message) =>
+        typeof message.content === 'string'
+          ? message.content
+          : JSON.stringify(message.content),
+      )
+      .join('\n');
+    expect(providerHistory).toContain('ITEM_001');
+    expect(providerHistory).toContain('AI 회의 코치');
+    expect(providerHistory).toContain('B2B 온보딩 관점으로 더 넓혀 주세요.');
+  });
+});
+
 describe('MeetingOrchestrator — abort handling', () => {
   it('stop() flips session.aborted and finalize is called with aborted', async () => {
     const deps = buildDeps();
@@ -539,6 +959,302 @@ describe('MeetingOrchestrator — abort handling', () => {
 });
 
 describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
+  function buildPlanningCheckedDesignDeps(args: {
+    verdict: 'aligned' | 'misaligned';
+    returnCount?: number;
+    dispatchFails?: boolean;
+  }): {
+    deps: MeetingOrchestratorDeps;
+    dispatch: ReturnType<typeof vi.fn>;
+    planningDesignCheckService: {
+      createRequest: ReturnType<typeof vi.fn>;
+      recordAligned: ReturnType<typeof vi.fn>;
+      recordMisaligned: ReturnType<typeof vi.fn>;
+      recordNeedsUserDecision: ReturnType<typeof vi.fn>;
+      setImplementationDispatchId: ReturnType<typeof vi.fn>;
+      setDesignReturnDispatchId: ReturnType<typeof vi.fn>;
+      findByDesignReturnDispatchId: ReturnType<typeof vi.fn>;
+    };
+  } {
+    const session = new MeetingSession({
+      meetingId: MEETING_ID,
+      channelId: CHANNEL_ID,
+      projectId: PROJECT_ID,
+      topic: 'Design login screen',
+      participants: participants(2),
+      ssmCtx: ctx(),
+      channelRole: 'design.ui',
+      sourceHandoffContext: {
+        dispatchRowId: 'dispatch-planning-to-design',
+        handoffPackage: {
+          sender: {
+            meetingId: 'planning-meeting-1',
+            channelId: 'ch-planning',
+            channelRole: 'planning',
+          },
+        } as SourceHandoffContext['handoffPackage'],
+        minutesMeetingId: 'planning-meeting-1',
+        minutesPath: '/tmp/planning-minutes.md',
+        minutesBody: '# original planning',
+      },
+    });
+    const designChannel = makeChannel(5);
+    (designChannel as unknown as { role: string }).role = 'design.ui';
+    const channelService = {
+      get: vi.fn(() => designChannel),
+      list: vi.fn(() => [designChannel]),
+      listByProject: vi.fn(() => [
+        { id: 'minutes-channel', kind: 'system_minutes' },
+      ]),
+    } as unknown as ChannelService;
+    const providerRegistry = {
+      get: vi.fn((id: string) => ({
+        id,
+        type: 'api' as const,
+        displayName: id,
+        model: 'm',
+        capabilities: [],
+        status: 'ready' as const,
+        config: {},
+        roles:
+          id === 'planner-1'
+            ? ['planning']
+            : ['design.ux', 'design.ui'],
+        skill_overrides: null,
+      })),
+    } as unknown as MeetingOrchestratorDeps['providerRegistry'];
+
+    let designedCallCount = 0;
+    const turnExecutor = {
+      requestOpinionGather: vi.fn(),
+      requestQuickVote: vi.fn(async (speaker, c) => ({
+        kind: 'ok' as const,
+        providerId: speaker.id,
+        messageId: 'msg',
+        payload: {
+          name: speaker.displayName,
+          label: c.suggestedLabel,
+          quick_votes: [{ target_id: 'ITEM_001', vote: 'agree' as const }],
+        },
+      })),
+      requestFreeDiscussion: vi.fn(),
+      requestAssigningDesignatedTask: vi.fn(async (speaker, dctx) => {
+        designedCallCount += 1;
+        return {
+          kind: 'ok' as const,
+          providerId: speaker.id,
+          messageId: `msg-${designedCallCount}`,
+          payload: {
+            name: speaker.displayName,
+            label: dctx.suggestedLabel,
+            opinions: [
+              {
+                title: `step-${designedCallCount}`,
+                content:
+                  dctx.kind === 'design_implementation'
+                    ? '<html><body>final</body></html>'
+                    : `wireframe-${designedCallCount}`,
+                rationale: 'r',
+              },
+            ],
+          },
+        };
+      }),
+      requestPlanningDesignCheck: vi.fn(async (speaker, pctx) => ({
+        kind: 'ok' as const,
+        providerId: speaker.id,
+        messageId: 'planning-check-msg',
+        payload: {
+          name: speaker.displayName,
+          label: pctx.suggestedLabel,
+          verdict: args.verdict,
+          reason:
+            args.verdict === 'aligned'
+              ? '기획 의도와 일치함'
+              : '반복 업무 도구 의도와 다름',
+          revision_direction:
+            args.verdict === 'misaligned'
+              ? '소개형 구성을 줄이고 업무 화면 밀도를 높이기'
+              : undefined,
+        },
+      })),
+      abort: vi.fn(),
+    } as unknown as MeetingTurnExecutor;
+
+    const roots: Opinion[] = [];
+    let opinionCounter = 0;
+    const opinionService = {
+      nextLabelHint: vi.fn(() => 1),
+      gather: vi.fn((req: { responses: Array<{ payload: { opinions: Array<{ content: string }> } }> }) => {
+        const inserted: Opinion[] = [];
+        for (const response of req.responses) {
+          for (const op of response.payload.opinions) {
+            opinionCounter += 1;
+            const opinion = makeOpinion(`op-${opinionCounter}`, {
+              content: op.content,
+              status: 'pending',
+              createdAt: opinionCounter,
+              updatedAt: opinionCounter,
+            });
+            roots.push(opinion);
+            inserted.push(opinion);
+          }
+        }
+        return { meetingId: MEETING_ID, inserted };
+      }),
+      tally: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        rootCount: roots.length,
+        totalCount: roots.length,
+        tree: roots.map((opinion) => ({
+          opinion,
+          screenId: null,
+          children: [],
+        })),
+        screenToUuid: {},
+        uuidToScreen: {},
+      })),
+      quickVote: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        agreed: [],
+        unresolved: [],
+        votesInserted: 0,
+      })),
+      freeDiscussionRound: vi.fn(),
+    } as unknown as OpinionService;
+    const meetingMinutesService = {
+      compose: vi.fn(async (request: { ordinal?: number }) => ({
+        body: request.ordinal === 1 ? '# wireframe minutes' : '# final minutes',
+        source: 'fallback' as const,
+        providerId: null,
+        minutesPath:
+          request.ordinal === 1 ? '/tmp/minutes-1.md' : '/tmp/minutes-2.md',
+        truncationDetected: false,
+      })),
+      readMinutesBody: vi.fn(async () => '# wireframe minutes'),
+    } as unknown as MeetingMinutesService;
+    const designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'] =
+      {
+        captureDesignSnapshot: vi.fn(async (req) => ({
+          desktopPath: '/tmp/desktop.png',
+          mobilePath: '/tmp/mobile.png',
+          generatedAt: 1_700_000_001_000,
+          sourceOpinionUuid: req.sourceOpinionUuid,
+        })),
+      };
+    const request = makePlanningDesignCheckRecord({
+      returnCount: args.returnCount ?? 0,
+    });
+    const planningDesignCheckService = {
+      createRequest: vi.fn(() => request),
+      findByDesignReturnDispatchId: vi.fn(() => null),
+      recordAligned: vi.fn(() =>
+        makePlanningDesignCheckRecord({
+          status: 'aligned',
+          verdict: 'aligned',
+          reason: '기획 의도와 일치함',
+        }),
+      ),
+      recordMisaligned: vi.fn(() => {
+        const shouldReturn = (args.returnCount ?? 0) < 1;
+        const record = makePlanningDesignCheckRecord({
+          status: shouldReturn ? 'returned_to_design' : 'needs_user_decision',
+          verdict: 'misaligned',
+          returnCount: shouldReturn ? 1 : 1,
+          reason: '반복 업무 도구 의도와 다름',
+          revisionDirection: '업무 화면 밀도를 높이기',
+        });
+        return {
+          record,
+          action: shouldReturn ? 'return_to_design' : 'needs_user_decision',
+        };
+      }),
+      recordNeedsUserDecision: vi.fn((input: { reason?: string | null }) =>
+        makePlanningDesignCheckRecord({
+          status: 'needs_user_decision',
+          verdict: args.verdict,
+          returnCount: args.returnCount ?? 0,
+          reason: input.reason ?? '사용자 판단 필요',
+        }),
+      ),
+      setImplementationDispatchId: vi.fn((id: string, dispatchId: string) =>
+        makePlanningDesignCheckRecord({
+          id,
+          status: 'aligned',
+          verdict: 'aligned',
+          implementationDispatchId: dispatchId,
+        }),
+      ),
+      setDesignReturnDispatchId: vi.fn((id: string, dispatchId: string) =>
+        makePlanningDesignCheckRecord({
+          id,
+          status: 'returned_to_design',
+          verdict: 'misaligned',
+          returnCount: 1,
+          designReturnDispatchId: dispatchId,
+        }),
+      ),
+    };
+    const dispatch = vi.fn((pkg) => {
+      if (args.dispatchFails === true) {
+        throw new Error('dispatch insert failed');
+      }
+      return {
+        id: `dispatch-${dispatch.mock.calls.length + 1}`,
+        fromMeetingId: pkg.sender.meetingId,
+        fromChannelId: pkg.sender.channelId,
+        toChannelId: pkg.target.channelId,
+        reason: pkg.reason,
+        minutesId: pkg.minutesMeetingId,
+        missionCardJson: '{}',
+        mode: pkg.mode,
+        dispatchedAt: pkg.dispatchedAt,
+        openedAt: null,
+        createdAt: pkg.dispatchedAt,
+      };
+    });
+    const deps = buildDeps({
+      session,
+      channelService,
+      providerRegistry,
+      turnExecutor,
+      opinionService,
+      meetingMinutesService,
+      designSnapshotService,
+      planningDesignCheckService:
+        planningDesignCheckService as unknown as MeetingOrchestratorDeps['planningDesignCheckService'],
+      handoffDispatchService: {
+        ...handoffDispatchServiceStub,
+        dispatch,
+      } as unknown as MeetingOrchestratorDeps['handoffDispatchService'],
+      resolveReceiverChannel: (_projectId, role) => {
+        if (role === 'planning') {
+          return {
+            channelId: 'ch-planning',
+            handoffMode: 'auto',
+            assignedProviderId: 'planner-1',
+          };
+        }
+        if (role === 'implement') {
+          return {
+            channelId: 'ch-implement',
+            handoffMode: 'auto',
+            assignedProviderId: 'implementer-1',
+          };
+        }
+        if (role === 'design.ui') {
+          return {
+            channelId: CHANNEL_ID,
+            handoffMode: 'auto',
+            assignedProviderId: 'designer-1',
+          };
+        }
+        return null;
+      },
+    });
+    return { deps, dispatch, planningDesignCheckService };
+  }
+
   it('design 채널 + capability 매칭 직원 0 명 → designed_task_failed 분기 → finalize aborted', async () => {
     // 디자인 부서 채널 (role='design.ux') 인데 모든 직원이 design 능력 미보유.
     // runDesignWorkflow 가 step 1 wireframe_drafting 진입 시 resolveDesignatedWorker
@@ -748,15 +1464,40 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
     } as unknown as OpinionService;
 
     const meetingMinutesService = {
-      compose: vi.fn(async () => ({
-        body: '# minutes',
+      compose: vi.fn(async (request: { ordinal?: number }) => ({
+        body: request.ordinal === 1 ? '# wireframe minutes' : '# final minutes',
         source: 'fallback' as const,
         providerId: null,
-        minutesPath: '/tmp/minutes.md',
+        minutesPath:
+          request.ordinal === 1 ? '/tmp/minutes-1.md' : '/tmp/minutes-2.md',
         truncationDetected: false,
       })),
       readMinutesBody: vi.fn(async () => '# minutes #1 합의 본문'),
     } as unknown as MeetingMinutesService;
+
+    const createWireframeCheckpoint = vi.fn(() => ({
+      checkpoint: {
+        id: 'checkpoint-1',
+        projectId: PROJECT_ID,
+        meetingId: MEETING_ID,
+        channelId: CHANNEL_ID,
+        kind: 'wireframe' as const,
+        status: 'pending' as const,
+        title: '와이어프레임 확인',
+        documentPath: '/tmp/minutes-1.md',
+        documentBodySnapshot: '# wireframe minutes',
+        userNote: null,
+        payloadJson: '{}',
+        createdAt: 1,
+        decidedAt: null,
+      },
+      shouldShowNotice: true,
+    }));
+    const designCheckpointService = {
+      createWireframeCheckpoint,
+    } as unknown as NonNullable<
+      MeetingOrchestratorDeps['designCheckpointService']
+    >;
 
     // T16c — snapshot service mock + stream emit spy.
     const captureDesignSnapshot = vi.fn(async (req) => ({
@@ -791,6 +1532,7 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
       meetingMinutesService,
       streamBridge,
       designSnapshotService,
+      designCheckpointService,
     });
     const orchestrator = new MeetingOrchestrator(deps);
     await orchestrator.run();
@@ -800,6 +1542,20 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
     // 2 회 회의 (#1 wireframe / #2 design) → quick_vote 회의당 1 회 + compose 1 회.
     expect(turnExecutor.requestQuickVote).toHaveBeenCalled();
     expect(meetingMinutesService.compose).toHaveBeenCalledTimes(2);
+    expect(createWireframeCheckpoint).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: PROJECT_ID,
+        meetingId: MEETING_ID,
+        channelId: CHANNEL_ID,
+        documentPath: '/tmp/minutes-1.md',
+        documentBodySnapshot: '# wireframe minutes',
+      }),
+    );
+    expect(
+      (deps.messageService.append as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map((call) => call[0] as { meta?: { wireframeCheckpoint?: { id?: string } } })
+        .some((input) => input.meta?.wireframeCheckpoint?.id === 'checkpoint-1'),
+    ).toBe(true);
 
     // T16c 핵심 — snapshot service 호출 + 입력 검증.
     expect(captureDesignSnapshot).toHaveBeenCalledTimes(1);
@@ -824,6 +1580,146 @@ describe('MeetingOrchestrator — design-workflow 분기 (T16b)', () => {
       'accepted',
       null,
     );
+  });
+
+  it('디자인 최종 결과 후 기획 검수 aligned면 구현 부서 의뢰서를 생성한다', async () => {
+    const { deps, dispatch, planningDesignCheckService } =
+      buildPlanningCheckedDesignDeps({ verdict: 'aligned' });
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(planningDesignCheckService.createRequest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectId: PROJECT_ID,
+        sourceDesignMeetingId: MEETING_ID,
+        designChannelId: CHANNEL_ID,
+        planningChannelId: 'ch-planning',
+        implementationChannelId: 'ch-implement',
+        originalPlanningMinutesBody: '# original planning',
+        originalPlanningMinutesPath: '/tmp/planning-minutes.md',
+        workBundleKey: 'planning-minutes:planning-meeting-1',
+        finalDesignMinutesBody: '# final minutes',
+        snapshotDesktopPath: '/tmp/desktop.png',
+      }),
+    );
+    expect(planningDesignCheckService.recordAligned).toHaveBeenCalledTimes(1);
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]![0].target.channelRole).toBe('implement');
+  });
+
+  it('aligned 후 구현 자동 인계가 실패하면 성공 메시지 대신 사용자 판단 필요로 남긴다', async () => {
+    const { deps, dispatch, planningDesignCheckService } =
+      buildPlanningCheckedDesignDeps({
+        verdict: 'aligned',
+        dispatchFails: true,
+      });
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(planningDesignCheckService.recordAligned).toHaveBeenCalledTimes(1);
+    expect(planningDesignCheckService.setImplementationDispatchId).not.toHaveBeenCalled();
+    expect(planningDesignCheckService.recordNeedsUserDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason:
+          '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+      }),
+    );
+    const appended = (
+      deps.messageService.append as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.map((call) => call[0] as { content?: string; meta?: unknown });
+    expect(
+      appended.some((message) =>
+        message.content?.includes('구현 부서로 자동 인계되었습니다'),
+      ),
+    ).toBe(false);
+    expect(
+      appended.some(
+        (message) =>
+          message.content ===
+          '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+      ),
+    ).toBe(true);
+  });
+
+  it('첫 misaligned면 디자인 부서로 한 번 되돌린다', async () => {
+    const { deps, dispatch, planningDesignCheckService } =
+      buildPlanningCheckedDesignDeps({ verdict: 'misaligned' });
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(planningDesignCheckService.recordMisaligned).toHaveBeenCalledTimes(1);
+    expect(planningDesignCheckService.setDesignReturnDispatchId).toHaveBeenCalled();
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(dispatch.mock.calls[0]![0].target.channelRole).toBe('design.ui');
+  });
+
+  it('첫 misaligned 후 디자인 되돌림 인계가 실패하면 성공 메시지 대신 사용자 판단 필요로 남긴다', async () => {
+    const { deps, dispatch, planningDesignCheckService } =
+      buildPlanningCheckedDesignDeps({
+        verdict: 'misaligned',
+        dispatchFails: true,
+      });
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(dispatch).toHaveBeenCalledTimes(1);
+    expect(planningDesignCheckService.recordMisaligned).toHaveBeenCalledTimes(1);
+    expect(planningDesignCheckService.setDesignReturnDispatchId).not.toHaveBeenCalled();
+    expect(planningDesignCheckService.recordNeedsUserDecision).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reason:
+          '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+      }),
+    );
+    const appended = (
+      deps.messageService.append as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.map((call) => call[0] as { content?: string });
+    expect(
+      appended.some((message) =>
+        message.content?.includes('디자인 되돌림을 한 번 자동 실행했습니다'),
+      ),
+    ).toBe(false);
+    expect(
+      appended.some(
+        (message) =>
+          message.content ===
+          '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+      ),
+    ).toBe(true);
+  });
+
+  it('두 번째 misaligned면 자동 되돌림 없이 사용자 판단 필요 메시지를 남긴다', async () => {
+    const { deps, dispatch, planningDesignCheckService } =
+      buildPlanningCheckedDesignDeps({
+        verdict: 'misaligned',
+        returnCount: 1,
+      });
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(planningDesignCheckService.recordMisaligned).toHaveBeenCalledTimes(1);
+    expect(planningDesignCheckService.setDesignReturnDispatchId).not.toHaveBeenCalled();
+    expect(dispatch).not.toHaveBeenCalled();
+    const appended = (
+      deps.messageService.append as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.map((call) => call[0] as { content?: string; meta?: unknown });
+    expect(
+      appended.some((message) => message.content === '사용자 판단 필요'),
+    ).toBe(true);
+    expect(
+      appended.some((message) => {
+        const meta = message.meta as {
+          planningDesignCheck?: { status?: string };
+        };
+        return meta?.planningDesignCheck?.status === 'needs_user_decision';
+      }),
+    ).toBe(true);
   });
 
   it('T16c: snapshot 실패 → snapshot_failed abort, 회의록은 이미 land', async () => {

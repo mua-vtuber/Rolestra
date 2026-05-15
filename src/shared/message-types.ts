@@ -6,6 +6,18 @@
  */
 
 import type { OpinionKind } from './opinion-types';
+import type {
+  MeetingReviewGateKind,
+  MeetingReviewGateStatus,
+} from './meeting-review-types';
+import type {
+  DesignCheckpointKind,
+  DesignCheckpointStatus,
+} from './design-checkpoint-types';
+import type { PlanningDesignCheckCardMeta } from './planning-design-check-types';
+import type { ChannelRole } from './channel-role-types';
+
+export type { PlanningDesignCheckCardMeta } from './planning-design-check-types';
 
 export type MessageAuthorKind = 'user' | 'member' | 'system';
 export type MessageRole = 'user' | 'assistant' | 'system' | 'tool';
@@ -40,6 +52,21 @@ export interface MessageMeta {
    * 존재 여부로 minutes 카드 렌더 분기.
    */
   minutes?: MinutesCardMeta;
+  /**
+   * R12-C2 기획 회의록 검토 안내 카드. 긴 회의록 전문 대신 대화창에는
+   * 짧은 notice + 검토 화면 진입 버튼만 보여준다.
+   */
+  reviewGate?: ReviewGateCardMeta;
+  /**
+   * R12-C2 3차 — 디자인 와이어프레임 가벼운 확인 카드. 공식 승인/반려가
+   * 아니므로 reviewGate 와 분리한다.
+   */
+  wireframeCheckpoint?: WireframeCheckpointCardMeta;
+  /**
+   * R12-C2 4차 — 디자인 -> 기획 검수 내부 결과 카드. 사용자 공식 승인/반려가
+   * 아니라 aligned/misaligned 자동 분기와 사용자 판단 필요 상태만 보여준다.
+   */
+  planningDesignCheck?: PlanningDesignCheckCardMeta;
   [k: string]: unknown;
 }
 
@@ -76,6 +103,24 @@ export interface MinutesCardMeta {
   minutesProviderId?: string | null;
 }
 
+export interface ReviewGateCardMeta {
+  id?: string;
+  kind: MeetingReviewGateKind | 'idea_bundle';
+  status: MeetingReviewGateStatus;
+  sourceChannelId: string;
+  targetChannelId?: string | null;
+  targetRole?: ChannelRole;
+  title?: string;
+}
+
+export interface WireframeCheckpointCardMeta {
+  id: string;
+  kind: DesignCheckpointKind;
+  status: DesignCheckpointStatus;
+  channelId: string;
+  title?: string;
+}
+
 /** Type guard: 의견 카드 메시지인가? */
 export function hasOpinionMeta(
   meta: MessageMeta | null,
@@ -101,6 +146,61 @@ export function hasMinutesMeta(
   return (
     typeof (m as MinutesCardMeta).minutesPath === 'string' &&
     typeof (m as MinutesCardMeta).minutesSource === 'string'
+  );
+}
+
+export function hasReviewGateMeta(
+  meta: MessageMeta | null,
+): meta is MessageMeta & { reviewGate: ReviewGateCardMeta & { id: string } } {
+  if (meta === null || typeof meta !== 'object') return false;
+  const gate = meta.reviewGate;
+  if (gate === undefined || gate === null || typeof gate !== 'object') {
+    return false;
+  }
+  return (
+    typeof (gate as ReviewGateCardMeta).id === 'string' &&
+    typeof (gate as ReviewGateCardMeta).kind === 'string' &&
+    typeof (gate as ReviewGateCardMeta).status === 'string' &&
+    typeof (gate as ReviewGateCardMeta).sourceChannelId === 'string'
+  );
+}
+
+export function hasWireframeCheckpointMeta(
+  meta: MessageMeta | null,
+): meta is MessageMeta & { wireframeCheckpoint: WireframeCheckpointCardMeta } {
+  if (meta === null || typeof meta !== 'object') return false;
+  const checkpoint = meta.wireframeCheckpoint;
+  if (
+    checkpoint === undefined ||
+    checkpoint === null ||
+    typeof checkpoint !== 'object'
+  ) {
+    return false;
+  }
+  return (
+    typeof (checkpoint as WireframeCheckpointCardMeta).id === 'string' &&
+    typeof (checkpoint as WireframeCheckpointCardMeta).kind === 'string' &&
+    typeof (checkpoint as WireframeCheckpointCardMeta).status === 'string' &&
+    typeof (checkpoint as WireframeCheckpointCardMeta).channelId === 'string'
+  );
+}
+
+export function hasPlanningDesignCheckMeta(
+  meta: MessageMeta | null,
+): meta is MessageMeta & { planningDesignCheck: PlanningDesignCheckCardMeta } {
+  if (meta === null || typeof meta !== 'object') return false;
+  const check = meta.planningDesignCheck;
+  if (check === undefined || check === null || typeof check !== 'object') {
+    return false;
+  }
+  return (
+    typeof (check as PlanningDesignCheckCardMeta).id === 'string' &&
+    typeof (check as PlanningDesignCheckCardMeta).status === 'string' &&
+    typeof (check as PlanningDesignCheckCardMeta).returnCount === 'number' &&
+    typeof (check as PlanningDesignCheckCardMeta).sourceDesignMeetingId ===
+      'string' &&
+    typeof (check as PlanningDesignCheckCardMeta).designChannelId === 'string' &&
+    typeof (check as PlanningDesignCheckCardMeta).planningChannelId === 'string'
   );
 }
 

@@ -5,6 +5,7 @@
  *   - `meeting:abort`                    — user gesture to tear down a stuck meeting.
  *   - `meeting:list-active`              — R4 dashboard TasksWidget fetch (spec §7.5).
  *   - `meeting:idea-finalize-selection`  — R12-C2 T15 idea-workflow USER_PICK commit.
+ *   - `meeting:idea-request-more`        — R12-C2 card UX 추가 아이디어 수집.
  *
  * Start flows through `channel:start-meeting`; finish happens inside the
  * meeting orchestrator engine. Abort is surfaced here so the user can exit
@@ -143,6 +144,60 @@ export function handleMeetingIdeaFinalizeSelection(
     }
     // 기타 예상치 못한 에러는 propagate — IPC 라우터가 generic 500 으로
     // 매핑 (silent fallback 금지 invariant).
+    throw err;
+  }
+}
+
+/** R12-C2 card UX: 선택 유지 + 추가 아이디어 수집. */
+export function handleMeetingIdeaRequestMore(
+  data: IpcRequest<'meeting:idea-request-more'>,
+): IpcResponse<'meeting:idea-request-more'> {
+  const orc = getOrchestrator(data.meetingId);
+  if (!orc) {
+    return {
+      ok: false,
+      reason: 'meeting_not_found',
+      message: `meeting "${data.meetingId}" has no live orchestrator`,
+    };
+  }
+  try {
+    const result = orc.requestMoreIdeas({
+      meetingId: data.meetingId,
+      selectedScreenIds: data.selectedScreenIds,
+      userComment: data.userComment,
+    });
+    return {
+      ok: true,
+      selectedIds: result.selectedIds,
+      userOpinionId: result.userOpinion?.id ?? null,
+    };
+  } catch (err) {
+    if (err instanceof IdeaPickValidationError) {
+      return {
+        ok: false,
+        reason: 'idea_pick_validation',
+        message: err.message,
+      };
+    }
+    if (err instanceof UnknownScreenIdError) {
+      return {
+        ok: false,
+        reason: 'unknown_screen_id',
+        message: err.message,
+      };
+    }
+    if (err instanceof Error) {
+      if (
+        err.message.includes('awaiting_user_pick') ||
+        err.message.includes('is not running')
+      ) {
+        return {
+          ok: false,
+          reason: 'wrong_phase',
+          message: err.message,
+        };
+      }
+    }
     throw err;
   }
 }

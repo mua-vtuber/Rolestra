@@ -565,6 +565,21 @@
       "noActiveChannel": "Select a channel on the left.",
       "noActiveProject": "Select a project on the left to open the messenger."
     },
+    "ideaPick": {
+      "approve": "Approve and send to planning",
+      "approvedNotice": "Creating the idea bundle and sending it to planning.",
+      "author": "Suggested by {{author}}",
+      "commentLabel": "Note for planning",
+      "commentPlaceholder": "Add why you chose this, what to avoid, or what to explore next.",
+      "description": "Staff proposed the ideas below. Choose ideas or leave a note to continue.",
+      "eyebrow": "Idea selection",
+      "keptLabel": "Kept",
+      "moreRequestedNotice": "Keeping the selected ideas and collecting more.",
+      "optionAria": "Select {{title}}",
+      "requestMore": "Collect more ideas",
+      "selectedCount": "{{count}} selected",
+      "title": "Choose ideas to send forward"
+    },
     "memberPanel": {
       "consensusTitle": "Consensus",
       "empty": "No participants.",
@@ -750,6 +765,64 @@
           "fallback": "System fallback"
         }
       },
+      "reviewGate": {
+        "title": "Planning minutes",
+        "hint": "Open the review screen to read the full document.",
+        "open": "Review",
+        "completed": "Decision saved",
+        "status": {
+          "pending": "Pending review",
+          "approved": "Approved",
+          "revision_requested": "Revision requested",
+          "restart_requested": "Restart requested",
+          "stopped": "Stopped"
+        }
+      },
+      "wireframeCheckpoint": {
+        "title": "Wireframe check",
+        "eyebrow": "Light check",
+        "body": "Choose whether to keep this wireframe direction or leave a short revision note.",
+        "noteLabel": "Revision note",
+        "notePlaceholder": "Example: simplify settings so the main path fits on one screen.",
+        "noteRequired": "Please enter a revision note.",
+        "status": {
+          "pending": "Waiting for check",
+          "continued": "Continuing",
+          "revision_requested": "Revision note saved",
+          "auto_skipped": "Auto-progressing"
+        },
+        "action": {
+          "continue": "Continue as-is",
+          "requestRevision": "Leave revision note",
+          "autoSkip": "Auto-progress next time"
+        }
+      },
+      "planningDesignCheck": {
+        "title": "Planning check",
+        "eyebrow": "Design check request",
+        "status": {
+          "request_created": "Check requested",
+          "aligned": "Aligned",
+          "returned_to_design": "Returned to design",
+          "needs_user_decision": "User decision needed",
+          "user_decision_completed": "User decision completed"
+        },
+        "verdict": {
+          "aligned": "Aligned",
+          "misaligned": "Misaligned",
+          "needs_user_decision": "User decision needed"
+        },
+        "action": {
+          "send_to_implementation": "Send to implementation",
+          "request_design_revision": "Request design revision",
+          "stop": "Stop progress"
+        },
+        "userDecision": {
+          "send_to_implementation": "User decision: send to implementation",
+          "request_design_revision": "User decision: request design revision",
+          "stop": "User decision: stop progress"
+        }
+      },
       "action": {
         "agree": "Agree",
         "oppose": "Oppose",
@@ -771,6 +844,29 @@
         "unknownSpeaker": "AI"
       },
       "loading": "Loading messages…"
+    }
+  },
+  "meetingReview": {
+    "titleFallback": "Planning minutes",
+    "description": "Read the minutes and choose the next flow.",
+    "loading": "Loading minutes…",
+    "error": "Could not process the meeting review: {{error}}",
+    "noteLabel": "Review note",
+    "notePlaceholder": "Add notes for the design department or rejection reason.",
+    "nextFlowLabel": "Next flow",
+    "nextFlowPlanning": "Approval sends this to the design department. Rejecting lets you request edits or stop.",
+    "processedLabel": "Status",
+    "processed": "These minutes were already handled. Current status: {{status}}",
+    "approvePlanning": "Approve and send to Design",
+    "rejectButton": "Reject",
+    "close": "Close",
+    "reject": {
+      "title": "Choose rejection path",
+      "description": "Decide how to handle these minutes.",
+      "revise": "Request revisions",
+      "stop": "Stop progress",
+      "noteRequired": "A revision request requires a review note.",
+      "close": "Cancel"
     }
   },
   "notification": {

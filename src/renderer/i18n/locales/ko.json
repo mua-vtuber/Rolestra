@@ -565,6 +565,21 @@
       "noActiveChannel": "왼쪽에서 채널을 선택하세요.",
       "noActiveProject": "메신저를 시작하려면 왼쪽에서 프로젝트를 선택하세요."
     },
+    "ideaPick": {
+      "approve": "승인하고 기획으로 보내기",
+      "approvedNotice": "아이디어 묶음 문서를 만들고 기획 부서로 보내는 중입니다.",
+      "author": "{{author}} 제안",
+      "commentLabel": "기획 부서에 남길 의견",
+      "commentPlaceholder": "선택 이유, 빼고 싶은 방향, 더 보고 싶은 조건을 적어 주세요.",
+      "description": "직원들이 아래 아이디어를 제안했습니다. 선택하거나 의견을 남기면 다음 흐름을 열 수 있습니다.",
+      "eyebrow": "아이디어 선택",
+      "keptLabel": "유지 중",
+      "moreRequestedNotice": "선택한 아이디어를 유지한 채 추가 아이디어를 더 모으는 중입니다.",
+      "optionAria": "{{title}} 선택",
+      "requestMore": "추가 아이디어 수집",
+      "selectedCount": "{{count}}개 선택",
+      "title": "다음 단계로 보낼 아이디어를 고르세요"
+    },
     "memberPanel": {
       "consensusTitle": "합의 상태",
       "empty": "등록된 참여자가 없습니다.",
@@ -750,6 +765,64 @@
           "fallback": "시스템 fallback"
         }
       },
+      "reviewGate": {
+        "title": "기획 회의록",
+        "hint": "전체 회의록은 검토 화면에서 문서처럼 읽을 수 있습니다.",
+        "open": "검토하기",
+        "completed": "결정 완료",
+        "status": {
+          "pending": "검토 대기",
+          "approved": "승인됨",
+          "revision_requested": "수정 지시",
+          "restart_requested": "새 회의 시작",
+          "stopped": "진행 중지"
+        }
+      },
+      "wireframeCheckpoint": {
+        "title": "와이어프레임 확인",
+        "eyebrow": "가벼운 확인",
+        "body": "현재 와이어프레임 방향을 유지할지, 짧은 수정 지시만 남길지 선택하세요.",
+        "noteLabel": "수정 지시",
+        "notePlaceholder": "예: 설정 화면은 한 화면에서 끝나게 단순화해줘.",
+        "noteRequired": "수정 지시를 입력해 주세요.",
+        "status": {
+          "pending": "확인 대기",
+          "continued": "이대로 계속",
+          "revision_requested": "수정 지시 저장됨",
+          "auto_skipped": "자동 진행"
+        },
+        "action": {
+          "continue": "이대로 계속",
+          "requestRevision": "수정 지시하기",
+          "autoSkip": "나중부터 자동 진행"
+        }
+      },
+      "planningDesignCheck": {
+        "title": "기획 검수",
+        "eyebrow": "디자인 검수 요청서",
+        "status": {
+          "request_created": "검수 요청",
+          "aligned": "의도에 맞음",
+          "returned_to_design": "디자인 되돌림",
+          "needs_user_decision": "사용자 판단 필요",
+          "user_decision_completed": "사용자 판단 완료"
+        },
+        "verdict": {
+          "aligned": "의도에 맞음",
+          "misaligned": "의도와 다름",
+          "needs_user_decision": "사용자 판단 필요"
+        },
+        "action": {
+          "send_to_implementation": "구현으로 보내기",
+          "request_design_revision": "디자인에 다시 수정 요청하기",
+          "stop": "진행 중지하기"
+        },
+        "userDecision": {
+          "send_to_implementation": "사용자 판단: 구현으로 보내기",
+          "request_design_revision": "사용자 판단: 디자인 수정 요청",
+          "stop": "사용자 판단: 진행 중지"
+        }
+      },
       "action": {
         "agree": "동의",
         "oppose": "반대",
@@ -771,6 +844,29 @@
         "unknownSpeaker": "AI"
       },
       "loading": "메시지를 불러오는 중…"
+    }
+  },
+  "meetingReview": {
+    "titleFallback": "기획 회의록",
+    "description": "회의록 본문을 확인하고 다음 흐름을 결정합니다.",
+    "loading": "회의록을 불러오는 중…",
+    "error": "회의록 검토를 처리하지 못했습니다: {{error}}",
+    "noteLabel": "검토 의견",
+    "notePlaceholder": "디자인 부서에 전달할 의견이나 반려 사유를 남겨 주세요.",
+    "nextFlowLabel": "다음 흐름",
+    "nextFlowPlanning": "승인하면 디자인 부서로 인계됩니다. 반려하면 수정 지시 또는 진행 중지 중 하나를 선택합니다.",
+    "processedLabel": "처리 상태",
+    "processed": "이미 처리된 회의록입니다. 현재 상태: {{status}}",
+    "approvePlanning": "승인하고 디자인으로 보내기",
+    "rejectButton": "반려",
+    "close": "닫기",
+    "reject": {
+      "title": "반려 방식을 선택하세요",
+      "description": "회의록을 어떻게 처리할지 정합니다.",
+      "revise": "수정 지시하기",
+      "stop": "진행 중지하기",
+      "noteRequired": "수정 지시에는 검토 의견이 필요합니다.",
+      "close": "취소"
     }
   },
   "notification": {

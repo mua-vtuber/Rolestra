@@ -137,6 +137,19 @@ import {
   handleHandoffStartMeetingFromPackage,
 } from './handlers/handoff-handler';
 import {
+  handleMeetingReviewDecide,
+  handleMeetingReviewGet,
+  handleMeetingReviewList,
+} from './handlers/meeting-review-handler';
+import {
+  handleDesignCheckpointDecide,
+  handleDesignCheckpointGet,
+} from './handlers/design-checkpoint-handler';
+import {
+  handlePlanningDesignCheckDecide,
+  handlePlanningDesignCheckGet,
+} from './handlers/planning-design-check-handler';
+import {
   handleMessageAppend,
   handleMessageListByChannel,
   handleMessageListRecent,
@@ -146,6 +159,7 @@ import {
   handleMeetingAbort,
   handleMeetingListActive,
   handleMeetingIdeaFinalizeSelection,
+  handleMeetingIdeaRequestMore,
 } from './handlers/meeting-handler';
 import {
   handleOpinionGather,
@@ -493,6 +507,27 @@ export function registerIpcHandlers(): void {
     handleHandoffStartMeetingFromPackage(data),
   );
 
+  // ── R12-C2 planning minutes review gate ───────────────────────────
+  handle('meeting-review:list', isDev, (data) =>
+    handleMeetingReviewList(data),
+  );
+  handle('meeting-review:get', isDev, (data) => handleMeetingReviewGet(data));
+  handle('meeting-review:decide', isDev, (data) =>
+    handleMeetingReviewDecide(data),
+  );
+  handle('design-checkpoint:get', isDev, (data) =>
+    handleDesignCheckpointGet(data),
+  );
+  handle('design-checkpoint:decide', isDev, (data) =>
+    handleDesignCheckpointDecide(data),
+  );
+  handle('planning-design-check:get', isDev, (data) =>
+    handlePlanningDesignCheckGet(data),
+  );
+  handle('planning-design-check:decide', isDev, (data) =>
+    handlePlanningDesignCheckDecide(data),
+  );
+
   // ── R10-Task3: DM (사용자↔AI 1:1) ───────────────────────────────
   handle('dm:list', isDev, () => handleDmList());
   handle('dm:create', isDev, (data) => handleDmCreate(data));
@@ -509,6 +544,9 @@ export function registerIpcHandlers(): void {
   // R12-C2 T15: idea-workflow USER_PICK commit (spec §5.1).
   handle('meeting:idea-finalize-selection', isDev, (data) =>
     handleMeetingIdeaFinalizeSelection(data),
+  );
+  handle('meeting:idea-request-more', isDev, (data) =>
+    handleMeetingIdeaRequestMore(data),
   );
   // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거 — SSM 투표 snapshot
   // 흐름이 폐기되어 데이터 소스가 사라졌다. 새 의견 모델 표결 surface 는

@@ -301,6 +301,8 @@ export interface StreamAutonomyModeChangedPayload {
 export interface StreamIdeaPickSnapshotPayload {
   meetingId: string;
   channelId: string;
+  /** 추가 아이디어 수집 이후에도 유지해야 하는 현재 사용자 선택. */
+  selectedScreenIds?: string[];
   cards: Array<{
     /** 화면 ID (예: `ITEM_001`). UI 가 IPC 응답 selectedScreenIds 로 사용. */
     screenId: string;

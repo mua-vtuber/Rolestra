@@ -9,7 +9,10 @@
  *       audit  ok         → no_chain reason='audit_verdict_ok'
  *       audit  ng + planning channel resolved → chain_resolved + HandoffPackage
  *       audit  ng + planning resolver returns null → throw
- *       idea / planning / design / implement → no_chain reason=*_unhandled (placeholder)
+ *       idea             → planning auto handoff package
+ *       planning         → design.ux auto handoff package
+ *       design           → planning auto handoff package
+ *       implement        → no_chain reason=implement_chain_unhandled (placeholder)
  *   - audit invariant:
  *       sender.channelRole !== 'audit' → throw
  *       auditInput 미지정 → throw
@@ -146,13 +149,45 @@ describe('resolveHandoffChain — chain 외 부서', () => {
   });
 });
 
-// ── workflowKind 분기 — placeholder (idea / planning / design / implement) ─
+// ── workflowKind 분기 — idea chain + placeholder ────────────────────
+
+describe('resolveHandoffChain — idea chain', () => {
+  it("workflowKind='idea' → planning 으로 auto HandoffPackage", () => {
+    const result = resolveHandoffChain(
+      baseInput({
+        workflowKind: 'idea',
+        sender: { ...auditSender, channelRole: 'idea' },
+        auditInput: undefined,
+      }),
+    );
+    if (result.kind !== 'chain_resolved') {
+      throw new Error(`expected chain_resolved, got ${result.kind}`);
+    }
+    expect(result.package.sender.channelRole).toBe('idea');
+    expect(result.package.target.channelRole).toBe('planning');
+    expect(result.package.target.channelId).toBe('planning-channel-1');
+    expect(result.package.mode).toBe('auto');
+    expect(result.package.minutesMeetingId).toBe('audit-meeting-1');
+    expect(result.package.missionCard.payload.kind).toBe('change-request');
+    expect(result.package.missionCard.targetChannelId).toBe('planning-channel-1');
+  });
+
+  it("workflowKind='idea' + planning resolver null → throw", () => {
+    expect(() =>
+      resolveHandoffChain(
+        baseInput({
+          workflowKind: 'idea',
+          sender: { ...auditSender, channelRole: 'idea' },
+          auditInput: undefined,
+          resolveReceiverChannel: () => null,
+        }),
+      ),
+    ).toThrow(HandoffChainResolverInvariantError);
+  });
+});
 
 describe('resolveHandoffChain — placeholder (T28 시점 미구현)', () => {
   it.each([
-    ['idea', 'idea', 'idea_chain_unhandled'] as const,
-    ['planning', 'planning', 'planning_chain_unhandled'] as const,
-    ['design', 'design.ui', 'design_chain_unhandled'] as const,
     ['implement', 'implement', 'implement_chain_unhandled'] as const,
   ])(
     "workflowKind='%s' (sender.role=%s) → no_chain reason='%s'",
@@ -167,6 +202,78 @@ describe('resolveHandoffChain — placeholder (T28 시점 미구현)', () => {
       expect(result).toEqual({ kind: 'no_chain', reason });
     },
   );
+});
+
+describe('resolveHandoffChain — design chain', () => {
+  it("workflowKind='design' → planning 으로 auto HandoffPackage", () => {
+    const result = resolveHandoffChain(
+      baseInput({
+        workflowKind: 'design',
+        sender: { ...auditSender, channelRole: 'design.ui' },
+        auditInput: undefined,
+        designInput: {
+          finalDesignMinutesMarkdown: '# final design',
+          snapshotDesktopPath: '/tmp/desktop.png',
+          snapshotMobilePath: '/tmp/mobile.png',
+        },
+      }),
+    );
+    if (result.kind !== 'chain_resolved') {
+      throw new Error(`expected chain_resolved, got ${result.kind}`);
+    }
+    expect(result.package.sender.channelRole).toBe('design.ui');
+    expect(result.package.target.channelRole).toBe('planning');
+    expect(result.package.target.channelId).toBe('planning-channel-1');
+    expect(result.package.mode).toBe('auto');
+    expect(result.package.missionCard.payload.kind).toBe('change-request');
+    expect(result.package.missionCard.payload.inputFiles).toEqual([
+      '/tmp/desktop.png',
+      '/tmp/mobile.png',
+    ]);
+  });
+});
+
+describe('resolveHandoffChain — planning chain', () => {
+  it("workflowKind='planning' → design.ux 으로 auto HandoffPackage", () => {
+    const result = resolveHandoffChain(
+      baseInput({
+        workflowKind: 'planning',
+        sender: { ...auditSender, channelRole: 'planning' },
+        auditInput: undefined,
+        resolveReceiverChannel: (role) =>
+          role === 'design.ux'
+            ? {
+                channelId: 'design-channel-1',
+                handoffMode: 'check',
+                assignedProviderId: 'designer',
+              }
+            : null,
+      }),
+    );
+    if (result.kind !== 'chain_resolved') {
+      throw new Error(`expected chain_resolved, got ${result.kind}`);
+    }
+    expect(result.package.sender.channelRole).toBe('planning');
+    expect(result.package.target.channelRole).toBe('design.ux');
+    expect(result.package.target.channelId).toBe('design-channel-1');
+    expect(result.package.mode).toBe('auto');
+    expect(result.package.minutesMeetingId).toBe('audit-meeting-1');
+    expect(result.package.missionCard.payload.kind).toBe('change-request');
+    expect(result.package.missionCard.targetChannelId).toBe('design-channel-1');
+  });
+
+  it("workflowKind='planning' + design resolver null → throw", () => {
+    expect(() =>
+      resolveHandoffChain(
+        baseInput({
+          workflowKind: 'planning',
+          sender: { ...auditSender, channelRole: 'planning' },
+          auditInput: undefined,
+          resolveReceiverChannel: () => null,
+        }),
+      ),
+    ).toThrow(HandoffChainResolverInvariantError);
+  });
 });
 
 // ── audit chain — verdict 분기 ─────────────────────────────────────

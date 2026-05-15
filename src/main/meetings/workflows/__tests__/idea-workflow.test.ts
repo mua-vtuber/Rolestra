@@ -38,11 +38,26 @@ describe('IdeaUserPickPending', () => {
       expect(p.isSettled).toBe(false);
     });
 
-    it('commit(input) resolves wait() with the same input + flips settled', async () => {
+    it('commit(input) resolves wait() as approve decision + flips settled', async () => {
       const p = new IdeaUserPickPending();
       const promise = p.wait();
       p.commit(sample);
-      await expect(promise).resolves.toEqual(sample);
+      await expect(promise).resolves.toEqual({
+        kind: 'approve',
+        input: sample,
+      });
+      expect(p.isSettled).toBe(true);
+      expect(p.isWaiting).toBe(false);
+    });
+
+    it('requestMore(input) resolves wait() as request_more decision', async () => {
+      const p = new IdeaUserPickPending();
+      const promise = p.wait();
+      p.requestMore(sample);
+      await expect(promise).resolves.toEqual({
+        kind: 'request_more',
+        input: sample,
+      });
       expect(p.isSettled).toBe(true);
       expect(p.isWaiting).toBe(false);
     });
@@ -80,9 +95,21 @@ describe('IdeaUserPickPending', () => {
       expect(() => p.commit(sample)).toThrow(/duplicate commit|settled/);
     });
 
+    it('requestMore() on a settled instance throws (duplicate commit)', () => {
+      const p = new IdeaUserPickPending();
+      void p.wait();
+      p.requestMore(sample);
+      expect(() => p.requestMore(sample)).toThrow(/duplicate commit|settled/);
+    });
+
     it('commit() before wait() throws (race / wrong order)', () => {
       const p = new IdeaUserPickPending();
       expect(() => p.commit(sample)).toThrow(/before wait/);
+    });
+
+    it('requestMore() before wait() throws (race / wrong order)', () => {
+      const p = new IdeaUserPickPending();
+      expect(() => p.requestMore(sample)).toThrow(/before wait/);
     });
 
     it('cancel() on a settled instance is a no-op (idempotent abort)', () => {

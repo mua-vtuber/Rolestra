@@ -78,6 +78,25 @@ import type { MeetingMinutesComposeResult } from './meeting-minutes-types';
 import type { HandoffDispatchRowSummary } from './handoff/dispatch-row-summary';
 import type { RunStep } from './run-step-types';
 import type { DashboardProgressSnapshot } from './dashboard-progress-types';
+import type {
+  MeetingReviewDecideRequest,
+  MeetingReviewDecideResponse,
+  MeetingReviewGate,
+  MeetingReviewGetRequest,
+  MeetingReviewListRequest,
+} from './meeting-review-types';
+import type {
+  DesignCheckpoint,
+  DesignCheckpointDecideRequest,
+  DesignCheckpointDecideResponse,
+  DesignCheckpointGetRequest,
+} from './design-checkpoint-types';
+import type {
+  PlanningDesignCheckDecideRequest,
+  PlanningDesignCheckDecideResponse,
+  PlanningDesignCheckGetRequest,
+  PlanningDesignCheckRecord,
+} from './planning-design-check-types';
 
 /** Common metadata attached to every IPC message. */
 export interface IpcMeta {
@@ -713,6 +732,36 @@ export type IpcChannelMap = {
     response: { meeting: Meeting };
   };
 
+  // ── v3: Meeting Review Gate (R12-C2 planning minutes) ─────────────
+  'meeting-review:list': {
+    request: MeetingReviewListRequest;
+    response: { items: MeetingReviewGate[] };
+  };
+  'meeting-review:get': {
+    request: MeetingReviewGetRequest;
+    response: { item: MeetingReviewGate };
+  };
+  'meeting-review:decide': {
+    request: MeetingReviewDecideRequest;
+    response: MeetingReviewDecideResponse;
+  };
+  'design-checkpoint:get': {
+    request: DesignCheckpointGetRequest;
+    response: { item: DesignCheckpoint };
+  };
+  'design-checkpoint:decide': {
+    request: DesignCheckpointDecideRequest;
+    response: DesignCheckpointDecideResponse;
+  };
+  'planning-design-check:get': {
+    request: PlanningDesignCheckGetRequest;
+    response: { item: PlanningDesignCheckRecord };
+  };
+  'planning-design-check:decide': {
+    request: PlanningDesignCheckDecideRequest;
+    response: PlanningDesignCheckDecideResponse;
+  };
+
   // ── v3: Message ─────────────────────────────────────────────────
   'message:append': {
     request: MessageAppendInput;
@@ -819,6 +868,34 @@ export type IpcChannelMap = {
           ok: true;
           agreedIds: string[];
           excludedIds: string[];
+          userOpinionId: string | null;
+        }
+      | {
+          ok: false;
+          reason:
+            | 'idea_pick_validation'
+            | 'wrong_phase'
+            | 'meeting_not_found'
+            | 'unknown_screen_id';
+          message: string;
+        };
+  };
+
+  /**
+   * R12-C2 card UX: 아이디어 선택을 유지한 채 추가 아이디어를 더 모은다.
+   * 승인과 같은 입력 검증을 적용하되, 회의는 compose_minutes 로 가지 않고
+   * gather 단계로 되돌아간다.
+   */
+  'meeting:idea-request-more': {
+    request: {
+      meetingId: string;
+      selectedScreenIds: string[];
+      userComment?: string;
+    };
+    response:
+      | {
+          ok: true;
+          selectedIds: string[];
           userOpinionId: string | null;
         }
       | {

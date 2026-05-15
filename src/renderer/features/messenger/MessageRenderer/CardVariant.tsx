@@ -30,11 +30,18 @@ import { useTheme } from '../../../theme/use-theme';
 import {
   hasMinutesMeta,
   hasOpinionMeta,
+  hasPlanningDesignCheckMeta,
+  hasReviewGateMeta,
+  hasWireframeCheckpointMeta,
   type Message as ChannelMessage,
   type MinutesCardMeta,
   type OpinionCardMeta,
+  type PlanningDesignCheckCardMeta,
+  type ReviewGateCardMeta,
+  type WireframeCheckpointCardMeta,
 } from '../../../../shared/message-types';
 import type { OpinionKind, OpinionVoteValue } from '../../../../shared/opinion-types';
+import type { PlanningDesignCheckUserDecision } from '../../../../shared/planning-design-check-types';
 
 /**
  * 본문 collapse threshold — 이보다 길면 첫 표시는 collapsed, 사용자가 [더 보기]
@@ -62,6 +69,26 @@ export interface MinutesCardActionHandlers {
   onHandoff?: (minutesPath: string) => void;
 }
 
+export interface ReviewGateActionHandlers {
+  onReviewOpen?: (reviewId: string) => void;
+}
+
+export interface WireframeCheckpointActionHandlers {
+  onContinue?: (checkpointId: string) => Promise<void> | void;
+  onRequestRevision?: (
+    checkpointId: string,
+    note: string,
+  ) => Promise<void> | void;
+  onAutoSkip?: (checkpointId: string) => Promise<void> | void;
+}
+
+export interface PlanningDesignCheckActionHandlers {
+  onUserDecision?: (
+    checkId: string,
+    decision: PlanningDesignCheckUserDecision,
+  ) => Promise<void> | void;
+}
+
 export interface MessageCardVariantProps {
   message: ChannelMessage;
   /** Optional — idea-workflow 에서 사용자가 카드 선택했는지 표시 (체크 마크). */
@@ -73,6 +100,12 @@ export interface MessageCardVariantProps {
   opinionHandlers?: OpinionCardActionHandlers;
   /** Optional — minutes-card 액션 버튼 핸들러. */
   minutesHandlers?: MinutesCardActionHandlers;
+  /** Optional — meeting review notice action. */
+  reviewGateHandlers?: ReviewGateActionHandlers;
+  /** Optional — lightweight design wireframe checkpoint actions. */
+  wireframeCheckpointHandlers?: WireframeCheckpointActionHandlers;
+  /** Optional — planning design check user decision actions. */
+  planningDesignCheckHandlers?: PlanningDesignCheckActionHandlers;
   className?: string;
 }
 
@@ -325,6 +358,38 @@ function MinutesActionFooter({
   );
 }
 
+function ReviewGateFooter({
+  meta,
+  handlers,
+}: {
+  meta: ReviewGateCardMeta & { id: string };
+  handlers: ReviewGateActionHandlers;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  if (handlers.onReviewOpen === undefined) return null;
+  const disabled = meta.status !== 'pending';
+  return (
+    <CardFooter data-testid="message-card-footer">
+      <button
+        type="button"
+        data-testid="message-card-action-review-open"
+        disabled={disabled}
+        onClick={() => handlers.onReviewOpen?.(meta.id)}
+        className={clsx(
+          'rounded-md border px-3 py-1.5 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+          disabled
+            ? 'border-border-soft bg-surface text-fg-muted'
+            : 'border-brand bg-brand text-action-primary-fg hover:bg-brand-deep',
+        )}
+      >
+        {disabled
+          ? t('messenger.messageCard.reviewGate.completed')
+          : t('messenger.messageCard.reviewGate.open')}
+      </button>
+    </CardFooter>
+  );
+}
+
 /**
  * Opinion 카드 — root / revise / block / addition / self-raised / user-raised 6 종.
  */
@@ -409,6 +474,368 @@ function MinutesCard({
   );
 }
 
+function ReviewGateCard({
+  message,
+  meta,
+  handlers,
+  className,
+}: {
+  message: ChannelMessage;
+  meta: ReviewGateCardMeta & { id: string };
+  handlers: ReviewGateActionHandlers;
+  className?: string;
+}): ReactElement {
+  const { t } = useTranslation();
+  const { themeKey } = useTheme();
+  return (
+    <Card
+      data-testid="message-card"
+      data-message-id={message.id}
+      data-card-variant="review-gate"
+      data-review-gate-id={meta.id}
+      data-review-gate-status={meta.status}
+      data-theme-variant={themeKey}
+      className={clsx('mx-4 my-1', className)}
+    >
+      <CardHeader
+        heading={
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span
+              data-testid="message-card-review-title"
+              className="text-sm font-semibold text-fg"
+            >
+              {meta.title ?? t('messenger.messageCard.reviewGate.title')}
+            </span>
+            <span
+              data-testid="message-card-review-status"
+              data-status={meta.status}
+              className="text-xs text-fg-subtle"
+            >
+              {t(`messenger.messageCard.reviewGate.status.${meta.status}`)}
+            </span>
+          </div>
+        }
+      />
+      <CardBody>
+        <p
+          data-testid="message-card-review-body"
+          className="text-sm text-fg"
+        >
+          {message.content}
+        </p>
+        <p className="mt-2 text-xs text-fg-muted">
+          {t('messenger.messageCard.reviewGate.hint')}
+        </p>
+      </CardBody>
+      <ReviewGateFooter meta={meta} handlers={handlers} />
+    </Card>
+  );
+}
+
+function WireframeCheckpointCard({
+  message,
+  meta,
+  handlers,
+  className,
+}: {
+  message: ChannelMessage;
+  meta: WireframeCheckpointCardMeta;
+  handlers: WireframeCheckpointActionHandlers;
+  className?: string;
+}): ReactElement {
+  const { t } = useTranslation();
+  const { themeKey } = useTheme();
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [note, setNote] = useState('');
+  const [submitting, setSubmitting] = useState<
+    'continue' | 'request_revision' | 'auto_skip' | null
+  >(null);
+  const [error, setError] = useState<string | null>(null);
+  const pending = meta.status === 'pending';
+  const disabled = !pending || submitting !== null;
+
+  const runAction = async (
+    action: 'continue' | 'request_revision' | 'auto_skip',
+  ): Promise<void> => {
+    setError(null);
+    if (action === 'request_revision') {
+      if (!noteOpen) {
+        setNoteOpen(true);
+        return;
+      }
+      if (note.trim().length === 0) {
+        setError(t('messenger.messageCard.wireframeCheckpoint.noteRequired'));
+        return;
+      }
+    }
+    setSubmitting(action);
+    try {
+      if (action === 'continue') {
+        await handlers.onContinue?.(meta.id);
+      } else if (action === 'request_revision') {
+        await handlers.onRequestRevision?.(meta.id, note);
+      } else {
+        await handlers.onAutoSkip?.(meta.id);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setSubmitting(null);
+    }
+  };
+
+  return (
+    <Card
+      data-testid="wireframe-checkpoint-card"
+      data-message-id={message.id}
+      data-card-variant="wireframe-checkpoint"
+      data-wireframe-checkpoint-id={meta.id}
+      data-wireframe-checkpoint-status={meta.status}
+      data-theme-variant={themeKey}
+      className={clsx('mx-4 my-1', className)}
+    >
+      <CardHeader
+        heading={
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span
+              data-testid="wireframe-checkpoint-title"
+              className="text-sm font-semibold text-fg"
+            >
+              {meta.title ??
+                t('messenger.messageCard.wireframeCheckpoint.title')}
+            </span>
+            <span
+              data-testid="wireframe-checkpoint-status"
+              data-status={meta.status}
+              className="text-xs text-fg-subtle"
+            >
+              {t(
+                `messenger.messageCard.wireframeCheckpoint.status.${meta.status}`,
+              )}
+            </span>
+          </div>
+        }
+      />
+      <CardBody>
+        <p className="text-xs font-semibold uppercase text-fg-subtle">
+          {t('messenger.messageCard.wireframeCheckpoint.eyebrow')}
+        </p>
+        <p
+          data-testid="wireframe-checkpoint-body"
+          className="mt-1 text-sm text-fg"
+        >
+          {t('messenger.messageCard.wireframeCheckpoint.body')}
+        </p>
+        {noteOpen && pending ? (
+          <label className="mt-3 block text-xs text-fg-muted">
+            <span>{t('messenger.messageCard.wireframeCheckpoint.noteLabel')}</span>
+            <textarea
+              data-testid="wireframe-checkpoint-note"
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              className="mt-1 min-h-20 w-full resize-none rounded-md border border-border-soft bg-elev px-3 py-2 text-sm text-fg focus:outline-none focus:ring-2 focus:ring-brand"
+              placeholder={t(
+                'messenger.messageCard.wireframeCheckpoint.notePlaceholder',
+              )}
+            />
+          </label>
+        ) : null}
+        {error !== null ? (
+          <p
+            data-testid="wireframe-checkpoint-error"
+            className="mt-2 text-xs text-danger"
+          >
+            {error}
+          </p>
+        ) : null}
+      </CardBody>
+      <CardFooter data-testid="message-card-footer">
+        <button
+          type="button"
+          data-testid="wireframe-checkpoint-continue"
+          disabled={disabled || handlers.onContinue === undefined}
+          onClick={() => void runAction('continue')}
+          className={clsx(
+            'rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+            disabled
+              ? 'border-border-soft bg-surface text-fg-muted'
+              : 'border-brand bg-brand text-action-primary-fg hover:bg-brand-deep',
+          )}
+        >
+          {t('messenger.messageCard.wireframeCheckpoint.action.continue')}
+        </button>
+        <button
+          type="button"
+          data-testid="wireframe-checkpoint-request-revision"
+          disabled={disabled || handlers.onRequestRevision === undefined}
+          onClick={() => void runAction('request_revision')}
+          className={clsx(
+            'rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+            disabled
+              ? 'border-border-soft bg-surface text-fg-muted'
+              : 'border-border-soft bg-elev text-fg hover:bg-canvas',
+          )}
+        >
+          {t(
+            'messenger.messageCard.wireframeCheckpoint.action.requestRevision',
+          )}
+        </button>
+        <button
+          type="button"
+          data-testid="wireframe-checkpoint-auto-skip"
+          disabled={disabled || handlers.onAutoSkip === undefined}
+          onClick={() => void runAction('auto_skip')}
+          className={clsx(
+            'rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+            disabled
+              ? 'border-border-soft bg-surface text-fg-muted'
+              : 'border-border-soft bg-elev text-fg hover:bg-canvas',
+          )}
+        >
+          {t('messenger.messageCard.wireframeCheckpoint.action.autoSkip')}
+        </button>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function PlanningDesignCheckCard({
+  message,
+  meta,
+  handlers,
+  className,
+}: {
+  message: ChannelMessage;
+  meta: PlanningDesignCheckCardMeta;
+  handlers: PlanningDesignCheckActionHandlers;
+  className?: string;
+}): ReactElement {
+  const { t } = useTranslation();
+  const { themeKey } = useTheme();
+  const [busyDecision, setBusyDecision] =
+    useState<PlanningDesignCheckUserDecision | null>(null);
+  const canDecide =
+    meta.status === 'needs_user_decision' && meta.userDecision == null;
+  const statusLabelKey =
+    meta.userDecision == null ? meta.status : 'user_decision_completed';
+  async function runDecision(
+    decision: PlanningDesignCheckUserDecision,
+  ): Promise<void> {
+    if (!canDecide || handlers.onUserDecision === undefined) return;
+    setBusyDecision(decision);
+    try {
+      await handlers.onUserDecision(meta.id, decision);
+    } finally {
+      setBusyDecision(null);
+    }
+  }
+  return (
+    <Card
+      data-testid="planning-design-check-card"
+      data-message-id={message.id}
+      data-card-variant="planning-design-check"
+      data-planning-design-check-id={meta.id}
+      data-planning-design-check-status={meta.status}
+      data-theme-variant={themeKey}
+      className={clsx('mx-4 my-1', className)}
+    >
+      <CardHeader
+        heading={
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span
+              data-testid="planning-design-check-title"
+              className="text-sm font-semibold text-fg"
+            >
+              {t('messenger.messageCard.planningDesignCheck.title')}
+            </span>
+            <span
+              data-testid="planning-design-check-status"
+              data-status={meta.status}
+              className="text-xs text-fg-subtle"
+            >
+              {t(
+                `messenger.messageCard.planningDesignCheck.status.${statusLabelKey}`,
+              )}
+            </span>
+          </div>
+        }
+      />
+      <CardBody>
+        <p className="text-xs font-semibold uppercase text-fg-subtle">
+          {t('messenger.messageCard.planningDesignCheck.eyebrow')}
+        </p>
+        <p
+          data-testid="planning-design-check-body"
+          className="mt-1 text-sm text-fg"
+        >
+          {message.content}
+        </p>
+        {meta.verdict !== undefined && meta.verdict !== null ? (
+          <p
+            data-testid="planning-design-check-verdict"
+            className="mt-2 text-xs text-fg-muted"
+          >
+            {t(
+              `messenger.messageCard.planningDesignCheck.verdict.${meta.verdict}`,
+            )}
+          </p>
+        ) : null}
+        {meta.reason !== undefined && meta.reason !== null ? (
+          <p
+            data-testid="planning-design-check-reason"
+            className="mt-2 text-xs text-fg-muted"
+          >
+            {meta.reason}
+          </p>
+        ) : null}
+        {meta.userDecision !== undefined && meta.userDecision !== null ? (
+          <p
+            data-testid="planning-design-check-user-decision"
+            className="mt-2 text-xs text-fg-muted"
+          >
+            {t(
+              `messenger.messageCard.planningDesignCheck.userDecision.${meta.userDecision}`,
+            )}
+          </p>
+        ) : null}
+      </CardBody>
+      {canDecide ? (
+        <CardFooter className="flex flex-wrap gap-2">
+          {(
+            [
+              'send_to_implementation',
+              'request_design_revision',
+              'stop',
+            ] as const
+          ).map((decision) => (
+            <button
+              key={decision}
+              type="button"
+              data-testid={`planning-design-check-decision-${decision}`}
+              disabled={
+                handlers.onUserDecision === undefined || busyDecision !== null
+              }
+              onClick={() => void runDecision(decision)}
+              className={clsx(
+                'rounded-md border px-2 py-1 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand',
+                handlers.onUserDecision === undefined || busyDecision !== null
+                  ? 'border-border-soft bg-surface text-fg-muted'
+                  : decision === 'send_to_implementation'
+                    ? 'border-brand bg-brand text-action-primary-fg hover:bg-brand-deep'
+                    : 'border-border-soft bg-elev text-fg hover:bg-canvas',
+              )}
+            >
+              {t(
+                `messenger.messageCard.planningDesignCheck.action.${decision}`,
+              )}
+            </button>
+          ))}
+        </CardFooter>
+      ) : null}
+    </Card>
+  );
+}
+
 /**
  * 채팅창 카드 메시지 entry — meta 로 분기.
  *
@@ -422,6 +849,9 @@ export function MessageCardVariant({
   selected = false,
   opinionHandlers,
   minutesHandlers,
+  reviewGateHandlers,
+  wireframeCheckpointHandlers,
+  planningDesignCheckHandlers,
   className,
 }: MessageCardVariantProps): ReactElement | null {
   const meta = message.meta;
@@ -446,6 +876,36 @@ export function MessageCardVariant({
       />
     );
   }
+  if (hasReviewGateMeta(meta)) {
+    return (
+      <ReviewGateCard
+        message={message}
+        meta={meta.reviewGate}
+        handlers={reviewGateHandlers ?? {}}
+        className={className}
+      />
+    );
+  }
+  if (hasWireframeCheckpointMeta(meta)) {
+    return (
+      <WireframeCheckpointCard
+        message={message}
+        meta={meta.wireframeCheckpoint}
+        handlers={wireframeCheckpointHandlers ?? {}}
+        className={className}
+      />
+    );
+  }
+  if (hasPlanningDesignCheckMeta(meta)) {
+    return (
+      <PlanningDesignCheckCard
+        message={message}
+        meta={meta.planningDesignCheck}
+        handlers={planningDesignCheckHandlers ?? {}}
+        className={className}
+      />
+    );
+  }
   return null;
 }
 
@@ -458,5 +918,11 @@ export function MessageCardVariant({
  * 미래 호환).
  */
 export function isCardMessage(message: ChannelMessage): boolean {
-  return hasOpinionMeta(message.meta) || hasMinutesMeta(message.meta);
+  return (
+    hasOpinionMeta(message.meta) ||
+    hasMinutesMeta(message.meta) ||
+    hasReviewGateMeta(message.meta) ||
+    hasWireframeCheckpointMeta(message.meta) ||
+    hasPlanningDesignCheckMeta(message.meta)
+  );
 }

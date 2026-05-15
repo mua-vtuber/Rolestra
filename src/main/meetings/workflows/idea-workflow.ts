@@ -32,6 +32,10 @@ import type {
   IdeaFinalizeSelectionResult,
 } from '../../../shared/opinion-types';
 
+export type IdeaUserPickDecision =
+  | { kind: 'approve'; input: IdeaFinalizeSelectionInput }
+  | { kind: 'request_more'; input: IdeaFinalizeSelectionInput };
+
 // ── Pending state — suspend promise 관리 ─────────────────────────────
 
 /**
@@ -47,21 +51,21 @@ import type {
  * 재사용 X (re-commit 은 caller 책임으로 차단).
  */
 export class IdeaUserPickPending {
-  private resolveFn: ((input: IdeaFinalizeSelectionInput) => void) | null = null;
+  private resolveFn: ((decision: IdeaUserPickDecision) => void) | null = null;
   private rejectFn: ((reason: IdeaUserPickAbortReason) => void) | null = null;
   private settled = false;
 
   /**
    * 사용자 IPC 응답까지 정지 — orchestrator 가 awaiting_user_pick phase
-   * 진입 직후 호출. 응답 시 IdeaFinalizeSelectionInput 반환.
+   * 진입 직후 호출. 응답 시 승인 또는 추가 수집 결정을 반환.
    */
-  wait(): Promise<IdeaFinalizeSelectionInput> {
+  wait(): Promise<IdeaUserPickDecision> {
     if (this.settled) {
       throw new Error(
         '[IdeaUserPickPending] wait() called on settled instance — pending state is single-use',
       );
     }
-    return new Promise<IdeaFinalizeSelectionInput>((resolve, reject) => {
+    return new Promise<IdeaUserPickDecision>((resolve, reject) => {
       this.resolveFn = resolve;
       this.rejectFn = reject;
     });
@@ -69,18 +73,27 @@ export class IdeaUserPickPending {
 
   /** IPC 핸들러가 사용자 입력 받아 호출 — phase loop 재개 신호. */
   commit(input: IdeaFinalizeSelectionInput): void {
+    this.resolve({ kind: 'approve', input }, 'commit');
+  }
+
+  /** IPC 핸들러가 추가 수집 입력 받아 호출 — phase loop 를 gather 로 되돌린다. */
+  requestMore(input: IdeaFinalizeSelectionInput): void {
+    this.resolve({ kind: 'request_more', input }, 'requestMore');
+  }
+
+  private resolve(decision: IdeaUserPickDecision, label: string): void {
     if (this.settled) {
       throw new Error(
-        '[IdeaUserPickPending] commit() called on settled instance — duplicate commit',
+        `[IdeaUserPickPending] ${label}() called on settled instance — duplicate commit`,
       );
     }
     if (!this.resolveFn) {
       throw new Error(
-        '[IdeaUserPickPending] commit() called before wait() — no pending promise',
+        `[IdeaUserPickPending] ${label}() called before wait() — no pending promise`,
       );
     }
     this.settled = true;
-    this.resolveFn(input);
+    this.resolveFn(decision);
     this.resolveFn = null;
     this.rejectFn = null;
   }
@@ -125,6 +138,8 @@ export type IdeaUserPickAbortReason =
 export interface IdeaPickSnapshot {
   meetingId: string;
   channelId: string;
+  /** 추가 수집 이후 유지된 사용자 선택. */
+  selectedScreenIds?: string[];
   /** root 카드 list — kind='root' 만 (자식 의견은 idea 흐름에서 발생 X). */
   cards: Array<{
     /** 화면 ID (예: `ITEM_001`). UI 가 IPC 응답에서 selectedScreenIds 로 보냄. */
@@ -148,9 +163,11 @@ export interface IdeaPickSnapshot {
  */
 export interface IdeaWorkflowResult {
   meetingId: string;
-  outcome: 'committed' | 'aborted';
+  outcome: 'committed' | 'request_more' | 'aborted';
   /** outcome === 'committed' 일 때만. 사용자 commit 결과 (agreed / excluded / userOpinion). */
   finalize?: IdeaFinalizeSelectionResult;
+  /** outcome === 'request_more' 일 때만. 유지할 선택 + 사용자 지시. */
+  requestMoreInput?: IdeaFinalizeSelectionInput;
   /** outcome === 'aborted' 일 때만. abort 사유. */
   abortReason?: IdeaUserPickAbortReason;
 }

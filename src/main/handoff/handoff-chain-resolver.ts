@@ -47,6 +47,7 @@ import {
   type HandoffPackage,
   type HandoffSender,
 } from '../../shared/schema/handoff-package';
+import { buildMissionCard } from '../../shared/schema/mission-card';
 import { planAuditDispatch } from '../meetings/workflows/audit-handoff-dispatch';
 import { classifyAuditVerdict } from '../meetings/workflows/audit-workflow';
 
@@ -167,6 +168,12 @@ export interface AuditChainInput {
   auditMinutesMarkdown: string;
 }
 
+export interface DesignChainInput {
+  finalDesignMinutesMarkdown?: string;
+  snapshotDesktopPath?: string | null;
+  snapshotMobilePath?: string | null;
+}
+
 /**
  * `resolveHandoffChain` 의 입력. workflow kind 별로 *추가 필드* 가 다르지만,
  * 본 인터페이스는 모든 분기의 *교집합* 만 강제 — workflow-specific 필드는 분기
@@ -191,6 +198,8 @@ export interface ChainResolverInput {
   sender: HandoffSender & { projectId: string };
   /** workflowKind='audit' 일 때만 채워야 함. 다른 kind 시 undefined OK. */
   auditInput?: AuditChainInput;
+  /** workflowKind='design' 일 때 snapshot 생성 후 mission card 보강용. */
+  designInput?: DesignChainInput;
   resolveReceiverChannel: (role: ChannelRole) => ResolvedReceiverChannel | null;
   missionCardIdFactory: () => string;
   generatedAt: number;
@@ -237,14 +246,11 @@ export function resolveHandoffChain(
     case 'audit':
       return resolveAuditChain(input);
     case 'idea':
-      // P3 후속 wire — idea → design.ux 매핑. T28 시점 미구현.
-      return { kind: 'no_chain', reason: 'idea_chain_unhandled' };
+      return resolveIdeaChain(input);
     case 'planning':
-      // R12-W 책임 — planning → implement 분담 (R12-C2 시점 simple 1 명).
-      return { kind: 'no_chain', reason: 'planning_chain_unhandled' };
+      return resolvePlanningChain(input);
     case 'design':
-      // P3 후속 wire — design → planning 인계 (HTML/CSS 결과 + Playwright PNG).
-      return { kind: 'no_chain', reason: 'design_chain_unhandled' };
+      return resolveDesignChain(input);
     case 'implement':
       // R12-W 책임 — implement → audit 자동 chain.
       return { kind: 'no_chain', reason: 'implement_chain_unhandled' };
@@ -256,6 +262,215 @@ export function resolveHandoffChain(
       );
     }
   }
+}
+
+// ── design chain ────────────────────────────────────────────────────
+
+function resolveDesignChain(input: ChainResolverInput): ChainResolverOutcome {
+  if (!isDesignSenderRole(input.sender.channelRole)) {
+    throw new HandoffChainResolverInvariantError(
+      `workflowKind='design' requires sender.channelRole to be a design role (got ${String(
+        input.sender.channelRole,
+      )})`,
+    );
+  }
+
+  const planningReceiver = input.resolveReceiverChannel('planning');
+  if (planningReceiver === null) {
+    throw new HandoffChainResolverInvariantError(
+      "design result completed but no planning channel resolved — invariant violated " +
+        '(every project must have at least one planning department channel)',
+    );
+  }
+
+  const inputFiles = [
+    input.designInput?.snapshotDesktopPath ?? null,
+    input.designInput?.snapshotMobilePath ?? null,
+  ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const missionCard = buildMissionCard({
+    id: input.missionCardIdFactory(),
+    payload: {
+      kind: 'change-request',
+      body: [
+        '디자인 검수 요청서를 읽고 최종 디자인이 기획 의도에 맞는지 내부 검수하세요.',
+        '이 단계는 사용자 공식 승인/반려가 아니라 기획 검수입니다.',
+        input.designInput?.finalDesignMinutesMarkdown
+          ? `\n[최종 디자인 회의록]\n${input.designInput.finalDesignMinutesMarkdown}`
+          : '',
+      ]
+        .filter((line) => line.length > 0)
+        .join('\n'),
+      inputFiles,
+      expectedOutputs: [
+        '의도에 맞음 또는 의도와 다름 판단',
+        '의도와 다름일 때 디자인 재작업 방향',
+      ],
+      userMessage:
+        '디자인 결과를 구현으로 보내기 전에 기획 의도와 맞는지 검수하세요.',
+    },
+    assignedProviderId: planningReceiver.assignedProviderId,
+    targetChannelId: planningReceiver.channelId,
+    createdAt: input.generatedAt,
+  });
+
+  const pkg: HandoffPackage = buildHandoffPackage({
+    sender: {
+      meetingId: input.sender.meetingId,
+      channelId: input.sender.channelId,
+      channelRole: input.sender.channelRole,
+    },
+    target: {
+      channelId: planningReceiver.channelId,
+      channelRole: 'planning',
+    },
+    reason: '디자인 결과 완료 — 구현 전 기획 검수로 자동 인계합니다.',
+    minutesMeetingId: input.sender.meetingId,
+    nextActions: [],
+    missionCard,
+    mode: 'auto',
+    dispatchedAt: input.generatedAt,
+  });
+
+  return { kind: 'chain_resolved', package: pkg };
+}
+
+function isDesignSenderRole(
+  role: HandoffSender['channelRole'],
+): role is Extract<ChannelRole, `design.${string}`> {
+  return (
+    role === 'design.ux' ||
+    role === 'design.ui' ||
+    role === 'design.character' ||
+    role === 'design.background'
+  );
+}
+
+// ── idea chain ───────────────────────────────────────────────────────
+
+/**
+ * 아이디어 선택 카드는 이미 사용자 승인 행위이므로 기존 HandoffApprovalModal 을
+ * 한 번 더 거치지 않는다. 의뢰서는 자동 dispatch 로 기획 부서에 도착하고,
+ * 받는 부서 H2 카드에서 아이디어 묶음 문서를 펼쳐 기획 회의를 시작한다.
+ */
+function resolveIdeaChain(input: ChainResolverInput): ChainResolverOutcome {
+  if (input.sender.channelRole !== 'idea') {
+    throw new HandoffChainResolverInvariantError(
+      `workflowKind='idea' requires sender.channelRole='idea' (got ${String(
+        input.sender.channelRole,
+      )})`,
+    );
+  }
+
+  const planningReceiver = input.resolveReceiverChannel('planning');
+  if (planningReceiver === null) {
+    throw new HandoffChainResolverInvariantError(
+      "idea bundle approved but no planning channel resolved — invariant violated " +
+        '(every project must have at least one planning department channel)',
+    );
+  }
+
+  const missionCard = buildMissionCard({
+    id: input.missionCardIdFactory(),
+    payload: {
+      kind: 'change-request',
+      body:
+        '아이디어 묶음 문서를 요구사항, 범위, 성공 기준, 다음 디자인 준비물로 정리하세요.',
+      inputFiles: [],
+      expectedOutputs: [
+        '요구사항과 범위가 정리된 기획 회의록',
+        '디자인 부서로 넘길 성공 기준과 제약 조건',
+      ],
+      userMessage:
+        '사용자가 승인한 아이디어 묶음 문서를 바탕으로 기획 회의를 시작하세요.',
+    },
+    assignedProviderId: planningReceiver.assignedProviderId,
+    targetChannelId: planningReceiver.channelId,
+    createdAt: input.generatedAt,
+  });
+
+  const pkg: HandoffPackage = buildHandoffPackage({
+    sender: {
+      meetingId: input.sender.meetingId,
+      channelId: input.sender.channelId,
+      channelRole: input.sender.channelRole,
+    },
+    target: {
+      channelId: planningReceiver.channelId,
+      channelRole: 'planning',
+    },
+    reason: '아이디어 묶음 문서 승인 — 기획 부서에서 요구사항과 범위로 정리합니다.',
+    minutesMeetingId: input.sender.meetingId,
+    nextActions: [],
+    missionCard,
+    mode: 'auto',
+    dispatchedAt: input.generatedAt,
+  });
+
+  return { kind: 'chain_resolved', package: pkg };
+}
+
+// ── planning chain ──────────────────────────────────────────────────
+
+/**
+ * 기획 회의록은 MeetingReviewGate 에서 사용자 승인을 받은 뒤 디자인 부서로
+ * dispatch 된다. resolver 는 검토 화면이 저장할 HandoffPackage 를 미리 만든다.
+ */
+function resolvePlanningChain(input: ChainResolverInput): ChainResolverOutcome {
+  if (input.sender.channelRole !== 'planning') {
+    throw new HandoffChainResolverInvariantError(
+      `workflowKind='planning' requires sender.channelRole='planning' (got ${String(
+        input.sender.channelRole,
+      )})`,
+    );
+  }
+
+  const designReceiver = input.resolveReceiverChannel('design.ux');
+  if (designReceiver === null) {
+    throw new HandoffChainResolverInvariantError(
+      "planning minutes approved but no design channel resolved — invariant violated " +
+        '(every project must have a design department channel)',
+    );
+  }
+
+  const missionCard = buildMissionCard({
+    id: input.missionCardIdFactory(),
+    payload: {
+      kind: 'change-request',
+      body:
+        '기획 회의록을 바탕으로 화면 구조, 와이어프레임, 최종 디자인 방향을 작성하세요.',
+      inputFiles: [],
+      expectedOutputs: [
+        '기획 의도에 맞는 와이어프레임',
+        '최종 UI 구조와 디자인 결정 요약',
+        '구현 부서가 이어받을 수 있는 디자인 산출물',
+      ],
+      userMessage:
+        '사용자가 승인한 기획 회의록을 기준으로 디자인 회의를 시작하세요.',
+    },
+    assignedProviderId: designReceiver.assignedProviderId,
+    targetChannelId: designReceiver.channelId,
+    createdAt: input.generatedAt,
+  });
+
+  const pkg: HandoffPackage = buildHandoffPackage({
+    sender: {
+      meetingId: input.sender.meetingId,
+      channelId: input.sender.channelId,
+      channelRole: input.sender.channelRole,
+    },
+    target: {
+      channelId: designReceiver.channelId,
+      channelRole: 'design.ux',
+    },
+    reason: '기획 회의록 승인 — 디자인 부서에서 화면 구조와 최종 디자인으로 구체화합니다.',
+    minutesMeetingId: input.sender.meetingId,
+    nextActions: [],
+    missionCard,
+    mode: 'auto',
+    dispatchedAt: input.generatedAt,
+  });
+
+  return { kind: 'chain_resolved', package: pkg };
 }
 
 // ── audit chain ──────────────────────────────────────────────────────

@@ -32,6 +32,10 @@ import { migration as m020 } from './020-run-step';
 import { migration as m021 } from './021-opinion-vote-light';
 import { migration as m022 } from './022-handoff-dispatch';
 import { migration as m023 } from './023-channel-permissions';
+import { migration as m024 } from './024-meeting-review-gate';
+import { migration as m025 } from './025-design-wireframe-checkpoint';
+import { migration as m026 } from './026-planning-design-check';
+import { migration as m027 } from './027-planning-design-check-context';
 
 /**
  * Ordered list of all v3 migrations.
@@ -61,4 +65,8 @@ export const migrations: Migration[] = [
   m021,
   m022,
   m023,
+  m024,
+  m025,
+  m026,
+  m027,
 ];

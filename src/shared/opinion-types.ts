@@ -313,6 +313,21 @@ export interface IdeaFinalizeSelectionResult {
   userOpinion: Opinion | null;
 }
 
+/**
+ * `meeting:idea-request-more` IPC 입력 — 사용자가 선택한 아이디어 방향은
+ * 유지하면서 직원들에게 추가 아이디어를 더 모으라고 지시한다.
+ */
+export type IdeaRequestMoreInput = IdeaFinalizeSelectionInput;
+
+/** `OpinionService.requestMoreIdeas` 결과. */
+export interface IdeaRequestMoreResult {
+  meetingId: string;
+  /** status='agreed' 로 유지된 카드 UUID list. */
+  selectedIds: string[];
+  /** 사용자 추가 수집 지시로 insert 된 신규 opinion row. 코멘트 0 자 면 null. */
+  userOpinion: Opinion | null;
+}
+
 // ── 일반 채널 가벼운 투표 (T21 land — spec §11.13 general row) ──────────
 
 /**

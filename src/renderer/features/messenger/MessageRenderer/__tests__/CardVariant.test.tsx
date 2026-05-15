@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   MessageCardVariant,
@@ -12,6 +12,7 @@ import {
   DEFAULT_THEME,
   useThemeStore,
 } from '../../../../theme/theme-store';
+import { i18next } from '../../../../i18n';
 import { ThemeProvider } from '../../../../theme/theme-provider';
 import type {
   ThemeKey,
@@ -27,6 +28,10 @@ function renderWithTheme(ui: React.ReactElement) {
 afterEach(() => {
   cleanup();
   useThemeStore.setState({ themeKey: DEFAULT_THEME, mode: DEFAULT_MODE });
+});
+
+beforeEach(() => {
+  void i18next.changeLanguage('ko');
 });
 
 const THEME_COMBOS: Array<[ThemeKey, ThemeMode]> = [
@@ -103,6 +108,69 @@ function makeMinutesMessage(args?: {
   };
 }
 
+function makeWireframeCheckpointMessage(args?: {
+  status?: 'pending' | 'continued' | 'revision_requested' | 'auto_skipped';
+}): ChannelMessage {
+  return {
+    id: 'msg-wireframe',
+    channelId: 'ch-design',
+    meetingId: 'meet-design',
+    authorId: 'system',
+    authorKind: 'system',
+    role: 'system',
+    content: '와이어프레임 확인 안내',
+    meta: {
+      wireframeCheckpoint: {
+        id: 'checkpoint-1',
+        kind: 'wireframe',
+        status: args?.status ?? 'pending',
+        channelId: 'ch-design',
+        title: '와이어프레임 확인',
+      },
+    },
+    createdAt: 1_700_000_000_800,
+  };
+}
+
+function makePlanningDesignCheckMessage(args?: {
+  status?:
+    | 'request_created'
+    | 'aligned'
+    | 'returned_to_design'
+    | 'needs_user_decision';
+  verdict?: 'aligned' | 'misaligned' | 'needs_user_decision' | null;
+  userDecision?:
+    | 'send_to_implementation'
+    | 'request_design_revision'
+    | 'stop'
+    | null;
+}): ChannelMessage {
+  return {
+    id: 'msg-planning-design-check',
+    channelId: 'ch-design',
+    meetingId: 'meet-design',
+    authorId: 'system',
+    authorKind: 'system',
+    role: 'system',
+    content: '사용자 판단 필요',
+    meta: {
+      planningDesignCheck: {
+        id: 'planning-design-check-1',
+        status: args?.status ?? 'needs_user_decision',
+        verdict: args?.verdict ?? 'misaligned',
+        returnCount: 1,
+        sourceDesignMeetingId: 'meet-design',
+        designChannelId: 'ch-design',
+        planningChannelId: 'ch-planning',
+        implementationChannelId: 'ch-implement',
+        reason: '재작업 후에도 의도와 다름',
+        userDecision: args?.userDecision ?? null,
+      },
+    },
+    createdAt: 1_700_000_000_900,
+  };
+}
+
 describe('isCardMessage — dispatcher 분기 결정', () => {
   it('opinion meta 있는 메시지는 card', () => {
     expect(isCardMessage(makeOpinionMessage({ kind: 'root' }))).toBe(true);
@@ -110,6 +178,14 @@ describe('isCardMessage — dispatcher 분기 결정', () => {
 
   it('minutes meta 있는 메시지는 card', () => {
     expect(isCardMessage(makeMinutesMessage())).toBe(true);
+  });
+
+  it('wireframe checkpoint meta 있는 메시지는 card', () => {
+    expect(isCardMessage(makeWireframeCheckpointMessage())).toBe(true);
+  });
+
+  it('planning design check meta 있는 메시지는 card', () => {
+    expect(isCardMessage(makePlanningDesignCheckMessage())).toBe(true);
   });
 
   it('plain 메시지는 card 아님', () => {
@@ -336,6 +412,193 @@ describe('MessageCardVariant — minutes variant (3 source × 6 테마)', () => 
     expect(opened).toBe('/arena/proj/consensus/meetings/meet-1/minutes.md');
     fireEvent.click(screen.getByTestId('message-card-action-handoff'));
     expect(handed).toBe('/arena/proj/consensus/meetings/meet-1/minutes.md');
+  });
+});
+
+describe('MessageCardVariant — wireframe checkpoint 카드', () => {
+  it('와이어프레임 확인 카드와 3개 액션 버튼을 표시한다', () => {
+    useThemeStore.setState({ themeKey: 'warm', mode: 'light' });
+    renderWithTheme(
+      <MessageCardVariant
+        message={makeWireframeCheckpointMessage()}
+        wireframeCheckpointHandlers={{
+          onContinue: vi.fn(),
+          onRequestRevision: vi.fn(),
+          onAutoSkip: vi.fn(),
+        }}
+      />,
+    );
+
+    const card = screen.getByTestId('wireframe-checkpoint-card');
+    expect(card.getAttribute('data-card-variant')).toBe('wireframe-checkpoint');
+    expect(screen.getByTestId('wireframe-checkpoint-title').textContent).toContain(
+      '와이어프레임 확인',
+    );
+    expect(screen.getByTestId('wireframe-checkpoint-continue').textContent).toBe(
+      '이대로 계속',
+    );
+    expect(
+      screen.getByTestId('wireframe-checkpoint-request-revision').textContent,
+    ).toBe('수정 지시하기');
+    expect(screen.getByTestId('wireframe-checkpoint-auto-skip').textContent).toBe(
+      '나중부터 자동 진행',
+    );
+  });
+
+  it('수정 지시하기에서 빈 note는 막고, 입력 note는 핸들러로 저장한다', async () => {
+    const onRequestRevision = vi.fn(async () => undefined);
+    renderWithTheme(
+      <MessageCardVariant
+        message={makeWireframeCheckpointMessage()}
+        wireframeCheckpointHandlers={{
+          onRequestRevision,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-request-revision'));
+    expect(screen.getByTestId('wireframe-checkpoint-note')).toBeTruthy();
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-request-revision'));
+    expect(screen.getByTestId('wireframe-checkpoint-error').textContent).toContain(
+      '수정 지시',
+    );
+
+    fireEvent.change(screen.getByTestId('wireframe-checkpoint-note'), {
+      target: { value: '상단 네비게이션을 한 줄로 줄여줘.' },
+    });
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-request-revision'));
+
+    await waitFor(() =>
+      expect(onRequestRevision).toHaveBeenCalledWith(
+        'checkpoint-1',
+        '상단 네비게이션을 한 줄로 줄여줘.',
+      ),
+    );
+  });
+
+  it('처리 완료 상태면 버튼이 비활성 상태로 보인다', () => {
+    renderWithTheme(
+      <MessageCardVariant
+        message={makeWireframeCheckpointMessage({ status: 'revision_requested' })}
+        wireframeCheckpointHandlers={{
+          onContinue: vi.fn(),
+          onRequestRevision: vi.fn(),
+          onAutoSkip: vi.fn(),
+        }}
+      />,
+    );
+
+    expect(
+      screen.getByTestId('wireframe-checkpoint-status').textContent,
+    ).toContain('수정 지시 저장됨');
+    expect(
+      (screen.getByTestId('wireframe-checkpoint-continue') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (
+        screen.getByTestId(
+          'wireframe-checkpoint-request-revision',
+        ) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByTestId('wireframe-checkpoint-auto-skip') as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it('pending이 아닌 checkpoint는 다시 처리할 수 없다', () => {
+    const onContinue = vi.fn();
+    const onRequestRevision = vi.fn();
+    const onAutoSkip = vi.fn();
+    renderWithTheme(
+      <MessageCardVariant
+        message={makeWireframeCheckpointMessage({ status: 'continued' })}
+        wireframeCheckpointHandlers={{
+          onContinue,
+          onRequestRevision,
+          onAutoSkip,
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-continue'));
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-request-revision'));
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-auto-skip'));
+
+    expect(onContinue).not.toHaveBeenCalled();
+    expect(onRequestRevision).not.toHaveBeenCalled();
+    expect(onAutoSkip).not.toHaveBeenCalled();
+  });
+});
+
+describe('MessageCardVariant — 기획 검수 카드', () => {
+  it('사용자 판단 필요 상태를 표시하고 공식 승인/반려 문구를 노출하지 않는다', () => {
+    renderWithTheme(
+      <MessageCardVariant message={makePlanningDesignCheckMessage()} />,
+    );
+
+    const card = screen.getByTestId('planning-design-check-card');
+    expect(card.getAttribute('data-card-variant')).toBe(
+      'planning-design-check',
+    );
+    expect(screen.getByTestId('planning-design-check-title').textContent).toBe(
+      '기획 검수',
+    );
+    expect(screen.getByTestId('planning-design-check-status').textContent).toBe(
+      '사용자 판단 필요',
+    );
+    expect(screen.getByTestId('planning-design-check-verdict').textContent).toBe(
+      '의도와 다름',
+    );
+    expect(screen.queryByText('승인')).toBeNull();
+    expect(screen.queryByText('반려')).toBeNull();
+  });
+
+  it('사용자 판단 버튼을 렌더하고 전용 handler로 결정한다', () => {
+    const onUserDecision = vi.fn();
+    renderWithTheme(
+      <MessageCardVariant
+        message={makePlanningDesignCheckMessage()}
+        planningDesignCheckHandlers={{ onUserDecision }}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByTestId(
+        'planning-design-check-decision-send_to_implementation',
+      ),
+    );
+
+    expect(onUserDecision).toHaveBeenCalledWith(
+      'planning-design-check-1',
+      'send_to_implementation',
+    );
+    expect(screen.queryByText('승인')).toBeNull();
+    expect(screen.queryByText('반려')).toBeNull();
+  });
+
+  it('사용자 판단이 끝난 카드에서는 결정 버튼을 다시 보이지 않는다', () => {
+    renderWithTheme(
+      <MessageCardVariant
+        message={makePlanningDesignCheckMessage({
+          userDecision: 'request_design_revision',
+        })}
+      />,
+    );
+
+    expect(screen.getByTestId('planning-design-check-status').textContent).toBe(
+      '사용자 판단 완료',
+    );
+    expect(
+      screen.getByTestId('planning-design-check-user-decision').textContent,
+    ).toContain('디자인 수정 요청');
+    expect(
+      screen.queryByTestId(
+        'planning-design-check-decision-request_design_revision',
+      ),
+    ).toBeNull();
   });
 });
 

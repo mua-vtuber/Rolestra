@@ -70,6 +70,12 @@ import {
   buildDesignedTaskPromptBody,
   type DesignedTaskContext,
 } from '../workflows/design-workflow';
+import {
+  buildPlanningDesignCheckPromptBody,
+  PlanningDesignCheckResponseSchema,
+  type PlanningDesignCheckPromptContext,
+  type PlanningDesignCheckResponseSchemaType,
+} from '../workflows/planning-design-check-workflow';
 import { PromptComposer } from '../../skills/prompt-composer';
 import type { ChannelPermissionResolver } from '../../permissions/channel-permission-resolver';
 import { tryGetLogger } from '../../log/logger-accessor';
@@ -167,6 +173,11 @@ export interface MeetingTurnExecutorDeps {
 export interface OpinionGatherCtx {
   /** orchestrator 가 발급한 발화 ID hint (`<providerId>_<n>`). prompt 안 안내. */
   suggestedLabel: string;
+  /**
+   * 아이디어 부서에서 사용자가 "추가 아이디어 수집"을 요청한 경우, 다음
+   * gather 턴에만 붙는 선택 아이디어 상세 + 사용자 지시.
+   */
+  requestMoreContextMarkdown?: string | null;
 }
 
 export interface QuickVoteCtx {
@@ -287,6 +298,18 @@ export class MeetingTurnExecutor {
       speaker,
       schema: PHASE_RESPONSE_SCHEMAS.assigning_designated_task,
       buildPromptBody: () => buildDesignedTaskPromptBody(ctx),
+    });
+  }
+
+  async requestPlanningDesignCheck(
+    speaker: Participant,
+    ctx: PlanningDesignCheckPromptContext,
+  ): Promise<MeetingTurnResult<PlanningDesignCheckResponseSchemaType>> {
+    return this.runPhaseTurn({
+      phase: 'assigning_designated_task',
+      speaker,
+      schema: PlanningDesignCheckResponseSchema,
+      buildPromptBody: () => buildPlanningDesignCheckPromptBody(ctx),
     });
   }
 
@@ -767,6 +790,16 @@ function buildGatherPromptBody(
   lines.push(
     '회의 주제는 이전 system 메시지에 있습니다. 본 단계에서 본인의 의견을 제시하세요.',
   );
+  const requestMoreContext = ctx.requestMoreContextMarkdown?.trim() ?? '';
+  if (requestMoreContext.length > 0) {
+    lines.push('');
+    lines.push('[추가 아이디어 수집 요청]');
+    lines.push(requestMoreContext);
+    lines.push('');
+    lines.push(
+      '이미 선택된 아이디어는 유지하세요. 같은 말을 반복하지 말고, 중복하지 않는 보강 아이디어만 추가로 제안하세요.',
+    );
+  }
   lines.push('');
   lines.push(
     '응답은 *JSON 한 객체만* — markdown code fence 사용 금지, JSON 외 본문 금지.',

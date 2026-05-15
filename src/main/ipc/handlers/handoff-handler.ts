@@ -338,10 +338,11 @@ export async function handleHandoffReadWithMinutes(
   let minutesBody: string | null = null;
   if (row.minutesId !== null) {
     try {
-      minutesBody = await minutes.readMinutesBody({
-        meetingId: row.minutesId,
-        ordinal: 1,
-      });
+      minutesBody = (
+        await minutes.readMostRelevantMinutesDocument({
+          meetingId: row.minutesId,
+        })
+      ).body;
     } catch (err) {
       console.warn(
         '[handoff:read-with-minutes] readMinutesBody threw',
@@ -394,10 +395,10 @@ export async function handleHandoffStartMeetingFromPackage(
       `[handoff:start-meeting] handoff row ${row.id} has no minutesId — caller invariant violated`,
     );
   }
-  const minutesBody = await minutes.readMinutesBody({
+  const minutesDocument = await minutes.readMostRelevantMinutesDocument({
     meetingId: row.minutesId,
-    ordinal: 1,
   });
+  const minutesBody = minutesDocument.body;
 
   // 4) HandoffPackage inflate + nextActions extract.
   const summary = rowToSummary(row);
@@ -449,6 +450,13 @@ export async function handleHandoffStartMeetingFromPackage(
     topic: data.topic,
     ssmCtx,
     priorContextSystemMessage,
+    sourceHandoffContext: {
+      dispatchRowId: row.id,
+      handoffPackage: summary.package,
+      minutesMeetingId: row.minutesId,
+      minutesPath: minutesDocument.path,
+      minutesBody,
+    },
   });
 
   return { meeting };

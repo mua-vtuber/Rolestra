@@ -45,6 +45,7 @@ import type { ConversationTaskSettings } from '../../../shared/config-types';
 import type { MeetingPhase } from '../../../shared/meeting-flow-types';
 import type { ChannelRole } from '../../../shared/channel-role-types';
 import type { PermissionSet } from '../../../shared/permission-set-types';
+import type { SourceHandoffContext } from '../../../shared/handoff/source-handoff-context';
 import type {
   ChannelService,
   PermissionChangedPayload,
@@ -128,6 +129,12 @@ export interface MeetingSessionOptions {
    * 합성한 markdown 본문 1 회 주입.
    */
   priorContextSystemMessage?: string;
+  /**
+   * HandoffPackageCard 에서 시작된 회의의 원본 인계 정보. 디자인 회의가
+   * 승인된 기획 회의록에서 시작됐는지, 또는 기획 검수의 디자인 되돌림으로
+   * 다시 시작됐는지 추적할 때 사용한다.
+   */
+  sourceHandoffContext?: SourceHandoffContext;
 }
 
 export class MeetingSession {
@@ -148,6 +155,7 @@ export class MeetingSession {
   private _messages: ParticipantMessage[];
   private readonly _participants: Participant[];
   private _taskSettings: ConversationTaskSettings | null;
+  readonly sourceHandoffContext: SourceHandoffContext | null;
 
   // ── R12-C2 T10a 신규 상태 ─────────────────────────────────────────────
   private _phase: MeetingPhase = 'gather';
@@ -229,6 +237,7 @@ export class MeetingSession {
     this._messages = [];
     this._participants = [...participants];
     this._taskSettings = options.taskSettings ?? null;
+    this.sourceHandoffContext = options.sourceHandoffContext ?? null;
 
     // D-A T2.5 / spec §5.5 — 회의 주제 첫 system 메시지 주입. round2.6 회귀
     // 차단 invariant — _messages[0] 은 항상 topic 시스템 메시지.

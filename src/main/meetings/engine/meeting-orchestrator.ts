@@ -37,6 +37,7 @@
  *   - §11.18 직원 응답 JSON schema 4 종 + retry/skip 흐름
  */
 
+import { randomUUID } from 'node:crypto';
 import type { Channel } from '../../../shared/channel-types';
 import {
   isDesignDepartmentRole,
@@ -50,7 +51,10 @@ import {
 } from '../../handoff/handoff-chain-resolver';
 import type { HandoffPendingState } from '../../handoff/handoff-pending-state';
 import type { HandoffDispatchService } from '../../handoff/handoff-dispatch-service';
-import { serializeHandoffPackage } from '../../../shared/schema/handoff-package';
+import {
+  serializeHandoffPackage,
+  type HandoffPackage,
+} from '../../../shared/schema/handoff-package';
 import type {
   MeetingPhase,
   Step1OpinionGatherSchemaType,
@@ -75,6 +79,15 @@ import type { NotificationService } from '../../notifications/notification-servi
 import type { CircuitBreaker } from '../../queue/circuit-breaker';
 import type { OpinionService } from '../opinion-service';
 import type { MeetingMinutesService } from '../meeting-minutes-service';
+import type { MeetingMinutesComposeResult } from '../../../shared/meeting-minutes-types';
+import type { MeetingReviewGateService } from '../../meeting-review/meeting-review-gate-service';
+import type { DesignCheckpointService } from '../../design-checkpoints/design-checkpoint-service';
+import type { PlanningDesignCheckService } from '../../planning-design-check/planning-design-check-service';
+import type {
+  PlanningDesignCheckPayloadContext,
+  PlanningDesignCheckReceiverContext,
+  PlanningDesignCheckRecord,
+} from '../../../shared/planning-design-check-types';
 import type { RunStepService } from '../run-step/run-step-service';
 import { OPINION_DEPTH_CAP } from '../screen-id';
 import { tryGetLogger } from '../../log/logger-accessor';
@@ -102,6 +115,11 @@ import {
   type DesignedTaskKind,
   type DesignWorkflowResult,
 } from '../workflows/design-workflow';
+import {
+  buildDesignReturnHandoffPackage,
+  buildImplementationHandoffPackage,
+  normalizePlanningDesignCheckResult,
+} from '../workflows/planning-design-check-workflow';
 // T23: resolver 본체는 designated-worker-resolver 모듈로 이전 — design-workflow 재export 도
 // 가능하지만 직접 참조가 호출 위치 분리에 더 명확.
 import {
@@ -112,10 +130,17 @@ import {
 import type {
   IdeaFinalizeSelectionInput,
   IdeaFinalizeSelectionResult,
+  IdeaRequestMoreResult,
 } from '../../../shared/opinion-types';
 
 /** Alias for the registry's instance type — same pattern as turn-executor. */
 type ProviderRegistry = typeof providerRegistry;
+
+type HandoffPhaseResult =
+  | { kind: 'dispatched'; dispatchRowId: string }
+  | { kind: 'pending' }
+  | { kind: 'fallback' }
+  | { kind: 'review_gate_pending' };
 
 export interface MeetingOrchestratorDeps {
   session: MeetingSession;
@@ -183,6 +208,19 @@ export interface MeetingOrchestratorDeps {
    * deps 는 'auto' path 전용.
    */
   handoffDispatchService: HandoffDispatchService;
+  /**
+   * R12-C2 planning minutes review gate. 기획 회의록은 handoff 직전에 사용자
+   * 검토 화면을 통과해야 하므로, compose_minutes 직후 pending row 를 남긴다.
+   * 테스트/구형 wiring 보호를 위해 optional — 없으면 기존 minutes card path.
+   */
+  meetingReviewGateService?: MeetingReviewGateService;
+  /**
+   * R12-C2 3차 — 디자인 와이어프레임 가벼운 확인. 공식 승인 게이트가 아니므로
+   * 회의 흐름을 대기시키지 않고, 회의 #1 산출물 안내 카드와 사용자 note 만
+   * 저장한다.
+   */
+  designCheckpointService?: DesignCheckpointService;
+  planningDesignCheckService?: PlanningDesignCheckService;
   /**
    * R12-C2 T28 — chain resolver 의 받는 채널 lookup helper. role + projectId 로
    * 단일 채널 식별 + handoff_mode + designated worker provider 를 caller (factory)
@@ -400,6 +438,9 @@ export class MeetingOrchestrator {
   private readonly designSnapshotService: MeetingOrchestratorDeps['designSnapshotService'];
   private readonly handoffPendingState: HandoffPendingState;
   private readonly handoffDispatchService: HandoffDispatchService;
+  private readonly meetingReviewGateService: MeetingReviewGateService | null;
+  private readonly designCheckpointService: DesignCheckpointService | null;
+  private readonly planningDesignCheckService: PlanningDesignCheckService | null;
   private readonly resolveReceiverChannel: MeetingOrchestratorDeps['resolveReceiverChannel'];
   private readonly missionCardIdFactory: MeetingOrchestratorDeps['missionCardIdFactory'];
   private readonly interTurnDelayMs: number;
@@ -418,6 +459,7 @@ export class MeetingOrchestrator {
    * 시 재사용. null = 회의록 미작성 (fallback 도 실패).
    */
   private cachedMinutesPath: string | null = null;
+  private pendingReviewGateId: string | null = null;
 
   private running = false;
   private terminalHandled = false;
@@ -437,6 +479,7 @@ export class MeetingOrchestrator {
    * 한 회의 lifetime 안에서 idea-workflow 는 1 회만 진입하므로 단발 instance.
    */
   private ideaPending: IdeaUserPickPending | null = null;
+  private nextIdeaGatherContextMarkdown: string | null = null;
 
   constructor(deps: MeetingOrchestratorDeps) {
     this.session = deps.session;
@@ -454,6 +497,9 @@ export class MeetingOrchestrator {
     this.designSnapshotService = deps.designSnapshotService;
     this.handoffPendingState = deps.handoffPendingState;
     this.handoffDispatchService = deps.handoffDispatchService;
+    this.meetingReviewGateService = deps.meetingReviewGateService ?? null;
+    this.designCheckpointService = deps.designCheckpointService ?? null;
+    this.planningDesignCheckService = deps.planningDesignCheckService ?? null;
     this.resolveReceiverChannel = deps.resolveReceiverChannel;
     this.missionCardIdFactory = deps.missionCardIdFactory;
     this.interTurnDelayMs = deps.interTurnDelayMs ?? INTER_TURN_DELAY_MS;
@@ -472,6 +518,9 @@ export class MeetingOrchestrator {
     this.terminalHandled = false;
     this.paused = false;
     this.turnIndexCounter = 0;
+    this.resolvedChain = null;
+    this.cachedMinutesPath = null;
+    this.pendingReviewGateId = null;
 
     const runStartedAt = Date.now();
     tryGetLogger()?.info({
@@ -514,9 +563,15 @@ export class MeetingOrchestrator {
 
       // ── R12-C2 T15: idea-workflow 분기 (D-B-Light + USER_PICK) ──────
       if (channel?.role === 'idea') {
-        const ideaResult = await this.runAwaitingUserPickPhase();
-        if (this.session.aborted) return await this.finalize('aborted');
-        if (ideaResult.outcome === 'aborted') {
+        let ideaResult = await this.runAwaitingUserPickPhase();
+        while (ideaResult.outcome === 'request_more') {
+          if (this.session.aborted) return await this.finalize('aborted');
+          await this.runGatherPhase();
+          if (this.session.aborted) return await this.finalize('aborted');
+          this.transitionToPhase('tally');
+          ideaResult = await this.runAwaitingUserPickPhase();
+        }
+        if (this.session.aborted || ideaResult.outcome === 'aborted') {
           return await this.finalize('aborted');
         }
         // idea variant: quick_vote / free_discussion skip → 바로 compose_minutes
@@ -616,6 +671,108 @@ export class MeetingOrchestrator {
     // (2) phase loop wait() 풀기. 이후 phase loop 가 compose_minutes 진입.
     this.ideaPending.commit(input);
     return result;
+  }
+
+  /**
+   * R12-C2 card UX — 사용자가 선택한 아이디어를 유지한 채 추가 아이디어를
+   * 더 모으도록 요청. DB 에 현재 선택/지시를 먼저 기록한 뒤 pending 을
+   * `request_more` 로 풀어 phase loop 를 gather 로 되돌린다.
+   */
+  requestMoreIdeas(
+    input: IdeaFinalizeSelectionInput,
+  ): IdeaRequestMoreResult {
+    if (!this.running) {
+      throw new Error(
+        `[MeetingOrchestrator] requestMoreIdeas: meeting "${this.session.meetingId}" is not running`,
+      );
+    }
+    if (!this.ideaPending || !this.ideaPending.isWaiting) {
+      throw new Error(
+        `[MeetingOrchestrator] requestMoreIdeas: meeting "${this.session.meetingId}" ` +
+          `is not in awaiting_user_pick phase (current=${this.session.currentPhase})`,
+      );
+    }
+
+    const contextMarkdown = this.buildIdeaRequestMoreContextMarkdown(input);
+    const result = this.opinionService.requestMoreIdeas(input);
+    this.nextIdeaGatherContextMarkdown = contextMarkdown;
+    this.appendIdeaRequestMoreTrace(contextMarkdown, input);
+    this.ideaPending.requestMore(input);
+    return result;
+  }
+
+  private buildIdeaRequestMoreContextMarkdown(
+    input: IdeaFinalizeSelectionInput,
+  ): string {
+    const selectedSet = new Set(input.selectedScreenIds);
+    const tally = this.opinionService.tally(this.session.meetingId);
+    const selectedNodes = tally.tree.filter(
+      (node) => selectedSet.has(node.screenId) && node.opinion.kind === 'root',
+    );
+    const selected =
+      input.selectedScreenIds.length > 0
+        ? input.selectedScreenIds.join(', ')
+        : '(선택 아이디어 없음)';
+    const comment = (input.userComment ?? '').trim();
+    const lines = [
+      '이미 선택된 아이디어는 유지하고, 중복하지 않는 보강 아이디어를 추가로 제안하세요.',
+      '기존 선택과 같은 말을 반복하지 말고, 새 관점 / 보완 조건 / 대안만 제시하세요.',
+      '',
+      `유지할 아이디어: ${selected}`,
+    ];
+    for (const node of selectedNodes) {
+      lines.push('');
+      lines.push(`- ${node.screenId}`);
+      lines.push(`  제목: ${node.opinion.title ?? '(제목 없음)'}`);
+      lines.push(`  본문: ${node.opinion.content ?? '(본문 없음)'}`);
+      lines.push(`  근거: ${node.opinion.rationale ?? '(근거 없음)'}`);
+    }
+    if (comment.length > 0) {
+      lines.push('', '사용자 추가 수집 지시:', comment);
+    }
+    return lines.join('\n');
+  }
+
+  private appendIdeaRequestMoreTrace(
+    contextMarkdown: string,
+    input: IdeaFinalizeSelectionInput,
+  ): void {
+    const selected =
+      input.selectedScreenIds.length > 0
+        ? input.selectedScreenIds.join(', ')
+        : '(선택 아이디어 없음)';
+    const comment = (input.userComment ?? '').trim();
+    this.session.interruptWithUserMessage({
+      id: randomUUID(),
+      role: 'user',
+      content: contextMarkdown,
+      participantId: USER_AUTHOR_LITERAL,
+      participantName: USER_AUTHOR_LITERAL,
+    });
+
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: `추가 아이디어 수집 요청 — 유지할 아이디어: ${selected}`,
+        meta: {
+          ideaPick: {
+            decision: 'request_more',
+            selectedScreenIds: input.selectedScreenIds,
+            userComment: comment,
+            contextMarkdown,
+          },
+        },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] idea request-more trace append failed',
+        errorPayload(err),
+      );
+    }
   }
 
   pause(): void {
@@ -865,6 +1022,8 @@ export class MeetingOrchestrator {
     }> = [];
     const channel = this.lookupChannel();
     const maxRounds = resolveMaxRounds(channel);
+    const requestMoreContextMarkdown = this.nextIdeaGatherContextMarkdown;
+    this.nextIdeaGatherContextMarkdown = null;
 
     for (const speaker of this.session.aiParticipants) {
       if (this.session.aborted) return;
@@ -873,6 +1032,7 @@ export class MeetingOrchestrator {
       const turnStartedAt = Date.now();
       const turnResult = await this.turnExecutor.requestOpinionGather(speaker, {
         suggestedLabel,
+        requestMoreContextMarkdown,
       });
       const turnEndedAt = Date.now();
       if (turnResult.kind === 'ok') {
@@ -1161,10 +1321,14 @@ export class MeetingOrchestrator {
     // 강제하므로 title/content/rationale 은 ≥ 1 char 보장 — 그래도 DB 가 nullable
     // 라 defensive coalesce.
     const tally = this.opinionService.tally(this.session.meetingId);
+    const ideaNodes = tally.tree.filter((node) => node.opinion.kind === 'root');
     const snapshot: IdeaPickSnapshot = {
       meetingId: this.session.meetingId,
       channelId: this.session.channelId,
-      cards: tally.tree.map((node) => ({
+      selectedScreenIds: ideaNodes
+        .filter((node) => node.opinion.status === 'agreed')
+        .map((node) => node.screenId),
+      cards: ideaNodes.map((node) => ({
         screenId: node.screenId,
         uuid: node.opinion.id,
         title: node.opinion.title ?? '',
@@ -1188,8 +1352,9 @@ export class MeetingOrchestrator {
     // 시점엔 이미 DB 가 갱신된 상태. phase loop 는 그저 다음 phase 로 진행.
     const pending = new IdeaUserPickPending();
     this.ideaPending = pending;
+    let decision: Awaited<ReturnType<IdeaUserPickPending['wait']>>;
     try {
-      await pending.wait();
+      decision = await pending.wait();
     } catch (reason) {
       this.ideaPending = null;
       const abortReason =
@@ -1203,6 +1368,14 @@ export class MeetingOrchestrator {
       };
     }
     this.ideaPending = null;
+
+    if (decision.kind === 'request_more') {
+      return {
+        meetingId: this.session.meetingId,
+        outcome: 'request_more',
+        requestMoreInput: decision.input,
+      };
+    }
 
     return {
       meetingId: this.session.meetingId,
@@ -1491,9 +1664,12 @@ export class MeetingOrchestrator {
           return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
         }
       }
-      await this.runComposeMinutesPhase({ ordinal: 1 });
+      const wireframeMinutes = await this.runComposeMinutesPhase({ ordinal: 1 });
       if (this.session.aborted) {
         return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
+      }
+      if (wireframeMinutes !== null) {
+        this.createWireframeCheckpoint(wireframeMinutes);
       }
       const minutes1 = await this.readMinutesBody(1);
 
@@ -1533,7 +1709,7 @@ export class MeetingOrchestrator {
           return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
         }
       }
-      await this.runComposeMinutesPhase({ ordinal: 2 });
+      const finalDesignMinutes = await this.runComposeMinutesPhase({ ordinal: 2 });
       if (this.session.aborted) {
         return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
       }
@@ -1550,8 +1726,18 @@ export class MeetingOrchestrator {
         return { meetingId, outcome: 'aborted', abortReason: { kind: 'aborted' } };
       }
 
-      // step 7c — handoff (풀세트와 동일 — runHandoffPhase 재사용).
-      await this.runHandoffPhase();
+      // step 7c — 디자인 -> 기획 검수 -> 구현/되돌림 분기.
+      if (finalDesignMinutes !== null) {
+        const handled = await this.runPlanningDesignCheckPhase({
+          finalDesignMinutes,
+          snapshot,
+        });
+        if (!handled) {
+          await this.runHandoffPhase();
+        }
+      } else {
+        await this.runHandoffPhase();
+      }
 
       return { meetingId, outcome: 'committed', snapshot };
     } catch (err) {
@@ -1651,45 +1837,41 @@ export class MeetingOrchestrator {
 
   private async runComposeMinutesPhase(options?: {
     ordinal?: 1 | 2;
-  }): Promise<void> {
+  }): Promise<MeetingMinutesComposeResult | null> {
     this.transitionToPhase('compose_minutes');
     const channel = this.lookupChannel();
     const maxRounds = resolveMaxRounds(channel);
     const composeStartedAt = Date.now();
     let composed = false;
+    let composeResult:
+      | Awaited<ReturnType<MeetingMinutesService['compose']>>
+      | null = null;
     try {
       const result = await this.meetingMinutesService.compose({
         meetingId: this.session.meetingId,
         ordinal: options?.ordinal,
       });
+      composeResult = result;
       composed = true;
       // R12-C2 T28 — chain resolver 의 audit chain 호출 시 회의록 본문 read 위해
       // path cache. file 본문 read 는 service 의 별 helper (`readMinutesBody`) 가
       // 책임 — 본 helper 는 path 보존만.
       this.cachedMinutesPath = result.minutesPath;
-      // 채팅창 회의록 카드 — meta.minutes 로 renderer 가
-      // 카드 컴포넌트 (T12) 와 매핑. 본 sub-task 는 system message 1 건.
-      try {
-        this.messageService.append({
-          channelId: this.session.channelId,
-          meetingId: this.session.meetingId,
-          authorId: 'system',
-          authorKind: 'system',
-          role: 'system',
-          content: result.body,
-          meta: {
-            minutes: {
-              minutesPath: result.minutesPath,
-              minutesSource: result.source,
-              minutesProviderId: result.providerId,
-            },
-          },
+      const shouldDeferForPlanningReview =
+        channel?.role === 'planning' &&
+        options?.ordinal === undefined &&
+        this.meetingReviewGateService !== null;
+
+      if (!shouldDeferForPlanningReview) {
+        this.appendMinutesCardMessage(result);
+      }
+      if (channel?.role === 'idea') {
+        this.appendIdeaBundleArchive({
+          body: result.body,
+          minutesPath: result.minutesPath,
+          source: result.source,
+          providerId: result.providerId,
         });
-      } catch (err) {
-        console.warn(
-          '[MeetingOrchestrator] minutes append failed',
-          errorPayload(err),
-        );
       }
     } catch (err) {
       console.warn(
@@ -1702,11 +1884,24 @@ export class MeetingOrchestrator {
     // workflowKind 별 chain target 결정. resolved 결과를 cache 해서 (a)
     // classifier hasNextChain 컨텍스트 (b) runHandoffPhase 분기에서 재사용.
     //
-    // R12-C2 시점 actual wire = audit chain 만 — 다른 workflowKind 는 chain
-    // resolver 안 placeholder branches 가 'no_chain' 반환 → hasNextChain=false →
-    // classifier 룰 6 'end' 카드 발행 (현재 동작 유지).
+    // R12-C2 시점 actual wire = idea→planning, audit→planning. 다른
+    // workflowKind 는 chain resolver 안 placeholder branches 가 'no_chain'
+    // 반환 → hasNextChain=false → classifier 룰 6 'end' 카드 발행.
     if (composed) {
       this.resolvedChain = await this.tryResolveChain();
+    }
+
+    if (
+      composed &&
+      composeResult !== null &&
+      channel?.role === 'planning' &&
+      options?.ordinal === undefined &&
+      this.meetingReviewGateService !== null
+    ) {
+      const created = this.createPlanningMinutesReview(composeResult);
+      if (!created) {
+        this.appendMinutesCardMessage(composeResult);
+      }
     }
 
     // R12-C2 T13 — minutes 작성 직후 boundary 분류. minutesComposed=true 로
@@ -1728,6 +1923,529 @@ export class MeetingOrchestrator {
         durationMs: composeEndedAt - composeStartedAt,
       });
     }
+    return composeResult;
+  }
+
+  private createWireframeCheckpoint(result: MeetingMinutesComposeResult): void {
+    if (this.designCheckpointService === null) return;
+    try {
+      const created = this.designCheckpointService.createWireframeCheckpoint({
+        projectId: this.session.projectId,
+        meetingId: this.session.meetingId,
+        channelId: this.session.channelId,
+        title: '와이어프레임 확인',
+        documentPath: result.minutesPath,
+        documentBodySnapshot: result.body,
+        payloadJson: JSON.stringify({
+          source: 'design_wireframe_minutes',
+          meetingOrdinal: 1,
+          noteForNextPhase:
+            'R12-C2 3차 현재는 디자인 중간 산출물 안내 카드로 연결',
+        }),
+      });
+      if (!created.shouldShowNotice) return;
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: '와이어프레임 확인이 준비되었습니다.',
+        meta: {
+          wireframeCheckpoint: {
+            id: created.checkpoint.id,
+            kind: created.checkpoint.kind,
+            status: created.checkpoint.status,
+            channelId: created.checkpoint.channelId,
+            title: created.checkpoint.title,
+          },
+        },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] wireframe checkpoint create or notice append failed',
+        errorPayload(err),
+      );
+    }
+  }
+
+  private appendMinutesCardMessage(
+    result: Awaited<ReturnType<MeetingMinutesService['compose']>>,
+  ): void {
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: result.body,
+        meta: {
+          minutes: {
+            minutesPath: result.minutesPath,
+            minutesSource: result.source,
+            minutesProviderId: result.providerId,
+          },
+        },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] minutes append failed',
+        errorPayload(err),
+      );
+    }
+  }
+
+  private createPlanningMinutesReview(
+    result: Awaited<ReturnType<MeetingMinutesService['compose']>>,
+  ): boolean {
+    if (this.meetingReviewGateService === null) return false;
+    const outcome = this.resolvedChain;
+    if (outcome === null || outcome.kind !== 'chain_resolved') {
+      return false;
+    }
+
+    try {
+      const gate = this.meetingReviewGateService.createPending({
+        projectId: this.session.projectId,
+        meetingId: this.session.meetingId,
+        sourceChannelId: this.session.channelId,
+        targetChannelId: outcome.package.target.channelId,
+        targetRole: outcome.package.target.channelRole,
+        kind: 'planning_minutes',
+        title: '기획 회의록',
+        documentPath: result.minutesPath,
+        documentBodySnapshot: result.body,
+        payloadJson: JSON.stringify({ handoffPackage: outcome.package }),
+      });
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content:
+          '기획 회의록이 준비되었습니다. 검토하기를 눌러 승인하거나 반려해 주세요.',
+        meta: {
+          reviewGate: {
+            id: gate.id,
+            kind: gate.kind,
+            status: gate.status,
+            sourceChannelId: gate.sourceChannelId,
+            targetChannelId: gate.targetChannelId,
+            targetRole: gate.targetRole,
+            title: gate.title,
+          },
+        },
+      });
+      this.pendingReviewGateId = gate.id;
+      return true;
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] planning review gate create or notice append failed',
+        errorPayload(err),
+      );
+      return false;
+    }
+  }
+
+  private async runPlanningDesignCheckPhase(input: {
+    finalDesignMinutes: MeetingMinutesComposeResult;
+    snapshot: DesignSnapshotPaths;
+  }): Promise<boolean> {
+    if (this.planningDesignCheckService === null) return false;
+    const designChannel = this.lookupChannel();
+    if (designChannel === null || !isDesignDepartmentRole(designChannel.role)) {
+      return false;
+    }
+    const planningReceiver = this.resolveReceiverChannel(
+      this.session.projectId,
+      'planning',
+    );
+    if (planningReceiver === null) return false;
+
+    const implementationReceiver = this.resolveReceiverChannel(
+      this.session.projectId,
+      'implement',
+    );
+
+    const designReceiver = this.resolveReceiverChannel(
+      this.session.projectId,
+      designChannel.role,
+    );
+    const planningContext = this.resolvePlanningDesignCheckContext();
+    const payload: PlanningDesignCheckPayloadContext = {
+      sourceHandoffDispatchId:
+        this.session.sourceHandoffContext?.dispatchRowId ?? null,
+      designReceiver: receiverContextFromResolved(designReceiver),
+      implementationReceiver: receiverContextFromResolved(implementationReceiver),
+    };
+
+    const request = this.planningDesignCheckService.createRequest({
+      projectId: this.session.projectId,
+      sourceDesignMeetingId: this.session.meetingId,
+      designChannelId: this.session.channelId,
+      designChannelRole: designChannel.role,
+      planningChannelId: planningReceiver.channelId,
+      implementationChannelId: implementationReceiver?.channelId ?? null,
+      finalDesignMinutesPath: input.finalDesignMinutes.minutesPath,
+      finalDesignMinutesBody: input.finalDesignMinutes.body,
+      workBundleKey: planningContext.workBundleKey,
+      originalPlanningMinutesId: planningContext.originalPlanningMinutesId,
+      originalPlanningMinutesPath: planningContext.originalPlanningMinutesPath,
+      originalPlanningMinutesBody: planningContext.originalPlanningMinutesBody,
+      originalPlanningMinutesMissingReason:
+        planningContext.originalPlanningMinutesMissingReason,
+      snapshotDesktopPath: input.snapshot.desktopPath,
+      snapshotMobilePath: input.snapshot.mobilePath,
+      payloadJson: JSON.stringify(payload),
+    });
+
+    this.appendPlanningDesignCheckRecord(
+      request,
+      '디자인 검수 요청서가 기획 부서로 전달되었습니다.',
+    );
+
+    if (planningContext.originalPlanningMinutesMissingReason !== null) {
+      const needsUser = this.planningDesignCheckService.recordNeedsUserDecision({
+        id: request.id,
+        reason: planningContext.originalPlanningMinutesMissingReason,
+        payloadJson: JSON.stringify({
+          missingOriginalPlanningMinutes: true,
+        }),
+      });
+      this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+      return true;
+    }
+
+    const speaker = this.participantFromProviderId(
+      planningReceiver.assignedProviderId,
+    );
+    const skippedReason = '기획 검수 담당 직원 응답이 없어 사용자 판단이 필요합니다.';
+    if (speaker === null) {
+      const needsUser = this.planningDesignCheckService.recordNeedsUserDecision({
+        id: request.id,
+        reason: skippedReason,
+      });
+      this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+      return true;
+    }
+
+    const result = await this.turnExecutor.requestPlanningDesignCheck(speaker, {
+      request,
+      speaker,
+      suggestedLabel: this.session.nextLabel(speaker.id),
+    });
+    if (result.kind !== 'ok') {
+      const needsUser = this.planningDesignCheckService.recordNeedsUserDecision({
+        id: request.id,
+        reason: skippedReason,
+        payloadJson: JSON.stringify({ skipped: result }),
+      });
+      this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+      return true;
+    }
+
+    const normalized = normalizePlanningDesignCheckResult(result.payload);
+    if (normalized.verdict === 'aligned') {
+      const aligned = this.planningDesignCheckService.recordAligned({
+        id: request.id,
+        reason: normalized.reason,
+        payloadJson: JSON.stringify({ reviewerProviderId: result.providerId }),
+      });
+      if (implementationReceiver === null) {
+        const needsUser =
+          this.planningDesignCheckService.recordNeedsUserDecision({
+            id: request.id,
+            reason:
+              '기획 검수는 의도에 맞음으로 끝났지만 구현 부서 채널을 찾지 못했습니다.',
+          });
+        this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+        return true;
+      }
+      const pkg = buildImplementationHandoffPackage({
+        request: aligned,
+        implementationReceiver,
+        missionCardId: this.missionCardIdFactory(),
+        generatedAt: Date.now(),
+      });
+      const dispatchRowId = this.dispatchAutoHandoffPackage(pkg);
+      if (dispatchRowId === null) {
+        const needsUser =
+          this.planningDesignCheckService.recordNeedsUserDecision({
+            id: aligned.id,
+            reason:
+              '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+          });
+        this.appendPlanningDesignCheckRecord(
+          needsUser,
+          '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+        );
+        return true;
+      }
+      const stored = this.planningDesignCheckService.setImplementationDispatchId(
+        aligned.id,
+        dispatchRowId,
+      );
+      this.appendPlanningDesignCheckRecord(
+        stored,
+        '기획 검수 결과 의도에 맞음으로 판단되어 구현 부서로 자동 인계되었습니다.',
+      );
+      return true;
+    }
+
+    const branch = this.planningDesignCheckService.recordMisaligned({
+      id: request.id,
+      reason: normalized.reason,
+      revisionDirection: normalized.revisionDirection,
+      payloadJson: JSON.stringify({ reviewerProviderId: result.providerId }),
+    });
+    if (branch.action === 'return_to_design' && designReceiver !== null) {
+      const pkg = buildDesignReturnHandoffPackage({
+        request: branch.record,
+        designReceiver,
+        missionCardId: this.missionCardIdFactory(),
+        generatedAt: Date.now(),
+      });
+      const dispatchRowId = this.dispatchAutoHandoffPackage(pkg);
+      if (dispatchRowId === null) {
+        const needsUser =
+          this.planningDesignCheckService.recordNeedsUserDecision({
+            id: branch.record.id,
+            reason:
+              '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+          });
+        this.appendPlanningDesignCheckRecord(
+          needsUser,
+          '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+        );
+        return true;
+      }
+      const stored = this.planningDesignCheckService.setDesignReturnDispatchId(
+        branch.record.id,
+        dispatchRowId,
+      );
+      this.appendPlanningDesignCheckRecord(
+        stored,
+        '기획 검수 결과 의도와 다름으로 판단되어 디자인 되돌림을 한 번 자동 실행했습니다.',
+      );
+      return true;
+    }
+
+    const needsUser =
+      branch.action === 'needs_user_decision'
+        ? branch.record
+        : this.planningDesignCheckService.recordNeedsUserDecision({
+            id: request.id,
+            reason:
+              '디자인 되돌림 대상 부서를 찾지 못해 사용자 판단이 필요합니다.',
+          });
+    this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+    return true;
+  }
+
+  private resolvePlanningDesignCheckContext(): {
+    workBundleKey: string | null;
+    originalPlanningMinutesId: string | null;
+    originalPlanningMinutesPath: string | null;
+    originalPlanningMinutesBody: string | null;
+    originalPlanningMinutesMissingReason: string | null;
+  } {
+    const source = this.session.sourceHandoffContext;
+    if (source === null) {
+      return missingPlanningMinutesContext(
+        '디자인 회의가 기획 인계서에서 시작된 기록이 없어 원래 기획 회의록을 찾지 못했습니다.',
+        `design-meeting:${this.session.meetingId}`,
+      );
+    }
+
+    const priorCheck =
+      this.planningDesignCheckService?.findByDesignReturnDispatchId(
+        source.dispatchRowId,
+      ) ?? null;
+    if (priorCheck !== null) {
+      return {
+        workBundleKey:
+          priorCheck.workBundleKey ??
+          bundleKeyFromPlanningMinutes(priorCheck.originalPlanningMinutesId) ??
+          `planning-design-check:${priorCheck.id}`,
+        originalPlanningMinutesId: priorCheck.originalPlanningMinutesId,
+        originalPlanningMinutesPath: priorCheck.originalPlanningMinutesPath,
+        originalPlanningMinutesBody: priorCheck.originalPlanningMinutesBody,
+        originalPlanningMinutesMissingReason:
+          priorCheck.originalPlanningMinutesMissingReason,
+      };
+    }
+
+    if (
+      source.handoffPackage.sender.channelRole === 'planning' &&
+      source.minutesMeetingId !== null &&
+      source.minutesPath !== null &&
+      source.minutesBody !== null &&
+      source.minutesBody.trim().length > 0
+    ) {
+      return {
+        workBundleKey: bundleKeyFromPlanningMinutes(source.minutesMeetingId),
+        originalPlanningMinutesId: source.minutesMeetingId,
+        originalPlanningMinutesPath: source.minutesPath,
+        originalPlanningMinutesBody: source.minutesBody,
+        originalPlanningMinutesMissingReason: null,
+      };
+    }
+
+    return missingPlanningMinutesContext(
+      '기획 검수 기준인 원래 기획 회의록 본문 또는 경로를 찾지 못했습니다.',
+      `source-handoff:${source.dispatchRowId}`,
+    );
+  }
+
+  private participantFromProviderId(providerId: string): Participant | null {
+    const provider = this.providerRegistry.get(providerId);
+    if (provider === undefined) return null;
+    return {
+      id: providerId,
+      providerId,
+      displayName: provider.displayName ?? providerId,
+      isActive: true,
+    };
+  }
+
+  private dispatchAutoHandoffPackage(pkg: HandoffPackage): string | null {
+    try {
+      const row = this.handoffDispatchService.dispatch(pkg);
+      try {
+        this.streamBridge.emitHandoffDispatched({
+          meetingId: this.session.meetingId,
+          dispatchRowId: row.id,
+          senderChannelId: pkg.sender.channelId,
+          targetChannelId: pkg.target.channelId,
+          mode: pkg.mode,
+          dispatchedAt: row.dispatchedAt,
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] planning design check dispatch stream emit failed',
+          errorPayload(err),
+        );
+      }
+      return row.id;
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] planning design check dispatch failed',
+        errorPayload(err),
+      );
+      return null;
+    }
+  }
+
+  private appendPlanningDesignCheckRecord(
+    record: ReturnType<PlanningDesignCheckService['get']>,
+    content: string,
+  ): void {
+    const meta = {
+      planningDesignCheck: {
+        id: record.id,
+        status: record.status,
+        verdict: record.verdict,
+        returnCount: record.returnCount,
+        sourceDesignMeetingId: record.sourceDesignMeetingId,
+        designChannelId: record.designChannelId,
+        planningChannelId: record.planningChannelId,
+        implementationChannelId: record.implementationChannelId,
+        title: record.requestTitle,
+        reason: record.reason,
+        revisionDirection: record.revisionDirection,
+        userDecision: record.userDecision,
+      },
+    };
+    try {
+      this.messageService.append({
+        channelId: this.session.channelId,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content,
+        meta,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] planning design check message append failed',
+        errorPayload(err),
+      );
+    }
+
+    let minutesChannel: Channel | undefined;
+    try {
+      minutesChannel = this.channelService
+        .listByProject(this.session.projectId)
+        .find((channel) => channel.kind === 'system_minutes');
+    } catch {
+      minutesChannel = undefined;
+    }
+    if (minutesChannel === undefined) return;
+    try {
+      this.messageService.append({
+        channelId: minutesChannel.id,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: buildPlanningDesignCheckArchive(record, content),
+        meta,
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] planning design check archive append failed',
+        errorPayload(err),
+      );
+    }
+  }
+
+  private appendIdeaBundleArchive(input: {
+    body: string;
+    minutesPath: string;
+    source: 'moderator' | 'moderator-retry' | 'fallback';
+    providerId: string | null;
+  }): void {
+    const minutesChannel = this.channelService
+      .listByProject(this.session.projectId)
+      .find((channel) => channel.kind === 'system_minutes');
+    if (minutesChannel === undefined) {
+      console.warn(
+        '[MeetingOrchestrator] idea bundle archive skipped — system_minutes channel not found',
+      );
+      return;
+    }
+
+    try {
+      this.messageService.append({
+        channelId: minutesChannel.id,
+        meetingId: this.session.meetingId,
+        authorId: 'system',
+        authorKind: 'system',
+        role: 'system',
+        content: input.body,
+        meta: {
+          minutes: {
+            minutesPath: input.minutesPath,
+            minutesSource: input.source,
+            minutesProviderId: input.providerId,
+          },
+          reviewGate: {
+            kind: 'idea_bundle',
+            status: 'approved',
+            sourceChannelId: this.session.channelId,
+            targetRole: 'planning',
+          },
+        },
+      });
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] idea bundle archive append failed',
+        errorPayload(err),
+      );
+    }
   }
 
   /**
@@ -1742,7 +2460,10 @@ export class MeetingOrchestrator {
    * R12-C2 시점 audit 채널만 actual chain wire — 다른 채널은 chain resolver 안
    * placeholder branches 가 'no_chain' 반환.
    */
-  private async tryResolveChain(): Promise<ChainResolverOutcome | null> {
+  private async tryResolveChain(options?: {
+    designSnapshot?: DesignSnapshotPaths;
+    finalDesignMinutesBody?: string;
+  }): Promise<ChainResolverOutcome | null> {
     const channel = this.lookupChannel();
     if (channel === null) return null;
     const workflowKind = mapChannelRoleToWorkflowKind(channel);
@@ -1775,6 +2496,14 @@ export class MeetingOrchestrator {
           projectId: this.session.projectId,
         },
         auditInput,
+        designInput:
+          workflowKind === 'design'
+            ? {
+                finalDesignMinutesMarkdown: options?.finalDesignMinutesBody,
+                snapshotDesktopPath: options?.designSnapshot?.desktopPath ?? null,
+                snapshotMobilePath: options?.designSnapshot?.mobilePath ?? null,
+              }
+            : undefined,
         resolveReceiverChannel: (role: ChannelRole) =>
           this.resolveReceiverChannel(this.session.projectId, role),
         missionCardIdFactory: this.missionCardIdFactory,
@@ -1814,8 +2543,31 @@ export class MeetingOrchestrator {
     }
   }
 
-  private async runHandoffPhase(): Promise<void> {
+  private async runHandoffPhase(): Promise<HandoffPhaseResult> {
     this.transitionToPhase('handoff');
+
+    if (this.pendingReviewGateId !== null) {
+      try {
+        this.messageService.append({
+          channelId: this.session.channelId,
+          meetingId: this.session.meetingId,
+          authorId: 'system',
+          authorKind: 'system',
+          role: 'system',
+          content: '기획 회의록 검토 대기 중입니다. 승인 전까지 디자인 부서 인계를 보류합니다.',
+          meta: {
+            reviewGateId: this.pendingReviewGateId,
+            handoff: 'review_gate_pending',
+          },
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] review gate pending message append failed',
+          errorPayload(err),
+        );
+      }
+      return { kind: 'review_gate_pending' };
+    }
 
     // R12-C2 T28 — chain resolver outcome 분기.
     //
@@ -1837,7 +2589,7 @@ export class MeetingOrchestrator {
 
     if (outcome === null || outcome.kind === 'no_chain') {
       this.runHandoffFallback();
-      return;
+      return { kind: 'fallback' };
     }
 
     // chain_resolved branch — outcome.package 사용.
@@ -1878,6 +2630,7 @@ export class MeetingOrchestrator {
             errorPayload(err),
           );
         }
+        return { kind: 'dispatched', dispatchRowId: row.id };
       } catch (err) {
         console.warn(
           '[MeetingOrchestrator] handoffDispatchService.dispatch threw',
@@ -1885,8 +2638,8 @@ export class MeetingOrchestrator {
         );
         // dispatch 실패 시 fallback path — 회의 종결만 알림.
         this.runHandoffFallback();
+        return { kind: 'fallback' };
       }
-      return;
     }
 
     // mode === 'check' — pending state 등록 + stream emit.
@@ -1899,7 +2652,7 @@ export class MeetingOrchestrator {
       );
       // pending 등록 실패 시 fallback — chain 정보 손실 안되게 system message 만.
       this.runHandoffFallback();
-      return;
+      return { kind: 'fallback' };
     }
 
     try {
@@ -1951,6 +2704,7 @@ export class MeetingOrchestrator {
         errorPayload(err),
       );
     }
+    return { kind: 'pending' };
   }
 
   /**
@@ -2215,6 +2969,114 @@ function emptyQuickVoteResult(meetingId: string): OpinionQuickVoteResult {
     unresolved: [],
     votesInserted: 0,
   };
+}
+
+function buildPlanningDesignCheckArchive(
+  record: PlanningDesignCheckRecord,
+  headline: string,
+): string {
+  const lines: string[] = [];
+  lines.push(`# ${record.requestTitle}`);
+  lines.push('');
+  lines.push(headline);
+  lines.push('');
+  lines.push(`상태: ${record.status}`);
+  lines.push(`판단: ${record.verdict ?? 'pending'}`);
+  lines.push(`되돌림 횟수: ${record.returnCount}`);
+  if (record.workBundleKey !== null) {
+    lines.push(`작업 묶음: ${record.workBundleKey}`);
+  }
+  if (record.originalPlanningMinutesPath !== null) {
+    lines.push(`원래 기획 회의록: ${record.originalPlanningMinutesPath}`);
+  }
+  if (record.originalPlanningMinutesMissingReason !== null) {
+    lines.push(`원래 기획 회의록 누락: ${record.originalPlanningMinutesMissingReason}`);
+  }
+  lines.push(`최종 디자인 회의록: ${record.finalDesignMinutesPath}`);
+  if (record.snapshotDesktopPath !== null) {
+    lines.push(`데스크톱 스냅샷: ${record.snapshotDesktopPath}`);
+  }
+  if (record.snapshotMobilePath !== null) {
+    lines.push(`모바일 스냅샷: ${record.snapshotMobilePath}`);
+  }
+  if (record.reason !== null) {
+    lines.push('');
+    lines.push('## 기획 검수 의견');
+    lines.push(record.reason);
+  }
+  if (record.revisionDirection !== null) {
+    lines.push('');
+    lines.push('## 수정 방향');
+    lines.push(record.revisionDirection);
+  }
+  if (record.userDecision !== null) {
+    lines.push('');
+    lines.push('## 사용자 판단');
+    lines.push(userDecisionLabel(record.userDecision));
+    if (record.userDecisionNote !== null) {
+      lines.push(record.userDecisionNote);
+    }
+    if (record.userDecisionDispatchId !== null) {
+      lines.push(`인계 ID: ${record.userDecisionDispatchId}`);
+    }
+  }
+  lines.push('');
+  lines.push('## 요청서 본문');
+  lines.push(record.requestBody);
+  return lines.join('\n');
+}
+
+function receiverContextFromResolved(
+  receiver: ResolvedReceiverChannel | null,
+): PlanningDesignCheckReceiverContext | null {
+  if (receiver === null) return null;
+  return {
+    channelId: receiver.channelId,
+    handoffMode: receiver.handoffMode,
+    assignedProviderId: receiver.assignedProviderId,
+  };
+}
+
+function bundleKeyFromPlanningMinutes(meetingId: string | null): string | null {
+  return meetingId === null ? null : `planning-minutes:${meetingId}`;
+}
+
+function missingPlanningMinutesContext(
+  reason: string,
+  fallbackWorkBundleKey: string,
+): {
+  workBundleKey: string;
+  originalPlanningMinutesId: null;
+  originalPlanningMinutesPath: null;
+  originalPlanningMinutesBody: null;
+  originalPlanningMinutesMissingReason: string;
+} {
+  return {
+    workBundleKey: fallbackWorkBundleKey,
+    originalPlanningMinutesId: null,
+    originalPlanningMinutesPath: null,
+    originalPlanningMinutesBody: null,
+    originalPlanningMinutesMissingReason: reason,
+  };
+}
+
+function userDecisionLabel(
+  decision: PlanningDesignCheckRecord['userDecision'],
+): string {
+  switch (decision) {
+    case 'send_to_implementation':
+      return '구현으로 보내기';
+    case 'request_design_revision':
+      return '디자인에 다시 수정 요청하기';
+    case 'stop':
+      return '진행 중지';
+    case null:
+      return '';
+    default: {
+      const _exhaustive: never = decision;
+      return _exhaustive;
+    }
+  }
 }
 
 function errorPayload(err: unknown): { name?: string; message: string } {

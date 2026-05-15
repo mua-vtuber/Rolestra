@@ -9,4 +9,6 @@ export {
   type MessageCardVariantProps,
   type OpinionCardActionHandlers,
   type MinutesCardActionHandlers,
+  type WireframeCheckpointActionHandlers,
+  type PlanningDesignCheckActionHandlers,
 } from './CardVariant';

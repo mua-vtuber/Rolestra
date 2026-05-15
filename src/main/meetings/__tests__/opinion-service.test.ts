@@ -790,6 +790,95 @@ describe('OpinionService', () => {
       expect(result.userOpinion!.title).toContain('ITEM_001');
     });
 
+    it('requestMoreIdeas keeps selected roots agreed and leaves unselected roots pending', () => {
+      const gathered = gatherThree();
+
+      const result = svc.requestMoreIdeas({
+        meetingId,
+        selectedScreenIds: ['ITEM_001', 'ITEM_003'],
+        userComment: 'A와 C는 유지하고 더 넓게 모아주세요.',
+      });
+
+      expect(result.selectedIds).toEqual([
+        gathered.screen.ITEM_001,
+        gathered.screen.ITEM_003,
+      ]);
+      expect(result.userOpinion).not.toBeNull();
+      expect(result.userOpinion!.kind).toBe('user-raised');
+      expect(result.userOpinion!.authorLabel).toBe(
+        IDEA_USER_OPINION_AUTHOR_LABEL,
+      );
+      expect(result.userOpinion!.status).toBe('agreed');
+
+      const rows = repo.listByMeeting(meetingId);
+      expect(rows).toHaveLength(4);
+      const byId = new Map(rows.map((row) => [row.id, row]));
+      expect(byId.get(gathered.screen.ITEM_001!)!.status).toBe('agreed');
+      expect(byId.get(gathered.screen.ITEM_002!)!.status).toBe('pending');
+      expect(byId.get(gathered.screen.ITEM_003!)!.status).toBe('agreed');
+      expect(byId.get(gathered.screen.ITEM_002!)!.exclusionReason).toBeNull();
+    });
+
+    it('finalize after requestMoreIdeas excludes only root cards, not saved user notes', () => {
+      gatherThree();
+      const more = svc.requestMoreIdeas({
+        meetingId,
+        selectedScreenIds: ['ITEM_001'],
+        userComment: '이 방향은 유지하고 대안을 더 모아주세요.',
+      });
+
+      const result = svc.finalizeIdeaSelection({
+        meetingId,
+        selectedScreenIds: ['ITEM_001'],
+        userComment: undefined,
+      });
+
+      expect(result.agreedIds).toHaveLength(1);
+      expect(result.excludedIds).toHaveLength(2);
+      expect(result.excludedIds).not.toContain(more.userOpinion!.id);
+
+      const savedUserNote = repo
+        .listByMeeting(meetingId)
+        .find((row) => row.id === more.userOpinion!.id);
+      expect(savedUserNote).toBeDefined();
+      expect(savedUserNote!.kind).toBe('user-raised');
+      expect(savedUserNote!.status).toBe('agreed');
+      expect(savedUserNote!.exclusionReason).toBeNull();
+    });
+
+    it('requestMoreIdeas rejects empty selection plus blank comment', () => {
+      gatherThree();
+
+      expect(() =>
+        svc.requestMoreIdeas({
+          meetingId,
+          selectedScreenIds: [],
+          userComment: ' \n\t ',
+        }),
+      ).toThrow(IdeaPickValidationError);
+
+      const rows = repo.listByMeeting(meetingId);
+      expect(rows).toHaveLength(3);
+      expect(rows.every((o) => o.status === 'pending')).toBe(true);
+    });
+
+    it('requestMoreIdeas rejects non-root user-raised screen ids', () => {
+      gatherThree();
+      svc.requestMoreIdeas({
+        meetingId,
+        selectedScreenIds: ['ITEM_001'],
+        userComment: '사용자 메모를 남깁니다.',
+      });
+
+      expect(() =>
+        svc.requestMoreIdeas({
+          meetingId,
+          selectedScreenIds: ['ITEM_004'],
+          userComment: '사용자 메모 카드는 선택 카드가 아닙니다.',
+        }),
+      ).toThrow(UnknownScreenIdError);
+    });
+
     it('throws IdeaPickValidationError on 0 picks + 0 (or whitespace) comment', () => {
       gatherThree();
 

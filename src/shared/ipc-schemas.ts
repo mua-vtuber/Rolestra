@@ -292,6 +292,74 @@ export const handoffStartMeetingFromPackageSchema = z.object({
   topic: z.string().min(1).max(500),
 });
 
+const meetingReviewStatusSchema = z.enum([
+  'pending',
+  'approved',
+  'revision_requested',
+  'restart_requested',
+  'stopped',
+]);
+
+const meetingReviewKindSchema = z.enum(['planning_minutes']);
+
+const designCheckpointDecisionSchema = z.enum([
+  'continue',
+  'request_revision',
+  'auto_skip',
+]);
+
+const planningDesignCheckDecisionSchema = z.enum([
+  'send_to_implementation',
+  'request_design_revision',
+  'stop',
+]);
+
+export const meetingReviewListSchema = z.object({
+  projectId: z.string().min(1).max(128).optional(),
+  status: meetingReviewStatusSchema.optional(),
+  kind: meetingReviewKindSchema.optional(),
+});
+
+export const meetingReviewGetSchema = z.object({
+  reviewId: z.string().min(1).max(128),
+});
+
+export const meetingReviewDecideSchema = z.object({
+  reviewId: z.string().min(1).max(128),
+  decision: z.enum(['approve', 'revise', 'restart', 'stop']),
+  userNote: z.string().max(10_000).optional(),
+});
+
+export const designCheckpointGetSchema = z.object({
+  checkpointId: z.string().min(1).max(128),
+});
+
+export const designCheckpointDecideSchema = z
+  .object({
+    checkpointId: z.string().min(1).max(128),
+    decision: designCheckpointDecisionSchema,
+    note: z.string().max(10_000).optional(),
+  })
+  .refine(
+    (v) =>
+      v.decision !== 'request_revision' ||
+      ((v.note ?? '').trim().length > 0),
+    {
+      message: 'note is required when decision=request_revision',
+      path: ['note'],
+    },
+  );
+
+export const planningDesignCheckGetSchema = z.object({
+  checkId: z.string().min(1).max(128),
+});
+
+export const planningDesignCheckDecideSchema = z.object({
+  checkId: z.string().min(1).max(128),
+  decision: planningDesignCheckDecisionSchema,
+  userNote: z.string().max(10_000).optional(),
+});
+
 export const messageAppendSchema = z.object({
   channelId: z.string().min(1).max(128),
   meetingId: z.string().min(1).max(128).nullable().optional(),
@@ -583,6 +651,9 @@ export const meetingIdeaFinalizeSelectionSchema = z.object({
     .max(200, 'selectedScreenIds: too many entries (cap 200 / one meeting)'),
   userComment: z.string().max(10_000).optional(),
 });
+
+/** R12-C2 card UX: 선택 유지 + 추가 아이디어 수집. */
+export const meetingIdeaRequestMoreSchema = meetingIdeaFinalizeSelectionSchema;
 
 // ── R11-Task5 신규 zod schemas ─────────────────────────────────────
 
@@ -933,6 +1004,13 @@ export const v3ChannelSchemas = {
   'handoff:open': handoffOpenSchema,
   'handoff:read-with-minutes': handoffReadWithMinutesSchema,
   'handoff:start-meeting-from-package': handoffStartMeetingFromPackageSchema,
+  'meeting-review:list': meetingReviewListSchema,
+  'meeting-review:get': meetingReviewGetSchema,
+  'meeting-review:decide': meetingReviewDecideSchema,
+  'design-checkpoint:get': designCheckpointGetSchema,
+  'design-checkpoint:decide': designCheckpointDecideSchema,
+  'planning-design-check:get': planningDesignCheckGetSchema,
+  'planning-design-check:decide': planningDesignCheckDecideSchema,
   'message:append': messageAppendSchema,
   'message:search': messageSearchSchema,
   'message:list-recent': messageListRecentSchema,
@@ -966,6 +1044,7 @@ export const v3ChannelSchemas = {
   'channel:update-permissions': channelUpdatePermissionsSchema,
   'meeting:llm-summarize': meetingLlmSummarizeSchema,
   'meeting:idea-finalize-selection': meetingIdeaFinalizeSelectionSchema,
+  'meeting:idea-request-more': meetingIdeaRequestMoreSchema,
   // R11-Task4: dev hook (ROLESTRA_E2E=1 only — registration in router.ts
   // is gated, but the schema entry is unconditional so the dev-mode zod
   // round-trip catches malformed payloads when the handler IS registered).

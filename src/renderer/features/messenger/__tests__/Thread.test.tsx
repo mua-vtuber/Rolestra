@@ -8,7 +8,9 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import {
+  act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -30,8 +32,43 @@ import {
 import type { Channel } from '../../../../shared/channel-types';
 import type { ActiveMeetingSummary } from '../../../../shared/meeting-types';
 import type { MemberView } from '../../../../shared/member-profile-types';
+import type {
+  StreamEventType,
+  StreamV3PayloadOf,
+} from '../../../../shared/stream-events';
 
 const PROJECT_ID = 'p-a';
+type StreamHandler = (payload: unknown) => void;
+
+function createStreamStub() {
+  const handlers = new Map<StreamEventType, Set<StreamHandler>>();
+
+  function onStream<T extends StreamEventType>(
+    type: T,
+    cb: (payload: StreamV3PayloadOf<T>) => void,
+  ): () => void {
+    const existing = handlers.get(type);
+    const set = existing ?? new Set<StreamHandler>();
+    if (!existing) {
+      handlers.set(type, set);
+    }
+    set.add(cb as StreamHandler);
+    return () => {
+      set.delete(cb as StreamHandler);
+    };
+  }
+
+  function emit<T extends StreamEventType>(
+    type: T,
+    payload: StreamV3PayloadOf<T>,
+  ): void {
+    const set = handlers.get(type);
+    if (!set) return;
+    for (const cb of set) cb(payload);
+  }
+
+  return { onStream, emit };
+}
 
 function makeChannel(overrides: Partial<Channel>): Channel {
   return {
@@ -63,6 +100,7 @@ interface StubOptions {
   meetings?: ActiveMeetingSummary[];
   members?: MemberView[];
   messages?: Array<Record<string, unknown>>;
+  stream?: ReturnType<typeof createStreamStub>;
 }
 
 function stubBridge(options: StubOptions = {}) {
@@ -81,9 +119,54 @@ function stubBridge(options: StubOptions = {}) {
     if (channel === 'member:list') return { members };
     if (channel === 'meeting:list-active') return { meetings };
     if (channel === 'message:list-by-channel') return { messages };
+    if (channel === 'planning-design-check:decide') {
+      const payload = data as { checkId: string; decision: string };
+      return {
+        check: {
+          id: payload.checkId,
+          projectId: PROJECT_ID,
+          sourceDesignMeetingId: 'meeting-design',
+          designChannelId: 'c-design',
+          designChannelRole: 'design.ui',
+          planningChannelId: 'c-planning',
+          implementationChannelId: 'c-implement',
+          requestTitle: '디자인 검수 요청서',
+          requestBody: '# 디자인 검수 요청서',
+          finalDesignMinutesPath: '/tmp/final.md',
+          finalDesignMinutesBody: '# final design',
+          snapshotDesktopPath: null,
+          snapshotMobilePath: null,
+          wireframeCheckpointsJson: '[]',
+          wireframeUserNotesJson: '[]',
+          workBundleKey: 'planning-minutes:planning-meeting',
+          originalPlanningMinutesId: 'planning-meeting',
+          originalPlanningMinutesPath: '/tmp/planning.md',
+          originalPlanningMinutesBody: '# planning',
+          originalPlanningMinutesMissingReason: null,
+          returnCount: 1,
+          verdict: 'misaligned',
+          status: 'needs_user_decision',
+          reason: '두 번째 검수에서도 의도와 다름',
+          revisionDirection: '정보 밀도 조정',
+          implementationDispatchId: null,
+          designReturnDispatchId: null,
+          userDecision: payload.decision,
+          userDecisionNote: null,
+          userDecisionDispatchId: null,
+          payloadJson: null,
+          createdAt: 1,
+          decidedAt: 2,
+        },
+        dispatchRowId: null,
+      };
+    }
     throw new Error(`no mock for channel ${channel}`);
   });
-  vi.stubGlobal('arena', { platform: 'linux', invoke });
+  vi.stubGlobal('arena', {
+    platform: 'linux',
+    invoke,
+    onStream: options.stream?.onStream ?? (() => () => undefined),
+  });
   return invoke;
 }
 
@@ -198,6 +281,188 @@ describe('Thread — renders ChannelHeader when a user channel is active', () =>
   });
 });
 
+describe('Thread — planning design check card', () => {
+  it('shows 사용자 판단 필요 without official approval/rejection wording', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-design' },
+    });
+    const invoke = stubBridge({
+      channels: [makeChannel({ id: 'c-design', name: '디자인', kind: 'user' })],
+      messages: [
+        {
+          id: 'm-planning-design-check',
+          channelId: 'c-design',
+          meetingId: 'meeting-design',
+          authorId: 'system',
+          authorKind: 'system',
+          role: 'system',
+          content: '사용자 판단 필요',
+          createdAt: 1_700_000_000_000,
+          meta: {
+            planningDesignCheck: {
+              id: 'check-1',
+              status: 'needs_user_decision',
+              verdict: 'misaligned',
+              returnCount: 1,
+              sourceDesignMeetingId: 'meeting-design',
+              designChannelId: 'c-design',
+              planningChannelId: 'c-planning',
+              implementationChannelId: 'c-implement',
+              reason: '두 번째 검수에서도 의도와 다름',
+            },
+          },
+        },
+      ],
+    });
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('planning-design-check-card')).toBeTruthy(),
+    );
+    expect(screen.getAllByText('사용자 판단 필요').length).toBeGreaterThan(0);
+    expect(
+      screen.getByTestId(
+        'planning-design-check-decision-send_to_implementation',
+      ).textContent,
+    ).toContain('구현으로 보내기');
+    fireEvent.click(
+      screen.getByTestId(
+        'planning-design-check-decision-send_to_implementation',
+      ),
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('planning-design-check:decide', {
+        checkId: 'check-1',
+        decision: 'send_to_implementation',
+        userNote: '',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('planning-design-check-status').textContent).toBe(
+        '사용자 판단 완료',
+      ),
+    );
+    expect(
+      screen.getByTestId('planning-design-check-user-decision').textContent,
+    ).toContain('구현으로 보내기');
+    expect(
+      screen.queryByTestId(
+        'planning-design-check-decision-send_to_implementation',
+      ),
+    ).toBeNull();
+    expect(screen.queryByText('승인')).toBeNull();
+    expect(screen.queryByText('반려')).toBeNull();
+  });
+
+  it('오래된 pending meta라도 최신 사용자 판단이 있으면 버튼을 다시 보이지 않는다', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-design' },
+    });
+    const staleCheckMessage = {
+      id: 'm-planning-design-check',
+      channelId: 'c-design',
+      meetingId: 'meeting-design',
+      authorId: 'system',
+      authorKind: 'system',
+      role: 'system',
+      content: '사용자 판단 필요',
+      createdAt: 1_700_000_000_000,
+      meta: {
+        planningDesignCheck: {
+          id: 'check-1',
+          status: 'needs_user_decision',
+          verdict: 'misaligned',
+          returnCount: 1,
+          sourceDesignMeetingId: 'meeting-design',
+          designChannelId: 'c-design',
+          planningChannelId: 'c-planning',
+          implementationChannelId: 'c-implement',
+          reason: '두 번째 검수에서도 의도와 다름',
+          userDecision: null,
+        },
+      },
+    };
+    const invoke = stubBridge({
+      channels: [makeChannel({ id: 'c-design', name: '디자인', kind: 'user' })],
+      messages: [staleCheckMessage],
+    });
+    invoke.mockImplementation(async (channel: string, data: unknown) => {
+      if (channel === 'channel:list') {
+        const payload = data as { projectId: string | null };
+        return payload.projectId === null
+          ? { channels: [] }
+          : { channels: [makeChannel({ id: 'c-design', name: '디자인', kind: 'user' })] };
+      }
+      if (channel === 'member:list') return { members: [] };
+      if (channel === 'meeting:list-active') return { meetings: [] };
+      if (channel === 'message:list-by-channel') {
+        return { messages: [staleCheckMessage] };
+      }
+      if (channel === 'planning-design-check:get') {
+        return {
+          item: {
+            id: 'check-1',
+            projectId: PROJECT_ID,
+            sourceDesignMeetingId: 'meeting-design',
+            designChannelId: 'c-design',
+            designChannelRole: 'design.ui',
+            planningChannelId: 'c-planning',
+            implementationChannelId: 'c-implement',
+            requestTitle: '디자인 검수 요청서',
+            requestBody: '# 디자인 검수 요청서',
+            finalDesignMinutesPath: '/tmp/final.md',
+            finalDesignMinutesBody: '# final design',
+            snapshotDesktopPath: null,
+            snapshotMobilePath: null,
+            wireframeCheckpointsJson: '[]',
+            wireframeUserNotesJson: '[]',
+            workBundleKey: 'planning-minutes:planning-meeting',
+            originalPlanningMinutesId: 'planning-meeting',
+            originalPlanningMinutesPath: '/tmp/planning.md',
+            originalPlanningMinutesBody: '# planning',
+            originalPlanningMinutesMissingReason: null,
+            returnCount: 1,
+            verdict: 'misaligned',
+            status: 'needs_user_decision',
+            reason: '두 번째 검수에서도 의도와 다름',
+            revisionDirection: '정보 밀도 조정',
+            implementationDispatchId: null,
+            designReturnDispatchId: null,
+            userDecision: 'stop',
+            userDecisionNote: null,
+            userDecisionDispatchId: null,
+            payloadJson: null,
+            createdAt: 1,
+            decidedAt: 2,
+          },
+        };
+      }
+      throw new Error(`no mock for channel ${channel}`);
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('planning-design-check:get', {
+        checkId: 'check-1',
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('planning-design-check-status').textContent).toBe(
+        '사용자 판단 완료',
+      ),
+    );
+    expect(
+      screen.getByTestId('planning-design-check-user-decision').textContent,
+    ).toContain('진행 중지');
+    expect(
+      screen.queryByTestId(
+        'planning-design-check-decision-send_to_implementation',
+      ),
+    ).toBeNull();
+  });
+});
+
 describe('Thread — MeetingBanner wire-up (Task 7)', () => {
   it('renders MeetingBanner when an active meeting exists in the channel', async () => {
     useActiveChannelStore.setState({
@@ -249,6 +514,560 @@ describe('Thread — MeetingBanner wire-up (Task 7)', () => {
       expect(screen.getByTestId('channel-header')).toBeTruthy(),
     );
     expect(screen.queryByTestId('meeting-banner')).toBeNull();
+  });
+});
+
+describe('Thread — idea pick snapshot wire-up', () => {
+  it('renders the idea pick card when the active channel receives a snapshot', async () => {
+    const stream = createStreamStub();
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-idea' },
+    });
+    stubBridge({
+      channels: [
+        makeChannel({
+          id: 'c-idea',
+          name: '아이디어',
+          kind: 'user',
+          role: 'idea',
+        }),
+      ],
+      members: [makeMember('codex')],
+      meetings: [
+        {
+          id: 'm-idea',
+          projectId: PROJECT_ID,
+          projectName: 'P',
+          channelId: 'c-idea',
+          channelName: '아이디어',
+          topic: '새 프로젝트 방향',
+          stateIndex: 2,
+          stateName: 'awaiting_user_pick',
+          startedAt: 1_700_000_000_000,
+          elapsedMs: 30_000,
+        } as ActiveMeetingSummary,
+      ],
+      messages: [],
+      stream,
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('channel-header-name').textContent).toBe(
+        '아이디어',
+      ),
+    );
+
+    act(() => {
+      stream.emit('stream:idea-pick-snapshot', {
+        meetingId: 'm-idea',
+        channelId: 'c-idea',
+        selectedScreenIds: ['ITEM_001'],
+        cards: [
+          {
+            uuid: 'op-1',
+            screenId: 'ITEM_001',
+            title: '선택된 아이디어',
+            content: '기획으로 넘길 수 있는 후보',
+            rationale: '사용자 선택 유지 확인',
+            authorLabel: 'codex_1',
+          },
+        ],
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId('idea-pick-card').textContent).toContain(
+        '선택된 아이디어',
+      ),
+    );
+    expect(screen.getByTestId('idea-pick-kept-list').textContent).toContain(
+      '선택된 아이디어',
+    );
+  });
+
+  it('hides a stale idea pick snapshot when the active meeting is no longer awaiting_user_pick', async () => {
+    const stream = createStreamStub();
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-idea' },
+    });
+    stubBridge({
+      channels: [
+        makeChannel({
+          id: 'c-idea',
+          name: '아이디어',
+          kind: 'user',
+          role: 'idea',
+        }),
+      ],
+      members: [makeMember('codex')],
+      meetings: [
+        {
+          id: 'm-idea',
+          projectId: PROJECT_ID,
+          projectName: 'P',
+          channelId: 'c-idea',
+          channelName: '아이디어',
+          topic: '새 프로젝트 방향',
+          stateIndex: 3,
+          stateName: 'compose_minutes',
+          startedAt: 1_700_000_000_000,
+          elapsedMs: 60_000,
+        } as ActiveMeetingSummary,
+      ],
+      messages: [],
+      stream,
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+    await waitFor(() =>
+      expect(screen.getByTestId('channel-header-name').textContent).toBe(
+        '아이디어',
+      ),
+    );
+
+    act(() => {
+      stream.emit('stream:idea-pick-snapshot', {
+        meetingId: 'm-idea',
+        channelId: 'c-idea',
+        selectedScreenIds: ['ITEM_001'],
+        cards: [
+          {
+            uuid: 'op-1',
+            screenId: 'ITEM_001',
+            title: '오래된 아이디어',
+            content: '이미 끝난 회의의 선택 카드',
+            rationale: '회의 상태가 다르면 숨겨야 함',
+            authorLabel: 'codex_1',
+          },
+        ],
+      });
+    });
+
+    expect(screen.queryByTestId('idea-pick-card')).toBeNull();
+  });
+});
+
+describe('Thread — meeting review notice wire-up', () => {
+  it('opens the review panel and reject modal from the review notice card', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-plan' },
+    });
+    const reviewMessage = {
+      id: 'msg-review',
+      channelId: 'c-plan',
+      meetingId: 'm-plan',
+      authorId: 'system',
+      authorKind: 'system',
+      role: 'system',
+      content: '기획 회의록이 준비되었습니다.',
+      meta: {
+        reviewGate: {
+          id: 'review-1',
+          kind: 'planning_minutes',
+          status: 'pending',
+          sourceChannelId: 'c-plan',
+          targetChannelId: 'c-design',
+          targetRole: 'design.ux',
+          title: '기획 회의록',
+        },
+      },
+      createdAt: 1_700_000_000_000,
+    };
+    const invoke = stubBridge({
+      channels: [
+        makeChannel({
+          id: 'c-plan',
+          name: '기획',
+          kind: 'user',
+          role: 'planning',
+        }),
+      ],
+      members: [makeMember('planner')],
+      meetings: [],
+      messages: [reviewMessage],
+    });
+    invoke.mockImplementation(async (channel: string, data: unknown) => {
+      if (channel === 'channel:list') {
+        const payload = data as { projectId: string | null };
+        return payload.projectId === null
+          ? { channels: [] }
+          : {
+              channels: [
+                makeChannel({
+                  id: 'c-plan',
+                  name: '기획',
+                  kind: 'user',
+                  role: 'planning',
+                }),
+              ],
+            };
+      }
+      if (channel === 'member:list') return { members: [makeMember('planner')] };
+      if (channel === 'meeting:list-active') return { meetings: [] };
+      if (channel === 'message:list-by-channel') return { messages: [reviewMessage] };
+      if (channel === 'meeting-review:get') {
+        return {
+          item: {
+            id: 'review-1',
+            projectId: PROJECT_ID,
+            meetingId: 'm-plan',
+            sourceChannelId: 'c-plan',
+            targetChannelId: 'c-design',
+            targetRole: 'design.ux',
+            kind: 'planning_minutes',
+            status: 'pending',
+            title: '기획 회의록',
+            documentPath: '/tmp/minutes.md',
+            documentBodySnapshot: '# 기획 회의록\n본문',
+            userNote: null,
+            payloadJson: '{}',
+            createdAt: 1,
+            decidedAt: null,
+          },
+        };
+      }
+      if (channel === 'meeting-review:decide') {
+        return {
+          review: {
+            id: 'review-1',
+            projectId: PROJECT_ID,
+            meetingId: 'm-plan',
+            sourceChannelId: 'c-plan',
+            targetChannelId: 'c-design',
+            targetRole: 'design.ux',
+            kind: 'planning_minutes',
+            status: 'stopped',
+            title: '기획 회의록',
+            documentPath: '/tmp/minutes.md',
+            documentBodySnapshot: '# 기획 회의록\n본문',
+            userNote: null,
+            payloadJson: '{}',
+            createdAt: 1,
+            decidedAt: 2,
+          },
+          dispatchRowId: null,
+          followUpRequired: false,
+        };
+      }
+      throw new Error(`no mock for channel ${channel}`);
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('message-card-action-review-open')).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByTestId('message-card-action-review-open'));
+
+    await waitFor(() =>
+      expect(screen.getByTestId('meeting-review-document').textContent).toContain(
+        '기획 회의록',
+      ),
+    );
+    expect(screen.getByTestId('meeting-review-approve')).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId('meeting-review-reject'));
+    await waitFor(() =>
+      expect(screen.getByTestId('meeting-review-reject-stop')).toBeTruthy(),
+    );
+    expect(screen.queryByTestId('meeting-review-reject-restart')).toBeNull();
+    fireEvent.click(screen.getByTestId('meeting-review-reject-stop'));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('meeting-review:decide', {
+        reviewId: 'review-1',
+        decision: 'stop',
+        userNote: '',
+      }),
+    );
+    await waitFor(() => {
+      const reviewButton = screen.getByTestId(
+        'message-card-action-review-open',
+      ) as HTMLButtonElement;
+      expect(reviewButton.disabled).toBe(true);
+      expect(reviewButton.textContent).toContain('결정 완료');
+    });
+  });
+
+  it('오래된 pending 회의록 검토 카드도 최신 상태가 완료면 새 결정을 열지 않는다', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-plan' },
+    });
+    const reviewMessage = {
+      id: 'msg-review',
+      channelId: 'c-plan',
+      meetingId: 'm-plan',
+      authorId: 'system',
+      authorKind: 'system',
+      role: 'system',
+      content: '기획 회의록이 준비되었습니다.',
+      meta: {
+        reviewGate: {
+          id: 'review-1',
+          kind: 'planning_minutes',
+          status: 'pending',
+          sourceChannelId: 'c-plan',
+          targetChannelId: 'c-design',
+          targetRole: 'design.ux',
+          title: '기획 회의록',
+        },
+      },
+      createdAt: 1_700_000_000_000,
+    };
+    const invoke = stubBridge({
+      channels: [
+        makeChannel({
+          id: 'c-plan',
+          name: '기획',
+          kind: 'user',
+          role: 'planning',
+        }),
+      ],
+      messages: [reviewMessage],
+    });
+    invoke.mockImplementation(async (channel: string, data: unknown) => {
+      if (channel === 'channel:list') {
+        const payload = data as { projectId: string | null };
+        return payload.projectId === null
+          ? { channels: [] }
+          : {
+              channels: [
+                makeChannel({
+                  id: 'c-plan',
+                  name: '기획',
+                  kind: 'user',
+                  role: 'planning',
+                }),
+              ],
+            };
+      }
+      if (channel === 'member:list') return { members: [] };
+      if (channel === 'meeting:list-active') return { meetings: [] };
+      if (channel === 'message:list-by-channel') return { messages: [reviewMessage] };
+      if (channel === 'meeting-review:get') {
+        return {
+          item: {
+            id: 'review-1',
+            projectId: PROJECT_ID,
+            meetingId: 'm-plan',
+            sourceChannelId: 'c-plan',
+            targetChannelId: 'c-design',
+            targetRole: 'design.ux',
+            kind: 'planning_minutes',
+            status: 'approved',
+            title: '기획 회의록',
+            documentPath: '/tmp/minutes.md',
+            documentBodySnapshot: '# 기획 회의록\n본문',
+            userNote: null,
+            payloadJson: '{}',
+            createdAt: 1,
+            decidedAt: 2,
+          },
+        };
+      }
+      throw new Error(`no mock for channel ${channel}`);
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('meeting-review:get', {
+        reviewId: 'review-1',
+      }),
+    );
+    await waitFor(() => {
+      const reviewButton = screen.getByTestId(
+        'message-card-action-review-open',
+      ) as HTMLButtonElement;
+      expect(reviewButton.disabled).toBe(true);
+      expect(reviewButton.textContent).toContain('결정 완료');
+    });
+    fireEvent.click(screen.getByTestId('message-card-action-review-open'));
+    expect(screen.queryByTestId('meeting-review-document')).toBeNull();
+  });
+});
+
+describe('Thread — wireframe checkpoint notice wire-up', () => {
+  function makeWireframeMessage(status = 'pending'): Record<string, unknown> {
+    return {
+      id: 'msg-wireframe',
+      channelId: 'c-design',
+      meetingId: 'm-design',
+      authorId: 'system',
+      authorKind: 'system',
+      role: 'system',
+      content: '와이어프레임 확인 안내',
+      meta: {
+        wireframeCheckpoint: {
+          id: 'checkpoint-1',
+          kind: 'wireframe',
+          status,
+          channelId: 'c-design',
+          title: '와이어프레임 확인',
+        },
+      },
+      createdAt: 1_700_000_000_000,
+    };
+  }
+
+  function makeCheckpoint(status = 'pending', note: string | null = null) {
+    return {
+      id: 'checkpoint-1',
+      projectId: PROJECT_ID,
+      meetingId: 'm-design',
+      channelId: 'c-design',
+      kind: 'wireframe',
+      status,
+      title: '와이어프레임 확인',
+      documentPath: '/tmp/wireframe-minutes.md',
+      documentBodySnapshot: '# wireframe',
+      userNote: note,
+      payloadJson: '{}',
+      createdAt: 1,
+      decidedAt: status === 'pending' ? null : 2,
+    };
+  }
+
+  it('수정 지시 note를 IPC로 저장하고 처리 완료 상태로 갱신한다', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-design' },
+    });
+    const wireframeMessage = makeWireframeMessage('pending');
+    const invoke = stubBridge({
+      channels: [
+        makeChannel({
+          id: 'c-design',
+          name: '디자인',
+          kind: 'department',
+          role: 'design.ui',
+        }),
+      ],
+      members: [makeMember('designer')],
+      meetings: [],
+      messages: [wireframeMessage],
+    });
+    invoke.mockImplementation(async (channel: string, data: unknown) => {
+      if (channel === 'channel:list') {
+        const payload = data as { projectId: string | null };
+        return payload.projectId === null
+          ? { channels: [] }
+          : {
+              channels: [
+                makeChannel({
+                  id: 'c-design',
+                  name: '디자인',
+                  kind: 'department',
+                  role: 'design.ui',
+                }),
+              ],
+            };
+      }
+      if (channel === 'member:list') return { members: [makeMember('designer')] };
+      if (channel === 'meeting:list-active') return { meetings: [] };
+      if (channel === 'message:list-by-channel') {
+        return { messages: [wireframeMessage] };
+      }
+      if (channel === 'design-checkpoint:get') {
+        return { item: makeCheckpoint('pending') };
+      }
+      if (channel === 'design-checkpoint:decide') {
+        return {
+          checkpoint: makeCheckpoint(
+            'revision_requested',
+            '첫 화면 CTA를 더 작게 정리해줘.',
+          ),
+        };
+      }
+      throw new Error(`no mock for channel ${channel}`);
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('wireframe-checkpoint-card')).toBeTruthy(),
+    );
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-request-revision'));
+    fireEvent.change(screen.getByTestId('wireframe-checkpoint-note'), {
+      target: { value: '첫 화면 CTA를 더 작게 정리해줘.' },
+    });
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-request-revision'));
+
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith('design-checkpoint:decide', {
+        checkpointId: 'checkpoint-1',
+        decision: 'request_revision',
+        note: '첫 화면 CTA를 더 작게 정리해줘.',
+      }),
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('wireframe-checkpoint-status').textContent).toContain(
+        '수정 지시 저장됨',
+      );
+      expect(
+        (
+          screen.getByTestId(
+            'wireframe-checkpoint-request-revision',
+          ) as HTMLButtonElement
+        ).disabled,
+      ).toBe(true);
+    });
+  });
+
+  it('오래된 pending meta라도 최신 checkpoint 상태가 완료면 다시 처리할 수 없다', async () => {
+    useActiveChannelStore.setState({
+      channelIdByProject: { [PROJECT_ID]: 'c-design' },
+    });
+    const wireframeMessage = makeWireframeMessage('pending');
+    const invoke = stubBridge({
+      channels: [
+        makeChannel({
+          id: 'c-design',
+          name: '디자인',
+          kind: 'department',
+          role: 'design.ui',
+        }),
+      ],
+      messages: [wireframeMessage],
+    });
+    invoke.mockImplementation(async (channel: string, data: unknown) => {
+      if (channel === 'channel:list') {
+        const payload = data as { projectId: string | null };
+        return payload.projectId === null
+          ? { channels: [] }
+          : {
+              channels: [
+                makeChannel({
+                  id: 'c-design',
+                  name: '디자인',
+                  kind: 'department',
+                  role: 'design.ui',
+                }),
+              ],
+            };
+      }
+      if (channel === 'member:list') return { members: [] };
+      if (channel === 'meeting:list-active') return { meetings: [] };
+      if (channel === 'message:list-by-channel') {
+        return { messages: [wireframeMessage] };
+      }
+      if (channel === 'design-checkpoint:get') {
+        return { item: makeCheckpoint('continued') };
+      }
+      throw new Error(`no mock for channel ${channel}`);
+    });
+
+    renderThread(<Thread projectId={PROJECT_ID} />);
+
+    await waitFor(() =>
+      expect(screen.getByTestId('wireframe-checkpoint-status').textContent).toContain(
+        '이대로 계속',
+      ),
+    );
+    fireEvent.click(screen.getByTestId('wireframe-checkpoint-continue'));
+    expect(
+      invoke.mock.calls.some((call) => call[0] === 'design-checkpoint:decide'),
+    ).toBe(false);
   });
 });
 

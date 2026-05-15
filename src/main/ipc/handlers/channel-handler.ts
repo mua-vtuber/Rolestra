@@ -26,6 +26,7 @@ import type { SsmContext } from '../../../shared/ssm-context-types';
 import type { Channel } from '../../../shared/channel-types';
 import type { DmSummary } from '../../../shared/dm-types';
 import type { MemberView } from '../../../shared/member-profile-types';
+import type { SourceHandoffContext } from '../../../shared/handoff/source-handoff-context';
 import { providerRegistry } from '../../providers/registry';
 
 /**
@@ -56,6 +57,7 @@ export interface MeetingOrchestratorFactory {
      * markdown 본문 + 받는 부서 작업 list 통째. 일반 회의 시작 path 는 undefined.
      */
     priorContextSystemMessage?: string;
+    sourceHandoffContext?: SourceHandoffContext;
   }): Promise<void> | void;
 }
 
