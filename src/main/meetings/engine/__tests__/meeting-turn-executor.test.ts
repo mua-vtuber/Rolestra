@@ -253,12 +253,13 @@ describe('MeetingTurnExecutor — ok happy-path', () => {
       expect(result.payload.opinions[0].title).toBe('t');
     }
     expect(provider.streamCompletion).toHaveBeenCalledTimes(1);
-    expect(deps.messageService.append).toHaveBeenCalledWith(
-      expect.objectContaining({
-        authorKind: 'member',
-        role: 'assistant',
-      }),
-    );
+    expect(deps.messageService.append).not.toHaveBeenCalled();
+    expect(deps.streamBridge.emitMeetingTurnToken).not.toHaveBeenCalled();
+    expect(
+      deps.session
+        .getMessagesForProvider(speaker.id)
+        .some((message) => message.content === validJson),
+    ).toBe(true);
     expect(deps.streamBridge.emitMeetingTurnDone).toHaveBeenCalled();
   });
 
@@ -381,7 +382,13 @@ describe('MeetingTurnExecutor — invalid-schema retry', () => {
       expect(result.reason).toBe('invalid-schema');
     }
     expect(provider.streamCompletion).toHaveBeenCalledTimes(2);
-    expect(deps.streamBridge.emitMeetingError).toHaveBeenCalled();
+    expect(deps.streamBridge.emitMeetingTurnDone).toHaveBeenCalledTimes(1);
+    expect(deps.streamBridge.emitMeetingError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messageId: expect.any(String),
+        speakerId: speaker.id,
+      }),
+    );
   });
 
   it('retries once then succeeds on the second valid response', async () => {

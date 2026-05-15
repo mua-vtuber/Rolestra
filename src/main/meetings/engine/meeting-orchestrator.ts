@@ -57,6 +57,7 @@ import type {
   Step25QuickVoteSchemaType,
   Step3FreeDiscussionSchemaType,
 } from '../../../shared/meeting-flow-types';
+import { USER_AUTHOR_LITERAL } from '../../../shared/message-types';
 import type {
   Opinion,
   OpinionTreeNode,
@@ -791,6 +792,69 @@ export class MeetingOrchestrator {
     return { allOpinionsResolved, depthCapReached };
   }
 
+  /**
+   * Persist user-visible transcript cards for newly inserted opinion rows.
+   *
+   * The turn executor keeps raw JSON only in provider history. Once
+   * OpinionService has created durable opinion rows, this method mirrors those
+   * rows into chat messages using the existing `meta.opinion` card contract.
+   */
+  private appendOpinionTranscriptCards(inserted: readonly Opinion[]): void {
+    if (inserted.length === 0) return;
+
+    let tally: OpinionTallyResult;
+    try {
+      tally = this.opinionService.tally(this.session.meetingId);
+    } catch (err) {
+      console.warn(
+        '[MeetingOrchestrator] transcript card tally threw',
+        errorPayload(err),
+      );
+      return;
+    }
+
+    for (const opinion of inserted) {
+      const screenId = tally.uuidToScreen[opinion.id];
+      if (!screenId) {
+        console.warn(
+          '[MeetingOrchestrator] transcript card skipped: screen id missing',
+          {
+            meetingId: this.session.meetingId,
+            opinionId: opinion.id,
+          },
+        );
+        continue;
+      }
+
+      const authorProviderId = opinion.authorProviderId;
+      try {
+        this.messageService.append({
+          channelId: this.session.channelId,
+          meetingId: this.session.meetingId,
+          authorId: authorProviderId ?? USER_AUTHOR_LITERAL,
+          authorKind: authorProviderId === null ? 'user' : 'member',
+          role: authorProviderId === null ? 'user' : 'assistant',
+          content: opinion.content ?? '',
+          meta: {
+            opinion: {
+              opinionRef: opinion.id,
+              opinionKind: opinion.kind,
+              opinionScreenId: screenId,
+              authorLabel: opinion.authorLabel,
+              opinionTitle: opinion.title,
+              opinionRationale: opinion.rationale,
+            },
+          },
+        });
+      } catch (err) {
+        console.warn(
+          '[MeetingOrchestrator] transcript card append failed',
+          errorPayload(err),
+        );
+      }
+    }
+  }
+
   // ── phase 별 본체 ────────────────────────────────────────────────────
 
   private async runGatherPhase(): Promise<void> {
@@ -840,12 +904,13 @@ export class MeetingOrchestrator {
     }
 
     try {
-      this.opinionService.gather({
+      const result = this.opinionService.gather({
         meetingId: this.session.meetingId,
         channelId: this.session.channelId,
         round: 0,
         responses,
       });
+      this.appendOpinionTranscriptCards(result.inserted);
     } catch (err) {
       console.warn(
         '[MeetingOrchestrator] opinionService.gather threw',
@@ -935,7 +1000,8 @@ export class MeetingOrchestrator {
 
     while (queue.length > 0) {
       if (this.session.aborted) return;
-      const opinionId = queue.shift()!;
+      const opinionId = queue.shift();
+      if (opinionId === undefined) break;
 
       // 매 의견 진입 시 tally 다시 — 직전 round 의 자식 추가 / status 갱신 반영.
       const tally = this.opinionService.tally(this.session.meetingId);
@@ -1037,6 +1103,8 @@ export class MeetingOrchestrator {
           break;
         }
         nextRound += 1;
+
+        this.appendOpinionTranscriptCards(result.additions);
 
         // 자식 의견 신규 추가 — 다음 진입 큐에 push.
         for (const child of result.additions) {
@@ -1296,6 +1364,7 @@ export class MeetingOrchestrator {
               `[MeetingOrchestrator] OpinionService.gather returned empty inserted for designated-task '${kind}'`,
             );
           }
+          this.appendOpinionTranscriptCards(insertResult.inserted);
           return {
             opinionUuid: inserted.id,
             content: inserted.content ?? extracted.content,
@@ -1565,7 +1634,12 @@ export class MeetingOrchestrator {
       );
     }
     // tally tree 가 created_at 오름차순으로 정렬되어 있다고 가정 — 마지막 root 가 step 6.
-    const last = tally.tree[tally.tree.length - 1]!;
+    const last = tally.tree.at(-1);
+    if (last === undefined) {
+      throw new Error(
+        `[MeetingOrchestrator] design-workflow snapshot — no latest root opinion found for meeting ${this.session.meetingId}`,
+      );
+    }
     const content = last.opinion.content ?? '';
     if (content.trim().length === 0) {
       throw new Error(
@@ -1593,7 +1667,7 @@ export class MeetingOrchestrator {
       // path cache. file 본문 read 는 service 의 별 helper (`readMinutesBody`) 가
       // 책임 — 본 helper 는 path 보존만.
       this.cachedMinutesPath = result.minutesPath;
-      // 채팅창 회의록 카드 — meta.minutesPath / meta.minutesSource 로 renderer 가
+      // 채팅창 회의록 카드 — meta.minutes 로 renderer 가
       // 카드 컴포넌트 (T12) 와 매핑. 본 sub-task 는 system message 1 건.
       try {
         this.messageService.append({
@@ -1604,9 +1678,11 @@ export class MeetingOrchestrator {
           role: 'system',
           content: result.body,
           meta: {
-            minutesPath: result.minutesPath,
-            minutesSource: result.source,
-            minutesProviderId: result.providerId,
+            minutes: {
+              minutesPath: result.minutesPath,
+              minutesSource: result.source,
+              minutesProviderId: result.providerId,
+            },
           },
         });
       } catch (err) {

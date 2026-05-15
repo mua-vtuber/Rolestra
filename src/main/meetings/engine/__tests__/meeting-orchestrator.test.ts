@@ -26,6 +26,7 @@ import type { NotificationService } from '../../../notifications/notification-se
 import type { OpinionService } from '../../opinion-service';
 import type { MeetingMinutesService } from '../../meeting-minutes-service';
 import type { Channel } from '../../../../shared/channel-types';
+import type { Opinion } from '../../../../shared/opinion-types';
 import type { RunStepService } from '../../run-step/run-step-service';
 import type { RunStep, NewRunStep } from '../../../../shared/run-step-types';
 
@@ -79,6 +80,27 @@ function makeChannel(maxRounds: number | null = 5): Channel {
     createdAt: 0,
     updatedAt: 0,
   } as unknown as Channel;
+}
+
+function makeOpinion(id: string, overrides: Partial<Opinion> = {}): Opinion {
+  return {
+    id,
+    parentId: null,
+    meetingId: MEETING_ID,
+    channelId: CHANNEL_ID,
+    kind: 'root',
+    authorProviderId: 'ai-1',
+    authorLabel: 'ai-1_1',
+    title: 't1',
+    content: 'c1',
+    rationale: 'r1',
+    status: 'pending',
+    exclusionReason: null,
+    round: 0,
+    createdAt: 0,
+    updatedAt: 0,
+    ...overrides,
+  };
 }
 
 function buildDeps(
@@ -312,6 +334,114 @@ describe('MeetingOrchestrator — happy-path phase loop', () => {
       null,
     );
     expect(deps.streamBridge.emitMeetingPhaseChanged).toHaveBeenCalled();
+  });
+
+  it('publishes gathered opinions as card messages, not raw assistant JSON', async () => {
+    const deps = buildDeps();
+    const inserted = [
+      makeOpinion('op-1', {
+        authorProviderId: 'ai-1',
+        authorLabel: 'ai-1_1',
+        title: 'A',
+        content: '첫 번째 의견',
+        rationale: '근거 A',
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+      makeOpinion('op-2', {
+        authorProviderId: 'ai-2',
+        authorLabel: 'ai-2_1',
+        title: 'B',
+        content: '두 번째 의견',
+        rationale: '근거 B',
+        createdAt: 2,
+        updatedAt: 2,
+      }),
+    ];
+    const opinionService = {
+      nextLabelHint: vi.fn(() => 1),
+      gather: vi.fn(() => ({ meetingId: MEETING_ID, inserted })),
+      tally: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        rootCount: 2,
+        totalCount: 2,
+        tree: inserted.map((opinion, index) => ({
+          opinion,
+          screenId: `ITEM_${String(index + 1).padStart(3, '0')}`,
+          depth: 0,
+          children: [],
+        })),
+        screenToUuid: { ITEM_001: 'op-1', ITEM_002: 'op-2' },
+        uuidToScreen: { 'op-1': 'ITEM_001', 'op-2': 'ITEM_002' },
+      })),
+      quickVote: vi.fn(() => ({
+        meetingId: MEETING_ID,
+        agreed: ['op-1', 'op-2'],
+        unresolved: [],
+        votesInserted: 2,
+      })),
+      freeDiscussionRound: vi.fn(),
+    } as unknown as OpinionService;
+    const orchestrator = new MeetingOrchestrator({
+      ...deps,
+      opinionService,
+    });
+
+    await orchestrator.run();
+
+    const appendCalls = (
+      deps.messageService.append as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.map((call) => call[0] as Record<string, unknown>);
+    const opinionCalls = appendCalls.filter((input) => {
+      const meta = input.meta as { opinion?: unknown } | null | undefined;
+      return meta?.opinion !== undefined;
+    });
+
+    expect(opinionCalls).toHaveLength(2);
+    expect(opinionCalls[0]).toEqual(
+      expect.objectContaining({
+        authorKind: 'member',
+        role: 'assistant',
+        content: '첫 번째 의견',
+        meta: {
+          opinion: {
+            opinionRef: 'op-1',
+            opinionKind: 'root',
+            opinionScreenId: 'ITEM_001',
+            authorLabel: 'ai-1_1',
+            opinionTitle: 'A',
+            opinionRationale: '근거 A',
+          },
+        },
+      }),
+    );
+    expect(
+      appendCalls.some(
+        (input) =>
+          typeof input.content === 'string' &&
+          input.content.startsWith('{"name"'),
+      ),
+    ).toBe(false);
+  });
+
+  it('publishes minutes with nested card meta contract', async () => {
+    const deps = buildDeps();
+    const orchestrator = new MeetingOrchestrator(deps);
+
+    await orchestrator.run();
+
+    expect(deps.messageService.append).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: '# minutes',
+        meta: {
+          minutes: {
+            minutesPath: '/tmp/minutes.md',
+            minutesSource: 'fallback',
+            minutesProviderId: null,
+          },
+        },
+      }),
+    );
   });
 
   it('enters free_discussion when quickVote leaves unresolved opinions', async () => {

@@ -17,13 +17,15 @@
  *   - work-status gate (spec §7.2) — speaker.status !== 'online' → skip +
  *     emitMeetingTurnSkipped + system marker 메시지 persist
  *   - provider lookup + AbortController + signal 전파
- *   - stream emit 5 종 (turn-start / turn-token / turn-done / error /
- *     turn-skipped)
+ *   - stream emit 4 종 (turn-start / turn-done / error / turn-skipped).
+ *     구조화 JSON turn-token 은 사용자 가시 raw 노출을 막기 위해 발행하지
+ *     않는다.
  *   - persona = `MemberProfileService.buildPersona(speakerId)` +
  *     `buildPermissionRules(...)`
  *   - CLI permission prompt (CLI provider 한정, `approvalCliAdapter`)
- *   - assistant 응답 messageService.append (raw JSON 본문 그대로 저장 —
- *     디스플레이 변환은 renderer 책임)
+ *   - assistant 응답은 provider-history 에 raw JSON 그대로 보존하되, 채팅
+ *     transcript 로는 저장하지 않는다. 사용자 가시 transcript 는
+ *     MeetingOrchestrator 가 OpinionService write 이후 카드 row 로 발행한다.
  *   - circuitBreaker.recordError (turn 단위 분류)
  *
  * 폐기:
@@ -398,6 +400,9 @@ export class MeetingTurnExecutor {
     // (4) 1차 시도 → 실패 시 1회 재요청. 두 번 모두 schema 부합 안 함 →
     // skipped:'invalid-schema'. provider 호출 실패 → skipped:'provider-error'.
     let lastInvalidRaw: string | null = null;
+    let lastInvalidTurn:
+      | { messageId: string; totalTokens: number }
+      | null = null;
     for (let attempt = 1; attempt <= 2; attempt += 1) {
       const promptBody =
         attempt === 1
@@ -422,21 +427,13 @@ export class MeetingTurnExecutor {
       const parsed = extracted === null ? null : safeParse(schema, extracted);
 
       if (parsed !== null) {
-        // (6) 성공 — assistant 메시지 persist + emit turn-done.
-        const persisted = this.persistAssistantMessage({
+        // (6) 성공 — provider-history 보존 + emit turn-done. 사용자 가시
+        // transcript 는 orchestrator 가 domain write 이후 카드 row 로 발행.
+        this.recordAssistantTurnForProviderHistory({
           speaker,
           messageId: callResult.messageId,
           rawContent: raw,
         });
-        if (!persisted) {
-          // FK / disk-full 등 fatal — 회의 자체 abort.
-          this.session.abort();
-          return {
-            kind: 'skipped',
-            providerId: speaker.id,
-            reason: 'provider-error',
-          };
-        }
         this.streamBridge.emitMeetingTurnDone({
           meetingId: this.session.meetingId,
           channelId: this.session.channelId,
@@ -469,6 +466,18 @@ export class MeetingTurnExecutor {
 
       // schema 부합 안 함. raw 보존 + 다음 시도 (attempt 2).
       lastInvalidRaw = raw;
+      lastInvalidTurn = {
+        messageId: callResult.messageId,
+        totalTokens: callResult.outputTokens ?? callResult.tokenSequence,
+      };
+      if (attempt < 2) {
+        this.streamBridge.emitMeetingTurnDone({
+          meetingId: this.session.meetingId,
+          channelId: this.session.channelId,
+          messageId: lastInvalidTurn.messageId,
+          totalTokens: lastInvalidTurn.totalTokens,
+        });
+      }
       tryGetLogger()?.warn({
         component: 'meeting',
         action: 'turn-invalid-schema',
@@ -490,6 +499,7 @@ export class MeetingTurnExecutor {
       channelId: this.session.channelId,
       error: `phase=${phase} schema invalid after 2 attempts`,
       fatal: false,
+      messageId: lastInvalidTurn?.messageId,
       speakerId: speaker.id,
     });
     return {
@@ -500,9 +510,9 @@ export class MeetingTurnExecutor {
   }
 
   /**
-   * 단발 provider 호출 — token streaming + persona/permission 동봉.
-   * 응답 raw text + messageId + token 카운트 반환. 호출 자체가 throw 하면
-   * provider-error 분기.
+   * 단발 provider 호출 — provider stream 을 소비해 raw text 를 모으고
+   * persona/permission 을 동봉한다. raw token 은 UI 로 중계하지 않는다.
+   * 호출 자체가 throw 하면 provider-error 분기.
    */
   private async callProviderOnce(args: {
     provider: BaseProvider;
@@ -593,7 +603,7 @@ export class MeetingTurnExecutor {
       const options = isCliProvider(provider)
         ? { cliWorkspace: this.resolveCliWorkspace() }
         : undefined;
-      let sequence = 0;
+      let tokenCount = 0;
       try {
         for await (const token of provider.streamCompletion(
           messages,
@@ -603,14 +613,7 @@ export class MeetingTurnExecutor {
         )) {
           if (this.session.aborted) break;
           fullContent += token;
-          this.streamBridge.emitMeetingTurnToken({
-            meetingId: this.session.meetingId,
-            channelId: this.session.channelId,
-            messageId,
-            token,
-            cumulative: fullContent,
-            sequence: sequence++,
-          });
+          tokenCount += 1;
         }
       } finally {
         if (isCliProvider(provider)) {
@@ -623,7 +626,7 @@ export class MeetingTurnExecutor {
         kind: 'ok',
         messageId,
         fullContent,
-        tokenSequence: sequence,
+        tokenSequence: tokenCount,
         outputTokens: providerUsage?.outputTokens ?? null,
       };
     } catch (err) {
@@ -688,14 +691,18 @@ export class MeetingTurnExecutor {
   }
 
   /**
-   * raw assistant 응답을 messageService 와 session in-memory 둘 다 push.
-   * persist 실패 시 회의 자체를 abort (DB FK / disk-full 같은 fatal).
+   * raw assistant 응답을 provider-history 전용 in-memory buffer 에만 push.
+   *
+   * 직원 응답 JSON 은 다음 turn 의 context 로는 필요하지만, 채팅 transcript 에
+   * 그대로 저장하면 사용자에게 application-level JSON 이 노출된다. 사용자 가시
+   * 메시지는 orchestrator 가 OpinionService write 이후 `meta.opinion` 카드
+   * row 로 별도 발행한다.
    */
-  private persistAssistantMessage(args: {
+  private recordAssistantTurnForProviderHistory(args: {
     speaker: Participant;
     messageId: string;
     rawContent: string;
-  }): boolean {
+  }): void {
     const { speaker, messageId, rawContent } = args;
     // session in-memory — 다음 turn prompt history 에 자연 포함.
     this.session.createMessage({
@@ -705,49 +712,6 @@ export class MeetingTurnExecutor {
       role: 'assistant',
       content: rawContent,
     });
-    try {
-      this.messageService.append({
-        channelId: this.session.channelId,
-        meetingId: this.session.meetingId,
-        authorId: speaker.providerId ?? speaker.id,
-        authorKind: 'member',
-        role: 'assistant',
-        content: rawContent,
-        meta: null,
-      });
-      return true;
-    } catch (dbErr) {
-      const dbErrCode =
-        dbErr instanceof Error
-          ? (dbErr as { code?: string }).code ?? 'unknown'
-          : 'unknown';
-      this.streamBridge.emitMeetingError({
-        meetingId: this.session.meetingId,
-        channelId: this.session.channelId,
-        error:
-          dbErr instanceof Error
-            ? `DB persist failed: ${dbErr.message}`
-            : 'DB persist failed',
-        fatal: true,
-        messageId,
-        speakerId: speaker.id,
-      });
-      tryGetLogger()?.error({
-        component: 'meeting',
-        action: 'turn-error',
-        result: 'failure',
-        participantId: speaker.id,
-        error: { code: 'db_persist', message: dbErrCode },
-        metadata: {
-          meetingId: this.session.meetingId,
-          channelId: this.session.channelId,
-          messageId,
-          participantName: speaker.displayName,
-          phase: 'persist',
-        },
-      });
-      return false;
-    }
   }
 
   // ── Persona / CLI permission helpers ────────────────────────────────
