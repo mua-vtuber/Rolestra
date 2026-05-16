@@ -51,8 +51,8 @@ describe('generateSelfSignedCert', () => {
   it('produces a valid X509Certificate', () => {
     const { cert } = generateSelfSignedCert();
     const x509 = new X509Certificate(cert);
-    expect(x509.subject).toContain('CN=AI Chat Arena Self-Signed');
-    expect(x509.issuer).toContain('CN=AI Chat Arena Self-Signed');
+    expect(x509.subject).toContain('CN=Rolestra Self-Signed');
+    expect(x509.issuer).toContain('CN=Rolestra Self-Signed');
   });
 
   it('has validity period of ~1 year', () => {

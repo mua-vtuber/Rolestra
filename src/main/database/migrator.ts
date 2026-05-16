@@ -23,7 +23,7 @@ export interface Migration {
 }
 
 /**
- * v2 (AI Chat Arena) migration IDs.
+ * Legacy v2 migration IDs.
  * Presence of any of these in the `migrations` table indicates a DB that was
  * migrated by v2 and is incompatible with the Rolestra v3 schema chain.
  */
@@ -66,7 +66,7 @@ function recordMigration(db: Database.Database, migrationId: string): void {
 }
 
 /**
- * Refuses to boot against a v2 (AI Chat Arena) database.
+ * Refuses to boot against a legacy v2 database.
  *
  * Rolestra v3 uses an incompatible schema chain; silently re-migrating a v2 DB
  * could corrupt user data. This guard throws with a clear guidance message

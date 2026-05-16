@@ -26,7 +26,7 @@ describe('app-handler', () => {
     it('name and version match shared constants', () => {
       const result = handleGetInfo();
 
-      expect(result.name).toBe('AI Chat Arena');
+      expect(result.name).toBe('Rolestra');
       expect(result.version).toBe('0.1.0');
     });
   });

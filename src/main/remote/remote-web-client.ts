@@ -56,8 +56,8 @@ export interface RemoteWebClientDictionary {
 }
 
 const KO: RemoteWebClientDictionary = {
-  pageTitle: 'AI Chat Arena — 원격',
-  brandName: 'AI Chat Arena',
+  pageTitle: 'Rolestra — 원격',
+  brandName: 'Rolestra',
   tokenSavedHint: '저장된 토큰이 있습니다. 다시 입력하거나 연결하세요.',
   tokenPrompt: '접속 토큰을 입력하세요.',
   tokenPlaceholder: '토큰 입력...',
@@ -80,8 +80,8 @@ const KO: RemoteWebClientDictionary = {
 };
 
 const EN: RemoteWebClientDictionary = {
-  pageTitle: 'AI Chat Arena — Remote',
-  brandName: 'AI Chat Arena',
+  pageTitle: 'Rolestra — Remote',
+  brandName: 'Rolestra',
   tokenSavedHint: 'A saved token is on file. Re-enter it or connect.',
   tokenPrompt: 'Enter your access token.',
   tokenPlaceholder: 'Enter token...',

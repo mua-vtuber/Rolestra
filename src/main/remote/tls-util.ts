@@ -261,7 +261,7 @@ function buildTbsCertificate(
   const serial = asn1Integer(serialBytes);
 
   const sigAlg = algorithmIdentifier();
-  const issuer = rdnSequence('AI Chat Arena Self-Signed');
+  const issuer = rdnSequence('Rolestra Self-Signed');
   const validity = tlv(
     ASN1.SEQUENCE,
     Buffer.concat([asn1UtcTime(notBefore), asn1UtcTime(notAfter)]),

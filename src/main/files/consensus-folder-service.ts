@@ -5,7 +5,7 @@
  * This folder is always accessible (read & write) by all AI participants,
  * regardless of project folder permissions.
  *
- * Default path: ~/Documents/AI_Chat_Arena/
+ * Default path: ~/Documents/Rolestra/
  * Users can customize via settings.consensusFolderPath.
  */
 
@@ -33,10 +33,10 @@ export class ConsensusFolderService {
 
   /**
    * Platform-appropriate default consensus folder path.
-   * Resolves to <documentsPath>/AI_Chat_Arena.
+   * Resolves to <documentsPath>/Rolestra.
    */
   getDefaultPath(): string {
-    return path.join(this._documentsPath, 'AI_Chat_Arena');
+    return path.join(this._documentsPath, 'Rolestra');
   }
 
   /**

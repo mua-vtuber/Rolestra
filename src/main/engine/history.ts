@@ -2,7 +2,7 @@
  * Multi-party message adaptation — converts conversation history
  * so each AI sees itself as "assistant" and all others as "user".
  *
- * Core rules (from v1 AI_Chat and design doc Section 4-3):
+ * Core rules (from the legacy v1 project and design doc Section 4-3):
  * 1. selfId's messages       → role: "assistant"
  * 2. All other participants   → role: "user", content prefixed with "[name]: "
  * 3. Consecutive user messages are merged (most AI APIs reject consecutive user roles)

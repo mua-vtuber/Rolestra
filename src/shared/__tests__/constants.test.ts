@@ -8,8 +8,8 @@ describe('shared/constants', () => {
     expect(APP_NAME.length).toBeGreaterThan(0);
   });
 
-  it('APP_NAME should be "AI Chat Arena"', () => {
-    expect(APP_NAME).toBe('AI Chat Arena');
+  it('APP_NAME should be "Rolestra"', () => {
+    expect(APP_NAME).toBe('Rolestra');
   });
 
   it('APP_VERSION should be defined and follow semver pattern', () => {

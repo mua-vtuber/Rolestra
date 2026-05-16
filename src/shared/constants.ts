@@ -5,7 +5,7 @@ import {
   type MeetingPhase,
 } from './meeting-flow-types';
 
-export const APP_NAME = 'AI Chat Arena';
+export const APP_NAME = 'Rolestra';
 export const APP_VERSION = '0.1.0';
 
 /**

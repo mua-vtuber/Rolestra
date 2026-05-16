@@ -100,7 +100,7 @@ export interface SettingsConfig {
   memorySettings: MemorySettings;
   /** Conversation/task mode policy settings. */
   conversationTask: ConversationTaskSettings;
-  /** Custom path for consensus folder. Empty string = platform default (~/Documents/AI_Chat_Arena). */
+  /** Custom path for consensus folder. Empty string = platform default (~/Documents/Rolestra). */
   consensusFolderPath: string;
   /** Custom path for ArenaRoot directory. Empty string = platform default (~/Documents/arena). */
   arenaRoot: string;
@@ -235,4 +235,3 @@ export interface SecretScanResult {
   /** Warnings about detected secrets. */
   warnings: string[];
 }
-

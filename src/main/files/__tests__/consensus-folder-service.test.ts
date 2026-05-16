@@ -31,12 +31,12 @@ describe('ConsensusFolderService', () => {
   it('returns a path under home directory', () => {
     const defaultPath = service.getDefaultPath();
     expect(defaultPath).toContain(os.homedir());
-    expect(defaultPath).toContain('AI_Chat_Arena');
+    expect(defaultPath).toContain('Rolestra');
   });
 
   it('uses injected documentsPath when provided', () => {
     const custom = new ConsensusFolderService('/custom/docs');
-    expect(custom.getDefaultPath()).toBe(path.join('/custom/docs', 'AI_Chat_Arena'));
+    expect(custom.getDefaultPath()).toBe(path.join('/custom/docs', 'Rolestra'));
     custom.dispose();
   });
 
