@@ -38,6 +38,7 @@ import type { MeetingService } from '../meetings/meeting-service';
 import type { ProjectService } from '../projects/project-service';
 import type { PermissionService } from '../files/permission-service';
 import type { MeetingOrchestratorFactory } from '../ipc/handlers/channel-handler';
+import type { BaseProvider } from '../providers/provider-interface';
 import type { QueueMeetingStarter, QueueService } from './queue-service';
 
 /**
@@ -67,6 +68,14 @@ export interface DefaultMeetingStarterDeps {
    * itself a constructor argument of `QueueService`.
    */
   queueItemLookup: Pick<QueueService, 'get'>;
+  /**
+   * Provider registry lookup so participant `displayName` reflects the
+   * human-friendly label (e.g. "Claude Code") instead of the raw
+   * provider id. Mirrors the sibling auto-trigger path in `index.ts`
+   * (meeting-auto-trigger participant mapping) — both arms of the
+   * autonomy auto-spawn metaphor must produce the same label shape.
+   */
+  providerLookup: { get(id: string): BaseProvider | undefined };
   /**
    * The same factory the IPC `channel:start-meeting` handler uses. We
    * share it so a queued meeting follows the identical orchestrator
@@ -128,12 +137,15 @@ export function createDefaultMeetingStarter(
         `channel ${channelId} has ${members.length} member(s); need >= 2`,
       );
     }
-    const participants: Participant[] = members.map((m) => ({
-      id: m.providerId,
-      providerId: m.providerId,
-      displayName: m.providerId,
-      isActive: true,
-    }));
+    const participants: Participant[] = members.map((m) => {
+      const provider = deps.providerLookup.get(m.providerId);
+      return {
+        id: m.providerId,
+        providerId: m.providerId,
+        displayName: provider?.displayName ?? m.providerId,
+        isActive: true,
+      };
+    });
 
     // 3. Project context for SSM. Pull the project so the SSM context
     //    starts with the persisted permissionMode/autonomyMode rather

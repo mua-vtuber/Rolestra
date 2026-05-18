@@ -813,6 +813,7 @@ app.whenReady().then(async () => {
       queueItemLookup: {
         get: (id) => (queueServiceRef ? queueServiceRef.get(id) : null),
       },
+      providerLookup: providerRegistry,
       orchestratorFactory: {
         createAndRun: (input) => {
           if (!orchestratorFactoryHolder.current) {
@@ -1304,12 +1305,15 @@ app.whenReady().then(async () => {
     setHandoffStartMeetingResolver({
       resolveParticipants: (channelId: string) => {
         const members = channelService.listMembers(channelId);
-        return members.map((m) => ({
-          id: m.providerId,
-          providerId: m.providerId,
-          displayName: m.providerId,
-          isActive: true,
-        }));
+        return members.map((m) => {
+          const provider = providerRegistry.get(m.providerId);
+          return {
+            id: m.providerId,
+            providerId: m.providerId,
+            displayName: provider?.displayName ?? m.providerId,
+            isActive: true,
+          };
+        });
       },
       buildSsmCtx: ({ meetingId, channelId, projectId }) => {
         const project = projectService.get(projectId);

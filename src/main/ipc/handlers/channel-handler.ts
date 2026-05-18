@@ -378,12 +378,15 @@ export function handleChannelStartMeeting(
   if (factory) {
     if (channel && channel.projectId) {
       const members = getChannel().listMembers(data.channelId);
-      const participants: Participant[] = members.map((m) => ({
-        id: m.providerId,
-        providerId: m.providerId,
-        displayName: m.providerId,
-        isActive: true,
-      }));
+      const participants: Participant[] = members.map((m) => {
+        const provider = providerRegistry.get(m.providerId);
+        return {
+          id: m.providerId,
+          providerId: m.providerId,
+          displayName: provider?.displayName ?? m.providerId,
+          isActive: true,
+        };
+      });
       if (participants.length >= 2) {
         // R12-W T10.5.G2+G5 — project row + ArenaRoot 로 cwd / mode 동기화.
         // 사용자 mental model: 회의 cwd = 작업장 안 프로젝트 폴더. 옛

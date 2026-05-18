@@ -111,6 +111,7 @@ interface Harness {
   projectService: { get: ReturnType<typeof vi.fn> };
   permissionService: { resolveForCli: ReturnType<typeof vi.fn> };
   queueItemLookup: { get: ReturnType<typeof vi.fn> };
+  providerLookup: { get: ReturnType<typeof vi.fn> };
   orchestratorFactory: { createAndRun: ReturnType<typeof vi.fn> };
 }
 
@@ -154,6 +155,9 @@ function makeHarness(opts: HarnessOpts = {}): Harness {
     },
     queueItemLookup: {
       get: vi.fn().mockReturnValue(queueItem),
+    },
+    providerLookup: {
+      get: vi.fn().mockReturnValue(undefined),
     },
     orchestratorFactory: {
       createAndRun: opts.factoryThrows
