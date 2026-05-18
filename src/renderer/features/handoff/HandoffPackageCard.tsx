@@ -23,6 +23,7 @@
  */
 
 import { clsx } from 'clsx';
+import type { TFunction } from 'i18next';
 import { useCallback, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -53,18 +54,19 @@ interface ActionState {
 }
 
 /**
- * 보낸 시각 → 사람이 읽기 쉬운 상대 시간. 1 분 미만 → "방금", 1~59 분 → "N 분 전",
- * 1 시간 이상 → "N 시간 전" / "N 일 전". 영어 fallback 도 동일 형식 (i18n 구분).
+ * 보낸 시각 → 사람이 읽기 쉬운 상대 시간. 1 분 미만 → justNow, 1~59 분 → minutesAgo,
+ * 1~23 시간 → hoursAgo, 그 이상 → daysAgo. locale 분기는 `handoff.card.relativeTime.*`
+ * 키에 위임.
  */
-function formatRelativeTime(epochMs: number, now: number): string {
+function formatRelativeTime(epochMs: number, now: number, t: TFunction): string {
   const diff = Math.max(0, now - epochMs);
   const min = Math.floor(diff / 60_000);
-  if (min < 1) return '방금';
-  if (min < 60) return `${min} 분 전`;
+  if (min < 1) return t('handoff.card.relativeTime.justNow');
+  if (min < 60) return t('handoff.card.relativeTime.minutesAgo', { count: min });
   const hour = Math.floor(min / 60);
-  if (hour < 24) return `${hour} 시간 전`;
+  if (hour < 24) return t('handoff.card.relativeTime.hoursAgo', { count: hour });
   const day = Math.floor(hour / 24);
-  return `${day} 일 전`;
+  return t('handoff.card.relativeTime.daysAgo', { count: day });
 }
 
 export function HandoffPackageCard({
@@ -113,6 +115,7 @@ export function HandoffPackageCard({
   const dispatchedAtLabel = formatRelativeTime(
     item.package.dispatchedAt,
     now,
+    t,
   );
 
   return (

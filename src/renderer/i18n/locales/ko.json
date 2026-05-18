@@ -608,7 +608,13 @@
         "actionError": "처리 실패: {{error}}",
         "close": "닫기",
         "startMeeting": "의견 모아 회의 시작",
-        "defaultTopic": "{{sender}} 부서 인계 처리"
+        "defaultTopic": "{{sender}} 부서 인계 처리",
+        "relativeTime": {
+          "justNow": "방금",
+          "minutesAgo": "{{count}} 분 전",
+          "hoursAgo": "{{count}} 시간 전",
+          "daysAgo": "{{count}} 일 전"
+        }
       },
       "minutesViewer": {
         "title": "회의록 통째 보기",
