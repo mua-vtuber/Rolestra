@@ -39,8 +39,6 @@ export interface HandoffPackageCardProps {
   minutesBody: string | null;
   /** 받는 부서 작업 list (mission card payload 에서 derive). */
   nextActions: readonly string[];
-  /** 받는 채널 id (회의 시작 시 topic 합성 용). */
-  receiverChannelId: string;
   /** [의견 모아 회의 시작] 후 호출 — caller 가 채널 활성 회의 surface 갱신. */
   onMeetingStarted?: (meetingId: string) => void;
   /** [닫기] / [의견 모아 회의 시작] 성공 후 호출 — caller 가 카드 hide. */
@@ -73,7 +71,6 @@ export function HandoffPackageCard({
   item,
   minutesBody,
   nextActions,
-  receiverChannelId: _receiverChannelId,
   onMeetingStarted,
   onClose,
   className,

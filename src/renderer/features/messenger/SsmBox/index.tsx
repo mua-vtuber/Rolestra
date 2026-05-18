@@ -113,7 +113,6 @@ export function SsmBox({
         item={handoffPending.item}
         minutesBody={handoffPending.minutesBody}
         nextActions={handoffPending.nextActions}
-        receiverChannelId={resolvedChannel.id}
         onClose={dismissHandoff}
         className={className}
       />
