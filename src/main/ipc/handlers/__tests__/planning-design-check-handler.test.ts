@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PlanningDesignCheckRecord } from '../../../../shared/planning-design-check-types';
 import {
+  PlanningDesignCheckPayloadInvariantError,
   handlePlanningDesignCheckDecide,
   setPlanningDesignCheckChannelServiceAccessor,
   setPlanningDesignCheckDispatchServiceAccessor,
@@ -144,6 +145,37 @@ describe('planning-design-check-handler', () => {
       'design.ui',
     );
     expect(checkService.setDesignReturnDispatchId).toHaveBeenCalled();
+  });
+
+  it('payloadJson 이 손상되면 PlanningDesignCheckPayloadInvariantError 로 surface 한다', () => {
+    const corrupted = makeCheck({ payloadJson: '{not-json,,' });
+    checkService.get.mockReturnValueOnce(corrupted);
+    checkService.recordUserDecision.mockReturnValueOnce(corrupted);
+
+    expect(() =>
+      handlePlanningDesignCheckDecide({
+        checkId: 'check-1',
+        decision: 'send_to_implementation',
+        userNote: '',
+      }),
+    ).toThrow(PlanningDesignCheckPayloadInvariantError);
+
+    try {
+      checkService.get.mockReturnValueOnce(corrupted);
+      checkService.recordUserDecision.mockReturnValueOnce(corrupted);
+      handlePlanningDesignCheckDecide({
+        checkId: 'check-1',
+        decision: 'send_to_implementation',
+        userNote: '',
+      });
+    } catch (err) {
+      expect(err).toBeInstanceOf(PlanningDesignCheckPayloadInvariantError);
+      expect((err as Error).message).toContain('check-1');
+      expect((err as Error).message).toContain('payloadJson');
+      expect((err as Error).message).toContain('{not-json,,');
+    }
+
+    expect(dispatchService.dispatch).not.toHaveBeenCalled();
   });
 
   it('사용자 판단: 진행 중지는 dispatch 없이 기록만 남긴다', () => {

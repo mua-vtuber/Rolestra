@@ -206,18 +206,36 @@ function requireReceiver(
   };
 }
 
+export class PlanningDesignCheckPayloadInvariantError extends Error {
+  constructor(message: string) {
+    super(`[PlanningDesignCheckPayload] ${message}`);
+    this.name = 'PlanningDesignCheckPayloadInvariantError';
+  }
+}
+
 function parsePayload(
   check: PlanningDesignCheckRecord,
 ): PlanningDesignCheckPayloadContext {
   if (check.payloadJson === null) return {};
+  const snippet =
+    check.payloadJson.length > 120
+      ? `${check.payloadJson.slice(0, 120)}…`
+      : check.payloadJson;
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(check.payloadJson) as unknown;
-    return typeof parsed === 'object' && parsed !== null
-      ? (parsed as PlanningDesignCheckPayloadContext)
-      : {};
-  } catch {
-    return {};
+    parsed = JSON.parse(check.payloadJson);
+  } catch (err) {
+    const cause = err instanceof Error ? err.message : String(err);
+    throw new PlanningDesignCheckPayloadInvariantError(
+      `check ${check.id} column payloadJson is not valid JSON (${cause}) — snippet: ${snippet}`,
+    );
   }
+  if (typeof parsed !== 'object' || parsed === null) {
+    throw new PlanningDesignCheckPayloadInvariantError(
+      `check ${check.id} column payloadJson must be a JSON object (got ${parsed === null ? 'null' : typeof parsed}) — snippet: ${snippet}`,
+    );
+  }
+  return parsed as PlanningDesignCheckPayloadContext;
 }
 
 function emitDispatchIfNeeded(
