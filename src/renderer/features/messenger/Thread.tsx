@@ -536,7 +536,8 @@ export function Thread({
         try {
           const result = await invoke('meeting-review:get', { reviewId });
           return result.item;
-        } catch {
+        } catch (err) {
+          console.warn('[Thread] meeting-review:get failed for', reviewId, ':', err);
           return null;
         }
       }),
@@ -577,7 +578,8 @@ export function Thread({
         try {
           const result = await invoke('design-checkpoint:get', { checkpointId });
           return result.item;
-        } catch {
+        } catch (err) {
+          console.warn('[Thread] design-checkpoint:get failed for', checkpointId, ':', err);
           return null;
         }
       }),
@@ -618,7 +620,8 @@ export function Thread({
         try {
           const result = await invoke('planning-design-check:get', { checkId });
           return result.item;
-        } catch {
+        } catch (err) {
+          console.warn('[Thread] planning-design-check:get failed for', checkId, ':', err);
           return null;
         }
       }),

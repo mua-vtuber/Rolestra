@@ -1,6 +1,7 @@
 import { app, BrowserWindow, session } from 'electron';
 import { randomUUID } from 'node:crypto';
 import { join } from 'path';
+import { USER_AUTHOR_LITERAL } from '../shared/message-types';
 import { runMigrations } from './database/migrator';
 import { closeDatabase, initDatabaseRoot } from './database/connection';
 import { registerIpcHandlers } from './ipc/router';
@@ -700,7 +701,7 @@ app.whenReady().then(async () => {
               role: 'user',
               content: firstMessage.content,
               participantId: 'user',
-              participantName: '사용자',
+              participantName: USER_AUTHOR_LITERAL,
             });
           } catch (err) {
             tryGetLogger()?.warn({
@@ -740,7 +741,7 @@ app.whenReady().then(async () => {
             role: 'user',
             content: message.content,
             participantId: 'user',
-            participantName: '사용자',
+            participantName: USER_AUTHOR_LITERAL,
           });
         } catch (err) {
           tryGetLogger()?.warn({
