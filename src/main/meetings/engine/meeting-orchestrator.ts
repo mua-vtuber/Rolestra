@@ -1936,7 +1936,7 @@ export class MeetingOrchestrator {
         projectId: this.session.projectId,
         meetingId: this.session.meetingId,
         channelId: this.session.channelId,
-        title: '와이어프레임 확인',
+        title: resolveNotificationLabel('wireframeCheckpoint.title'),
         documentPath: result.minutesPath,
         documentBodySnapshot: result.body,
         payloadJson: JSON.stringify({
@@ -1953,7 +1953,7 @@ export class MeetingOrchestrator {
         authorId: 'system',
         authorKind: 'system',
         role: 'system',
-        content: '와이어프레임 확인이 준비되었습니다.',
+        content: resolveNotificationLabel('wireframeCheckpoint.readyMessage'),
         meta: {
           wireframeCheckpoint: {
             id: created.checkpoint.id,
@@ -2016,7 +2016,9 @@ export class MeetingOrchestrator {
         targetChannelId: outcome.package.target.channelId,
         targetRole: outcome.package.target.channelRole,
         kind: 'planning_minutes',
-        title: '기획 회의록',
+        title: resolveNotificationLabel(
+          'meetingReviewSystemMessage.planningMinutesTitle',
+        ),
         documentPath: result.minutesPath,
         documentBodySnapshot: result.body,
         payloadJson: JSON.stringify({ handoffPackage: outcome.package }),
@@ -2027,8 +2029,9 @@ export class MeetingOrchestrator {
         authorId: 'system',
         authorKind: 'system',
         role: 'system',
-        content:
-          '기획 회의록이 준비되었습니다. 검토하기를 눌러 승인하거나 반려해 주세요.',
+        content: resolveNotificationLabel(
+          'meetingReviewSystemMessage.planningReviewReady',
+        ),
         meta: {
           reviewGate: {
             id: gate.id,
@@ -2106,7 +2109,9 @@ export class MeetingOrchestrator {
 
     this.appendPlanningDesignCheckRecord(
       request,
-      '디자인 검수 요청서가 기획 부서로 전달되었습니다.',
+      resolveNotificationLabel(
+        'planningDesignCheckSystemMessage.designCheckRequestDispatched',
+      ),
     );
 
     if (planningContext.originalPlanningMinutesMissingReason !== null) {
@@ -2117,20 +2122,32 @@ export class MeetingOrchestrator {
           missingOriginalPlanningMinutes: true,
         }),
       });
-      this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+      this.appendPlanningDesignCheckRecord(
+        needsUser,
+        resolveNotificationLabel(
+          'planningDesignCheckSystemMessage.needsUserDecision',
+        ),
+      );
       return true;
     }
 
     const speaker = this.participantFromProviderId(
       planningReceiver.assignedProviderId,
     );
-    const skippedReason = '기획 검수 담당 직원 응답이 없어 사용자 판단이 필요합니다.';
+    const skippedReason = resolveNotificationLabel(
+      'planningDesignCheckSystemMessage.staffMissingReason',
+    );
     if (speaker === null) {
       const needsUser = this.planningDesignCheckService.recordNeedsUserDecision({
         id: request.id,
         reason: skippedReason,
       });
-      this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+      this.appendPlanningDesignCheckRecord(
+        needsUser,
+        resolveNotificationLabel(
+          'planningDesignCheckSystemMessage.needsUserDecision',
+        ),
+      );
       return true;
     }
 
@@ -2145,7 +2162,12 @@ export class MeetingOrchestrator {
         reason: skippedReason,
         payloadJson: JSON.stringify({ skipped: result }),
       });
-      this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+      this.appendPlanningDesignCheckRecord(
+        needsUser,
+        resolveNotificationLabel(
+          'planningDesignCheckSystemMessage.needsUserDecision',
+        ),
+      );
       return true;
     }
 
@@ -2160,10 +2182,16 @@ export class MeetingOrchestrator {
         const needsUser =
           this.planningDesignCheckService.recordNeedsUserDecision({
             id: request.id,
-            reason:
-              '기획 검수는 의도에 맞음으로 끝났지만 구현 부서 채널을 찾지 못했습니다.',
+            reason: resolveNotificationLabel(
+              'planningDesignCheckSystemMessage.alignedButNoImplementationChannel',
+            ),
           });
-        this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+        this.appendPlanningDesignCheckRecord(
+          needsUser,
+          resolveNotificationLabel(
+            'planningDesignCheckSystemMessage.needsUserDecision',
+          ),
+        );
         return true;
       }
       const pkg = buildImplementationHandoffPackage({
@@ -2177,12 +2205,15 @@ export class MeetingOrchestrator {
         const needsUser =
           this.planningDesignCheckService.recordNeedsUserDecision({
             id: aligned.id,
-            reason:
-              '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+            reason: resolveNotificationLabel(
+              'planningDesignCheckSystemMessage.implementationDispatchFailed',
+            ),
           });
         this.appendPlanningDesignCheckRecord(
           needsUser,
-          '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+          resolveNotificationLabel(
+            'planningDesignCheckSystemMessage.implementationDispatchFailed',
+          ),
         );
         return true;
       }
@@ -2192,7 +2223,9 @@ export class MeetingOrchestrator {
       );
       this.appendPlanningDesignCheckRecord(
         stored,
-        '기획 검수 결과 의도에 맞음으로 판단되어 구현 부서로 자동 인계되었습니다.',
+        resolveNotificationLabel(
+          'planningDesignCheckSystemMessage.alignedDispatched',
+        ),
       );
       return true;
     }
@@ -2215,12 +2248,15 @@ export class MeetingOrchestrator {
         const needsUser =
           this.planningDesignCheckService.recordNeedsUserDecision({
             id: branch.record.id,
-            reason:
-              '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+            reason: resolveNotificationLabel(
+              'planningDesignCheckSystemMessage.designReturnDispatchFailed',
+            ),
           });
         this.appendPlanningDesignCheckRecord(
           needsUser,
-          '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+          resolveNotificationLabel(
+            'planningDesignCheckSystemMessage.designReturnDispatchFailed',
+          ),
         );
         return true;
       }
@@ -2230,7 +2266,9 @@ export class MeetingOrchestrator {
       );
       this.appendPlanningDesignCheckRecord(
         stored,
-        '기획 검수 결과 의도와 다름으로 판단되어 디자인 되돌림을 한 번 자동 실행했습니다.',
+        resolveNotificationLabel(
+          'planningDesignCheckSystemMessage.designReturnDispatched',
+        ),
       );
       return true;
     }
@@ -2240,10 +2278,16 @@ export class MeetingOrchestrator {
         ? branch.record
         : this.planningDesignCheckService.recordNeedsUserDecision({
             id: request.id,
-            reason:
-              '디자인 되돌림 대상 부서를 찾지 못해 사용자 판단이 필요합니다.',
+            reason: resolveNotificationLabel(
+              'planningDesignCheckSystemMessage.designReturnTargetMissing',
+            ),
           });
-    this.appendPlanningDesignCheckRecord(needsUser, '사용자 판단 필요');
+    this.appendPlanningDesignCheckRecord(
+      needsUser,
+      resolveNotificationLabel(
+        'planningDesignCheckSystemMessage.needsUserDecision',
+      ),
+    );
     return true;
   }
 
@@ -2257,7 +2301,9 @@ export class MeetingOrchestrator {
     const source = this.session.sourceHandoffContext;
     if (source === null) {
       return missingPlanningMinutesContext(
-        '디자인 회의가 기획 인계서에서 시작된 기록이 없어 원래 기획 회의록을 찾지 못했습니다.',
+        resolveNotificationLabel(
+          'planningDesignCheckSystemMessage.missingSourceHandoffReason',
+        ),
         `design-meeting:${this.session.meetingId}`,
       );
     }
@@ -2297,7 +2343,9 @@ export class MeetingOrchestrator {
     }
 
     return missingPlanningMinutesContext(
-      '기획 검수 기준인 원래 기획 회의록 본문 또는 경로를 찾지 못했습니다.',
+      resolveNotificationLabel(
+        'planningDesignCheckSystemMessage.missingPlanningMinutesBodyReason',
+      ),
       `source-handoff:${source.dispatchRowId}`,
     );
   }
@@ -3071,11 +3119,15 @@ function userDecisionLabel(
 ): string {
   switch (decision) {
     case 'send_to_implementation':
-      return '구현으로 보내기';
+      return resolveNotificationLabel(
+        'planningDesignCheck.decisionLabel.send_to_implementation',
+      );
     case 'request_design_revision':
-      return '디자인에 다시 수정 요청하기';
+      return resolveNotificationLabel(
+        'planningDesignCheck.decisionLabel.request_design_revision',
+      );
     case 'stop':
-      return '진행 중지';
+      return resolveNotificationLabel('planningDesignCheck.decisionLabel.stop');
     case null:
       return '';
     default: {

@@ -873,7 +873,94 @@
       "stop": "Stop progress",
       "noteRequired": "A revision request requires a review note.",
       "close": "Cancel"
+    },
+    "decisionMessage": {
+      "approveWithoutDispatch": "The planning minutes were approved.",
+      "approveWithDispatch": "The planning minutes were approved and handed off to the design department.",
+      "stop": "After reviewing the planning minutes, the work was stopped without a handoff.",
+      "revise": "Revision instructions for the planning minutes were saved. This document is archived as a returned record.",
+      "restart": "A request to start a new meeting based on the planning minutes was saved."
+    },
+    "archiveHeader": {
+      "status": "Status: {{value}}",
+      "document": "Document: {{value}}",
+      "targetRole": "Next department: {{value}}",
+      "dispatchId": "Handoff ID: {{value}}",
+      "decision": "Decision: {{value}}",
+      "userNoteSection": "## User review note",
+      "minutesBodySection": "## Minutes body"
+    },
+    "decisionLabel": {
+      "approve": "Approve",
+      "revise": "Request revision",
+      "restart": "Request restart",
+      "stop": "Stop"
+    },
+    "statusLabel": {
+      "pending": "Pending review",
+      "approved": "Approved",
+      "revision_requested": "Revision requested",
+      "restart_requested": "Restart requested",
+      "stopped": "Stopped"
     }
+  },
+  "meetingReviewSystemMessage": {
+    "planningMinutesTitle": "Planning minutes",
+    "planningReviewReady": "The planning minutes are ready. Press \"Review\" to approve or return them."
+  },
+  "meetingMinutesHandoff": {
+    "reviewGatePending": "The planning minutes are awaiting review. Design handoff is held until approval.",
+    "autoDispatched": "Meeting ended — auto-dispatched to the receiver department.",
+    "pendingUserApproval": "Meeting ended — the handoff is awaiting user approval.",
+    "noChain": "The meeting has ended.",
+    "maxRoundsPause": "Opinion {{screenId}} did not reach consensus within {{maxRounds}} rounds — calling the user, the meeting is paused."
+  },
+  "handoffContext": {
+    "minutesHeader": "[Sender department minutes]",
+    "nextActionsHeader": "[Tasks for you to handle]",
+    "noActions": "(No task list — distribute from the minutes body above)",
+    "reasonHeader": "[Handoff reason]",
+    "footer": "Review the minutes + task list above and post your opinion. The response schema is provided in a separate system message."
+  },
+  "wireframeCheckpoint": {
+    "title": "Wireframe review",
+    "readyMessage": "The wireframe review is ready."
+  },
+  "planningDesignCheck": {
+    "decisionMessage": {
+      "sendToImplementation": "Per user decision, the work was forwarded to implementation.",
+      "requestDesignRevision": "Per user decision, a revision was requested back from the design department.",
+      "stop": "Per user decision, the work was stopped.",
+      "saved": "The user decision was saved."
+    },
+    "archiveHeader": {
+      "title": "# User decision required",
+      "decision": "Decision: {{value}}",
+      "userNoteSection": "## User decision note",
+      "dispatchId": "Handoff ID: {{value}}",
+      "reasonSection": "## Planning review note",
+      "reasonMissing": "(no record)",
+      "revisionDirectionSection": "## Revision direction"
+    },
+    "decisionLabel": {
+      "send_to_implementation": "Send to implementation",
+      "request_design_revision": "Request design revision",
+      "stop": "Stop",
+      "unset": "(unset)"
+    }
+  },
+  "planningDesignCheckSystemMessage": {
+    "designCheckRequestDispatched": "The design-review request was forwarded to the planning department.",
+    "needsUserDecision": "User decision required",
+    "staffMissingReason": "No staff is assigned to the planning-review department, so a user decision is required.",
+    "alignedButNoImplementationChannel": "The planning review came back as aligned, but no implementation department channel was found.",
+    "alignedDispatched": "The planning review came back as aligned, so the work was auto-dispatched to the implementation department.",
+    "implementationDispatchFailed": "Auto-dispatch to the implementation department failed. A user decision is required.",
+    "designReturnDispatched": "The planning review came back as misaligned, so one design return was auto-dispatched.",
+    "designReturnDispatchFailed": "Auto-dispatch of the design revision request failed. A user decision is required.",
+    "designReturnTargetMissing": "No design return target department was found, so a user decision is required.",
+    "missingSourceHandoffReason": "The design meeting was not started from a planning handoff, so the original planning minutes could not be located.",
+    "missingPlanningMinutesBodyReason": "The body or path of the original planning minutes (the planning-review baseline) was not found."
   },
   "notification": {
     "approvalPending": {

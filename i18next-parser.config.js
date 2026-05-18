@@ -222,6 +222,24 @@ export default {
     // ko/en parity by reading the JSON.
     /^translation:approvalNotificationBridge(\..+)?$/,
     /^translation:autonomyGate(\..+)?$/,
+    // R12-C2 P6 / T29 / B1 follow-up — main-process dictionary mirror
+    // keys for meeting-review-handler, planning-design-check-handler,
+    // meeting-orchestrator handoff phase, handoff context system message,
+    // wireframe checkpoint, planning-minutes review system message, and
+    // the planning-design check orchestrator phase. Renderer does not
+    // call t() against these directly (main bundle resolves them via
+    // `notification-labels.ts`); mirroring keeps the LanguageTab toggle
+    // visibly synced and lets QA confirm ko/en parity by reading JSON.
+    /^translation:meetingReview\.decisionMessage(\..+)?$/,
+    /^translation:meetingReview\.archiveHeader(\..+)?$/,
+    /^translation:meetingReview\.decisionLabel(\..+)?$/,
+    /^translation:meetingReview\.statusLabel(\..+)?$/,
+    /^translation:meetingReviewSystemMessage(\..+)?$/,
+    /^translation:meetingMinutesHandoff(\..+)?$/,
+    /^translation:handoffContext(\..+)?$/,
+    /^translation:wireframeCheckpoint(\..+)?$/,
+    /^translation:planningDesignCheck(\..+)?$/,
+    /^translation:planningDesignCheckSystemMessage(\..+)?$/,
   ],
   failOnWarnings: false,
 };

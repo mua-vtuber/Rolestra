@@ -265,6 +265,50 @@ interface NotificationDictionary {
     reasonHeader: string;
     footer: string;
   };
+  /**
+   * R12-C2 follow-up: main-process labels for the wireframe checkpoint
+   * created by {@link MeetingOrchestrator.createWireframeCheckpoint}.
+   * `title` is the checkpoint title (also rendered in the channel UI),
+   * `readyMessage` is the system message body appended when the
+   * checkpoint becomes available.
+   */
+  wireframeCheckpoint: {
+    title: string;
+    readyMessage: string;
+  };
+  /**
+   * R12-C2 follow-up: orchestrator-side system message bodies for the
+   * meeting-review gate (`createPlanningMinutesReview`). `decisionMessage`
+   * already covers handler decision outcomes — these cover the *creation*
+   * side (the planning-minutes title used as the gate title + the system
+   * message appended to surface the gate).
+   */
+  meetingReviewSystemMessage: {
+    planningMinutesTitle: string;
+    planningReviewReady: string;
+  };
+  /**
+   * R12-C2 follow-up: orchestrator-side system message bodies and
+   * audit-reason strings for the planning-design check phase
+   * (`runPlanningDesignCheckPhase`). Each entry mirrors a
+   * `appendPlanningDesignCheckRecord(..., '<korean>')` call site (the
+   * 2nd arg is the system message body) plus the misalignment /
+   * dispatch failure / missing-channel reason strings passed to
+   * `recordNeedsUserDecision({ reason })`.
+   */
+  planningDesignCheckSystemMessage: {
+    designCheckRequestDispatched: string;
+    needsUserDecision: string;
+    staffMissingReason: string;
+    alignedButNoImplementationChannel: string;
+    alignedDispatched: string;
+    implementationDispatchFailed: string;
+    designReturnDispatched: string;
+    designReturnDispatchFailed: string;
+    designReturnTargetMissing: string;
+    missingSourceHandoffReason: string;
+    missingPlanningMinutesBodyReason: string;
+  };
 }
 
 const KO: NotificationDictionary = {
@@ -437,6 +481,36 @@ const KO: NotificationDictionary = {
     reasonHeader: '[인계 사유]',
     footer:
       '위 인계 회의록 + 작업 list 보고 의견을 제시하세요. 응답 schema 는 별도 system message 안내.',
+  },
+  wireframeCheckpoint: {
+    title: '와이어프레임 확인',
+    readyMessage: '와이어프레임 확인이 준비되었습니다.',
+  },
+  meetingReviewSystemMessage: {
+    planningMinutesTitle: '기획 회의록',
+    planningReviewReady:
+      '기획 회의록이 준비되었습니다. 검토하기를 눌러 승인하거나 반려해 주세요.',
+  },
+  planningDesignCheckSystemMessage: {
+    designCheckRequestDispatched: '디자인 검수 요청서가 기획 부서로 전달되었습니다.',
+    needsUserDecision: '사용자 판단 필요',
+    staffMissingReason: '기획 검수 담당 직원 응답이 없어 사용자 판단이 필요합니다.',
+    alignedButNoImplementationChannel:
+      '기획 검수는 의도에 맞음으로 끝났지만 구현 부서 채널을 찾지 못했습니다.',
+    alignedDispatched:
+      '기획 검수 결과 의도에 맞음으로 판단되어 구현 부서로 자동 인계되었습니다.',
+    implementationDispatchFailed:
+      '구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+    designReturnDispatched:
+      '기획 검수 결과 의도와 다름으로 판단되어 디자인 되돌림을 한 번 자동 실행했습니다.',
+    designReturnDispatchFailed:
+      '디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.',
+    designReturnTargetMissing:
+      '디자인 되돌림 대상 부서를 찾지 못해 사용자 판단이 필요합니다.',
+    missingSourceHandoffReason:
+      '디자인 회의가 기획 인계서에서 시작된 기록이 없어 원래 기획 회의록을 찾지 못했습니다.',
+    missingPlanningMinutesBodyReason:
+      '기획 검수 기준인 원래 기획 회의록 본문 또는 경로를 찾지 못했습니다.',
   },
 };
 
@@ -614,6 +688,38 @@ const EN: NotificationDictionary = {
     footer:
       'Review the minutes + task list above and post your opinion. The response schema is provided in a separate system message.',
   },
+  wireframeCheckpoint: {
+    title: 'Wireframe review',
+    readyMessage: 'The wireframe review is ready.',
+  },
+  meetingReviewSystemMessage: {
+    planningMinutesTitle: 'Planning minutes',
+    planningReviewReady:
+      'The planning minutes are ready. Press "Review" to approve or return them.',
+  },
+  planningDesignCheckSystemMessage: {
+    designCheckRequestDispatched:
+      'The design-review request was forwarded to the planning department.',
+    needsUserDecision: 'User decision required',
+    staffMissingReason:
+      'No staff is assigned to the planning-review department, so a user decision is required.',
+    alignedButNoImplementationChannel:
+      'The planning review came back as aligned, but no implementation department channel was found.',
+    alignedDispatched:
+      'The planning review came back as aligned, so the work was auto-dispatched to the implementation department.',
+    implementationDispatchFailed:
+      'Auto-dispatch to the implementation department failed. A user decision is required.',
+    designReturnDispatched:
+      'The planning review came back as misaligned, so one design return was auto-dispatched.',
+    designReturnDispatchFailed:
+      'Auto-dispatch of the design revision request failed. A user decision is required.',
+    designReturnTargetMissing:
+      'No design return target department was found, so a user decision is required.',
+    missingSourceHandoffReason:
+      'The design meeting was not started from a planning handoff, so the original planning minutes could not be located.',
+    missingPlanningMinutesBodyReason:
+      'The body or path of the original planning minutes (the planning-review baseline) was not found.',
+  },
 };
 
 const DICTIONARIES: Record<NotificationLocale, NotificationDictionary> = {
@@ -727,7 +833,25 @@ export type NotificationLabelKey =
   | 'handoffContext.nextActionsHeader'
   | 'handoffContext.noActions'
   | 'handoffContext.reasonHeader'
-  | 'handoffContext.footer';
+  | 'handoffContext.footer'
+  // R12-C2 follow-up B1: meeting-orchestrator wireframe checkpoint labels.
+  | 'wireframeCheckpoint.title'
+  | 'wireframeCheckpoint.readyMessage'
+  // R12-C2 follow-up B1: meeting-orchestrator planning-minutes review labels.
+  | 'meetingReviewSystemMessage.planningMinutesTitle'
+  | 'meetingReviewSystemMessage.planningReviewReady'
+  // R12-C2 follow-up B1: meeting-orchestrator planning-design check labels.
+  | 'planningDesignCheckSystemMessage.designCheckRequestDispatched'
+  | 'planningDesignCheckSystemMessage.needsUserDecision'
+  | 'planningDesignCheckSystemMessage.staffMissingReason'
+  | 'planningDesignCheckSystemMessage.alignedButNoImplementationChannel'
+  | 'planningDesignCheckSystemMessage.alignedDispatched'
+  | 'planningDesignCheckSystemMessage.implementationDispatchFailed'
+  | 'planningDesignCheckSystemMessage.designReturnDispatched'
+  | 'planningDesignCheckSystemMessage.designReturnDispatchFailed'
+  | 'planningDesignCheckSystemMessage.designReturnTargetMissing'
+  | 'planningDesignCheckSystemMessage.missingSourceHandoffReason'
+  | 'planningDesignCheckSystemMessage.missingPlanningMinutesBodyReason';
 
 /**
  * Resolves a notification label for the current locale. `key` is a

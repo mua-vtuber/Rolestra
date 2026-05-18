@@ -873,7 +873,94 @@
       "stop": "진행 중지하기",
       "noteRequired": "수정 지시에는 검토 의견이 필요합니다.",
       "close": "취소"
+    },
+    "decisionMessage": {
+      "approveWithoutDispatch": "기획 회의록이 승인되었습니다.",
+      "approveWithDispatch": "기획 회의록이 승인되어 디자인 부서로 인계되었습니다.",
+      "stop": "기획 회의록 검토 결과, 다음 부서 인계 없이 진행을 중지했습니다.",
+      "revise": "기획 회의록에 수정 지시가 저장되었습니다. 이 회의록은 반려 기록으로 보관됩니다.",
+      "restart": "기획 회의록 기준으로 새 회의 시작 요청이 저장되었습니다."
+    },
+    "archiveHeader": {
+      "status": "상태: {{value}}",
+      "document": "문서: {{value}}",
+      "targetRole": "다음 부서: {{value}}",
+      "dispatchId": "인계 ID: {{value}}",
+      "decision": "결정: {{value}}",
+      "userNoteSection": "## 사용자 검토 의견",
+      "minutesBodySection": "## 회의록 본문"
+    },
+    "decisionLabel": {
+      "approve": "승인",
+      "revise": "수정 지시",
+      "restart": "새 회의 시작 요청",
+      "stop": "진행 중지"
+    },
+    "statusLabel": {
+      "pending": "검토 대기",
+      "approved": "승인됨",
+      "revision_requested": "수정 지시",
+      "restart_requested": "새 회의 시작 요청",
+      "stopped": "진행 중지"
     }
+  },
+  "meetingReviewSystemMessage": {
+    "planningMinutesTitle": "기획 회의록",
+    "planningReviewReady": "기획 회의록이 준비되었습니다. 검토하기를 눌러 승인하거나 반려해 주세요."
+  },
+  "meetingMinutesHandoff": {
+    "reviewGatePending": "기획 회의록 검토 대기 중입니다. 승인 전까지 디자인 부서 인계를 보류합니다.",
+    "autoDispatched": "회의 종결 — 받는 부서로 자동 인계 완료.",
+    "pendingUserApproval": "회의 종결 — 다음 부서 인계는 사용자 승인 대기 중입니다.",
+    "noChain": "회의가 끝났습니다.",
+    "maxRoundsPause": "의견 {{screenId}} 가 {{maxRounds}} 라운드 동안 합의에 이르지 못해 사용자 호출 — 회의를 일시 정지합니다."
+  },
+  "handoffContext": {
+    "minutesHeader": "[보낸 부서 인계 회의록]",
+    "nextActionsHeader": "[당신이 처리할 작업]",
+    "noActions": "(작업 list 없음 — 위 회의록 본문에서 자체 분배)",
+    "reasonHeader": "[인계 사유]",
+    "footer": "위 인계 회의록 + 작업 list 보고 의견을 제시하세요. 응답 schema 는 별도 system message 안내."
+  },
+  "wireframeCheckpoint": {
+    "title": "와이어프레임 확인",
+    "readyMessage": "와이어프레임 확인이 준비되었습니다."
+  },
+  "planningDesignCheck": {
+    "decisionMessage": {
+      "sendToImplementation": "사용자 판단에 따라 구현으로 보냈습니다.",
+      "requestDesignRevision": "사용자 판단에 따라 디자인에 다시 수정 요청했습니다.",
+      "stop": "사용자 판단에 따라 진행을 중지했습니다.",
+      "saved": "사용자 판단이 저장되었습니다."
+    },
+    "archiveHeader": {
+      "title": "# 사용자 판단 필요",
+      "decision": "결정: {{value}}",
+      "userNoteSection": "## 사용자 판단 의견",
+      "dispatchId": "인계 ID: {{value}}",
+      "reasonSection": "## 기획 검수 의견",
+      "reasonMissing": "(기록 없음)",
+      "revisionDirectionSection": "## 수정 방향"
+    },
+    "decisionLabel": {
+      "send_to_implementation": "구현으로 보내기",
+      "request_design_revision": "디자인에 다시 수정 요청하기",
+      "stop": "진행 중지",
+      "unset": "(미정)"
+    }
+  },
+  "planningDesignCheckSystemMessage": {
+    "designCheckRequestDispatched": "디자인 검수 요청서가 기획 부서로 전달되었습니다.",
+    "needsUserDecision": "사용자 판단 필요",
+    "staffMissingReason": "기획 검수 담당 직원 응답이 없어 사용자 판단이 필요합니다.",
+    "alignedButNoImplementationChannel": "기획 검수는 의도에 맞음으로 끝났지만 구현 부서 채널을 찾지 못했습니다.",
+    "alignedDispatched": "기획 검수 결과 의도에 맞음으로 판단되어 구현 부서로 자동 인계되었습니다.",
+    "implementationDispatchFailed": "구현 부서 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.",
+    "designReturnDispatched": "기획 검수 결과 의도와 다름으로 판단되어 디자인 되돌림을 한 번 자동 실행했습니다.",
+    "designReturnDispatchFailed": "디자인 수정 요청 자동 인계에 실패했습니다. 사용자 판단이 필요합니다.",
+    "designReturnTargetMissing": "디자인 되돌림 대상 부서를 찾지 못해 사용자 판단이 필요합니다.",
+    "missingSourceHandoffReason": "디자인 회의가 기획 인계서에서 시작된 기록이 없어 원래 기획 회의록을 찾지 못했습니다.",
+    "missingPlanningMinutesBodyReason": "기획 검수 기준인 원래 기획 회의록 본문 또는 경로를 찾지 못했습니다."
   },
   "notification": {
     "approvalPending": {

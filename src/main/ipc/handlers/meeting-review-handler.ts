@@ -220,7 +220,7 @@ function appendDecisionRecords(
   decision: MeetingReviewDecision,
   dispatchRowId: string | null,
 ): void {
-  const sourceContent = sourceDecisionMessage(review, decision, dispatchRowId);
+  const sourceContent = sourceDecisionMessage(decision, dispatchRowId);
   try {
     getMessageService().append({
       channelId: review.sourceChannelId,
@@ -282,7 +282,6 @@ function appendDecisionRecords(
 }
 
 function sourceDecisionMessage(
-  review: MeetingReviewGate,
   decision: MeetingReviewDecision,
   dispatchRowId: string | null,
 ): string {
