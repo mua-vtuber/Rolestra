@@ -12,6 +12,7 @@ import type {
   LocalProviderConfig,
 } from '../../../shared/provider-types';
 import { LOCAL_PROVIDER_TIMEOUT_MS } from '../../../shared/timeouts';
+import { resolveLocalCapabilities } from '../capability-resolver';
 
 export type LocalProviderInit = Omit<BaseProviderInit, 'type' | 'capabilities'>;
 
@@ -20,10 +21,12 @@ export class LocalProvider extends BaseProvider {
     super({
       ...init,
       type: 'local',
-      // R11-Task9: 'summarize' 정식 추가. Local Ollama / llama.cpp /vLLM
-      // 모두 OpenAI-compatible chat completions 로 1-shot 요약 가능 —
-      // 모델이 너무 작아 품질이 낮을 수는 있어도 capability 자체는 advertise.
-      capabilities: ['streaming', 'summarize'],
+      // 결재 3번 (A, 2026-05-19): capability 매트릭스를 resolver 로 위임. Local
+      // Ollama / llama.cpp / vLLM 은 모델 다양성이 커 보수적으로 공통 능력
+      // (streaming + summarize) 만 광고 — 모델별 tools / multimodal 가용성은
+      // 단일 advertise 로 표현할 수 없으므로 라우팅에 false-positive 를 만들지
+      // 않도록 의도적으로 미등록.
+      capabilities: resolveLocalCapabilities(),
     });
   }
 

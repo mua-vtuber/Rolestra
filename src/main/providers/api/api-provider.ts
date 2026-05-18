@@ -20,6 +20,7 @@ import {
   anthropicEventSchema,
   googleChunkSchema,
 } from './sse-schemas';
+import { resolveApiCapabilities } from '../capability-resolver';
 
 /** Anthropic API version header — required by the Messages API. */
 const ANTHROPIC_API_VERSION = '2023-06-01';
@@ -41,13 +42,16 @@ export class ApiProvider extends BaseProvider {
   private readonly resolveApiKey: ApiKeyResolver;
 
   constructor(init: ApiProviderInit) {
+    const apiConfig = init.config as ApiProviderConfig;
     super({
       ...init,
       type: 'api',
-      // R11-Task9: 'summarize' 정식 추가 (Anthropic / OpenAI / Google /
-      // OpenRouter 등 모든 OpenAI-compatible 엔드포인트가 1-shot 요약을
-      // 지원하므로 capability snapshot 에 일관 노출).
-      capabilities: ['streaming', 'summarize'],
+      // 결재 3번 (A, 2026-05-19): endpoint 별 실제 능력 매트릭스 채우기.
+      // Anthropic / OpenAI / Google / OpenRouter 각 endpoint 가 지원하는
+      // tools / multimodal / json-mode 를 capability snapshot 에 정직히 노출.
+      // R11-Task9 의 streaming + summarize 일관 노출은 resolver 의 공통
+      // baseline 에 보존.
+      capabilities: resolveApiCapabilities(apiConfig.endpoint),
     });
     this.resolveApiKey = init.resolveApiKey;
   }
