@@ -13,6 +13,7 @@ import {
   type MeetingReviewGateService,
 } from '../../meeting-review/meeting-review-gate-service';
 import { parseHandoffPackage } from '../../../shared/schema/handoff-package';
+import { resolveNotificationLabel } from '../../notifications/notification-labels';
 
 let reviewAccessor: (() => MeetingReviewGateService) | null = null;
 let dispatchAccessor: (() => HandoffDispatchService) | null = null;
@@ -287,16 +288,16 @@ function sourceDecisionMessage(
 ): string {
   if (decision === 'approve') {
     return dispatchRowId === null
-      ? '기획 회의록이 승인되었습니다.'
-      : '기획 회의록이 승인되어 디자인 부서로 인계되었습니다.';
+      ? resolveNotificationLabel('meetingReview.decisionMessage.approveWithoutDispatch')
+      : resolveNotificationLabel('meetingReview.decisionMessage.approveWithDispatch');
   }
   if (decision === 'stop') {
-    return '기획 회의록 검토 결과, 다음 부서 인계 없이 진행을 중지했습니다.';
+    return resolveNotificationLabel('meetingReview.decisionMessage.stop');
   }
   if (decision === 'revise') {
-    return '기획 회의록에 수정 지시가 저장되었습니다. 이 회의록은 반려 기록으로 보관됩니다.';
+    return resolveNotificationLabel('meetingReview.decisionMessage.revise');
   }
-  return '기획 회의록 기준으로 새 회의 시작 요청이 저장되었습니다.';
+  return resolveNotificationLabel('meetingReview.decisionMessage.restart');
 }
 
 function archiveDecisionMessage(
@@ -307,22 +308,42 @@ function archiveDecisionMessage(
   const lines: string[] = [];
   lines.push(`# ${review.title}`);
   lines.push('');
-  lines.push(`상태: ${statusLabel(review.status)}`);
-  lines.push(`문서: ${review.documentPath}`);
+  lines.push(
+    resolveNotificationLabel('meetingReview.archiveHeader.status', {
+      value: statusLabel(review.status),
+    }),
+  );
+  lines.push(
+    resolveNotificationLabel('meetingReview.archiveHeader.document', {
+      value: review.documentPath,
+    }),
+  );
   if (review.targetRole !== null) {
-    lines.push(`다음 부서: ${review.targetRole}`);
+    lines.push(
+      resolveNotificationLabel('meetingReview.archiveHeader.targetRole', {
+        value: review.targetRole,
+      }),
+    );
   }
   if (dispatchRowId !== null) {
-    lines.push(`인계 ID: ${dispatchRowId}`);
+    lines.push(
+      resolveNotificationLabel('meetingReview.archiveHeader.dispatchId', {
+        value: dispatchRowId,
+      }),
+    );
   }
-  lines.push(`결정: ${decisionLabel(decision)}`);
+  lines.push(
+    resolveNotificationLabel('meetingReview.archiveHeader.decision', {
+      value: decisionLabel(decision),
+    }),
+  );
   if (review.userNote !== null) {
     lines.push('');
-    lines.push('## 사용자 검토 의견');
+    lines.push(resolveNotificationLabel('meetingReview.archiveHeader.userNoteSection'));
     lines.push(review.userNote);
   }
   lines.push('');
-  lines.push('## 회의록 본문');
+  lines.push(resolveNotificationLabel('meetingReview.archiveHeader.minutesBodySection'));
   lines.push(review.documentBodySnapshot);
   return lines.join('\n');
 }
@@ -330,13 +351,13 @@ function archiveDecisionMessage(
 function decisionLabel(decision: MeetingReviewDecision): string {
   switch (decision) {
     case 'approve':
-      return '승인';
+      return resolveNotificationLabel('meetingReview.decisionLabel.approve');
     case 'revise':
-      return '수정 지시';
+      return resolveNotificationLabel('meetingReview.decisionLabel.revise');
     case 'restart':
-      return '새 회의 시작 요청';
+      return resolveNotificationLabel('meetingReview.decisionLabel.restart');
     case 'stop':
-      return '진행 중지';
+      return resolveNotificationLabel('meetingReview.decisionLabel.stop');
     default: {
       const _exhaustive: never = decision;
       return _exhaustive;
@@ -347,15 +368,15 @@ function decisionLabel(decision: MeetingReviewDecision): string {
 function statusLabel(status: MeetingReviewGateStatus): string {
   switch (status) {
     case 'pending':
-      return '검토 대기';
+      return resolveNotificationLabel('meetingReview.statusLabel.pending');
     case 'approved':
-      return '승인됨';
+      return resolveNotificationLabel('meetingReview.statusLabel.approved');
     case 'revision_requested':
-      return '수정 지시';
+      return resolveNotificationLabel('meetingReview.statusLabel.revision_requested');
     case 'restart_requested':
-      return '새 회의 시작 요청';
+      return resolveNotificationLabel('meetingReview.statusLabel.restart_requested');
     case 'stopped':
-      return '진행 중지';
+      return resolveNotificationLabel('meetingReview.statusLabel.stopped');
     default: {
       const _exhaustive: never = status;
       return _exhaustive;

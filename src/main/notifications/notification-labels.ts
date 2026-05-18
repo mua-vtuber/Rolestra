@@ -162,6 +162,109 @@ interface NotificationDictionary {
       errorBody: string;
     };
   };
+  /**
+   * R12-C2 P6 follow-up: main-process labels for the
+   * {@link MeetingReviewHandler}. `decisionMessage.*` covers the system
+   * message body appended after each gate decision (approve / stop /
+   * revise / restart). `archiveHeader.*` covers the archived markdown
+   * heading lines (status / document / target role / dispatch / decision
+   * / user note / minutes body). `decisionLabel.*` + `statusLabel.*`
+   * cover the inline labels referenced from the archive markdown.
+   */
+  meetingReview: {
+    decisionMessage: {
+      approveWithoutDispatch: string;
+      approveWithDispatch: string;
+      stop: string;
+      revise: string;
+      restart: string;
+    };
+    archiveHeader: {
+      status: string;
+      document: string;
+      targetRole: string;
+      dispatchId: string;
+      decision: string;
+      userNoteSection: string;
+      minutesBodySection: string;
+    };
+    decisionLabel: {
+      approve: string;
+      revise: string;
+      restart: string;
+      stop: string;
+    };
+    statusLabel: {
+      pending: string;
+      approved: string;
+      revision_requested: string;
+      restart_requested: string;
+      stopped: string;
+    };
+  };
+  /**
+   * R12-C2 P6 follow-up: main-process labels for the
+   * {@link PlanningDesignCheckHandler}. Mirrors `meetingReview` shape —
+   * `decisionMessage.*` for system-message bodies after the user picks
+   * an outcome, `archiveHeader.*` for the archived markdown headings,
+   * `decisionLabel.*` for the inline label referenced from the archive.
+   */
+  planningDesignCheck: {
+    decisionMessage: {
+      sendToImplementation: string;
+      requestDesignRevision: string;
+      stop: string;
+      saved: string;
+    };
+    archiveHeader: {
+      title: string;
+      decision: string;
+      userNoteSection: string;
+      dispatchId: string;
+      reasonSection: string;
+      reasonMissing: string;
+      revisionDirectionSection: string;
+    };
+    decisionLabel: {
+      send_to_implementation: string;
+      request_design_revision: string;
+      stop: string;
+      unset: string;
+    };
+  };
+  /**
+   * R12-C2 P6 follow-up: main-process labels for handoff phase system
+   * messages emitted by {@link MeetingOrchestrator.runHandoffPhase}.
+   * Each entry mirrors a `messageService.append({ content })` call site
+   * — keeping them here lets the locale flip without threading t() into
+   * the orchestrator (which has no project/user context in scope).
+   *
+   * `maxRoundsPause` is the system message appended when an opinion did
+   * not reach consensus within `channels.max_rounds` and the meeting
+   * pauses for user attention. `screenId` + `maxRounds` interpolation.
+   */
+  meetingMinutesHandoff: {
+    reviewGatePending: string;
+    autoDispatched: string;
+    pendingUserApproval: string;
+    noChain: string;
+    maxRoundsPause: string;
+  };
+  /**
+   * R12-C2 T29 follow-up: labels embedded inside the second system
+   * message that prepends handoff context to the receiver department's
+   * meeting. Both the LLM prompt and the in-UI rendering read these
+   * strings, so the dictionary path keeps prompt + display in sync when
+   * the locale flips. `noActions` is the fallback line when the mission
+   * card carries no `expectedOutputs`.
+   */
+  handoffContext: {
+    minutesHeader: string;
+    nextActionsHeader: string;
+    noActions: string;
+    reasonHeader: string;
+    footer: string;
+  };
 }
 
 const KO: NotificationDictionary = {
@@ -263,6 +366,78 @@ const KO: NotificationDictionary = {
       errorBody: '{{label}} 실패로 manual 모드로 전환되었습니다',
     },
   },
+  meetingReview: {
+    decisionMessage: {
+      approveWithoutDispatch: '기획 회의록이 승인되었습니다.',
+      approveWithDispatch: '기획 회의록이 승인되어 디자인 부서로 인계되었습니다.',
+      stop: '기획 회의록 검토 결과, 다음 부서 인계 없이 진행을 중지했습니다.',
+      revise:
+        '기획 회의록에 수정 지시가 저장되었습니다. 이 회의록은 반려 기록으로 보관됩니다.',
+      restart: '기획 회의록 기준으로 새 회의 시작 요청이 저장되었습니다.',
+    },
+    archiveHeader: {
+      status: '상태: {{value}}',
+      document: '문서: {{value}}',
+      targetRole: '다음 부서: {{value}}',
+      dispatchId: '인계 ID: {{value}}',
+      decision: '결정: {{value}}',
+      userNoteSection: '## 사용자 검토 의견',
+      minutesBodySection: '## 회의록 본문',
+    },
+    decisionLabel: {
+      approve: '승인',
+      revise: '수정 지시',
+      restart: '새 회의 시작 요청',
+      stop: '진행 중지',
+    },
+    statusLabel: {
+      pending: '검토 대기',
+      approved: '승인됨',
+      revision_requested: '수정 지시',
+      restart_requested: '새 회의 시작 요청',
+      stopped: '진행 중지',
+    },
+  },
+  planningDesignCheck: {
+    decisionMessage: {
+      sendToImplementation: '사용자 판단에 따라 구현으로 보냈습니다.',
+      requestDesignRevision: '사용자 판단에 따라 디자인에 다시 수정 요청했습니다.',
+      stop: '사용자 판단에 따라 진행을 중지했습니다.',
+      saved: '사용자 판단이 저장되었습니다.',
+    },
+    archiveHeader: {
+      title: '# 사용자 판단 필요',
+      decision: '결정: {{value}}',
+      userNoteSection: '## 사용자 판단 의견',
+      dispatchId: '인계 ID: {{value}}',
+      reasonSection: '## 기획 검수 의견',
+      reasonMissing: '(기록 없음)',
+      revisionDirectionSection: '## 수정 방향',
+    },
+    decisionLabel: {
+      send_to_implementation: '구현으로 보내기',
+      request_design_revision: '디자인에 다시 수정 요청하기',
+      stop: '진행 중지',
+      unset: '(미정)',
+    },
+  },
+  meetingMinutesHandoff: {
+    reviewGatePending:
+      '기획 회의록 검토 대기 중입니다. 승인 전까지 디자인 부서 인계를 보류합니다.',
+    autoDispatched: '회의 종결 — 받는 부서로 자동 인계 완료.',
+    pendingUserApproval: '회의 종결 — 다음 부서 인계는 사용자 승인 대기 중입니다.',
+    noChain: '회의가 끝났습니다.',
+    maxRoundsPause:
+      '의견 {{screenId}} 가 {{maxRounds}} 라운드 동안 합의에 이르지 못해 사용자 호출 — 회의를 일시 정지합니다.',
+  },
+  handoffContext: {
+    minutesHeader: '[보낸 부서 인계 회의록]',
+    nextActionsHeader: '[당신이 처리할 작업]',
+    noActions: '(작업 list 없음 — 위 회의록 본문에서 자체 분배)',
+    reasonHeader: '[인계 사유]',
+    footer:
+      '위 인계 회의록 + 작업 list 보고 의견을 제시하세요. 응답 schema 는 별도 system message 안내.',
+  },
 };
 
 const EN: NotificationDictionary = {
@@ -363,6 +538,82 @@ const EN: NotificationDictionary = {
       errorBody: 'Reverted to manual after {{label}} failure',
     },
   },
+  meetingReview: {
+    decisionMessage: {
+      approveWithoutDispatch: 'The planning minutes were approved.',
+      approveWithDispatch:
+        'The planning minutes were approved and handed off to the design department.',
+      stop: 'After reviewing the planning minutes, the work was stopped without a handoff.',
+      revise:
+        'Revision instructions for the planning minutes were saved. This document is archived as a returned record.',
+      restart: 'A request to start a new meeting based on the planning minutes was saved.',
+    },
+    archiveHeader: {
+      status: 'Status: {{value}}',
+      document: 'Document: {{value}}',
+      targetRole: 'Next department: {{value}}',
+      dispatchId: 'Handoff ID: {{value}}',
+      decision: 'Decision: {{value}}',
+      userNoteSection: '## User review note',
+      minutesBodySection: '## Minutes body',
+    },
+    decisionLabel: {
+      approve: 'Approve',
+      revise: 'Request revision',
+      restart: 'Request restart',
+      stop: 'Stop',
+    },
+    statusLabel: {
+      pending: 'Pending review',
+      approved: 'Approved',
+      revision_requested: 'Revision requested',
+      restart_requested: 'Restart requested',
+      stopped: 'Stopped',
+    },
+  },
+  planningDesignCheck: {
+    decisionMessage: {
+      sendToImplementation:
+        'Per user decision, the work was forwarded to implementation.',
+      requestDesignRevision:
+        'Per user decision, a revision was requested back from the design department.',
+      stop: 'Per user decision, the work was stopped.',
+      saved: 'The user decision was saved.',
+    },
+    archiveHeader: {
+      title: '# User decision required',
+      decision: 'Decision: {{value}}',
+      userNoteSection: '## User decision note',
+      dispatchId: 'Handoff ID: {{value}}',
+      reasonSection: '## Planning review note',
+      reasonMissing: '(no record)',
+      revisionDirectionSection: '## Revision direction',
+    },
+    decisionLabel: {
+      send_to_implementation: 'Send to implementation',
+      request_design_revision: 'Request design revision',
+      stop: 'Stop',
+      unset: '(unset)',
+    },
+  },
+  meetingMinutesHandoff: {
+    reviewGatePending:
+      'The planning minutes are awaiting review. Design handoff is held until approval.',
+    autoDispatched: 'Meeting ended — auto-dispatched to the receiver department.',
+    pendingUserApproval:
+      'Meeting ended — the handoff is awaiting user approval.',
+    noChain: 'The meeting has ended.',
+    maxRoundsPause:
+      'Opinion {{screenId}} did not reach consensus within {{maxRounds}} rounds — calling the user, the meeting is paused.',
+  },
+  handoffContext: {
+    minutesHeader: '[Sender department minutes]',
+    nextActionsHeader: '[Tasks for you to handle]',
+    noActions: '(No task list — distribute from the minutes body above)',
+    reasonHeader: '[Handoff reason]',
+    footer:
+      'Review the minutes + task list above and post your opinion. The response schema is provided in a separate system message.',
+  },
 };
 
 const DICTIONARIES: Record<NotificationLocale, NotificationDictionary> = {
@@ -426,7 +677,57 @@ export type NotificationLabelKey =
   | 'autonomyGate.notify.autoAcceptTitle'
   | 'autonomyGate.notify.autoAcceptBody'
   | 'autonomyGate.notify.errorTitle'
-  | 'autonomyGate.notify.errorBody';
+  | 'autonomyGate.notify.errorBody'
+  // R12-C2 P6 follow-up: meeting-review-handler labels.
+  | 'meetingReview.decisionMessage.approveWithoutDispatch'
+  | 'meetingReview.decisionMessage.approveWithDispatch'
+  | 'meetingReview.decisionMessage.stop'
+  | 'meetingReview.decisionMessage.revise'
+  | 'meetingReview.decisionMessage.restart'
+  | 'meetingReview.archiveHeader.status'
+  | 'meetingReview.archiveHeader.document'
+  | 'meetingReview.archiveHeader.targetRole'
+  | 'meetingReview.archiveHeader.dispatchId'
+  | 'meetingReview.archiveHeader.decision'
+  | 'meetingReview.archiveHeader.userNoteSection'
+  | 'meetingReview.archiveHeader.minutesBodySection'
+  | 'meetingReview.decisionLabel.approve'
+  | 'meetingReview.decisionLabel.revise'
+  | 'meetingReview.decisionLabel.restart'
+  | 'meetingReview.decisionLabel.stop'
+  | 'meetingReview.statusLabel.pending'
+  | 'meetingReview.statusLabel.approved'
+  | 'meetingReview.statusLabel.revision_requested'
+  | 'meetingReview.statusLabel.restart_requested'
+  | 'meetingReview.statusLabel.stopped'
+  // R12-C2 P6 follow-up: planning-design-check-handler labels.
+  | 'planningDesignCheck.decisionMessage.sendToImplementation'
+  | 'planningDesignCheck.decisionMessage.requestDesignRevision'
+  | 'planningDesignCheck.decisionMessage.stop'
+  | 'planningDesignCheck.decisionMessage.saved'
+  | 'planningDesignCheck.archiveHeader.title'
+  | 'planningDesignCheck.archiveHeader.decision'
+  | 'planningDesignCheck.archiveHeader.userNoteSection'
+  | 'planningDesignCheck.archiveHeader.dispatchId'
+  | 'planningDesignCheck.archiveHeader.reasonSection'
+  | 'planningDesignCheck.archiveHeader.reasonMissing'
+  | 'planningDesignCheck.archiveHeader.revisionDirectionSection'
+  | 'planningDesignCheck.decisionLabel.send_to_implementation'
+  | 'planningDesignCheck.decisionLabel.request_design_revision'
+  | 'planningDesignCheck.decisionLabel.stop'
+  | 'planningDesignCheck.decisionLabel.unset'
+  // R12-C2 P6 follow-up: meeting-orchestrator handoff phase system messages.
+  | 'meetingMinutesHandoff.reviewGatePending'
+  | 'meetingMinutesHandoff.autoDispatched'
+  | 'meetingMinutesHandoff.pendingUserApproval'
+  | 'meetingMinutesHandoff.noChain'
+  | 'meetingMinutesHandoff.maxRoundsPause'
+  // R12-C2 T29 follow-up: handoff-context system message labels.
+  | 'handoffContext.minutesHeader'
+  | 'handoffContext.nextActionsHeader'
+  | 'handoffContext.noActions'
+  | 'handoffContext.reasonHeader'
+  | 'handoffContext.footer';
 
 /**
  * Resolves a notification label for the current locale. `key` is a

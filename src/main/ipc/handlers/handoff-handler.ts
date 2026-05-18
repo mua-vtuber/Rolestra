@@ -31,6 +31,7 @@ import {
   type HandoffPackage,
 } from '../../../shared/schema/handoff-package';
 import { parseMissionCardJson } from '../../../shared/schema/mission-card';
+import { resolveNotificationLabel } from '../../notifications/notification-labels';
 import type { Participant } from '../../../shared/engine-types';
 import type { SsmContext } from '../../../shared/ssm-context-types';
 import type { MeetingOrchestratorFactory } from './channel-handler';
@@ -475,24 +476,22 @@ function composeHandoffContextSystemMessage(input: {
   nextActions: readonly string[];
 }): string {
   const lines: string[] = [];
-  lines.push('[보낸 부서 인계 회의록]');
+  lines.push(resolveNotificationLabel('handoffContext.minutesHeader'));
   lines.push('');
   lines.push(input.minutesBody.trim());
   lines.push('');
-  lines.push('[당신이 처리할 작업]');
+  lines.push(resolveNotificationLabel('handoffContext.nextActionsHeader'));
   if (input.nextActions.length === 0) {
-    lines.push('(작업 list 없음 — 위 회의록 본문에서 자체 분배)');
+    lines.push(resolveNotificationLabel('handoffContext.noActions'));
   } else {
     for (const action of input.nextActions) {
       lines.push(`- ${action}`);
     }
   }
   lines.push('');
-  lines.push('[인계 사유]');
+  lines.push(resolveNotificationLabel('handoffContext.reasonHeader'));
   lines.push(input.handoffPackage.reason);
   lines.push('');
-  lines.push(
-    '위 인계 회의록 + 작업 list 보고 의견을 제시하세요. 응답 schema 는 별도 system message 안내.',
-  );
+  lines.push(resolveNotificationLabel('handoffContext.footer'));
   return lines.join('\n');
 }

@@ -15,6 +15,7 @@ import {
   buildDesignReturnHandoffPackage,
   buildImplementationHandoffPackage,
 } from '../../meetings/workflows/planning-design-check-workflow';
+import { resolveNotificationLabel } from '../../notifications/notification-labels';
 
 let checkAccessor: (() => PlanningDesignCheckService) | null = null;
 let dispatchAccessor: (() => HandoffDispatchService) | null = null;
@@ -334,13 +335,17 @@ function planningDesignCheckMeta(check: PlanningDesignCheckRecord) {
 function userDecisionSourceMessage(check: PlanningDesignCheckRecord): string {
   switch (check.userDecision) {
     case 'send_to_implementation':
-      return '사용자 판단에 따라 구현으로 보냈습니다.';
+      return resolveNotificationLabel(
+        'planningDesignCheck.decisionMessage.sendToImplementation',
+      );
     case 'request_design_revision':
-      return '사용자 판단에 따라 디자인에 다시 수정 요청했습니다.';
+      return resolveNotificationLabel(
+        'planningDesignCheck.decisionMessage.requestDesignRevision',
+      );
     case 'stop':
-      return '사용자 판단에 따라 진행을 중지했습니다.';
+      return resolveNotificationLabel('planningDesignCheck.decisionMessage.stop');
     case null:
-      return '사용자 판단이 저장되었습니다.';
+      return resolveNotificationLabel('planningDesignCheck.decisionMessage.saved');
     default: {
       const _exhaustive: never = check.userDecision;
       return _exhaustive;
@@ -350,23 +355,42 @@ function userDecisionSourceMessage(check: PlanningDesignCheckRecord): string {
 
 function archiveUserDecisionMessage(check: PlanningDesignCheckRecord): string {
   const lines: string[] = [];
-  lines.push('# 사용자 판단 필요');
+  lines.push(resolveNotificationLabel('planningDesignCheck.archiveHeader.title'));
   lines.push('');
-  lines.push(`결정: ${userDecisionLabel(check.userDecision)}`);
+  lines.push(
+    resolveNotificationLabel('planningDesignCheck.archiveHeader.decision', {
+      value: userDecisionLabel(check.userDecision),
+    }),
+  );
   if (check.userDecisionNote !== null) {
     lines.push('');
-    lines.push('## 사용자 판단 의견');
+    lines.push(
+      resolveNotificationLabel('planningDesignCheck.archiveHeader.userNoteSection'),
+    );
     lines.push(check.userDecisionNote);
   }
   if (check.userDecisionDispatchId !== null) {
-    lines.push(`인계 ID: ${check.userDecisionDispatchId}`);
+    lines.push(
+      resolveNotificationLabel('planningDesignCheck.archiveHeader.dispatchId', {
+        value: check.userDecisionDispatchId,
+      }),
+    );
   }
   lines.push('');
-  lines.push('## 기획 검수 의견');
-  lines.push(check.reason ?? '(기록 없음)');
+  lines.push(
+    resolveNotificationLabel('planningDesignCheck.archiveHeader.reasonSection'),
+  );
+  lines.push(
+    check.reason ??
+      resolveNotificationLabel('planningDesignCheck.archiveHeader.reasonMissing'),
+  );
   if (check.revisionDirection !== null) {
     lines.push('');
-    lines.push('## 수정 방향');
+    lines.push(
+      resolveNotificationLabel(
+        'planningDesignCheck.archiveHeader.revisionDirectionSection',
+      ),
+    );
     lines.push(check.revisionDirection);
   }
   return lines.join('\n');
@@ -377,13 +401,17 @@ function userDecisionLabel(
 ): string {
   switch (decision) {
     case 'send_to_implementation':
-      return '구현으로 보내기';
+      return resolveNotificationLabel(
+        'planningDesignCheck.decisionLabel.send_to_implementation',
+      );
     case 'request_design_revision':
-      return '디자인에 다시 수정 요청하기';
+      return resolveNotificationLabel(
+        'planningDesignCheck.decisionLabel.request_design_revision',
+      );
     case 'stop':
-      return '진행 중지';
+      return resolveNotificationLabel('planningDesignCheck.decisionLabel.stop');
     case null:
-      return '(미정)';
+      return resolveNotificationLabel('planningDesignCheck.decisionLabel.unset');
     default: {
       const _exhaustive: never = decision;
       return _exhaustive;

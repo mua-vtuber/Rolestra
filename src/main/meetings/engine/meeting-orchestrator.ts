@@ -96,7 +96,10 @@ import type { ParticipantMessage } from '../../engine/history';
 import type { MeetingTurnExecutor } from './meeting-turn-executor';
 import type { providerRegistry } from '../../providers/registry';
 import { resolveNotificationLabel } from '../../notifications/notification-labels';
-import { INTER_TURN_DELAY_MS } from '../../../shared/timeouts';
+import {
+  INTER_TURN_DELAY_MS,
+  MEETING_PAUSE_POLL_INTERVAL_MS,
+} from '../../../shared/timeouts';
 import {
   classifyNextStepWithDetails,
   type NextStepClassifierContext,
@@ -2554,7 +2557,7 @@ export class MeetingOrchestrator {
           authorId: 'system',
           authorKind: 'system',
           role: 'system',
-          content: '기획 회의록 검토 대기 중입니다. 승인 전까지 디자인 부서 인계를 보류합니다.',
+          content: resolveNotificationLabel('meetingMinutesHandoff.reviewGatePending'),
           meta: {
             reviewGateId: this.pendingReviewGateId,
             handoff: 'review_gate_pending',
@@ -2621,7 +2624,7 @@ export class MeetingOrchestrator {
             authorId: 'system',
             authorKind: 'system',
             role: 'system',
-            content: '회의 종결 — 받는 부서로 자동 인계 완료.',
+            content: resolveNotificationLabel('meetingMinutesHandoff.autoDispatched'),
             meta: { handoff: 'auto', dispatchRowId: row.id },
           });
         } catch (err) {
@@ -2695,7 +2698,7 @@ export class MeetingOrchestrator {
         authorId: 'system',
         authorKind: 'system',
         role: 'system',
-        content: '회의 종결 — 다음 부서 인계는 사용자 승인 대기 중입니다.',
+        content: resolveNotificationLabel('meetingMinutesHandoff.pendingUserApproval'),
         meta: { handoff: 'check' },
       });
     } catch (err) {
@@ -2736,7 +2739,7 @@ export class MeetingOrchestrator {
         authorId: 'system',
         authorKind: 'system',
         role: 'system',
-        content: '회의가 끝났습니다.',
+        content: resolveNotificationLabel('meetingMinutesHandoff.noChain'),
         meta: { handoff: 'no_chain' },
       });
     } catch (err) {
@@ -2915,7 +2918,10 @@ export class MeetingOrchestrator {
         authorId: 'system',
         authorKind: 'system',
         role: 'system',
-        content: `의견 ${screenId} 가 ${maxRounds} 라운드 동안 합의에 이르지 못해 사용자 호출 — 회의를 일시 정지합니다.`,
+        content: resolveNotificationLabel('meetingMinutesHandoff.maxRoundsPause', {
+          screenId,
+          maxRounds,
+        }),
         meta: { maxRoundsReached: true, screenId, maxRounds },
       });
     } catch (err) {
@@ -2940,7 +2946,7 @@ export class MeetingOrchestrator {
 
   private async waitWhilePaused(): Promise<void> {
     while (this.paused && !this.session.aborted) {
-      await this.delay(500);
+      await this.delay(MEETING_PAUSE_POLL_INTERVAL_MS);
     }
   }
 
