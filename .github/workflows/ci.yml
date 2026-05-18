@@ -1,0 +1,50 @@
+name: CI
+
+# Fast pre-merge gate: typecheck + lint + unit/integration vitest on a
+# single Linux runner. Restores automated quality gates that lapsed when
+# the previous playwright.yml workflow was removed (commit 5183338).
+#
+# Scope is intentionally narrow:
+#   - Linux only (ubuntu-latest). The cross-OS packaging matrix lives in
+#     release.yml and runs on tag push.
+#   - No Playwright Electron E2E. Headed Electron on hosted runners is
+#     flake-prone and slow; e2e re-introduction is deferred.
+#   - vitest (`npm test`) covers unit + integration suites. The
+#     `pretest` hook rebuilds better-sqlite3 against the host Node ABI
+#     automatically, so no explicit rebuild step is required.
+#
+# Node version is pinned to match release.yml to prevent drift between
+# the CI gate and the packaging pipeline.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck + lint + test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test (vitest unit + integration)
+        run: npm test
