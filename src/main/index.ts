@@ -61,7 +61,11 @@ import {
   setPlanningDesignCheckStreamBridgeAccessor,
 } from './ipc/handlers/planning-design-check-handler';
 import { setMessageServiceAccessor } from './ipc/handlers/message-handler';
-import { setMeetingAbortServiceAccessor } from './ipc/handlers/meeting-handler';
+import {
+  setMeetingAbortServiceAccessor,
+  setMeetingMinutesAccessorForHandler,
+  setMeetingSummaryAccessorForHandler,
+} from './ipc/handlers/meeting-handler';
 import { ChannelRepository } from './channels/channel-repository';
 import { ChannelService } from './channels/channel-service';
 import { ProjectService } from './projects/project-service';
@@ -937,6 +941,11 @@ app.whenReady().then(async () => {
       meetingSummary: meetingSummaryService,
     });
     setMeetingMinutesServiceAccessor(() => meetingMinutesService);
+    // 결재 2번 (A, 2026-05-19) — meeting-handler 의 새 5 채널 중
+    // `meeting:llm-summarize` 가 회의록 본문 read + LLM 요약 호출에 필요.
+    // 동일 service instance 재사용 (별도 boot X).
+    setMeetingMinutesAccessorForHandler(() => meetingMinutesService);
+    setMeetingSummaryAccessorForHandler(() => meetingSummaryService);
 
     // R12-C2 T28 + T29 — handoff handler 의 모든 accessor 한 번에 wire.
     const {

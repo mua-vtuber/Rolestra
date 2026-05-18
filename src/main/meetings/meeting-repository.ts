@@ -124,6 +124,46 @@ export class MeetingRepository {
   }
 
   /**
+   * 결재 2번 (A, 2026-05-19) — `meeting:edit-topic` 백엔드.
+   *
+   * 진행 중 회의 (`ended_at IS NULL`) 의 topic 만 갱신. 종료된 회의는 변경
+   * 허용 X (UI 도 종료된 회의에 inline editor 노출 안 함 — 본 가드는 race
+   * / 직접 호출 방어). 반환값은 영향받은 row 수 > 0 여부.
+   */
+  updateTopic(id: string, topic: string): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE meetings SET topic = ?
+         WHERE id = ? AND ended_at IS NULL`,
+      )
+      .run(topic, id);
+    return result.changes > 0;
+  }
+
+  /**
+   * 결재 2번 (A, 2026-05-19) — `meeting:pause` / `meeting:resume` 백엔드.
+   *
+   * `pausedAt` 에 ms epoch 넘기면 pause, `null` 넘기면 resume. 종료된 회의
+   * 는 변경 허용 X (UI 도 노출 안 함 — race 방어). 반환값은 영향받은 row
+   * 수 > 0 여부.
+   *
+   * orchestrator 의 in-memory `paused` flag 와 DB 의 `paused_at` 컬럼은
+   * 서로 다른 진실원 — 본 method 는 DB 만 갱신, orchestrator flag 는
+   * `MeetingOrchestrator.pause()` / `.resume()` 가 별로 토글. 호출자 (IPC
+   * handler) 가 두 곳을 같이 갱신해 dashboard list-active stream 에 올바른
+   * pausedAt 이 노출되게 한다.
+   */
+  setPausedAt(id: string, pausedAt: number | null): boolean {
+    const result = this.db
+      .prepare(
+        `UPDATE meetings SET paused_at = ?
+         WHERE id = ? AND ended_at IS NULL`,
+      )
+      .run(pausedAt, id);
+    return result.changes > 0;
+  }
+
+  /**
    * Marks a meeting as finished: sets `ended_at`, `outcome`, and
    * optionally a final `state_snapshot_json`. Returns `true` when a row
    * was actually updated.

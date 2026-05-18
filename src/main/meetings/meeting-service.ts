@@ -230,6 +230,59 @@ export class MeetingService {
   }
 
   /**
+   * 결재 2번 (A, 2026-05-19) — `meeting:edit-topic` wrapper.
+   *
+   * topic 200 자 cap 은 IPC schema (`meetingEditTopicSchema`) 단계에서 강제
+   * — 본 service 는 단순 DB 갱신 + 종료된 회의 race 차단만 책임. 갱신된
+   * Meeting 을 반환해 dashboard list-active stream 재방출 caller 가 동일
+   * snapshot 으로 push.
+   *
+   * @throws {MeetingNotFoundError} 회의 ID 가 없거나 이미 종료된 경우.
+   */
+  updateTopic(id: string, topic: string): Meeting {
+    const updated = this.repo.updateTopic(id, topic);
+    if (!updated) throw new MeetingNotFoundError(id);
+    const next = this.repo.get(id);
+    if (!next) {
+      throw new MeetingError(`updateTopic: meeting disappeared after update: ${id}`);
+    }
+    return next;
+  }
+
+  /**
+   * 결재 2번 (A, 2026-05-19) — `meeting:pause` wrapper.
+   *
+   * `paused_at = now` 으로 DB 갱신. orchestrator in-memory flag (`paused`)
+   * 갱신은 호출자 (IPC handler) 가 `MeetingOrchestrator.pause()` 도 같이
+   * 호출해 함께 토글. 본 service 는 영속 측만 책임.
+   *
+   * @throws {MeetingNotFoundError} 회의 ID 가 없거나 이미 종료된 경우.
+   * @returns 갱신 시점의 ms epoch (`Date.now()` 결과).
+   */
+  pause(id: string): number {
+    const pausedAt = Date.now();
+    const updated = this.repo.setPausedAt(id, pausedAt);
+    if (!updated) throw new MeetingNotFoundError(id);
+    return pausedAt;
+  }
+
+  /**
+   * 결재 2번 (A, 2026-05-19) — `meeting:resume` wrapper.
+   *
+   * `paused_at = NULL` 으로 DB 갱신. orchestrator in-memory flag 갱신은
+   * 호출자 책임.
+   *
+   * @throws {MeetingNotFoundError} 회의 ID 가 없거나 이미 종료된 경우.
+   * @returns 재개 시점의 ms epoch (`Date.now()` 결과).
+   */
+  resume(id: string): number {
+    const resumedAt = Date.now();
+    const updated = this.repo.setPausedAt(id, null);
+    if (!updated) throw new MeetingNotFoundError(id);
+    return resumedAt;
+  }
+
+  /**
    * Update the in-flight meeting's `state` + `state_snapshot_json`
    * columns. Passing `null` for snapshot is allowed (mirrors initial
    * state).

@@ -160,6 +160,11 @@ import {
   handleMeetingListActive,
   handleMeetingIdeaFinalizeSelection,
   handleMeetingIdeaRequestMore,
+  handleMeetingRequestStop,
+  handleMeetingEditTopic,
+  handleMeetingPause,
+  handleMeetingResume,
+  handleMeetingLlmSummarize,
 } from './handlers/meeting-handler';
 import {
   handleOpinionGather,
@@ -548,6 +553,14 @@ export function registerIpcHandlers(): void {
   handle('meeting:idea-request-more', isDev, (data) =>
     handleMeetingIdeaRequestMore(data),
   );
+  // 결재 2번 (A, 2026-05-19) — D-A T2 명세 5 채널 실제 wire 완료.
+  // 4주간 schema 만 등록되고 handler 부재 (CLAUDE.md 절대 규칙 위반).
+  handle('meeting:request-stop', isDev, (data) => handleMeetingRequestStop(data));
+  handle('meeting:edit-topic', isDev, (data) => handleMeetingEditTopic(data));
+  handle('meeting:pause', isDev, (data) => handleMeetingPause(data));
+  handle('meeting:resume', isDev, (data) => handleMeetingResume(data));
+  // R10-Task11 명세 — providerId 생략 시 summarize capability fallback (D7).
+  handle('meeting:llm-summarize', isDev, (data) => handleMeetingLlmSummarize(data));
   // R12-C2 T10b: 옛 `meeting:voting-history` 채널 제거 — SSM 투표 snapshot
   // 흐름이 폐기되어 데이터 소스가 사라졌다. 새 의견 모델 표결 surface 는
   // P3/R12-H 에서 별도 IPC 로 재정의.

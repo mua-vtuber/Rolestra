@@ -346,4 +346,73 @@ describe('MeetingService', () => {
       expect(first).toHaveLength(2);
     });
   });
+
+  // ── 결재 2번 (A, 2026-05-19) — D-A T2 lifecycle method ────────────────
+
+  describe('updateTopic (결재 2번)', () => {
+    it('진행 중 회의의 topic 갱신 + 갱신된 Meeting 반환', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId, topic: 'old' });
+      const updated = meetingService.updateTopic(meeting.id, 'new topic');
+      expect(updated.topic).toBe('new topic');
+      const reread = meetingService.get(meeting.id);
+      expect(reread?.topic).toBe('new topic');
+    });
+
+    it('종료된 회의 — MeetingNotFoundError (race 차단)', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId });
+      meetingService.finish(meeting.id, 'accepted');
+      expect(() => meetingService.updateTopic(meeting.id, 'x')).toThrow(
+        MeetingNotFoundError,
+      );
+    });
+
+    it('알 수 없는 meetingId — MeetingNotFoundError', () => {
+      expect(() => meetingService.updateTopic('does-not-exist', 'x')).toThrow(
+        MeetingNotFoundError,
+      );
+    });
+  });
+
+  describe('pause / resume (결재 2번)', () => {
+    it('pause — paused_at 에 ms epoch 기록 + 반환값과 일치', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId });
+      const before = Date.now();
+      const pausedAt = meetingService.pause(meeting.id);
+      const after = Date.now();
+      expect(pausedAt).toBeGreaterThanOrEqual(before);
+      expect(pausedAt).toBeLessThanOrEqual(after);
+      const reread = meetingService.get(meeting.id);
+      expect(reread?.pausedAt).toBe(pausedAt);
+    });
+
+    it('resume — paused_at NULL 로 되돌리기 + resumedAt 반환', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId });
+      meetingService.pause(meeting.id);
+      const before = Date.now();
+      const resumedAt = meetingService.resume(meeting.id);
+      const after = Date.now();
+      expect(resumedAt).toBeGreaterThanOrEqual(before);
+      expect(resumedAt).toBeLessThanOrEqual(after);
+      const reread = meetingService.get(meeting.id);
+      expect(reread?.pausedAt).toBeNull();
+    });
+
+    it('종료된 회의에 pause — MeetingNotFoundError', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId });
+      meetingService.finish(meeting.id, 'accepted');
+      expect(() => meetingService.pause(meeting.id)).toThrow(MeetingNotFoundError);
+    });
+
+    it('종료된 회의에 resume — MeetingNotFoundError', async () => {
+      const channelId = await seedChannel();
+      const meeting = meetingService.start({ channelId });
+      meetingService.finish(meeting.id, 'accepted');
+      expect(() => meetingService.resume(meeting.id)).toThrow(MeetingNotFoundError);
+    });
+  });
 });
