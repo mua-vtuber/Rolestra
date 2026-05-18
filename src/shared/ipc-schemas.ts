@@ -292,6 +292,15 @@ export const handoffStartMeetingFromPackageSchema = z.object({
   topic: z.string().min(1).max(500),
 });
 
+/**
+ * R12-C2 T28 — `meetings:readMinutesBody` 입력 schema. HandoffApprovalModal /
+ * HandoffPackageCard 회의록 본문 read. ordinal 은 1차/2차 회의록 분기 (선택).
+ */
+export const meetingsReadMinutesBodySchema = z.object({
+  meetingId: z.string().min(1).max(128),
+  ordinal: z.union([z.literal(1), z.literal(2)]).optional(),
+});
+
 const meetingReviewStatusSchema = z.enum([
   'pending',
   'approved',
@@ -1004,6 +1013,7 @@ export const v3ChannelSchemas = {
   'handoff:open': handoffOpenSchema,
   'handoff:read-with-minutes': handoffReadWithMinutesSchema,
   'handoff:start-meeting-from-package': handoffStartMeetingFromPackageSchema,
+  'meetings:readMinutesBody': meetingsReadMinutesBodySchema,
   'meeting-review:list': meetingReviewListSchema,
   'meeting-review:get': meetingReviewGetSchema,
   'meeting-review:decide': meetingReviewDecideSchema,

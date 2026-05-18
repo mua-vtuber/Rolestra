@@ -37,6 +37,15 @@ export const CLI_DETECTION_TIMEOUT_MS = 5000;
  */
 export const LOCAL_PROVIDER_TIMEOUT_MS = 5000;
 
+/**
+ * Abort window for the Ollama `/api/tags` model-list fetch issued by
+ * the model-registry catalog enumeration path. Tighter than the
+ * warm-up probe because (i) the call runs against a local socket and
+ * (ii) a sluggish daemon should fail fast so the settings UI can
+ * surface "Ollama unreachable" instead of stalling.
+ */
+export const OLLAMA_MODEL_LIST_TIMEOUT_MS = 3000;
+
 // ── Database ─────────────────────────────────────────────────────────
 
 /**
@@ -61,3 +70,10 @@ export const KILL_GRACE_PERIOD_MS = 3000;
  * Lets renderer subscribers settle before the next `stream:turn` event.
  */
 export const INTER_TURN_DELAY_MS = 2000;
+
+/**
+ * Poll interval used by `MeetingOrchestrator.waitWhilePaused` while the
+ * paused / aborted flags settle. Kept short enough that resume feels
+ * instant, long enough to avoid burning a CPU core on the idle loop.
+ */
+export const MEETING_PAUSE_POLL_INTERVAL_MS = 500;
