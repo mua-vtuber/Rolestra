@@ -1121,6 +1121,15 @@ app.whenReady().then(async () => {
           sourceHandoffContext,
         });
 
+        // R12-W T8 wire: subscribe to channel `'permission-changed'` so the
+        // session's cached permission snapshot is marked dirty when a user
+        // toggles channel permissions mid-meeting. Without this attach, the
+        // first-turn snapshot is frozen for the whole meeting — defeating
+        // T8's invalidation contract. Detach is paired below in the
+        // `.finally(...)` of `orchestrator.run()` to keep attach/detach
+        // symmetric (the invariant the unit tests assert via listenerCount).
+        session.attachPermissionInvalidation(channelService);
+
         const personaPrimedParticipants = new Set<string>();
         const turnExecutor = new MeetingTurnExecutor({
           session,
@@ -1266,6 +1275,11 @@ app.whenReady().then(async () => {
             );
           })
           .finally(() => {
+            // R12-W T8 wire: paired detach for the attach above. Runs on
+            // every terminal path (success / error / abort) so the listener
+            // never outlives the session — prevents the ChannelService
+            // EventEmitter from accumulating dead listeners across meetings.
+            session.detachPermissionInvalidation(channelService);
             unregisterOrchestrator(meeting.id);
           });
       },
