@@ -15,7 +15,7 @@ name: CI
 #
 # Node version is pinned to match release.yml to prevent drift between
 # the CI gate and the packaging pipeline. It must satisfy dependency
-# engine constraints such as @electron/rebuild's Node >=22.12.0 floor.
+# engine constraints such as eslint-visitor-keys' Node >=22.13.0 floor.
 
 on:
   push:
@@ -35,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '22.12.0'
+          node-version: '22.13.0'
           cache: npm
 
       - name: Install dependencies
