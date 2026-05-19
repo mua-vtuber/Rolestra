@@ -19,6 +19,7 @@ import {
   setNotificationLocale,
   type NotificationLocale,
 } from '../../notifications/notification-labels';
+import { setMainLocale, type MainLocale } from '../../i18n/main-locale';
 import type {
   NotificationKind,
   NotificationPrefs,
@@ -89,15 +90,25 @@ export function handleNotificationTest(
 }
 
 /**
- * notification:set-locale (R10-Task12) — switches the main-process label
- * dictionary so subsequent OS notifications + system-message injections
- * render in the chosen locale. Mirrors the `i18n.changeLanguage(...)`
- * call the renderer makes in LanguageTab. Unknown locales fall through
- * to the default — see `notification-labels.ts` setNotificationLocale.
+ * notification:set-locale (R10-Task12 + 결재 5번 2026-05-19) — switches the
+ * main-process locale across *all* dictionaries so subsequent OS notifications,
+ * system-message injections, planning-design-check archive markdown headers,
+ * and LLM prompt bodies render in the chosen locale. Mirrors the
+ * `i18n.changeLanguage(...)` call the renderer makes in LanguageTab.
+ *
+ * Two setters are called in lockstep:
+ *   - `setNotificationLocale` (R9): notification + circuit-breaker copy.
+ *   - `setMainLocale` (결재 5번): process-wide locale for newly added
+ *     dictionaries (planning-design-check labels and future modules).
+ *
+ * Both setters silently clamp unknown locales to the default — see the
+ * source modules. Keeping the two in sync here is the simplest wire that
+ * avoids a circular import between notification-labels and main-locale.
  */
 export function handleNotificationSetLocale(
   data: IpcRequest<'notification:set-locale'>,
 ): IpcResponse<'notification:set-locale'> {
   setNotificationLocale(data.locale as NotificationLocale);
+  setMainLocale(data.locale as MainLocale);
   return { locale: data.locale };
 }

@@ -11,6 +11,7 @@ import type {
 import { buildHandoffPackage } from '../../../shared/schema/handoff-package';
 import { buildMissionCard } from '../../../shared/schema/mission-card';
 import type { ResolvedReceiverChannel } from '../../handoff/handoff-chain-resolver';
+import { promptLabels } from '../../planning-design-check/planning-design-check-labels';
 
 export const PlanningDesignCheckResponseSchema = z
   .object({
@@ -44,30 +45,27 @@ export interface PlanningDesignCheckPromptContext {
 export function buildPlanningDesignCheckPromptBody(
   ctx: PlanningDesignCheckPromptContext,
 ): string {
+  const labels = promptLabels();
   const lines: string[] = [];
-  lines.push('[현재 단계: 기획 검수]');
+  lines.push(labels.labelCurrentStep);
   lines.push('');
-  lines.push('[미션]');
-  lines.push(
-    '디자인 검수 요청서를 읽고 최종 디자인이 원래 기획 의도와 사용자 와이어프레임 수정 지시에 맞는지 판단하세요.',
-  );
-  lines.push('사용자 공식 승인/반려가 아니라 기획 부서 내부 검수입니다.');
+  lines.push(labels.labelMission);
+  lines.push(labels.missionBodyLine1);
+  lines.push(labels.missionBodyLine2);
   lines.push('');
-  lines.push('[디자인 검수 요청서]');
+  lines.push(labels.labelDesignReviewRequest);
   lines.push(ctx.request.requestBody);
   lines.push('');
-  lines.push('[응답 형식]');
-  lines.push(
-    '응답은 JSON 한 객체만 작성하세요. verdict 는 aligned 또는 misaligned 중 하나입니다.',
-  );
+  lines.push(labels.labelResponseFormat);
+  lines.push(labels.responseFormatBody);
   lines.push('');
   lines.push('```json');
   lines.push('{');
   lines.push(`  "name": "${escapeForPrompt(ctx.speaker.displayName)}",`);
   lines.push(`  "label": "${escapeForPrompt(ctx.suggestedLabel)}",`);
   lines.push('  "verdict": "aligned",');
-  lines.push('  "reason": "<판단 근거>",');
-  lines.push('  "revision_direction": "<misaligned일 때 디자인 재작업 방향>"');
+  lines.push(`  "reason": "${labels.jsonPlaceholderReason}",`);
+  lines.push(`  "revision_direction": "${labels.jsonPlaceholderRevision}"`);
   lines.push('}');
   lines.push('```');
   return lines.join('\n');
@@ -96,18 +94,19 @@ export function buildImplementationHandoffPackage(input: {
   missionCardId: string;
   generatedAt: number;
 }): HandoffPackage {
+  const labels = promptLabels();
   const missionCard = buildMissionCard({
     id: input.missionCardId,
     payload: {
       kind: 'change-request',
       body: [
-        '기획 검수에서 의도에 맞음으로 판정된 디자인을 구현 가능한 작업으로 착수하세요.',
+        labels.implementationHandoffIntro,
         '',
         input.request.requestBody,
         '',
         input.request.reason !== null
-          ? `기획 검수 판단 근거: ${input.request.reason}`
-          : '기획 검수 판단 근거: 의도에 맞음',
+          ? `${labels.planningReviewReasonPrefix}: ${input.request.reason}`
+          : labels.planningReviewReasonFallback,
       ].join('\n'),
       inputFiles: compact([
         input.request.originalPlanningMinutesPath,
@@ -116,11 +115,10 @@ export function buildImplementationHandoffPackage(input: {
         input.request.snapshotMobilePath,
       ]),
       expectedOutputs: [
-        '최종 디자인 산출물을 기준으로 한 구현 계획',
-        '구현 부서가 이어받을 작업 단위와 검증 기준',
+        labels.expectedOutputImplementationPlan,
+        labels.expectedOutputHandoffUnits,
       ],
-      userMessage:
-        '기획 검수에서 의도에 맞음으로 확인된 디자인을 구현 부서로 인계합니다.',
+      userMessage: labels.implementationHandoffUserMessage,
     },
     assignedProviderId: input.implementationReceiver.assignedProviderId,
     targetChannelId: input.implementationReceiver.channelId,

@@ -50,6 +50,7 @@ import {
 import { buildMissionCard } from '../../shared/schema/mission-card';
 import { planAuditDispatch } from '../meetings/workflows/audit-handoff-dispatch';
 import { classifyAuditVerdict } from '../meetings/workflows/audit-workflow';
+import { promptLabels as planningDesignCheckPromptLabels } from '../planning-design-check/planning-design-check-labels';
 
 // ── workflow kind ────────────────────────────────────────────────────
 
@@ -287,26 +288,26 @@ function resolveDesignChain(input: ChainResolverInput): ChainResolverOutcome {
     input.designInput?.snapshotDesktopPath ?? null,
     input.designInput?.snapshotMobilePath ?? null,
   ].filter((value): value is string => typeof value === 'string' && value.length > 0);
+  const labels = planningDesignCheckPromptLabels();
   const missionCard = buildMissionCard({
     id: input.missionCardIdFactory(),
     payload: {
       kind: 'change-request',
       body: [
-        '디자인 검수 요청서를 읽고 최종 디자인이 기획 의도에 맞는지 내부 검수하세요.',
-        '이 단계는 사용자 공식 승인/반려가 아니라 기획 검수입니다.',
+        labels.chainResolverPromptLine,
+        labels.chainResolverPromptSecondLine,
         input.designInput?.finalDesignMinutesMarkdown
-          ? `\n[최종 디자인 회의록]\n${input.designInput.finalDesignMinutesMarkdown}`
+          ? `\n${labels.chainResolverFinalDesignMinutesLabel}\n${input.designInput.finalDesignMinutesMarkdown}`
           : '',
       ]
         .filter((line) => line.length > 0)
         .join('\n'),
       inputFiles,
       expectedOutputs: [
-        '의도에 맞음 또는 의도와 다름 판단',
-        '의도와 다름일 때 디자인 재작업 방향',
+        labels.chainResolverExpectedAlignment,
+        labels.chainResolverExpectedRevision,
       ],
-      userMessage:
-        '디자인 결과를 구현으로 보내기 전에 기획 의도와 맞는지 검수하세요.',
+      userMessage: labels.chainResolverUserMessage,
     },
     assignedProviderId: planningReceiver.assignedProviderId,
     targetChannelId: planningReceiver.channelId,
@@ -323,7 +324,7 @@ function resolveDesignChain(input: ChainResolverInput): ChainResolverOutcome {
       channelId: planningReceiver.channelId,
       channelRole: 'planning',
     },
-    reason: '디자인 결과 완료 — 구현 전 기획 검수로 자동 인계합니다.',
+    reason: labels.chainResolverHandoffReason,
     minutesMeetingId: input.sender.meetingId,
     nextActions: [],
     missionCard,

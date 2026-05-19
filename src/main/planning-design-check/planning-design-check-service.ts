@@ -9,6 +9,7 @@ import type {
 } from '../../shared/planning-design-check-types';
 import type { DesignCheckpointService } from '../design-checkpoints/design-checkpoint-service';
 import type { PlanningDesignCheckRepository } from './planning-design-check-repository';
+import { archiveLabels } from './planning-design-check-labels';
 
 export class PlanningDesignCheckError extends Error {
   constructor(message: string) {
@@ -129,7 +130,7 @@ export class PlanningDesignCheckService {
       designChannelRole: input.designChannelRole,
       planningChannelId: input.planningChannelId,
       implementationChannelId: input.implementationChannelId,
-      requestTitle: '디자인 검수 요청서',
+      requestTitle: archiveLabels().requestTitle,
       requestBody,
       finalDesignMinutesPath: input.finalDesignMinutesPath,
       finalDesignMinutesBody: input.finalDesignMinutesBody,
@@ -320,43 +321,44 @@ function buildRequestBody(input: {
   wireframeUserNotes: Array<{ checkpointId: string; userNote: string | null }>;
   returnCount: number;
 }): string {
+  const labels = archiveLabels();
   const lines: string[] = [];
-  lines.push('# 디자인 검수 요청서');
+  lines.push(labels.headerH1);
   lines.push('');
-  lines.push(`되돌림 횟수: ${input.returnCount}`);
+  lines.push(`${labels.returnCountLabel}: ${input.returnCount}`);
   lines.push('');
-  lines.push('## 원래 기획 회의록');
+  lines.push(labels.sectionOriginalPlanningMinutes);
   if (
     input.originalPlanningMinutesBody !== null &&
     input.originalPlanningMinutesPath !== null
   ) {
     if (input.originalPlanningMinutesId !== null) {
-      lines.push(`회의 ID: ${input.originalPlanningMinutesId}`);
+      lines.push(`${labels.metaMeetingId}: ${input.originalPlanningMinutesId}`);
     }
-    lines.push(`경로: ${input.originalPlanningMinutesPath}`);
+    lines.push(`${labels.metaPath}: ${input.originalPlanningMinutesPath}`);
     lines.push('');
     lines.push(input.originalPlanningMinutesBody);
   } else {
     lines.push(
-      `찾지 못함: ${
+      `${labels.notFoundPrefix}: ${
         input.originalPlanningMinutesMissingReason ??
-        '원래 기획 회의록 컨텍스트가 없습니다.'
+        labels.missingPlanningContextDefault
       }`,
     );
   }
   lines.push('');
-  lines.push('## 최종 디자인 산출물');
-  lines.push(`최종 디자인 회의록: ${input.finalDesignMinutesPath}`);
+  lines.push(labels.sectionFinalDesignArtifacts);
+  lines.push(`${labels.metaFinalDesignMinutes}: ${input.finalDesignMinutesPath}`);
   if (input.snapshotDesktopPath !== null) {
-    lines.push(`데스크톱 스냅샷: ${input.snapshotDesktopPath}`);
+    lines.push(`${labels.metaDesktopSnapshot}: ${input.snapshotDesktopPath}`);
   }
   if (input.snapshotMobilePath !== null) {
-    lines.push(`모바일 스냅샷: ${input.snapshotMobilePath}`);
+    lines.push(`${labels.metaMobileSnapshot}: ${input.snapshotMobilePath}`);
   }
   lines.push('');
-  lines.push('## 와이어프레임 확인 기록');
+  lines.push(labels.sectionWireframeCheckpoints);
   if (input.wireframeCheckpoints.length === 0) {
-    lines.push('(기록 없음)');
+    lines.push(labels.placeholderEmpty);
   } else {
     for (const checkpoint of input.wireframeCheckpoints) {
       lines.push(
@@ -366,16 +368,16 @@ function buildRequestBody(input: {
     }
   }
   lines.push('');
-  lines.push('## 사용자 와이어프레임 수정 지시');
+  lines.push(labels.sectionUserWireframeNotes);
   if (input.wireframeUserNotes.length === 0) {
-    lines.push('(없음)');
+    lines.push(labels.placeholderNone);
   } else {
     for (const note of input.wireframeUserNotes) {
       lines.push(`- ${note.userNote ?? ''}`);
     }
   }
   lines.push('');
-  lines.push('## 최종 디자인 회의록 본문');
+  lines.push(labels.sectionFinalDesignBody);
   lines.push(input.finalDesignMinutesBody);
   return lines.join('\n');
 }
