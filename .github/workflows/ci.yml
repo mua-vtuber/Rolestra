@@ -14,7 +14,8 @@ name: CI
 #     automatically, so no explicit rebuild step is required.
 #
 # Node version is pinned to match release.yml to prevent drift between
-# the CI gate and the packaging pipeline.
+# the CI gate and the packaging pipeline. It must satisfy dependency
+# engine constraints such as @electron/rebuild's Node >=22.12.0 floor.
 
 on:
   push:
@@ -34,7 +35,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22.12.0'
           cache: npm
 
       - name: Install dependencies
