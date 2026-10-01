@@ -582,7 +582,8 @@ export class DmAutoResponder extends EventEmitter {
     detail?: string,
   ): void {
     if (this.isChannelClosed(channelId)) return;
-    const registered = this.deps.providerLookup.get(providerId) !== undefined;
+    const provider = this.deps.providerLookup.get(providerId);
+    const registered = provider !== undefined;
     try {
       this.deps.messageService.append({
         channelId,
@@ -591,7 +592,11 @@ export class DmAutoResponder extends EventEmitter {
         authorKind: registered ? 'member' : 'system',
         role: 'system',
         content: code,
-        meta: detail ? { chatError: code, chatErrorDetail: detail } : { chatError: code },
+        meta: {
+          chatError: code,
+          ...(detail ? { chatErrorDetail: detail } : {}),
+          ...(code === 'usage_limit' && provider ? { chatErrorSpeakerName: provider.displayName } : {}),
+        },
       });
     } catch (error) {
       if (!this.isChannelClosed(channelId)) throw error;

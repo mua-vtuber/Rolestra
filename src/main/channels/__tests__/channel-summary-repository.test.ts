@@ -151,6 +151,13 @@ describe('ChannelSummaryRepository.listSummaries — last message and activity',
     expect(last?.content).toBe('가'.repeat(CHANNEL_PREVIEW_MAX_CHARS));
     expect(last?.notice).toBeNull();
   });
+
+  it('preserves the exhausted AI name in the initial chat list summary', () => {
+    message('general', { id: 'quota', author: 'ai-a', kind: 'member', role: 'system', content: 'usage_limit',
+      meta: { chatError: 'usage_limit', chatErrorSpeakerName: 'Alice', unrelated: 'not for previews' } });
+    const last = byId(new ChannelSummaryRepository(db).listSummaries(GENERAL_PARTICIPANTS), 'general').lastMessage;
+    expect(last?.notice).toEqual({ chatError: 'usage_limit', chatErrorSpeakerName: 'Alice' });
+  });
 });
 
 describe('ChannelSummaryRepository — unread count and read marker', () => {

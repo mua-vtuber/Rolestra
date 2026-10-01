@@ -44,6 +44,7 @@ import {
   CliWorkspaceRequiredError,
 } from '../cli-workspace';
 import { ClaudePermissionAdapter, CodexPermissionAdapter } from '../permission-adapter';
+import { ProviderUsageLimitError } from '../../provider-usage-limit-error';
 import type { CompletionOptions } from '../../../../shared/provider-types';
 import { createTmpDir } from '../../../../test-utils/integration-helpers';
 
@@ -422,6 +423,105 @@ describe('CliProvider Subprocess Integration', () => {
   });
 
   // ── 2. jsonl output parsing ────────────────────────────────────────
+
+  it.each(['assistant', 'result-only'])(
+    'keeps Claude %s usage exhaustion out of persistent chat text',
+    async (variant) => {
+      const config = makeCliConfig({ sessionStrategy: 'persistent', outputFormat: 'stream-json',
+        responseBoundary: (line) => line.includes('"type":"result"'),
+        permissionAdapter: new ClaudePermissionAdapter(),
+      });
+      const provider = new CliProvider(makeProviderInit(config));
+      const tokens: string[] = [];
+      const run = (async () => {
+        for await (const token of provider.streamCompletion(MESSAGES, 'Frozen persona', {
+          ...anyWorkspace(),
+          chatSession: { scopeKey: 'room-a:alice', resumeSessionId: null, currentStateHint: 'Continue this room.',
+            instructionsDir: chatInstructionsDir() },
+        })) tokens.push(token);
+      })();
+      const rejection = expect(run).rejects.toBeInstanceOf(ProviderUsageLimitError);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const proc = spawnedProcesses[0];
+      const text = "You've hit your session limit · resets 8pm (Asia/Seoul)";
+      proc.stdout.emit('data', JSON.stringify({ type: 'rate_limit_event',
+        rate_limit_info: { status: 'rejected', rateLimitType: 'five_hour' } }) + '\n');
+      if (variant === 'assistant') {
+        const line = JSON.stringify({ type: 'assistant', error: 'rate_limit',
+          message: { role: 'assistant', content: [{ type: 'text', text }] } });
+        proc.stdout.emit('data', line.slice(0, 41));
+        proc.stdout.emit('data', line.slice(41) + '\n');
+      }
+      proc.stdout.emit('data', JSON.stringify({ type: 'result', subtype: 'success',
+        is_error: true, result: text }) + '\n');
+      await rejection;
+      expect(tokens).toEqual([]);
+    },
+  );
+
+  it.each([
+    { type: 'assistant', error: 'authentication_failed',
+      message: { content: [{ type: 'text', text: 'Please log in again' }] } },
+    { type: 'result', subtype: 'success', is_error: true, result: 'Please log in again' },
+  ])('rejects Claude error envelopes without classifying login failure as quota: $type', async (event) => {
+    const provider = new CliProvider(makeProviderInit());
+    const tokens: string[] = [];
+    const run = (async () => {
+      for await (const token of provider.streamCompletion(MESSAGES, '', anyWorkspace())) tokens.push(token);
+    })();
+    const rejection = expect(run).rejects.toMatchObject({ name: 'Error', message: expect.stringContaining('Please log in again') });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    emitOutputAndExit(spawnedProcesses[0], [JSON.stringify(event)]);
+    await rejection;
+    expect(tokens).toEqual([]);
+  });
+
+  it.each([
+    { event: { type: 'error', message: "You've hit your usage limit. Try again later." }, exitCode: 1 },
+    { event: { type: 'turn.failed', error: { message: "You've hit your usage limit for GPT-5. Try again later." } }, exitCode: 0 },
+    { event: { type: 'turn.failed', error: { type: 'usage_limit_reached', message: 'Quota exhausted' } }, exitCode: 1 },
+  ])('classifies Codex failed output before nonzero-exit fallback: $event.type/$exitCode', async ({ event, exitCode }) => {
+    const provider = new CliProvider(makeProviderInit(makeCliConfig({ outputFormat: 'jsonl' })));
+    const tokens: string[] = [];
+    const run = (async () => {
+      for await (const token of provider.streamCompletion(MESSAGES, '', anyWorkspace())) tokens.push(token);
+    })();
+    const rejection = expect(run).rejects.toBeInstanceOf(ProviderUsageLimitError);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const proc = spawnedProcesses[0];
+    const line = JSON.stringify(event);
+    proc.stderr.emit('data', 'Reading prompt from stdin...');
+    proc.stdout.emit('data', line.slice(0, 23));
+    proc.stdout.emit('data', line.slice(23)); // Final JSONL line need not end with a newline.
+    proc._processEvents.emit('exit', exitCode, null);
+    await rejection;
+    expect(tokens).toEqual([]);
+  });
+
+  it('recognizes confirmed usage exhaustion in failed stderr', async () => {
+    const provider = new CliProvider(makeProviderInit(makeCliConfig({ outputFormat: 'jsonl' })));
+    const run = collectTokens(provider.streamCompletion(MESSAGES, '', anyWorkspace()));
+    const rejection = expect(run).rejects.toBeInstanceOf(ProviderUsageLimitError);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const proc = spawnedProcesses[0];
+    proc.stderr.emit('data', "Error: You've hit your usage limit. Try again later.");
+    proc._processEvents.emit('exit', 1, null);
+    await rejection;
+  });
+
+  it('allows retryable errors and usage warning metadata before successful prose mentioning limits', async () => {
+    const provider = new CliProvider(makeProviderInit(makeCliConfig({ outputFormat: 'jsonl' })));
+    const run = collectTokens(provider.streamCompletion(MESSAGES, '', anyWorkspace()));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    const text = "You've hit your usage limit. This is an example error message.";
+    emitOutputAndExit(spawnedProcesses[0], [
+      JSON.stringify({ type: 'error', message: 'rate limit exceeded: retrying request' }),
+      JSON.stringify({ type: 'rate_limit_event', message: 'You are near the limit', rate_limit_info: { status: 'allowed_warning' } }),
+      JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text } }),
+      JSON.stringify({ type: 'turn.completed' }),
+    ]);
+    await expect(run).resolves.toEqual([text]);
+  });
 
   it('jsonl: parses JSONL stdout lines into tokens', async () => {
     const config = makeCliConfig({ outputFormat: 'jsonl' });

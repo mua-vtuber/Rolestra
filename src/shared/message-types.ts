@@ -56,7 +56,7 @@ export const USER_AUTHOR_LITERAL = 'user' as const;
  * renderer 가 `messenger.whisper.errors.<code>` 번역으로 만든다.
  */
 export const CHAT_ERROR_CODES = [
-  'invalid_response', 'provider_unavailable', 'provider_error', 'timeout', 'whisper_limit',
+  'invalid_response', 'provider_unavailable', 'provider_error', 'usage_limit', 'timeout', 'whisper_limit',
   'opinion_registration_failed', 'recipient_unavailable',
   // 방 안 두 참가자의 불투명 별칭이 겹쳐 귓속말 상대를 가릴 수 없어 차례를 건너뜀.
   'participant_alias_collision',
@@ -166,6 +166,8 @@ export interface MessageMeta {
    * 저장한다. 그룹 방 알림에는 붙이지 않는다.
    */
   chatErrorDetail?: string;
+  /** 사용량 소진 알림에 표시할 등록 이름의 스냅샷. */
+  chatErrorSpeakerName?: string;
   /**
    * 침묵 알림 (role='system'). 오류 알림과 같이 관전자 화면에만 보이고 어떤
    * 모델 입력에도 들어가지 않는다.

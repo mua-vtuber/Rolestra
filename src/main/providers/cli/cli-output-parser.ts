@@ -12,6 +12,7 @@
  */
 
 import type { CliRuntimeConfig } from './cli-provider';
+import { ProviderUsageLimitError } from '../provider-usage-limit-error';
 import { ClaudeCodePermissionParser, type ParsedCliPermissionRequest } from './cli-permission-parser';
 
 /** Result of parseStreamJsonWithPermission. */
@@ -47,25 +48,50 @@ export class CliOutputParser {
     }
   }
 
-  /** Extract a structured error message from raw stdout (e.g., {"type":"error","message":"..."}). */
-  extractStructuredError(raw: string): string | null {
+  /** Extract failures only from provider error envelopes, never from ordinary answer text. */
+  extractStructuredError(raw: string): Error | null {
     if (!raw) return null;
 
-    for (const line of raw.split('\n')) {
+    // A retryable Codex error can precede the final failure of the same turn.
+    for (const line of raw.split('\n').reverse()) {
       const trimmed = line.trim();
       if (!trimmed.startsWith('{')) continue;
       try {
         const parsed: unknown = JSON.parse(trimmed);
         if (typeof parsed !== 'object' || parsed === null) continue;
         const obj = parsed as Record<string, unknown>;
-        if (obj.type === 'error' && typeof obj.message === 'string') {
-          return obj.message;
-        }
+        const error = this.extractEventError(obj);
+        if (error) return error;
       } catch {
         // ignore invalid lines
       }
     }
     return null;
+  }
+
+  /** Called only for a provider error envelope or a failed process's stderr. */
+  createProviderError(message: string, code?: unknown): Error {
+    const usageExhausted = code === 'usage_limit_reached'
+      || /\byou['’]ve hit your (?:session|weekly|usage) limit\b/i.test(message)
+      || /\b(?:Quota exceeded\.|Your workspace is out of credits\.)/i.test(message);
+    return usageExhausted
+      ? new ProviderUsageLimitError(message)
+      : new Error(`CLI command failed: ${message}`);
+  }
+
+  private extractEventError(obj: Record<string, unknown>, terminalOnly = false): Error | null {
+    const subtype = typeof obj.subtype === 'string' ? obj.subtype : '';
+    const assistantError = obj.type === 'assistant' && !!obj.error;
+    const resultError = obj.type === 'result' && (obj.is_error === true || subtype.startsWith('error_'));
+    const turnError = obj.type === 'turn.failed';
+    if (!assistantError && !resultError && !turnError && (terminalOnly || obj.type !== 'error')) return null;
+
+    const error = typeof obj.error === 'object' && obj.error !== null
+      ? obj.error as Record<string, unknown> : null;
+    const message = this.extractAnyText(obj.result) || this.extractAnyText(obj.message)
+      || this.extractAnyText(obj.errors) || this.extractAnyText(obj.error)
+      || `CLI result ${subtype || String(obj.type)}`;
+    return this.createProviderError(message, error?.code ?? error?.type ?? obj.error ?? obj.code);
   }
 
   /** Build a truncated sample of raw output for error messages. */
@@ -111,7 +137,8 @@ export class CliOutputParser {
           const extracted = this.extractTextFromEventObject(obj);
           if (extracted) results.push(extracted);
         }
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         // Skip unparseable lines
       }
     }
@@ -136,7 +163,8 @@ export class CliOutputParser {
           const extracted = this.extractTextFromEventObject(obj);
           if (extracted) results.push(extracted);
         }
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         // Skip unparseable lines
       }
     }
@@ -159,7 +187,8 @@ export class CliOutputParser {
           const extracted = this.extractTextFromEventObject(obj);
           if (extracted) results.push(extracted);
         }
-      } catch {
+      } catch (error) {
+        if (!(error instanceof SyntaxError)) throw error;
         // Skip unparseable lines
       }
     }
@@ -168,6 +197,10 @@ export class CliOutputParser {
   }
 
   private extractTextFromEventObject(obj: Record<string, unknown>): string {
+    // Claude puts terminal failures in assistant/result events; Codex uses turn.failed.
+    // Standalone Codex error events may be retries, so inspect those after process exit.
+    const error = this.extractEventError(obj, true);
+    if (error) throw error;
     const role = typeof obj.role === 'string' ? obj.role : '';
     const eventType = typeof obj.type === 'string' ? obj.type : '';
     const subtype = typeof obj.subtype === 'string' ? obj.subtype : '';
@@ -179,7 +212,7 @@ export class CliOutputParser {
       return '';
     }
     // Filter system/init events
-    if (eventType === 'system') return '';
+    if (eventType === 'system' || eventType === 'rate_limit_event') return '';
 
     // Check nested message role (Claude CLI wraps content in message.role)
     const msgObj = obj.message;

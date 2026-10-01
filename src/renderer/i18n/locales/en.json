@@ -331,6 +331,7 @@
         "provider_unavailable": "An AI is unavailable.",
         "recipient_unavailable": "The whisper could not be delivered — the recipient is no longer in this room.",
         "timeout": "An AI response timed out.",
+        "usage_limit": "{{name}} is too exhausted to respond. The usage limit has been reached.",
         "whisper_limit": "The response was too long to store."
       },
       "errorWithDetail": "{{message}} (Cause: {{detail}})",
@@ -338,7 +339,8 @@
       "observer": "Visible to you as observer",
       "observerNotice": "You can see public messages and private AI whispers in this room.",
       "routeIdentity": "Sender ID: {{senderId}} → Recipient ID: {{recipientId}}",
-      "threadReplyLabel": "Reply {{position}}/{{max}}"
+      "threadReplyLabel": "Reply {{position}}/{{max}}",
+      "unknownSpeakerName": "AI"
     }
   },
   "profile": {

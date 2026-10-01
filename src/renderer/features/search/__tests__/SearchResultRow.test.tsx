@@ -111,6 +111,19 @@ describe('SearchResultRow', () => {
 describe('SearchResultRow — chat error notices (D4)', () => {
   afterEach(() => cleanup());
 
+  it('shows the exhausted AI name as plain text instead of a raw quota snippet', async () => {
+    await i18next.changeLanguage('en');
+    render(<SearchResultRow hit={hit({
+      role: 'system', authorId: 'ai-a', authorKind: 'member', content: 'usage_limit',
+      meta: { chatError: 'usage_limit', chatErrorSpeakerName: '<Luna>', chatErrorDetail: 'raw CLI output' },
+      snippet: 'usage_<mark>limit</mark>',
+    })} onSelect={() => {}} locale="en-US" />);
+    const snippet = screen.getByTestId('search-result-snippet');
+    expect(snippet.textContent).toBe('<Luna> is too exhausted to respond. The usage limit has been reached.');
+    expect(snippet.querySelector('luna')).toBeNull();
+    expect(snippet.innerHTML).not.toContain('<mark>');
+  });
+
   it('shows the translated failure text instead of the raw error code', () => {
     void i18next.changeLanguage('en');
     render(<SearchResultRow hit={hit({

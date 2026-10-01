@@ -326,6 +326,7 @@
         "provider_unavailable": "AI에 연결할 수 없습니다.",
         "recipient_unavailable": "상대가 더 이상 이 방에 없어 귓속말을 전달하지 못했습니다.",
         "timeout": "AI 응답 시간이 초과되었습니다.",
+        "usage_limit": "{{name}}: 지쳐서 응답할 수 없습니다. 사용량 한도에 도달했습니다.",
         "whisper_limit": "응답이 너무 길어 저장할 수 없습니다."
       },
       "errorWithDetail": "{{message}} (원인: {{detail}})",
@@ -333,7 +334,8 @@
       "observer": "관전자에게 표시",
       "observerNotice": "이 방의 공개 메시지와 AI 간 귓속말을 모두 볼 수 있습니다.",
       "routeIdentity": "발신자 ID: {{senderId}} → 수신자 ID: {{recipientId}}",
-      "threadReplyLabel": "답장 {{position}}/{{max}}"
+      "threadReplyLabel": "답장 {{position}}/{{max}}",
+      "unknownSpeakerName": "AI"
     }
   },
   "profile": {

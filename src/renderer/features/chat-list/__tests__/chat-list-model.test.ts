@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { i18next } from '../../../i18n';
 import type { ChannelSummary, ChannelSummaryLastMessage } from '../../../../shared/channel-summary-types';
+import { patchSummary } from '../summary-patch';
 import {
   conversationLabel,
   listTimeLabel,
@@ -95,6 +96,17 @@ describe('chat list labels', () => {
     expect(previewText(t, { ...room, lastMessage: last({
       role: 'system', content: 'timeout', notice: { chatError: 'timeout' },
     }) })).toBe('AI 응답 시간이 초과되었습니다.');
+  });
+
+  it('keeps the exhausted AI name when a streamed notice updates the preview', () => {
+    const room = summary({ channelId: 'r', kind: 'room', unreadCount: 2 });
+    const updated = patchSummary(room, {
+      id: 'quota-notice', channelId: 'r', meetingId: null, authorId: 'ai-luna', authorKind: 'member',
+      role: 'system', content: 'usage_limit', createdAt: 2,
+      meta: { chatError: 'usage_limit', chatErrorSpeakerName: '루나' },
+    }, false);
+    expect(previewText(t, updated)).toBe('루나: 지쳐서 응답할 수 없습니다. 사용량 한도에 도달했습니다.');
+    expect(updated.unreadCount).toBe(2);
   });
 
   it('shows today as hh:mm, yesterday as 어제, then the date', () => {

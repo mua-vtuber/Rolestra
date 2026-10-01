@@ -30,6 +30,7 @@ export interface ChannelSummaryParticipant {
 export interface ChannelSummaryNoticeMeta {
   chatError?: ChatErrorCode;
   chatErrorDetail?: string;
+  chatErrorSpeakerName?: string;
   chatSilence?: ChatSilenceNotice;
   chatPass?: typeof CHAT_PASS_CODE;
 }

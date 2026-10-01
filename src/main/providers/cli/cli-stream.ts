@@ -69,6 +69,9 @@ export class CliStreamer {
     }
 
     const stdout = child.stdout;
+    let lineBuffer = '';
+    const bufferJsonLines = !config.outputParser
+      && (config.outputFormat === 'stream-json' || config.outputFormat === 'jsonl');
     let hangTimer: ReturnType<typeof setTimeout> | null = null;
     let done = false;
 
@@ -123,7 +126,16 @@ export class CliStreamer {
 
     stdout.setEncoding('utf-8');
     stdout.on('data', (chunk: string) => {
-      chunks.push(chunk);
+      if (bufferJsonLines) {
+        lineBuffer += chunk;
+        const lastNewline = lineBuffer.lastIndexOf('\n');
+        if (lastNewline >= 0) {
+          chunks.push(lineBuffer.slice(0, lastNewline + 1));
+          lineBuffer = lineBuffer.slice(lastNewline + 1);
+        }
+      } else {
+        chunks.push(chunk);
+      }
       resetHangTimer();
       if (resolveWait) {
         resolveWait();
@@ -133,6 +145,7 @@ export class CliStreamer {
     });
 
     child.on('exit', () => {
+      if (lineBuffer) { chunks.push(lineBuffer); lineBuffer = ''; }
       cleanup();
       if (resolveWait) {
         resolveWait();
@@ -348,15 +361,8 @@ export class CliStreamer {
 
           // Check response boundary
           if (config.responseBoundary?.(line)) {
-            try {
-              const event = JSON.parse(line) as { type?: string; subtype?: string };
-              if (event.type === 'result' && event.subtype?.startsWith('error_')) {
-                throw new Error(`CLI result ${event.subtype}`);
-              }
-            } catch (error) {
-              if (error instanceof SyntaxError) return;
-              throw error;
-            }
+            const error = this.parser.extractStructuredError(line);
+            if (error) throw error;
             return; // response complete
           }
 

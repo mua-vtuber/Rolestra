@@ -42,6 +42,12 @@ export function chatNoticeText(
   }
   const chatError = message.meta?.chatError;
   if (!isChatErrorCode(chatError)) return null;
+  if (chatError === 'usage_limit') {
+    const speakerName = message.meta?.chatErrorSpeakerName;
+    const name = typeof speakerName === 'string' && speakerName.trim()
+      ? speakerName : t('messenger.whisper.unknownSpeakerName');
+    return t('messenger.whisper.errors.usage_limit', { name });
+  }
   const failure = t(`messenger.whisper.errors.${chatError}`);
   const detail = message.meta?.chatErrorDetail;
   return typeof detail === 'string' && detail.trim()

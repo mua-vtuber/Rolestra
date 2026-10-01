@@ -125,6 +125,27 @@ describe('SystemMessage — source-level hex color literal guard', () => {
 });
 
 describe('SystemMessage — sanitized group errors', () => {
+  it.each([
+    ['ko', '루나: 지쳐서 응답할 수 없습니다. 사용량 한도에 도달했습니다.'],
+    ['en', '루나 is too exhausted to respond. The usage limit has been reached.'],
+  ])('names the exhausted AI in %s without exposing technical output', async (language, expected) => {
+    await i18next.changeLanguage(language);
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      authorId: 'p-claude', authorKind: 'member', content: 'raw CLI quota output',
+      meta: { chatError: 'usage_limit', chatErrorSpeakerName: '루나', chatErrorDetail: 'technical CLI output' },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent).toBe(expected);
+  });
+
+  it.each([undefined, '   '])('uses the generic AI name when the stored name is %j', async (name) => {
+    await i18next.changeLanguage('ko');
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      content: 'usage_limit', meta: { chatError: 'usage_limit', chatErrorSpeakerName: name },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent)
+      .toBe('AI: 지쳐서 응답할 수 없습니다. 사용량 한도에 도달했습니다.');
+  });
+
   it('translates the persisted code instead of displaying provider output', () => {
     void i18next.changeLanguage('ko');
     renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({

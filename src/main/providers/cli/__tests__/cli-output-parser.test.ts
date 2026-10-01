@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CliOutputParser } from '../cli-output-parser';
+import { ProviderUsageLimitError } from '../../provider-usage-limit-error';
 import type { CliRuntimeConfig } from '../cli-provider';
 
 // ---------------------------------------------------------------------------
@@ -288,9 +289,37 @@ describe('parseOutputChunk', () => {
 // ===========================================================================
 
 describe('extractStructuredError', () => {
+  it('keeps the final failed request reason after an earlier retryable error', () => {
+    const raw = [
+      JSON.stringify({ type: 'error', message: 'rate limit exceeded: retrying request' }),
+      JSON.stringify({ type: 'error', message: "You've hit your usage limit. Try again later." }),
+    ].join('\n');
+    expect(parser.extractStructuredError(raw)).toBeInstanceOf(ProviderUsageLimitError);
+  });
+
+  it.each(['Quota exceeded.', 'Your workspace is out of credits.'])(
+    'recognizes the confirmed Codex failure message %s', (message) => {
+      const raw = JSON.stringify({ type: 'turn.failed', error: { message } });
+      expect(parser.extractStructuredError(raw)).toBeInstanceOf(ProviderUsageLimitError);
+    },
+  );
+
+  it('does not classify a transient HTTP 429 as account exhaustion', () => {
+    const raw = JSON.stringify({ type: 'error', message: 'HTTP 429 rate limit exceeded' });
+    const error = parser.extractStructuredError(raw);
+    expect(error).toBeInstanceOf(Error);
+    expect(error).not.toBeInstanceOf(ProviderUsageLimitError);
+  });
+
+  it('recognizes a terminal Claude error even while intercepting permission events', () => {
+    const raw = JSON.stringify({ type: 'assistant', error: 'rate_limit',
+      message: { content: [{ type: 'text', text: "You've hit your session limit" }] } });
+    expect(() => parser.parseStreamJsonWithPermission(raw)).toThrow(ProviderUsageLimitError);
+  });
+
   it('extracts error message from JSON error line', () => {
     const raw = '{"type":"error","message":"Rate limit exceeded"}';
-    expect(parser.extractStructuredError(raw)).toBe('Rate limit exceeded');
+    expect(parser.extractStructuredError(raw)?.message).toContain('Rate limit exceeded');
   });
 
   it('returns null when no error line found', () => {
@@ -304,7 +333,7 @@ describe('extractStructuredError', () => {
 
   it('skips non-JSON lines while finding error', () => {
     const raw = 'garbage\n{"type":"error","message":"Found it"}\nmore garbage';
-    expect(parser.extractStructuredError(raw)).toBe('Found it');
+    expect(parser.extractStructuredError(raw)?.message).toContain('Found it');
   });
 });
 

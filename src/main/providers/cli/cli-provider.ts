@@ -32,6 +32,7 @@
  */
 
 import { BaseProvider, type BaseProviderInit } from '../provider-interface';
+import { ProviderUsageLimitError } from '../provider-usage-limit-error';
 import type { ConnectionFailure } from '../../../shared/connection-failure-types';
 import { probeFailure } from '../connection-failure';
 import type {
@@ -581,14 +582,15 @@ export class CliProvider extends BaseProvider {
 
       const stderrText = stderrChunks.join('').trim();
       const stdoutText = stdoutChunks.join('').trim();
+      const structuredError = this.outputParser.extractStructuredError(stdoutText);
       if (exitCode !== 0 || exitSignal) {
+        if (structuredError) throw structuredError;
         const detail = stderrText || `exit code ${String(exitCode)}${exitSignal ? ` (${exitSignal})` : ''}`;
-        throw new Error(`CLI command failed: ${detail}`);
+        throw this.outputParser.createProviderError(detail);
       }
 
-      const structuredError = this.outputParser.extractStructuredError(stdoutText);
       if (!yieldedAny && structuredError) {
-        throw new Error(`CLI command failed: ${structuredError}`);
+        throw structuredError;
       }
 
       if (!yieldedAny && stderrText) {
@@ -667,6 +669,7 @@ export class CliProvider extends BaseProvider {
         }
         return; // success
       } catch (err) {
+        if (err instanceof ProviderUsageLimitError) throw err;
         if (options?.chatSession) {
           const message = err instanceof Error ? err.message : String(err);
           if (message.includes('error_during_execution') && !stderrTail) {

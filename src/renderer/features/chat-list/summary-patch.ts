@@ -17,7 +17,7 @@ import {
 } from '../../../shared/channel-summary-types';
 import type { Message } from '../../../shared/message-types';
 
-const NOTICE_META_KEYS = ['chatError', 'chatErrorDetail', 'chatSilence', 'chatPass'] as const;
+const NOTICE_META_KEYS = ['chatError', 'chatErrorDetail', 'chatErrorSpeakerName', 'chatSilence', 'chatPass'] as const;
 
 /** An AI message: the only kind the unread count includes. */
 export function countsAsUnread(message: Pick<Message, 'authorKind' | 'role'>): boolean {

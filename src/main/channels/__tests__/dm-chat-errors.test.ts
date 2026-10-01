@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DM_ERROR_DETAIL_MAX_CHARS } from '../chat-limits';
-import { createChatRuntime, type ChatRuntime, type ModelStep } from './chat-runtime-harness';
+import { ProviderUsageLimitError } from '../../providers/provider-usage-limit-error';
+import { createChatRuntime, publicReply, whisperTo, type ChatRuntime, type ModelStep } from './chat-runtime-harness';
 
 let runtime: ChatRuntime | null = null;
 afterEach(() => {
@@ -13,7 +14,55 @@ const failWith = (message: string): ModelStep => async function* () {
   throw new Error(message);
 };
 
+const usageLimited: ModelStep = async function* () {
+  yield* [];
+  throw new ProviderUsageLimitError("You've hit your session limit · resets 8pm (Asia/Seoul)");
+};
+
 describe('DM failure notices are stored as codes (A5)', () => {
+  it('stores CLI usage exhaustion with the configured name and no assistant reply or raw detail', async () => {
+    const rt = runtime = createChatRuntime({ cli: ['bob'], names: { bob: '달빛' } });
+    const dm = rt.channels.createDm('bob');
+    rt.script('bob', usageLimited);
+
+    await rt.sendUser(dm, 'hello');
+
+    expect(rt.publicReplies(dm.id, 'bob')).toEqual([]);
+    expect(rt.observer(dm.id).filter((m) => m.role === 'system')).toEqual([
+      expect.objectContaining({ authorId: 'bob', content: 'usage_limit',
+        meta: { chatError: 'usage_limit', chatErrorSpeakerName: '달빛' } }),
+    ]);
+  });
+
+  it('continues to the next room participant without exposing the usage notice to their model', async () => {
+    const rt = runtime = createChatRuntime({ cli: ['bob'], api: ['alice'] });
+    const room = rt.createRoom('Room', ['bob', 'alice']);
+    rt.script('bob', usageLimited);
+    rt.script('alice', publicReply('Still here'));
+
+    await rt.sendUser(room, 'hello');
+
+    expect(rt.notices(room.id)).toEqual(['usage_limit']);
+    expect(rt.publicReplies(room.id, 'bob')).toEqual([]);
+    expect(rt.publicReplies(room.id, 'alice')).toEqual(['Still here']);
+    const input = JSON.stringify(rt.callsFor('alice').map((call) => call.messages));
+    expect(input).not.toContain('usage_limit');
+    expect(input).not.toContain("You've hit your session limit");
+  });
+
+  it('reports an exhausted whisper recipient without storing the provider error as a private reply', async () => {
+    const rt = runtime = createChatRuntime({ api: ['alice'], cli: ['bob'] });
+    const room = rt.createRoom('Room', ['alice', 'bob']);
+    rt.script('alice', whisperTo('bob', 'A secret'));
+    rt.script('bob', usageLimited, publicReply('Back later'));
+
+    await rt.sendUser(room, 'hello');
+
+    expect(rt.notices(room.id)).toEqual(['usage_limit']);
+    expect(rt.observer(room.id).filter((m) => m.visibility === 'whisper')).toHaveLength(1);
+    expect(rt.publicReplies(room.id, 'bob')).toEqual(['Back later']);
+  });
+
   it('stores a provider failure code with one masked, shortened line of cause', async () => {
     const rt = runtime = createChatRuntime({ api: ['bob'] });
     const dm = rt.channels.createDm('bob');

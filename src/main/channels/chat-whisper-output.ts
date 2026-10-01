@@ -2,6 +2,7 @@ import {
   isChatPassMessage, type ChatErrorCode, type Message as ChannelMessage,
 } from '../../shared/message-types';
 import { ChatCliInstructionsInsideWorkspaceError } from '../files/chat-cli-instructions';
+import { ProviderUsageLimitError } from '../providers/provider-usage-limit-error';
 import { CHAT_RESPONSE_MAX_BYTES } from './chat-limits';
 import { ParticipantAliasCollisionError } from './participant-alias';
 
@@ -46,6 +47,7 @@ export class WhisperRecipientUnavailableError extends Error {
 /** Maps a failed chat turn (or whisper write) to the stored notice code. */
 export function chatErrorCodeFor(error: unknown, timedOut: boolean): ChatErrorCode {
   if (timedOut) return 'timeout';
+  if (error instanceof ProviderUsageLimitError) return 'usage_limit';
   if (error instanceof WhisperRecipientUnavailableError) return 'recipient_unavailable';
   if (error instanceof InvalidChatOutputError) return 'invalid_response';
   if (error instanceof ChatOutputLimitError) return 'whisper_limit';
