@@ -1,0 +1,663 @@
+{
+  "aiList": {
+    "description": "AI를 누르면 그 AI와 1:1 대화를 엽니다.",
+    "dmLoadFailed": "1:1 대화 목록을 불러오지 못했습니다: {{message}}",
+    "empty": "등록된 AI가 없습니다. 설정에서 AI를 추가하세요.",
+    "loadFailed": "AI 목록을 불러오지 못했습니다: {{message}}",
+    "loading": "불러오는 중…",
+    "nav": "AI 목록",
+    "noCharacterSheet": "캐릭터 설정이 비어 있습니다",
+    "openFailed": "{{name}}와의 1:1 대화를 열지 못했습니다: {{message}}",
+    "title": "AI 목록"
+  },
+  "app": {
+    "startupDiagnostics": {
+      "settingsCorruption": {
+        "invalidJson": "설정 파일(settings.json)이 손상되어 기본값으로 시작했습니다. 손상된 파일은 다음 위치에 백업되었습니다: {{backupPath}}",
+        "noBackup": "(백업 실패 — 원본 파일은 그대로 보존되어 있습니다)",
+        "nonObject": "설정 파일(settings.json)이 잘못된 형식이라 기본값으로 시작했습니다. 백업: {{backupPath}}",
+        "readError": "설정 파일(settings.json)을 읽을 수 없어 기본값으로 시작했습니다. 백업: {{backupPath}}"
+      }
+    }
+  },
+  "chat": {
+    "emptyProviders": "등록된 AI가 없습니다. 설정의 AI 탭에서 AI를 추가하면 여기에서 대화를 시작할 수 있습니다.",
+    "nav": "채팅",
+    "openAiSettings": "설정에서 AI 추가하기"
+  },
+  "chatList": {
+    "aria": "대화 목록",
+    "deletedAi": "삭제된 AI",
+    "empty": "대화가 없습니다",
+    "filter": {
+      "all": "전체",
+      "archive": "보관함",
+      "dms": "1:1",
+      "label": "대화 종류",
+      "rooms": "채팅방"
+    },
+    "generalName": "일반 채널",
+    "loadFailed": "대화 목록을 불러오지 못했습니다: {{message}}",
+    "loading": "불러오는 중…",
+    "markReadFailed": "읽음 표시를 저장하지 못했습니다: {{message}}",
+    "noMatch": "찾는 대화가 없습니다",
+    "noMessages": "아직 메시지가 없습니다",
+    "preview": {
+      "mine": "나: {{text}}",
+      "named": "{{name}}: {{text}}",
+      "whisper": "{{from}} → {{to}} 귓속말"
+    },
+    "retry": "다시 불러오기",
+    "search": {
+      "label": "대화 검색",
+      "messages": "\"{{query}}\" 메시지 검색",
+      "placeholder": "대화와 메시지 검색"
+    },
+    "tag": {
+      "dm": "[1:1]",
+      "room": "[방]"
+    },
+    "title": "채팅",
+    "unreadLog": "({{unread}})",
+    "yesterday": "어제"
+  },
+  "error": {
+    "boundary": {
+      "description": "예기치 않은 오류로 화면을 표시할 수 없습니다. 다시 시도하거나 앱을 재시작해 주세요.",
+      "retry": "다시 시도",
+      "title": "문제가 발생했습니다"
+    },
+    "toast": {
+      "dismiss": "닫기",
+      "title": "오류"
+    }
+  },
+  "meeting": {
+    "turnSkipped": "⚠ {{name}}이(가) {{reason}} 상태라 이 턴을 건너뜁니다."
+  },
+  "member": {
+    "avatarPicker": {
+      "catalogueError": "기본 아바타 목록을 불러오지 못했습니다.",
+      "currentCustom": "현재 업로드된 사진",
+      "loadingCatalogue": "기본 아바타 불러오는 중…",
+      "remove": "제거",
+      "revert": "기본으로 되돌리기",
+      "title": "아바타 선택",
+      "upload": "사진 업로드",
+      "uploadError": "업로드 실패: {{message}}",
+      "uploading": "업로드 중…"
+    },
+    "profileTrigger": {
+      "ariaLabel": "프로필 보기: {{name}}"
+    },
+    "status": {
+      "connecting": "재연결 중",
+      "offlineConnection": "점검 필요",
+      "offlineManual": "외근",
+      "online": "출근"
+    }
+  },
+  "message": {
+    "search": {
+      "close": "닫기",
+      "empty": "검색 결과 없음",
+      "error": "검색 실패: {{msg}}",
+      "filter": {
+        "allChats": "모든 대화",
+        "currentChannel": "현재 채널: #{{name}}"
+      },
+      "loading": "검색 중…",
+      "placeholder": "검색어를 입력하세요 (FTS5 syntax 지원)",
+      "shortcutHint": "Cmd/Ctrl+K 로 열기",
+      "title": "메시지 검색"
+    }
+  },
+  "messenger": {
+    "activity": {
+      "queued": "{{name}} 대기 중…",
+      "roundStateError": "진행 중인 대화 상태를 불러오지 못했습니다. ({{reason}})",
+      "unknownName": "알 수 없는 참가자",
+      "whisperWriting": "{{name}} → {{peer}} 귓속말 입력 중…",
+      "writing": "{{name}} 입력 중…"
+    },
+    "channelDelete": {
+      "body": "\"{{name}}\" 채널을 삭제하시겠습니까?",
+      "bodyDm": "\"{{name}}\" 대화를 닫으시겠습니까?",
+      "cancel": "취소",
+      "errors": {
+        "generic": "채널을 삭제하지 못했습니다.",
+        "notFound": "채널을 찾을 수 없습니다.",
+        "systemProtected": "시스템 채널은 삭제할 수 없습니다."
+      },
+      "irreversibleHint": "메시지는 영구적으로 사라집니다.",
+      "submit": "삭제",
+      "submitDm": "닫기",
+      "title": "채널 삭제",
+      "titleDm": "대화 닫기"
+    },
+    "channelHeader": {
+      "delete": "삭제",
+      "postOpinion": "의견 게시"
+    },
+    "composer": {
+      "errorSend": "메시지 전송 실패: {{reason}}",
+      "inputAriaLabel": "메시지 입력",
+      "logPrompt": "나>",
+      "placeholder": "메시지 보내기",
+      "placeholderLog": "메시지를 입력하고 Enter",
+      "readOnlyBadge": "읽기 전용 — 이 채널에는 메시지를 보낼 수 없습니다",
+      "send": "보내기",
+      "sendLog": "[보내기]"
+    },
+    "emptyState": {
+      "noActiveChannel": "왼쪽에서 채널을 선택하세요."
+    },
+    "log": {
+      "me": "나",
+      "time": "[{{time}}]"
+    },
+    "memberPanel": {
+      "empty": "등록된 참여자가 없습니다.",
+      "error": "참여자 목록을 불러오지 못했습니다.",
+      "loading": "참여자 목록을 불러오는 중…",
+      "noActiveChannel": "참여자를 표시할 채널을 선택하세요.",
+      "participantsTitle": "참여자",
+      "participantsTitleCount_one": "참여자 · {{count}}명",
+      "participantsTitleCount_other": "참여자 · {{count}}명",
+      "removeMember": "{{name}} 제거"
+    },
+    "pane": {
+      "memberPanel": "참여자 및 합의 상태",
+      "thread": "메시지 스레드"
+    },
+    "pass": {
+      "button": "넘기기",
+      "buttonLog": "[넘기기]",
+      "buttonTitle": "글 없이 AI들에게 대화를 넘깁니다",
+      "errors": {
+        "dmChannel": "DM에서는 넘길 수 없습니다.",
+        "failed": "넘기지 못했습니다. ({{reason}})",
+        "noParticipants": "대화에 참가한 AI가 없어 넘길 수 없습니다.",
+        "roomArchived": "보관된 대화에서는 넘길 수 없습니다.",
+        "roundRunning": "이미 대화가 진행 중입니다. 끝난 뒤 다시 눌러 주세요."
+      },
+      "row": "넘김"
+    },
+    "postOpinion": {
+      "cancel": "취소",
+      "contentLabel": "본문",
+      "contentPlaceholder": "어떤 의견인지 자유롭게 작성하세요…",
+      "description": "일반 채널의 의견 카드로 등록됩니다. 회의·합의·인계 없이 가벼운 동의/반대 카운터만 모입니다.",
+      "errors": {
+        "contentRequired": "본문을 입력하세요.",
+        "contentTooLong": "본문은 {{max}}자 이하여야 합니다.",
+        "generic": "의견을 등록하지 못했습니다.",
+        "titleTooLong": "제목은 {{max}}자 이하여야 합니다.",
+        "validation": "입력이 올바르지 않습니다."
+      },
+      "submit": "게시",
+      "title": "의견 게시",
+      "titleHint": "비워 두면 본문 첫 줄로 자동 생성됩니다.",
+      "titleLabel": "제목 (선택)",
+      "titlePlaceholder": "의견 제목"
+    },
+    "silence": {
+      "replyPassed": "{{name}}은(는) 답장하지 않았습니다",
+      "roundAllSilent": "모두 조용해졌습니다",
+      "turnPassed": "{{name}}은(는) 이번에 말하지 않았습니다"
+    },
+    "ssmBox": {
+      "description": "\"{{topic}}\" 회의가 진행 중입니다.",
+      "empty": "진행 중인 회의가 없습니다.",
+      "variants": {
+        "audit": {
+          "heading": "검토 부서"
+        },
+        "design": {
+          "empty": "진행 중인 디자인 회의가 없습니다.",
+          "heading": "디자인 부서",
+          "pendingDataNote": "단계 진행 표시는 디자인 워크플로우 데이터 연결 후 노출됩니다.",
+          "placeholder": "\"{{topic}}\" 디자인 7 단계 진행 중입니다.",
+          "sequenceAria": "디자인 단계 순서"
+        },
+        "general": {
+          "agreeButton": "동의 {{count}}",
+          "agreeButton_other": "동의 {{count}}",
+          "agreeButtonAria": "동의 ({{count}} 표). 클릭하면 토글됩니다.",
+          "agreeButtonAria_other": "동의 ({{count}} 표). 클릭하면 토글됩니다.",
+          "aiVote": {
+            "choice": {
+              "abstain": "보류",
+              "agree": "찬성",
+              "oppose": "반대"
+            },
+            "count": {
+              "abstain": "보류 {{count}}",
+              "agree": "찬성 {{count}}",
+              "failed": "실패 {{count}}",
+              "oppose": "반대 {{count}}",
+              "pending": "대기 {{count}}"
+            },
+            "error": "AI 투표를 불러오거나 시작하지 못했습니다.",
+            "failure": {
+              "interrupted": "중단됨",
+              "invalid_response": "잘못된 응답",
+              "provider_error": "제공자 오류",
+              "provider_unavailable": "제공자 없음",
+              "timeout": "시간 초과"
+            },
+            "heading": "AI 투표",
+            "participantStatus": {
+              "failed": "실패",
+              "pending": "대기",
+              "submitted": "제출"
+            },
+            "start": "AI 투표 시작",
+            "starting": "AI 투표 시작 중...",
+            "status": {
+              "completed": "투표 완료",
+              "interrupted": "투표 중단",
+              "running": "투표 진행 중"
+            }
+          },
+          "cardCount": "{{count}} 건",
+          "cardCount_other": "{{count}} 건",
+          "cardsAria": "잡담 카드 목록",
+          "empty": "등록된 카드가 없습니다.",
+          "error": "카드를 불러오지 못했습니다 — {{message}}",
+          "heading": "잡담 채널",
+          "kind": {
+            "addition": "보강안",
+            "block": "반대안",
+            "revise": "수정안",
+            "root": "회의 의견",
+            "self-raised": "직원 의견",
+            "user-raised": "내 의견"
+          },
+          "lightCounts": "내 투표: 찬성 {{agree}}, 반대 {{oppose}}",
+          "loading": "카드를 불러오는 중...",
+          "opposeButton": "반대 {{count}}",
+          "opposeButton_other": "반대 {{count}}",
+          "opposeButtonAria": "반대 ({{count}} 표). 클릭하면 토글됩니다.",
+          "opposeButtonAria_other": "반대 ({{count}} 표). 클릭하면 토글됩니다.",
+          "pendingDataNote": "[##본문] 카드 누적 표시는 P4 land 시점에 활성화됩니다.",
+          "untitled": "(제목 없음)",
+          "voteGroupAria": "동의 / 반대 버튼"
+        },
+        "idea": {
+          "empty": "아직 등록된 아이디어가 없습니다.",
+          "heading": "아이디어 부서",
+          "listAria": "등록된 아이디어 목록",
+          "pendingDataNote": "아이디어 카드는 회의 단계 데이터 연결 후 표시됩니다.",
+          "placeholder": "\"{{topic}}\" 아이디어 회의 진행 중입니다."
+        },
+        "implement": {
+          "designatedPlaceholder": "지정 작업자 표시 자리입니다.",
+          "empty": "진행 중인 구현 작업이 없습니다.",
+          "fileListPlaceholder": "작업 중 파일 목록 자리입니다.",
+          "heading": "구현 부서",
+          "progressPlaceholder": "진행도 게이지 자리입니다."
+        },
+        "planning": {
+          "empty": "진행 중인 회의가 없습니다.",
+          "heading": "기획 부서",
+          "minutesPreviewPlaceholder": "회의록 [합의] / [제외] 미리보기는 회의록 작성 단계에서 노출됩니다.",
+          "pendingDataNote": "의견 트리는 회의 데이터 연결 후 표시됩니다.",
+          "placeholder": "\"{{topic}}\" 회의가 진행 중입니다.",
+          "treeAria": "의견 트리"
+        },
+        "review": {
+          "heading": "리뷰 부서"
+        }
+      }
+    },
+    "thread": {
+      "empty": "아직 메시지가 없습니다",
+      "error": "메시지를 불러오지 못했습니다. 다시 시도해 주세요.",
+      "loading": "메시지를 불러오는 중…"
+    },
+    "whisper": {
+      "errors": {
+        "consensus_folder_contains_app_data": "앱 폴더 배치가 잘못되어 이 AI를 실행할 수 없습니다. 관련 폴더 경로는 앱 기록(로그)에 남겼습니다.",
+        "invalid_response": "AI 응답 형식이 올바르지 않습니다.",
+        "opinion_registration_failed": "의견 카드 등록에 실패했습니다.",
+        "participant_alias_collision": "이 방 참가자 두 명의 내부 식별값이 겹쳐 차례를 진행하지 못했습니다. 같은 참가자로 방을 새로 만들어 주세요.",
+        "provider_error": "AI 응답에 실패했습니다.",
+        "provider_unavailable": "AI에 연결할 수 없습니다.",
+        "recipient_unavailable": "상대가 더 이상 이 방에 없어 귓속말을 전달하지 못했습니다.",
+        "timeout": "AI 응답 시간이 초과되었습니다.",
+        "whisper_limit": "응답이 너무 길어 저장할 수 없습니다."
+      },
+      "errorWithDetail": "{{message}} (원인: {{detail}})",
+      "label": "귓속말",
+      "observer": "관전자에게 표시",
+      "observerNotice": "이 방의 공개 메시지와 AI 간 귓속말을 모두 볼 수 있습니다.",
+      "routeIdentity": "발신자 ID: {{senderId}} → 수신자 ID: {{recipientId}}",
+      "threadReplyLabel": "답장 {{position}}/{{max}}"
+    }
+  },
+  "profile": {
+    "editor": {
+      "account": {
+        "loadFailed": "연결 정보를 불러오지 못했습니다: {{message}}",
+        "title": "연결"
+      },
+      "apiKey": {
+        "hint": "키는 이 컴퓨터의 보안 저장소에만 저장됩니다. 바꾸면 예전 키는 지워집니다(다른 AI가 같은 키를 쓰면 남겨 둡니다).",
+        "label": "새 API 키",
+        "oldKeyCleanupFailed": "새 키로 바꿨지만 예전 키를 지우지 못했습니다: {{message}}",
+        "refreshFailed": "API 키는 바꿨지만 화면을 새로 고치지 못했습니다: {{message}}",
+        "replace": "키 바꾸기",
+        "replaceAndCleanupFailed": "키를 바꾸지 못했고, 이번에 저장한 새 키도 지우지 못했습니다: {{message}} / {{cleanup}}",
+        "replaced": "새 키로 바꿨습니다.",
+        "replaceFailed": "키를 바꾸지 못했습니다. 예전 키는 그대로입니다: {{message}}",
+        "replacing": "바꾸는 중…",
+        "storeFailed": "새 키를 저장하지 못했습니다: {{message}}"
+      },
+      "cancel": "취소",
+      "delete": {
+        "button": "AI 지우기",
+        "confirm": "{{name}}을(를) 지우시겠습니까? 되돌릴 수 없습니다. 이 AI의 API 키도 함께 지워집니다(다른 AI가 같은 키를 쓰면 남겨 둡니다).",
+        "confirmButton": "지우기",
+        "failed": "AI를 지우지 못했습니다: {{message}}",
+        "keyCleanupFailed": "{{name}}을(를) 지웠지만 API 키를 지우지 못했습니다: {{message}}"
+      },
+      "fetchError": "프로필을 불러오지 못했습니다.",
+      "fields": {
+        "characterSheet": "캐릭터 설정",
+        "name": "이름"
+      },
+      "loading": "프로필 불러오는 중…",
+      "nameDuplicateError": "\"{{name}}\" 이름은 이미 다른 AI가 쓰고 있습니다.",
+      "save": "저장",
+      "saveError": "저장 실패: {{message}}",
+      "title": "{{name}} 프로필 편집"
+    },
+    "popover": {
+      "actions": {
+        "edit": "편집",
+        "reconnect": "연락해보기",
+        "startDm": "DM 시작",
+        "toggleOffline": "외근",
+        "toggleOnline": "출근"
+      },
+      "errors": {
+        "dmFailed": "DM 채널 생성 실패",
+        "reconnectFailed": "재연결에 실패했습니다",
+        "toggleFailed": "출근 상태 변경 실패"
+      },
+      "fields": {
+        "expertise": "전문분야",
+        "personality": "성격"
+      },
+      "reconnecting": "연결 시도 중…"
+    }
+  },
+  "providerConnect": {
+    "add": "AI 추가",
+    "added": {
+      "body": "기본 이름으로 등록했습니다. 이름과 캐릭터 설정을 지금 정할 수 있습니다.",
+      "editProfile": "이름·캐릭터 설정 편집",
+      "title": "{{name}}을(를) 추가했습니다"
+    },
+    "api": {
+      "title": "API 키로 연결"
+    },
+    "cli": {
+      "add": "추가",
+      "added": "추가됨",
+      "detail": "CLI · 설치됨",
+      "detailVersion": "CLI · 설치됨 · {{version}}",
+      "wslName": "{{name}} ({{distro}})"
+    },
+    "close": "닫기",
+    "connectedRefreshFailed": "AI는 등록됐지만 화면을 새로고침하지 못했습니다. 닫고 다시 확인하세요.",
+    "detectFailed": "설치된 CLI를 확인하지 못했습니다: {{message}}",
+    "detecting": "설치된 CLI를 확인하는 중…",
+    "endpoint": "연결 주소",
+    "error": {
+      "addFailed": "AI를 추가하지 못했습니다: {{message}}",
+      "duplicateName": "'{{name}}' 이름은 이미 다른 AI가 쓰고 있습니다.",
+      "keyCleanupFailed": "이번에 저장한 API 키를 지우지 못했습니다({{message}}). 다음에 앱을 시작할 때 자동으로 지웁니다.",
+      "keyStoreFailed": "API 키를 저장하지 못했습니다: {{message}}",
+      "localModelMissing": "Ollama에 {{model}} 모델이 없어 추가하지 못했습니다.",
+      "localNotReady": "Ollama 상태가 바뀌어 추가하지 못했습니다. 다시 찾기 결과를 확인하세요.",
+      "modelListFailed": "모델 목록을 가져오지 못했습니다: {{message}}"
+    },
+    "found": {
+      "rescan": "다시 찾기",
+      "rescanning": "찾는 중…",
+      "title": "이 컴퓨터에서 찾은 AI"
+    },
+    "invalidEndpoint": "http 또는 https 주소를 입력하고 주소에 사용자 이름이나 비밀번호를 넣지 마세요.",
+    "loadingModels": "모델 불러오는 중…",
+    "loadModels": "모델 불러오기",
+    "local": {
+      "addModel": "이 모델로 추가",
+      "badModelList": "{{address}}의 Ollama 모델 목록을 읽지 못했습니다.",
+      "checking": "Ollama를 확인하는 중…",
+      "detail": "({{detail}})",
+      "detectFailed": "로컬 AI를 확인하지 못했습니다: {{message}}",
+      "httpError": "{{address}}의 서버가 Ollama 확인 요청에 오류로 답했습니다.",
+      "invalidEndpoint": "Ollama 주소 설정({{address}})을 읽을 수 없습니다. 설정 파일이나 OLLAMA_HOST 값을 확인하세요.",
+      "modelLegend": "Ollama 모델 선택",
+      "name": "Ollama",
+      "noModels": "{{address}}에서 Ollama가 실행 중이지만 설치된 모델이 없습니다. 모델을 받은 뒤 다시 찾기를 누르세요.",
+      "notOllama": "{{address}}에서 응답한 서버는 Ollama가 아닙니다.",
+      "refused": "{{address}}에서 응답이 없습니다. Ollama가 설치되지 않았거나 꺼져 있습니다.",
+      "running_other": "로컬 · {{address}}에서 실행 중 · 모델 {{count}}개",
+      "timeout": "{{address}}가 {{seconds}}초 안에 응답하지 않았습니다.",
+      "unreachable": "{{address}}에 연결하지 못했습니다."
+    },
+    "model": "모델",
+    "modelListError": {
+      "auth": "API 키를 확인하세요. 모델 목록을 가져올 권한이 없습니다.",
+      "network": "서비스에 연결하지 못했습니다. 네트워크 상태를 확인하고 다시 시도하세요.",
+      "parse": "서비스 응답을 해석하지 못했습니다. 잠시 후 다시 시도하세요."
+    },
+    "name": "표시 이름",
+    "noCli": "지원되는 CLI가 없습니다. API 또는 로컬 AI를 연결할 수 있습니다.",
+    "note": "추가하면 이름과 캐릭터 설정을 바로 정할 수 있습니다. 이름은 나중에도 바꿀 수 있습니다.",
+    "numberedName": "{{name}} {{number}}",
+    "providersFailed": "등록된 AI 목록을 불러오지 못해 지금은 추가할 수 없습니다: {{message}}",
+    "secret": "API 키",
+    "service": {
+      "anthropic": {
+        "defaultName": "Claude",
+        "name": "Claude",
+        "vendor": "Anthropic"
+      },
+      "google": {
+        "defaultName": "Gemini",
+        "name": "Gemini",
+        "vendor": "Google"
+      },
+      "openai": {
+        "defaultName": "ChatGPT",
+        "name": "ChatGPT · Codex",
+        "vendor": "OpenAI"
+      },
+      "other": {
+        "name": "기타",
+        "vendor": "OpenAI 호환 주소"
+      }
+    },
+    "title": "AI 추가"
+  },
+  "room": {
+    "header": {
+      "dm": "1:1 대화",
+      "info": "방 정보",
+      "members_one": "{{names}} · AI {{count}}명",
+      "members_other": "{{names}} · AI {{count}}명",
+      "more": "더 보기",
+      "observing": "귓속말까지 보는 중",
+      "observingLog": "[귓속말까지 보는 중]",
+      "participants": "참가자: {{names}}",
+      "search": "이 대화에서 검색"
+    }
+  },
+  "rooms": {
+    "actionFailed": "처리하지 못했습니다. 다시 시도해주세요.",
+    "archive": "대화 종료·보관",
+    "archiveHint": "진행 중인 응답을 중지하고 이 방을 보관합니다. 이후에는 읽기와 삭제만 가능하며 대화를 재개할 수 없습니다.",
+    "cancel": "취소",
+    "create": "채팅방 만들기",
+    "createFailed": "채팅방을 만들지 못했습니다. 입력 내용을 확인하고 다시 시도해주세요.",
+    "createTitle": "새 채팅방",
+    "delete": "채팅방 삭제",
+    "deleteHint": "이 방과 대화 기록을 삭제합니다. 삭제한 기록은 복구할 수 없습니다.",
+    "loading": "캐릭터를 불러오는 중입니다.",
+    "loadingHistory": "이전 대화를 불러오는 중…",
+    "name": "채팅방 이름",
+    "noMembers": "먼저 AI를 연결해주세요.",
+    "olderMessages": "이전 대화 더 보기",
+    "participants": "참여 캐릭터",
+    "personaCustom": "이 방 전용 페르소나",
+    "personaDefault": "앱 기본 페르소나 가져오기",
+    "personaFor": "{{name}}의 방 전용 페르소나",
+    "personaSnapshotHint": "이 방의 페르소나는 생성 시 저장됩니다. 이후 앱 기본 설정을 바꿔도 이 방에는 영향을 주지 않습니다.",
+    "personaSource": "페르소나",
+    "readOnly": "보관된 채팅방입니다. 기록을 읽거나 검색할 수 있습니다.",
+    "snapshotReadOnly": "이 방을 만들 때 저장한 캐릭터 설정입니다."
+  },
+  "settings": {
+    "about": {
+      "appName": "앱 이름",
+      "description": "버전·플랫폼 정보입니다.",
+      "platform": "플랫폼",
+      "title": "정보",
+      "version": "버전"
+    },
+    "ai": {
+      "apiService": {
+        "anthropic": "Anthropic",
+        "google": "Google",
+        "openai": "OpenAI"
+      },
+      "cause": {
+        "auth": "서비스가 API 키를 거부했습니다. 편집에서 API 키를 바꾸세요.",
+        "cliFailed": "{{name}}을(를) 실행하지 못했습니다.",
+        "cliGeneric": "CLI",
+        "cliNotFound": "{{name}}을(를) 찾지 못했습니다. 설치되어 있는지 확인하세요.",
+        "detail": "({{detail}})",
+        "httpError": "서비스가 오류로 답했습니다.",
+        "keyMissing": "저장된 API 키가 없습니다. 편집에서 API 키를 다시 넣으세요.",
+        "localBadModelList": "Ollama의 모델 목록을 읽지 못했습니다.",
+        "localInvalidEndpoint": "로컬 AI 주소를 읽을 수 없습니다.",
+        "localModelMissing": "Ollama에 {{model}} 모델이 없습니다.",
+        "localNoModels": "Ollama에 설치된 모델이 없습니다.",
+        "localNotOllama": "이 주소의 서버가 Ollama로 응답하지 않았습니다.",
+        "localNotRunning": "Ollama가 응답하지 않습니다. Ollama가 켜져 있는지 확인하세요.",
+        "network": "서버에 연결하지 못했습니다. 인터넷 연결이나 서버 상태를 확인하세요.",
+        "notChecked": "아직 연결을 확인하지 않았습니다.",
+        "probeFailed": "연결을 확인하는 중에 문제가 생겼습니다.",
+        "timeout": "제한 시간 안에 응답이 오지 않았습니다."
+      },
+      "cli": {
+        "claude": "Claude Code",
+        "codex": "Codex"
+      },
+      "connection": {
+        "api": "{{model}} · API ({{service}})",
+        "cli": "{{name}} · CLI",
+        "cliWsl": "{{name}} · CLI (WSL: {{distro}})",
+        "loading": "연결 정보를 불러오는 중…",
+        "local": "{{model}} · 로컬 ({{address}})",
+        "localOllama": "{{model}} · 로컬 (Ollama)"
+      },
+      "connectionLoadFailed": "AI 연결 정보를 불러오지 못했습니다: {{message}}",
+      "description": "대화에 참여하는 AI를 추가하고, 이름·캐릭터 설정·연결을 고칩니다.",
+      "edit": "편집",
+      "empty": "등록된 AI가 없습니다. \"AI 추가\"로 첫 AI를 연결하세요.",
+      "inactive": {
+        "loadFailed": "지원하지 않는 CLI 목록을 불러오지 못했습니다: {{message}}",
+        "reason": {
+          "corruptConfig": "저장된 설정이 손상되어 이 AI를 쓸 수 없습니다. 같은 CLI를 \"AI 추가\"로 다시 등록해 주세요.",
+          "unsupportedCommand": "더 이상 지원하지 않는 CLI입니다. Gemini는 API로 연결해 주세요."
+        },
+        "title": "지원하지 않는 CLI"
+      },
+      "keyNote": "API 키는 각 AI의 편집 화면에서 바꿉니다. 키만 따로 모아 두는 화면은 없습니다.",
+      "loadFailed": "AI 목록을 불러오지 못했습니다: {{message}}",
+      "loading": "AI 목록을 불러오는 중…",
+      "reconnect": "다시 연결",
+      "reconnectFailed": "다시 연결하지 못했습니다: {{message}}",
+      "reconnecting": "연결 중…",
+      "status": {
+        "connecting": "연결 중",
+        "offlineConnection": "연결 안 됨",
+        "offlineManual": "꺼 둠",
+        "online": "연결됨"
+      },
+      "title": "AI"
+    },
+    "general": {
+      "brightness": {
+        "dark": "다크",
+        "light": "라이트",
+        "system": "시스템 따라가기",
+        "title": "밝기"
+      },
+      "folder": {
+        "description": "대화 기록과 프로필 사진 같은 앱 데이터가 저장되는 폴더입니다. 앱이 자동으로 만들었습니다.",
+        "loadFailed": "폴더 위치를 불러오지 못했습니다: {{message}}",
+        "loading": "폴더 위치를 불러오는 중…",
+        "open": "폴더 열기",
+        "openFailed": "폴더를 열지 못했습니다: {{message}}",
+        "title": "대화 기록 폴더"
+      },
+      "language": {
+        "en": "English",
+        "failed": "언어를 바꾸지 못했습니다: {{message}}",
+        "ko": "한국어",
+        "title": "언어"
+      },
+      "theme": {
+        "preview": {
+          "line": "대화 내용",
+          "myBubble": "내 말풍선",
+          "name": "이름",
+          "otherBubble": "상대 말풍선",
+          "time": "[시:분]",
+          "whisper": "귓속말",
+          "whisperRoute": "보낸 AI → 받은 AI · 귓속말"
+        },
+        "retro": {
+          "description": "단색 모니터와 고정폭 글꼴의 PC 통신 대화 기록",
+          "name": "레트로"
+        },
+        "tactical": {
+          "description": "각진 모서리와 푸른 계기판 느낌의 말풍선 메신저",
+          "name": "테티컬"
+        },
+        "title": "테마"
+      },
+      "title": "일반"
+    },
+    "notifications": {
+      "description": "유형별 OS 알림 표시 및 소리 설정을 조정합니다.",
+      "display": "표시",
+      "kind": {
+        "error": "오류",
+        "newMessage": "새 메시지"
+      },
+      "loading": "알림 설정을 불러오는 중…",
+      "sound": "소리",
+      "test": "테스트",
+      "title": "알림"
+    },
+    "tabs": {
+      "about": "정보",
+      "ai": "AI",
+      "general": "일반",
+      "label": "설정 탭"
+    },
+    "title": "설정"
+  },
+  "shell": {
+    "nav": {
+      "ariaLabel": "주 내비게이션"
+    }
+  }
+}

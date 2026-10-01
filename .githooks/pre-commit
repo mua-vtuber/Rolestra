@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# R12-C2 T11 + T41 — pre-commit inspector hook (변경 파일 한정 — 빠른 피드백).
+#
+# 여기는 T41 이후에도 phase 1 (report-only) 로 남는다. 검사 대상이 *이번에
+# staged 된 파일뿐* 이라, 한 파일만 보면 위반으로 보이지만 저장소 전체를
+# 보면 아닌 경우가 생긴다 (예: 게이트 helper 를 다른 파일에서 부르는 흐름).
+# 그런 반쪽 판정으로 commit 을 막으면 사용자가 고칠 수 없는 것을 고치라고
+# 요구하게 된다. 전체 판정과 차단은 pre-push (phase 2) 가 담당한다.
+#
+# 우회: `git commit --no-verify`.
+set -e
+
+# Staged ts/tsx 파일만 추림 (삭제된 파일 제외)
+CHANGED=$(git diff --cached --name-only --diff-filter=ACMR | \
+          grep -E '\.tsx?$' || true)
+
+if [ -z "$CHANGED" ]; then
+  exit 0
+fi
+
+# tsx CLI 가 없으면 조용히 skip (CI 환경 외 setup 미완)
+if ! command -v npx >/dev/null 2>&1; then
+  exit 0
+fi
+
+echo "[inspector] pre-commit — 변경 파일 검사 ($(echo "$CHANGED" | wc -l) 파일)"
+npx tsx tools/inspectors/run.ts --changed $CHANGED --silent --report=tools/inspectors/report.precommit.json || true
+
+exit 0

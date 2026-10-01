@@ -1,0 +1,84 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test coverage
+coverage/
+
+# Electron
+release/
+
+# Data
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# AI
+.claude/
+.codex/
+CLAUDE.md
+AGENTS.md
+
+# oh-my-claudecode
+.omc/
+.worktrees/
+
+# Agestra plugin workspace (local, plugin-generated)
+.agestra/
+
+# Rolestra cli-smoke matrix results (generated locally)
+tools/cli-smoke/matrix-results/
+
+# Superpowers brainstorm sessions (local)
+.superpowers/
+
+# Scratch working dirs (local only)
+output/
+.omx/
+.playwright-cli/
+
+# Playwright Electron E2E artifacts (generated per run)
+e2e/test-results/
+e2e/report/
+# Playwright root fallback output dir (.last-run.json 등)
+test-results/
+
+# Graphify knowledge graph (local-only, regenerated on demand)
+graphify-out/
+.graphifyignore
+# Graphify auto-rebuild git hooks (installed by `graphify hook install`, host-local — Python 경로 탐지 로직이 호스트별로 다름)
+.githooks/post-checkout
+.githooks/post-commit
+
+# Inspector reports (R12-C2 T11 — gitignore + CI artifact 만)
+tools/inspectors/report.json
+tools/inspectors/report.precommit.json
+
+#문서안올리니까 자꾸 올리지마
+docs/
+.planning/

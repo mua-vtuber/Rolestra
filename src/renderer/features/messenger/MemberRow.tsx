@@ -1,0 +1,134 @@
+/**
+ * MemberRow — 우측 MemberPanel 참여자 섹션의 단일 행 (R5-Task9).
+ *
+ * themeKey 2-way:
+ * - tactical: `<ProfileAvatar shape=token.avatarShape size=28>` (hexagon) + 이름 + 역할(cli)
+ * - retro   : 8px status-dot only + mono 이름 + mono 역할(cli)
+ *
+ * 상태 점(status dot) 색상은 PeopleWidget 과 동일한 4-way token 매핑.
+ * R5 범위에선 정보성(non-interactive). R8+ 에서 프로필 drill-in.
+ *
+ * hex literal 금지.
+ */
+import { clsx } from 'clsx';
+import type { ReactElement } from 'react';
+import { useTranslation } from 'react-i18next';
+
+import { ProfileAvatar } from '../../components/shell/ProfileAvatar';
+import { MemberProfileTrigger } from '../members/MemberProfileTrigger';
+import { useTheme } from '../../theme/use-theme';
+import type { MemberView, WorkStatus } from '../../../shared/member-profile-types';
+
+const STATUS_DOT_CLASS: Record<WorkStatus, string> = {
+  online: 'bg-success',
+  connecting: 'bg-warning',
+  'offline-connection': 'bg-fg-muted',
+  'offline-manual': 'bg-fg-muted',
+};
+
+export interface MemberRowProps {
+  member: MemberView;
+  className?: string;
+  /**
+   * 옵셔널 — 정의되면 행 우측에 × 버튼을 그린다. 채널 멤버 관리 UI 가
+   * 사용. DM / 일반 채널처럼 멤버 변경이 의미 없는 surface 는 prop 미전달.
+   */
+  onRemove?: (providerId: string) => void;
+}
+
+export function MemberRow({
+  member,
+  className,
+  onRemove,
+}: MemberRowProps): ReactElement {
+  const { themeKey, token } = useTheme();
+  const { t } = useTranslation();
+  const statusClass = STATUS_DOT_CLASS[member.workStatus];
+  const fontClass = themeKey === 'retro' ? 'font-mono' : 'font-sans';
+
+  // R10 form-level wiring: drive avatar shape from token. Only the tactical
+  // branch below draws an avatar (retro renders the status dot instead).
+  const avatarShape = token.avatarShape;
+
+  return (
+    <li
+      data-testid="member-row"
+      data-theme-variant={themeKey}
+      data-provider-id={member.providerId}
+      data-status={member.workStatus}
+      className={clsx('flex items-center gap-2', className)}
+    >
+      {themeKey === 'retro' ? (
+        <MemberProfileTrigger member={member}>
+          <button
+            type="button"
+            data-testid="member-row-trigger"
+            aria-label={t('member.profileTrigger.ariaLabel', { name: member.displayName })}
+            className="shrink-0 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <span
+              data-testid="member-row-status-dot"
+              aria-hidden="true"
+              className={clsx('h-2 w-2 block rounded-full', statusClass)}
+            />
+          </button>
+        </MemberProfileTrigger>
+      ) : (
+        <MemberProfileTrigger member={member}>
+          <button
+            type="button"
+            data-testid="member-row-trigger"
+            aria-label={t('member.profileTrigger.ariaLabel', { name: member.displayName })}
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+          >
+            <ProfileAvatar
+              member={{
+                id: member.providerId,
+                name: member.displayName,
+              }}
+              profile={member}
+              size={28}
+              shape={avatarShape}
+            />
+          </button>
+        </MemberProfileTrigger>
+      )}
+      <div className={clsx('flex min-w-0 flex-1 flex-col', fontClass)}>
+        <span
+          data-testid="member-row-name"
+          className="truncate text-sm font-medium text-fg"
+        >
+          {member.displayName}
+        </span>
+        {member.characterSheet.length > 0 && (
+          <span
+            data-testid="member-row-character-sheet"
+            className="truncate text-xs text-fg-muted"
+          >
+            {member.characterSheet.split('\n')[0]}
+          </span>
+        )}
+      </div>
+      {themeKey !== 'retro' && (
+        <span
+          data-testid="member-row-status-dot"
+          aria-hidden="true"
+          className={clsx('h-2 w-2 shrink-0 rounded-full', statusClass)}
+        />
+      )}
+      {onRemove !== undefined && (
+        <button
+          type="button"
+          data-testid="member-row-remove"
+          aria-label={t('messenger.memberPanel.removeMember', {
+            name: member.displayName,
+          })}
+          onClick={() => onRemove(member.providerId)}
+          className="shrink-0 text-fg-muted hover:text-danger-text focus:outline-none focus:ring-1 focus:ring-danger rounded-sm px-1 leading-none text-xs"
+        >
+          <span aria-hidden="true">{'✕'}</span>
+        </button>
+      )}
+    </li>
+  );
+}

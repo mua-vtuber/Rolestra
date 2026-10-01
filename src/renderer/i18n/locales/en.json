@@ -1,0 +1,669 @@
+{
+  "aiList": {
+    "description": "Select an AI to open a one-on-one chat with it.",
+    "dmLoadFailed": "Could not load the one-on-one chats: {{message}}",
+    "empty": "No AIs yet. Add one in Settings.",
+    "loadFailed": "Could not load the AI list: {{message}}",
+    "loading": "Loading…",
+    "nav": "AIs",
+    "noCharacterSheet": "No character sheet yet",
+    "openFailed": "Could not open a chat with {{name}}: {{message}}",
+    "title": "AIs"
+  },
+  "app": {
+    "startupDiagnostics": {
+      "settingsCorruption": {
+        "invalidJson": "The settings file (settings.json) is corrupt and defaults were applied. The original was backed up to: {{backupPath}}",
+        "noBackup": "(backup failed — the original file is left in place untouched)",
+        "nonObject": "The settings file (settings.json) had an unexpected shape and defaults were applied. Backup: {{backupPath}}",
+        "readError": "The settings file (settings.json) could not be read and defaults were applied. Backup: {{backupPath}}"
+      }
+    }
+  },
+  "chat": {
+    "emptyProviders": "No AI is registered yet. Add one in Settings → AI to start chatting here.",
+    "nav": "Chat",
+    "openAiSettings": "Add an AI in Settings"
+  },
+  "chatList": {
+    "aria": "Conversations",
+    "deletedAi": "Deleted AI",
+    "empty": "No conversations",
+    "filter": {
+      "all": "All",
+      "archive": "Archive",
+      "dms": "1:1",
+      "label": "Conversation type",
+      "rooms": "Rooms"
+    },
+    "generalName": "General",
+    "loadFailed": "Could not load conversations: {{message}}",
+    "loading": "Loading…",
+    "markReadFailed": "Could not save the read marker: {{message}}",
+    "noMatch": "No matching conversations",
+    "noMessages": "No messages yet",
+    "preview": {
+      "mine": "Me: {{text}}",
+      "named": "{{name}}: {{text}}",
+      "whisper": "{{from}} → {{to}} whisper"
+    },
+    "retry": "Try again",
+    "search": {
+      "label": "Search conversations",
+      "messages": "Search messages for \"{{query}}\"",
+      "placeholder": "Search chats and messages"
+    },
+    "tag": {
+      "dm": "[1:1]",
+      "room": "[room]"
+    },
+    "title": "Chats",
+    "unreadLog": "({{unread}})",
+    "yesterday": "Yesterday"
+  },
+  "error": {
+    "boundary": {
+      "description": "An unexpected error prevented this view from rendering. Try again or restart the app.",
+      "retry": "Try again",
+      "title": "Something went wrong"
+    },
+    "toast": {
+      "dismiss": "Dismiss",
+      "title": "Error"
+    }
+  },
+  "meeting": {
+    "turnSkipped": "⚠ Skipped {{name}}'s turn — currently {{reason}}."
+  },
+  "member": {
+    "avatarPicker": {
+      "catalogueError": "Failed to load default avatar palette.",
+      "currentCustom": "Current uploaded photo",
+      "loadingCatalogue": "Loading default avatars…",
+      "remove": "Remove",
+      "revert": "Revert to default",
+      "title": "Pick avatar",
+      "upload": "Upload photo",
+      "uploadError": "Upload failed: {{message}}",
+      "uploading": "Uploading…"
+    },
+    "profileTrigger": {
+      "ariaLabel": "View profile: {{name}}"
+    },
+    "status": {
+      "connecting": "Reconnecting",
+      "offlineConnection": "Needs attention",
+      "offlineManual": "Out of office",
+      "online": "On duty"
+    }
+  },
+  "message": {
+    "search": {
+      "close": "Close",
+      "empty": "No results",
+      "error": "Search failed: {{msg}}",
+      "filter": {
+        "allChats": "All chats",
+        "currentChannel": "Current channel: #{{name}}"
+      },
+      "loading": "Searching…",
+      "placeholder": "Enter a query (FTS5 syntax supported)",
+      "shortcutHint": "Press Cmd/Ctrl+K to open",
+      "title": "Message search"
+    }
+  },
+  "messenger": {
+    "activity": {
+      "queued": "{{name}} is waiting…",
+      "roundStateError": "Could not load which conversations are in progress. ({{reason}})",
+      "unknownName": "Unknown participant",
+      "whisperWriting": "{{name}} → {{peer}} is writing a whisper…",
+      "writing": "{{name}} is typing…"
+    },
+    "channelDelete": {
+      "body": "Delete the \"{{name}}\" channel?",
+      "bodyDm": "Close the conversation with \"{{name}}\"?",
+      "cancel": "Cancel",
+      "errors": {
+        "generic": "Failed to delete the channel.",
+        "notFound": "Channel not found.",
+        "systemProtected": "System channels cannot be deleted."
+      },
+      "irreversibleHint": "Messages will be permanently removed.",
+      "submit": "Delete",
+      "submitDm": "Close",
+      "title": "Delete channel",
+      "titleDm": "Close conversation"
+    },
+    "channelHeader": {
+      "delete": "Delete",
+      "postOpinion": "Post opinion"
+    },
+    "composer": {
+      "errorSend": "Message failed to send: {{reason}}",
+      "inputAriaLabel": "Message input",
+      "logPrompt": "me>",
+      "placeholder": "Send a message",
+      "placeholderLog": "Type a message and press Enter",
+      "readOnlyBadge": "Read-only — this channel does not accept new messages",
+      "send": "Send",
+      "sendLog": "[send]"
+    },
+    "emptyState": {
+      "noActiveChannel": "Select a channel on the left."
+    },
+    "log": {
+      "me": "Me",
+      "time": "[{{time}}]"
+    },
+    "memberPanel": {
+      "empty": "No participants.",
+      "error": "Could not load participants.",
+      "loading": "Loading participants…",
+      "noActiveChannel": "Select a channel to see participants.",
+      "participantsTitle": "Participants",
+      "participantsTitleCount_one": "Participants · {{count}}",
+      "participantsTitleCount_other": "Participants · {{count}}",
+      "removeMember": "Remove {{name}}"
+    },
+    "pane": {
+      "memberPanel": "Participants and consensus",
+      "thread": "Message thread"
+    },
+    "pass": {
+      "button": "Pass",
+      "buttonLog": "[pass]",
+      "buttonTitle": "Let the AIs continue without writing anything",
+      "errors": {
+        "dmChannel": "You can't pass in a direct message.",
+        "failed": "Could not pass. ({{reason}})",
+        "noParticipants": "There are no AI participants to continue the conversation.",
+        "roomArchived": "You can't pass in an archived conversation.",
+        "roundRunning": "A round is already in progress. Try again when it ends."
+      },
+      "row": "Passed"
+    },
+    "postOpinion": {
+      "cancel": "Cancel",
+      "contentLabel": "Body",
+      "contentPlaceholder": "Write your opinion freely…",
+      "description": "Registers as an opinion card on a general channel. No meeting, consensus, or hand-off — just a lightweight agree/disagree counter.",
+      "errors": {
+        "contentRequired": "Please enter the body.",
+        "contentTooLong": "Body must be no more than {{max}} characters.",
+        "generic": "Could not post the opinion.",
+        "titleTooLong": "Title must be no more than {{max}} characters.",
+        "validation": "Input is invalid."
+      },
+      "submit": "Post",
+      "title": "Post opinion",
+      "titleHint": "Leave empty to auto-derive from the first line of the body.",
+      "titleLabel": "Title (optional)",
+      "titlePlaceholder": "Opinion title"
+    },
+    "silence": {
+      "replyPassed": "{{name}} chose not to reply.",
+      "roundAllSilent": "Everyone has gone quiet.",
+      "turnPassed": "{{name}} stayed silent this time."
+    },
+    "ssmBox": {
+      "description": "Meeting in progress: \"{{topic}}\".",
+      "empty": "No active meeting.",
+      "variants": {
+        "audit": {
+          "heading": "Audit department"
+        },
+        "design": {
+          "empty": "No active design meeting.",
+          "heading": "Design department",
+          "pendingDataNote": "Step progress appears once the design workflow data is wired.",
+          "placeholder": "Design 7-step flow on \"{{topic}}\" is in progress.",
+          "sequenceAria": "Design step sequence"
+        },
+        "general": {
+          "agreeButton": "Agree {{count}}",
+          "agreeButton_one": "Agree {{count}}",
+          "agreeButton_other": "Agree {{count}}",
+          "agreeButtonAria": "Agree ({{count}} votes). Click to toggle.",
+          "agreeButtonAria_one": "Agree ({{count}} vote). Click to toggle.",
+          "agreeButtonAria_other": "Agree ({{count}} votes). Click to toggle.",
+          "aiVote": {
+            "choice": {
+              "abstain": "Abstain",
+              "agree": "Agree",
+              "oppose": "Oppose"
+            },
+            "count": {
+              "abstain": "Abstain {{count}}",
+              "agree": "Agree {{count}}",
+              "failed": "Failed {{count}}",
+              "oppose": "Oppose {{count}}",
+              "pending": "Pending {{count}}"
+            },
+            "error": "Could not load or start the AI vote.",
+            "failure": {
+              "interrupted": "Interrupted",
+              "invalid_response": "Invalid response",
+              "provider_error": "Provider error",
+              "provider_unavailable": "Provider unavailable",
+              "timeout": "Timed out"
+            },
+            "heading": "AI vote",
+            "participantStatus": {
+              "failed": "Failed",
+              "pending": "Pending",
+              "submitted": "Submitted"
+            },
+            "start": "Start AI vote",
+            "starting": "Starting AI vote...",
+            "status": {
+              "completed": "Voting complete",
+              "interrupted": "Voting interrupted",
+              "running": "Voting in progress"
+            }
+          },
+          "cardCount": "{{count}} cards",
+          "cardCount_one": "{{count}} card",
+          "cardCount_other": "{{count}} cards",
+          "cardsAria": "Casual cards",
+          "empty": "No cards registered.",
+          "error": "Failed to load cards — {{message}}",
+          "heading": "General channel",
+          "kind": {
+            "addition": "Addition",
+            "block": "Objection",
+            "revise": "Revision",
+            "root": "Meeting opinion",
+            "self-raised": "Staff opinion",
+            "user-raised": "My opinion"
+          },
+          "lightCounts": "Your votes: agree {{agree}}, oppose {{oppose}}",
+          "loading": "Loading cards...",
+          "opposeButton": "Oppose {{count}}",
+          "opposeButton_one": "Oppose {{count}}",
+          "opposeButton_other": "Oppose {{count}}",
+          "opposeButtonAria": "Oppose ({{count}} votes). Click to toggle.",
+          "opposeButtonAria_one": "Oppose ({{count}} vote). Click to toggle.",
+          "opposeButtonAria_other": "Oppose ({{count}} votes). Click to toggle.",
+          "pendingDataNote": "[##body] card list lights up once Phase 4 lands.",
+          "untitled": "(Untitled)",
+          "voteGroupAria": "Agree / oppose buttons"
+        },
+        "idea": {
+          "empty": "No ideas registered yet.",
+          "heading": "Idea department",
+          "listAria": "Registered ideas",
+          "pendingDataNote": "Idea cards appear once the meeting data is wired.",
+          "placeholder": "Idea meeting on \"{{topic}}\" is in progress."
+        },
+        "implement": {
+          "designatedPlaceholder": "Designated worker slot.",
+          "empty": "No active implementation work.",
+          "fileListPlaceholder": "Working file list slot.",
+          "heading": "Implementation department",
+          "progressPlaceholder": "Progress gauge slot."
+        },
+        "planning": {
+          "empty": "No active meeting.",
+          "heading": "Planning department",
+          "minutesPreviewPlaceholder": "Minutes [agreed]/[excluded] preview appears during the minutes phase.",
+          "pendingDataNote": "The opinion tree appears once the meeting data is wired.",
+          "placeholder": "Meeting in progress: \"{{topic}}\".",
+          "treeAria": "Opinion tree"
+        },
+        "review": {
+          "heading": "Review department"
+        }
+      }
+    },
+    "thread": {
+      "empty": "No messages yet",
+      "error": "Couldn't load messages. Please try again.",
+      "loading": "Loading messages…"
+    },
+    "whisper": {
+      "errors": {
+        "consensus_folder_contains_app_data": "This AI cannot run because the app folder layout is invalid. The folders involved are recorded in the app log.",
+        "invalid_response": "An AI returned an invalid response format.",
+        "opinion_registration_failed": "Registering the opinion card failed.",
+        "participant_alias_collision": "This turn was skipped because two participants in this room got the same internal identifier. Create a new room with the same participants.",
+        "provider_error": "An AI response failed.",
+        "provider_unavailable": "An AI is unavailable.",
+        "recipient_unavailable": "The whisper could not be delivered — the recipient is no longer in this room.",
+        "timeout": "An AI response timed out.",
+        "whisper_limit": "The response was too long to store."
+      },
+      "errorWithDetail": "{{message}} (Cause: {{detail}})",
+      "label": "Whisper",
+      "observer": "Visible to you as observer",
+      "observerNotice": "You can see public messages and private AI whispers in this room.",
+      "routeIdentity": "Sender ID: {{senderId}} → Recipient ID: {{recipientId}}",
+      "threadReplyLabel": "Reply {{position}}/{{max}}"
+    }
+  },
+  "profile": {
+    "editor": {
+      "account": {
+        "loadFailed": "Could not load the connection details: {{message}}",
+        "title": "Connection"
+      },
+      "apiKey": {
+        "hint": "The key is stored only in this computer's secure storage. Replacing it deletes the old key (kept if another AI uses the same key).",
+        "label": "New API key",
+        "oldKeyCleanupFailed": "The key was replaced, but the old key could not be deleted: {{message}}",
+        "refreshFailed": "The API key was changed, but the screen could not refresh: {{message}}",
+        "replace": "Replace key",
+        "replaceAndCleanupFailed": "Could not replace the key, and the new key saved for this attempt could not be deleted: {{message}} / {{cleanup}}",
+        "replaced": "The key was replaced.",
+        "replaceFailed": "Could not replace the key; the old key is unchanged: {{message}}",
+        "replacing": "Replacing…",
+        "storeFailed": "Could not store the new key: {{message}}"
+      },
+      "cancel": "Cancel",
+      "delete": {
+        "button": "Delete AI",
+        "confirm": "Delete {{name}}? This cannot be undone. Its API key is deleted too (kept if another AI uses the same key).",
+        "confirmButton": "Delete",
+        "failed": "Could not delete the AI: {{message}}",
+        "keyCleanupFailed": "{{name}} was deleted, but its API key could not be deleted: {{message}}"
+      },
+      "fetchError": "Failed to load profile.",
+      "fields": {
+        "characterSheet": "Character sheet",
+        "name": "Name"
+      },
+      "loading": "Loading profile…",
+      "nameDuplicateError": "The name \"{{name}}\" is already used by another AI.",
+      "save": "Save",
+      "saveError": "Save failed: {{message}}",
+      "title": "Edit profile — {{name}}"
+    },
+    "popover": {
+      "actions": {
+        "edit": "Edit",
+        "reconnect": "Try connecting",
+        "startDm": "Start DM",
+        "toggleOffline": "Out of office",
+        "toggleOnline": "On duty"
+      },
+      "errors": {
+        "dmFailed": "Failed to create DM channel",
+        "reconnectFailed": "Reconnect failed",
+        "toggleFailed": "Failed to toggle work status"
+      },
+      "fields": {
+        "expertise": "Expertise",
+        "personality": "Personality"
+      },
+      "reconnecting": "Connecting…"
+    }
+  },
+  "providerConnect": {
+    "add": "Add AI",
+    "added": {
+      "body": "It was registered under a default name. You can set its name and character sheet now.",
+      "editProfile": "Edit name and character sheet",
+      "title": "Added {{name}}"
+    },
+    "api": {
+      "title": "Connect with an API key"
+    },
+    "cli": {
+      "add": "Add",
+      "added": "Added",
+      "detail": "CLI · installed",
+      "detailVersion": "CLI · installed · {{version}}",
+      "wslName": "{{name}} ({{distro}})"
+    },
+    "close": "Close",
+    "connectedRefreshFailed": "The AI was registered, but the view could not refresh. Close this dialog and check again.",
+    "detectFailed": "Could not check installed CLIs: {{message}}",
+    "detecting": "Checking installed CLIs…",
+    "endpoint": "Endpoint",
+    "error": {
+      "addFailed": "Could not add the AI: {{message}}",
+      "duplicateName": "Another AI already uses the name '{{name}}'.",
+      "keyCleanupFailed": "The API key saved for this attempt could not be deleted ({{message}}). The app deletes it automatically the next time it starts.",
+      "keyStoreFailed": "Could not save the API key: {{message}}",
+      "localModelMissing": "Ollama does not have the {{model}} model, so the AI was not added.",
+      "localNotReady": "Ollama changed, so the AI was not added. Check the new search result.",
+      "modelListFailed": "Could not get the model list: {{message}}"
+    },
+    "found": {
+      "rescan": "Search again",
+      "rescanning": "Searching…",
+      "title": "Found on this computer"
+    },
+    "invalidEndpoint": "Enter an http or https URL without a username or password in the address.",
+    "loadingModels": "Loading models…",
+    "loadModels": "Load models",
+    "local": {
+      "addModel": "Add this model",
+      "badModelList": "Could not read the Ollama model list at {{address}}.",
+      "checking": "Checking Ollama…",
+      "detail": "({{detail}})",
+      "detectFailed": "Could not check for a local AI: {{message}}",
+      "httpError": "The server at {{address}} answered the Ollama check with an error.",
+      "invalidEndpoint": "The Ollama address setting ({{address}}) is not a valid address. Check the settings file or OLLAMA_HOST.",
+      "modelLegend": "Choose an Ollama model",
+      "name": "Ollama",
+      "noModels": "Ollama is running at {{address}} but has no models installed. Pull a model, then search again.",
+      "notOllama": "The server answering at {{address}} is not Ollama.",
+      "refused": "Nothing answered at {{address}}. Ollama is not installed or not running.",
+      "running_one": "Local · running at {{address}} · {{count}} model",
+      "running_other": "Local · running at {{address}} · {{count}} models",
+      "timeout": "{{address}} did not answer within {{seconds}} seconds.",
+      "unreachable": "Could not reach {{address}}."
+    },
+    "model": "Model",
+    "modelListError": {
+      "auth": "Check your API key — it does not have permission to list models.",
+      "network": "Could not reach the service. Check your network and try again.",
+      "parse": "Could not read the service's response. Please try again shortly."
+    },
+    "name": "Display name",
+    "noCli": "No supported CLI found. You can connect an API or local AI.",
+    "note": "After adding, you can set the name and character sheet right away. You can change the name later too.",
+    "numberedName": "{{name}} {{number}}",
+    "providersFailed": "Could not load the registered AIs, so adding is unavailable: {{message}}",
+    "secret": "API key",
+    "service": {
+      "anthropic": {
+        "defaultName": "Claude",
+        "name": "Claude",
+        "vendor": "Anthropic"
+      },
+      "google": {
+        "defaultName": "Gemini",
+        "name": "Gemini",
+        "vendor": "Google"
+      },
+      "openai": {
+        "defaultName": "ChatGPT",
+        "name": "ChatGPT · Codex",
+        "vendor": "OpenAI"
+      },
+      "other": {
+        "name": "Other",
+        "vendor": "OpenAI-compatible address"
+      }
+    },
+    "title": "Add AI"
+  },
+  "room": {
+    "header": {
+      "dm": "One-on-one chat",
+      "info": "Room info",
+      "members_one": "{{names}} · {{count}} AI",
+      "members_other": "{{names}} · {{count}} AIs",
+      "more": "More",
+      "observing": "Watching whispers too",
+      "observingLog": "[watching whispers too]",
+      "participants": "Participants: {{names}}",
+      "search": "Search this chat"
+    }
+  },
+  "rooms": {
+    "actionFailed": "Could not complete the action. Please try again.",
+    "archive": "End and archive",
+    "archiveHint": "Stop any pending response and archive this room. You can read or delete it afterwards, but cannot resume the conversation.",
+    "cancel": "Cancel",
+    "create": "Create chat room",
+    "createFailed": "Could not create the room. Check your input and try again.",
+    "createTitle": "New chat room",
+    "delete": "Delete room",
+    "deleteHint": "Delete this room and its conversation history. Deleted history cannot be recovered.",
+    "loading": "Loading characters…",
+    "loadingHistory": "Loading earlier messages…",
+    "name": "Room name",
+    "noMembers": "Connect an AI first.",
+    "olderMessages": "Load earlier messages",
+    "participants": "Characters",
+    "personaCustom": "Custom persona for this room",
+    "personaDefault": "Use app default persona",
+    "personaFor": "Room persona for {{name}}",
+    "personaSnapshotHint": "Personas are saved when this room is created. Later changes to app defaults will not affect this room.",
+    "personaSource": "Persona",
+    "readOnly": "This room is archived. You can read or search its history.",
+    "snapshotReadOnly": "These character settings were saved when this room was created."
+  },
+  "settings": {
+    "about": {
+      "appName": "App name",
+      "description": "Version and platform information.",
+      "platform": "Platform",
+      "title": "About",
+      "version": "Version"
+    },
+    "ai": {
+      "apiService": {
+        "anthropic": "Anthropic",
+        "google": "Google",
+        "openai": "OpenAI"
+      },
+      "cause": {
+        "auth": "The service rejected the API key. Change it in Edit.",
+        "cliFailed": "{{name}} could not be started.",
+        "cliGeneric": "CLI",
+        "cliNotFound": "{{name}} was not found. Check that it is installed.",
+        "detail": "({{detail}})",
+        "httpError": "The service answered with an error.",
+        "keyMissing": "No API key is stored for this AI. Enter it again in Edit.",
+        "localBadModelList": "Could not read Ollama's model list.",
+        "localInvalidEndpoint": "The local AI address is not a valid address.",
+        "localModelMissing": "Ollama does not have the {{model}} model.",
+        "localNoModels": "Ollama has no models installed.",
+        "localNotOllama": "The server at this address did not answer as Ollama.",
+        "localNotRunning": "Ollama does not answer. Check that Ollama is running.",
+        "network": "Could not reach the server. Check your internet connection or the server.",
+        "notChecked": "The connection has not been checked yet.",
+        "probeFailed": "Something went wrong while checking the connection.",
+        "timeout": "No answer came within the time limit."
+      },
+      "cli": {
+        "claude": "Claude Code",
+        "codex": "Codex"
+      },
+      "connection": {
+        "api": "{{model}} · API ({{service}})",
+        "cli": "{{name}} · CLI",
+        "cliWsl": "{{name}} · CLI (WSL: {{distro}})",
+        "loading": "Loading connection details…",
+        "local": "{{model}} · Local ({{address}})",
+        "localOllama": "{{model}} · Local (Ollama)"
+      },
+      "connectionLoadFailed": "Could not load the AI connection details: {{message}}",
+      "description": "Add the AIs that join conversations and edit their name, character and connection.",
+      "edit": "Edit",
+      "empty": "No AI is registered. Use \"Add AI\" to connect the first one.",
+      "inactive": {
+        "loadFailed": "Could not load the unsupported CLI list: {{message}}",
+        "reason": {
+          "corruptConfig": "The stored settings are damaged, so this AI cannot be used. Register the CLI again with \"Add AI\".",
+          "unsupportedCommand": "This CLI is no longer supported. Connect Gemini through its API."
+        },
+        "title": "Unsupported CLIs"
+      },
+      "keyNote": "API keys are changed in each AI's edit dialog. There is no separate key list.",
+      "loadFailed": "Could not load the AI list: {{message}}",
+      "loading": "Loading the AI list…",
+      "reconnect": "Reconnect",
+      "reconnectFailed": "Could not reconnect: {{message}}",
+      "reconnecting": "Connecting…",
+      "status": {
+        "connecting": "Connecting",
+        "offlineConnection": "Not connected",
+        "offlineManual": "Turned off",
+        "online": "Connected"
+      },
+      "title": "AI"
+    },
+    "general": {
+      "brightness": {
+        "dark": "Dark",
+        "light": "Light",
+        "system": "Follow system",
+        "title": "Brightness"
+      },
+      "folder": {
+        "description": "This folder holds the app's data, such as conversation history and profile pictures. The app created it automatically.",
+        "loadFailed": "Could not load the folder location: {{message}}",
+        "loading": "Loading the folder location…",
+        "open": "Open folder",
+        "openFailed": "Could not open the folder: {{message}}",
+        "title": "Conversation-log folder"
+      },
+      "language": {
+        "en": "English",
+        "failed": "Could not change the language: {{message}}",
+        "ko": "한국어",
+        "title": "Language"
+      },
+      "theme": {
+        "preview": {
+          "line": "Message text",
+          "myBubble": "My bubble",
+          "name": "Name",
+          "otherBubble": "Their bubble",
+          "time": "[hh:mm]",
+          "whisper": "Whisper",
+          "whisperRoute": "Sender → recipient · whisper"
+        },
+        "retro": {
+          "description": "A dial-up chat log with a monochrome screen and fixed-width type",
+          "name": "Retro"
+        },
+        "tactical": {
+          "description": "A bubble messenger with angled corners and a blue instrument-panel look",
+          "name": "Tactical"
+        },
+        "title": "Theme"
+      },
+      "title": "General"
+    },
+    "notifications": {
+      "description": "Toggle OS notifications and sound per kind.",
+      "display": "Display",
+      "kind": {
+        "error": "Error",
+        "newMessage": "New message"
+      },
+      "loading": "Loading notification settings…",
+      "sound": "Sound",
+      "test": "Test",
+      "title": "Notifications"
+    },
+    "tabs": {
+      "about": "About",
+      "ai": "AI",
+      "general": "General",
+      "label": "Settings tabs"
+    },
+    "title": "Settings"
+  },
+  "shell": {
+    "nav": {
+      "ariaLabel": "Primary navigation"
+    }
+  }
+}

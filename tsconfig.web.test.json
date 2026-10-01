@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.web.json",
+  "compilerOptions": {
+    "composite": false,
+    "noEmit": true,
+    "types": ["vite/client", "node"]
+  },
+  "include": [
+    "src/renderer/**/*.ts",
+    "src/renderer/**/*.tsx",
+    "src/renderer/**/*.json",
+    "src/shared/**/*.ts",
+    "src/test-utils/**/*.ts"
+  ],
+  "exclude": [
+    "_legacy/**",
+    "out/**",
+    "dist/**"
+  ]
+}
