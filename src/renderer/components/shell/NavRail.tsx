@@ -1,12 +1,11 @@
 /**
  * NavRail — the left vertical menu (spec 2026-10-01-messenger-redesign.md
- * R2-1): logo, the main views (채팅, AI 목록), a spacer, then `bottomItems`
+ * R2-1): the main views, a spacer, then `bottomItems`
  * (설정). Each button carries `data-nav-id` for its view id.
  */
 import { clsx } from 'clsx';
 import { useTranslation } from 'react-i18next';
 
-import { useTheme } from '../../theme/use-theme';
 import { LineIcon, type IconName } from './LineIcon';
 
 export interface NavRailItem {
@@ -59,7 +58,6 @@ function NavButton({ item, active, onSelect }: {
 }
 
 export function NavRail({ items, bottomItems = [], activeId, onSelect, className }: NavRailProps) {
-  const { token } = useTheme();
   const { t } = useTranslation();
   return (
     <nav
@@ -70,12 +68,6 @@ export function NavRail({ items, bottomItems = [], activeId, onSelect, className
         className,
       )}
     >
-      <div
-        aria-hidden
-        className="mb-3 flex h-10 w-10 items-center justify-center bg-logo-bg font-display font-bold text-logo-fg shadow-logo [clip-path:var(--clip-control)]"
-      >
-        {token.useLineIcons ? <LineIcon name="dashboard" stroke={1.4} /> : 'R'}
-      </div>
       {items.map((item) => (
         <NavButton key={item.id} item={item} active={item.id === activeId} onSelect={onSelect} />
       ))}

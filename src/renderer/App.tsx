@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import './i18n';
 import { NavRail, Shell } from './components/shell';
 import type { NavRailItem } from './components/shell';
-import { AiListView } from './features/ai-list/AiListView';
 import { conversationLabel } from './features/chat-list/chat-list-model';
 import { MessengerPage } from './features/messenger/MessengerPage';
 import { MessageSearchView } from './features/search/MessageSearchView';
@@ -59,8 +58,8 @@ export function App() {
     }
   }, [globalChannelId, selectedScope, setGlobalChannelId]);
 
-  // Preserve a valid saved DM. Only replace a missing saved ID after both
-  // global lists have loaded successfully; no project is needed for chat.
+  // Restore a room only after the channel lists load; legacy DM selections
+  // fall back to general now that DM entry points have been removed.
   useEffect(() => {
     if (generalChannel === null) return;
     const selected = useActiveChannelStore.getState().globalChannelId;
@@ -116,12 +115,9 @@ export function App() {
 
   const navItems = useMemo<NavRailItem[]>(() => [
     { id: 'messenger', icon: 'chat', label: t('chat.nav') },
-    { id: 'ai-list', icon: 'people', label: t('aiList.nav') },
-  ], [t]);
-  const navBottomItems = useMemo<NavRailItem[]>(() => [
     { id: 'settings', icon: 'settings', label: t('settings.title') },
   ], [t]);
-  const railActive: AppView = view === 'settings' || view === 'ai-list' ? view : 'messenger';
+  const railActive: AppView = view === 'settings' ? view : 'messenger';
 
   const openChannel = useCallback((channelId: string): void => {
     setGlobalChannelId(channelId);
@@ -141,11 +137,9 @@ export function App() {
   }, [summaries, t]);
 
   return (
-    <Shell nav={<NavRail items={navItems} bottomItems={navBottomItems} activeId={railActive}
-      onSelect={(id) => setView(id === 'settings' || id === 'ai-list' ? id : 'messenger')} />}>
-      {view === 'settings' ? <SettingsView /> : view === 'ai-list' ? (
-        <AiListView onOpenChannel={openChannel} onOpenAiSettings={openAiSettings} />
-      ) : (
+    <Shell nav={<NavRail items={navItems} activeId={railActive}
+      onSelect={(id) => setView(id === 'settings' ? id : 'messenger')} />}>
+      {view === 'settings' ? <SettingsView /> : (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
           {members !== null && members.length === 0 ? (
             <div data-testid="chat-empty-provider" className="mx-4 mt-3 flex shrink-0 items-center justify-between gap-3 border border-border-soft px-4 py-3 [background:var(--color-panel-bg)] [clip-path:var(--clip-control)]">

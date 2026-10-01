@@ -4,9 +4,10 @@
  * the room-info drawer (closed by default).
  */
 import { expect, type Locator, type Page } from '@playwright/test';
+import { invokeInApp } from './isolated-app';
 
-/** A left-rail button by view id: `messenger`, `ai-list` or `settings`. */
-export function navButton(page: Page, viewId: 'messenger' | 'ai-list' | 'settings'): Locator {
+/** A left-rail button by view id: `messenger` or `settings`. */
+export function navButton(page: Page, viewId: 'messenger' | 'settings'): Locator {
   return page.locator(`[data-testid="nav-rail"] [data-nav-id="${viewId}"]`);
 }
 
@@ -18,11 +19,7 @@ export function generalChatRow(page: Page): Locator {
   return page.locator('[data-testid="chat-list-row"][data-kind="general"]');
 }
 
-export function dmChatRow(page: Page, providerId: string): Locator {
-  return page.locator(`[data-testid="chat-list-row"][data-kind="dm"][data-provider-id="${providerId}"]`);
-}
-
-export function chatListFilter(page: Page, filter: 'all' | 'rooms' | 'dms' | 'archive'): Locator {
+export function chatListFilter(page: Page, filter: 'all' | 'rooms' | 'archive'): Locator {
   return page.locator(`[data-testid="chat-list-filter"][data-filter="${filter}"]`);
 }
 
@@ -40,11 +37,16 @@ export async function openRoomInfo(page: Page): Promise<void> {
   await expect(page.getByTestId('messenger-member-panel')).toBeVisible();
 }
 
-/** Opens (or creates) the 1:1 chat with an AI from the AI list screen. */
-export async function openDmFromAiList(page: Page, providerId: string): Promise<void> {
-  await navButton(page, 'ai-list').click();
-  const row = page.locator(`[data-testid="ai-list-row"][data-provider-id="${providerId}"]`);
-  await expect(row).toBeEnabled({ timeout: 10_000 });
-  await row.click();
-  await expect(page.getByTestId('messenger-page')).toBeVisible({ timeout: 10_000 });
+/** Creates a room through the dialog; the thread switches to it. */
+export async function createRoom(page: Page, name: string, providerIds: string[]): Promise<string> {
+  await page.getByTestId('room-create-open').click();
+  await page.getByTestId('room-create-name').fill(name);
+  for (const providerId of providerIds) await page.getByTestId(`room-participant-${providerId}`).check();
+  await page.getByTestId('room-create-submit').click();
+  await expect(page.getByTestId('room-create-dialog')).toBeHidden();
+  const { rooms } = await invokeInApp(page, 'room:list', undefined);
+  const room = rooms.find((entry) => entry.name === name);
+  if (!room) throw new Error(`Room was not created: ${name}`);
+  await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', room.id);
+  return room.id;
 }

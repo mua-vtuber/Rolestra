@@ -104,25 +104,27 @@ const config: Config = {
       },
       // Named type scale from the 2026-10-01 mockups (Main / Settings / AddAI
       // .dc.html). Components use these names, never inline pixel sizes.
+      // Sizes come from the theme (tools/theme TYPE_SCALE + typeScaleOffset):
+      // tactical uses the base px, retro is 1px smaller at every step.
       fontSize: {
         // list time, time beside a bubble, avatar initials
-        micro: ['11px', { lineHeight: '16px' }],
+        micro: ['var(--text-micro)', { lineHeight: '16px' }],
         // filter chips, subtitles, sender name, date line, notices,
         // typing line (bubbles), log [hh:mm], settings row details
-        meta: ['12px', { lineHeight: '18px' }],
+        meta: ['var(--text-meta)', { lineHeight: '18px' }],
         // chat row preview, search field, settings descriptions and
         // section labels, typing line (log)
-        preview: ['13px', { lineHeight: '19px' }],
+        preview: ['var(--text-preview)', { lineHeight: '19px' }],
         // message text, composer, chat row name, log lines, settings tabs
-        body: ['14px', { lineHeight: '1.5' }],
+        body: ['var(--text-body)', { lineHeight: '1.5' }],
         // AI name in a settings roster row
-        'row-title': ['15px', { lineHeight: '1.5' }],
-        'room-title': ['17px', { lineHeight: '24px' }],
-        'dialog-title': ['20px', { lineHeight: '28px' }],
+        'row-title': ['var(--text-row-title)', { lineHeight: '1.5' }],
+        'room-title': ['var(--text-room-title)', { lineHeight: '24px' }],
+        'dialog-title': ['var(--text-dialog-title)', { lineHeight: '28px' }],
         // chat list title, settings menu title
-        'list-title': ['22px', { lineHeight: '28px' }],
+        'list-title': ['var(--text-list-title)', { lineHeight: '28px' }],
         // settings page title, AI list title
-        'page-title': ['24px', { lineHeight: '32px' }],
+        'page-title': ['var(--text-page-title)', { lineHeight: '32px' }],
       },
       spacing: {
         // settings menu row height

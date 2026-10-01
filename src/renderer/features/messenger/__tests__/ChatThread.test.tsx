@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Thread } from '../Thread';
@@ -29,7 +29,8 @@ function stubBridge(rooms: Channel[] = [], history?: ChannelMessage[]) {
   const opinions: unknown[] = [];
   const invoke = vi.fn(async (channel: string, data?: unknown) => {
     switch (channel) {
-      case 'room:list': return { rooms };
+      // IPC returns a fresh serialized value on every refresh.
+      case 'room:list': return { rooms: rooms.map((entry) => ({ ...entry })) };
       case 'channel:get-global-general': return { channel: general };
       case 'channel:list': return { channels: [dm] };
       case 'channel:list-members': return { members: [] };
@@ -92,15 +93,14 @@ describe('chat thread', () => {
       /^(project|queue|meeting|approval|execution|handoff):/.test(channel))).toEqual([]);
   });
 
-  it('offers DM deletion without meeting controls', async () => {
+  it('clears a remembered legacy DM without opening its conversation controls', async () => {
     stubBridge();
     useActiveChannelStore.setState({ globalChannelId: dm.id, selectedScope: 'global' });
-    const onDeleteDm = vi.fn();
-    render(<Thread onDeleteDm={onDeleteDm} />);
-    await clickMenuItem('chat-delete-dm');
-    expect(onDeleteDm).toHaveBeenCalledWith(dm.id);
-    expect(screen.queryByTestId('chat-post-opinion')).toBeNull();
-    expect(screen.queryByTestId('meeting-banner')).toBeNull();
+    render(<Thread />);
+    await waitFor(() => expect(useActiveChannelStore.getState().globalChannelId).toBeNull());
+    expect(screen.getByTestId('thread-empty-state')).toBeTruthy();
+    expect(screen.queryByTestId('room-menu-open')).toBeNull();
+    expect(screen.queryByTestId('composer')).toBeNull();
   });
 
   it('offers opinion posting in a writable chat room and hides it after archive', async () => {
@@ -158,7 +158,7 @@ describe('chat thread', () => {
     await clickMenuItem('chat-post-opinion');
     expect(screen.getByTestId('post-opinion-modal')).toBeTruthy();
     rooms[0] = { ...room, readOnly: true, archivedAt: 10 };
-    await notifyChannelsChanged();
+    await act(async () => { await notifyChannelsChanged(); });
     await waitFor(() => expect(screen.queryByTestId('post-opinion-modal')).toBeNull());
     await openRoomMenu();
     expect(screen.queryByTestId('chat-post-opinion')).toBeNull();

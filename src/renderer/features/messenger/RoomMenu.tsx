@@ -7,7 +7,7 @@
  * button is not drawn.
  */
 import * as Popover from '@radix-ui/react-popover';
-import { useState, type ReactElement } from 'react';
+import { useState, type KeyboardEvent, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
@@ -45,6 +45,45 @@ export function roomMenuItems(
   return items;
 }
 
+function navigateMenu(event: KeyboardEvent<HTMLDivElement>): void {
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+  const index = items.findIndex((item) => item === document.activeElement);
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+    : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+  items[next]?.focus();
+}
+
+/** Shared rendering keeps the header and chat-list menus in sync. */
+export function RoomMenuContent({ items, onSelect, align = 'end', onCloseAutoFocus, onEscapeKeyDown, onInteractOutside }: {
+  items: MenuItem[];
+  onSelect: (item: MenuItem) => void;
+  align?: 'start' | 'end';
+  onCloseAutoFocus?: (event: Event) => void;
+  onEscapeKeyDown?: () => void;
+  onInteractOutside?: () => void;
+}): ReactElement {
+  const { t } = useTranslation();
+  return (
+    <Popover.Portal>
+      <Popover.Content data-testid="room-menu" align={align} sideOffset={4} role="menu"
+        aria-label={t('room.header.more')} onKeyDown={navigateMenu} onCloseAutoFocus={onCloseAutoFocus}
+        onEscapeKeyDown={onEscapeKeyDown} onInteractOutside={onInteractOutside}
+        onContextMenu={(event) => event.preventDefault()}
+        className="z-50 flex min-w-40 flex-col border border-border bg-canvas py-1 text-sm text-fg shadow-panel [clip-path:var(--clip-control)]">
+        {items.map((item) => (
+          <button key={item.testId} type="button" role="menuitem" data-testid={item.testId}
+            onClick={() => onSelect(item)}
+            className={`px-3 py-2 text-left hover:bg-sunk ${item.danger ? 'text-danger-text' : ''}`}>
+            {item.label}
+          </button>
+        ))}
+      </Popover.Content>
+    </Popover.Portal>
+  );
+}
+
 export function RoomMenu({ channel, actions }: { channel: Channel; actions: RoomMenuActions }): ReactElement | null {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -54,22 +93,11 @@ export function RoomMenu({ channel, actions }: { channel: Channel; actions: Room
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <button type="button" data-testid="room-menu-open" aria-label={t('room.header.more')}
-          className="flex h-10 w-10 items-center justify-center text-fg-muted hover:text-fg">
+          className="flex h-7 w-7 shrink-0 items-center justify-center text-fg-muted hover:text-fg">
           <LineIcon name="more" size={18} stroke={2.4} />
         </button>
       </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content data-testid="room-menu" align="end" sideOffset={4} role="menu"
-          className="z-50 flex min-w-40 flex-col border border-border bg-canvas py-1 text-sm text-fg shadow-panel [clip-path:var(--clip-control)]">
-          {items.map((item) => (
-            <button key={item.testId} type="button" role="menuitem" data-testid={item.testId}
-              onClick={() => { setOpen(false); item.run(); }}
-              className={`px-3 py-2 text-left hover:bg-sunk ${item.danger ? 'text-danger-text' : ''}`}>
-              {item.label}
-            </button>
-          ))}
-        </Popover.Content>
-      </Popover.Portal>
+      <RoomMenuContent items={items} onSelect={(item) => { setOpen(false); item.run(); }} />
     </Popover.Root>
   );
 }

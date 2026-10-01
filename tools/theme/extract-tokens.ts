@@ -32,6 +32,21 @@ type ThemeMode = 'light' | 'dark';
 /** Number of AI name colors every theme provides (`namePalette`). */
 const NAME_PALETTE_SIZE = 4;
 
+/**
+ * Base type scale in px (2026-10-01 mockups, tactical). Each theme emits
+ * `--text-<step>: <base + typeScaleOffset>px`; Tailwind's `text-<step>`
+ * classes read those variables. Retro uses -1 because JetBrains Mono and
+ * Nanum Gothic Coding draw about 8-14% larger glyphs than IBM Plex Sans KR
+ * at the same size (measured 2026-10-01).
+ */
+const TYPE_SCALE: ReadonlyArray<readonly [step: string, basePx: number]> = [
+  ['micro', 11], ['meta', 12], ['preview', 13], ['body', 14], ['row-title', 15],
+  ['room-title', 17], ['dialog-title', 20], ['list-title', 22], ['page-title', 24],
+];
+
+/** Largest allowed |typeScaleOffset|, so a typo cannot blow up the scale. */
+const MAX_TYPE_SCALE_OFFSET = 2;
+
 interface RawTheme {
   themeKey: ThemeKey;
   mode: ThemeMode;
@@ -101,6 +116,7 @@ interface RawTheme {
   badgeRadius: 'square';
   messageLayout: 'bubbles' | 'log';
   titlePrefix: string;
+  typeScaleOffset: number;
   bubbleMineBg: string;
   bubbleMineFg: string;
   bubbleMineBorder: string;
@@ -155,7 +171,7 @@ const KEY_ORDER: ReadonlyArray<keyof RawTheme> = [
   'cardTitleStyle', 'approvalBodyStyle', 'miniBtnStyle',
   'gaugeGlow',
   'messengerHeaderPolicy', 'badgeRadius',
-  'messageLayout', 'titlePrefix',
+  'messageLayout', 'titlePrefix', 'typeScaleOffset',
   'bubbleMineBg', 'bubbleMineFg', 'bubbleMineBorder',
   'bubbleOtherBg', 'bubbleOtherBorder',
   'bubbleMineClip', 'bubbleOtherClip', 'avatarClip', 'controlClip',
@@ -185,6 +201,9 @@ function assertThemeShape(name: string, theme: RawTheme): void {
   }
   if (!Array.isArray(theme.namePalette) || theme.namePalette.length !== NAME_PALETTE_SIZE) {
     throw new Error(`theme-source.json: ${name}.namePalette must list exactly ${NAME_PALETTE_SIZE} colors`);
+  }
+  if (!Number.isInteger(theme.typeScaleOffset) || Math.abs(theme.typeScaleOffset) > MAX_TYPE_SCALE_OFFSET) {
+    throw new Error(`theme-source.json: ${name}.typeScaleOffset must be an integer between -${MAX_TYPE_SCALE_OFFSET} and ${MAX_TYPE_SCALE_OFFSET}`);
   }
 }
 
@@ -300,6 +319,9 @@ function renderCssBlock(selector: string, theme: RawTheme): string {
   lines.push(`  --font-mono: ${theme.monoFont};`);
   lines.push(`  --radius-panel: ${serializeCssValue('panelRadius', theme.panelRadius)};`);
   lines.push(`  --gauge-glow: ${theme.gaugeGlow};`);
+  for (const [step, basePx] of TYPE_SCALE) {
+    lines.push(`  --text-${step}: ${basePx + theme.typeScaleOffset}px;`);
+  }
   for (const [key, cssVar] of CSS_VAR_MAP) {
     const value = theme[key];
     lines.push(`  ${cssVar}: ${serializeCssValue(key, value)};`);
@@ -456,6 +478,8 @@ export interface ThemeToken {
   messageLayout: MessageLayout;
   /** Text shown before a screen title (retro \`'> '\`, tactical none). */
   titlePrefix: string;
+  /** Pixels added to every step of the type scale (retro -1: its mono fonts draw larger at the same size). */
+  typeScaleOffset: number;
   bubbleMineBg: string;
   bubbleMineFg: string;
   bubbleMineBorder: string;

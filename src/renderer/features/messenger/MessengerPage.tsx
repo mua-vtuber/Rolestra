@@ -38,7 +38,7 @@ export function MessengerPage({ onSearchMessages, className }: MessengerPageProp
   return (
     <div data-testid="messenger-page" data-empty="false"
       className={`flex h-full min-h-0 min-w-0 flex-1 ${className ?? ''}`}>
-      <ChatListColumn activeChannelId={activeChannelId} onSelectChannel={setGlobalChannelId}
+      <ChatListColumn channels={available} activeChannelId={activeChannelId} onSelectChannel={setGlobalChannelId}
         onSearchMessages={onSearchMessages} />
       <section data-testid="messenger-thread" aria-label={t('messenger.pane.thread')}
         className="flex min-h-0 min-w-0 flex-1">

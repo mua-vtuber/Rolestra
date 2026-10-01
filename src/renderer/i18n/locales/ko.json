@@ -1,15 +1,4 @@
 {
-  "aiList": {
-    "description": "AI를 누르면 그 AI와 1:1 대화를 엽니다.",
-    "dmLoadFailed": "1:1 대화 목록을 불러오지 못했습니다: {{message}}",
-    "empty": "등록된 AI가 없습니다. 설정에서 AI를 추가하세요.",
-    "loadFailed": "AI 목록을 불러오지 못했습니다: {{message}}",
-    "loading": "불러오는 중…",
-    "nav": "AI 목록",
-    "noCharacterSheet": "캐릭터 설정이 비어 있습니다",
-    "openFailed": "{{name}}와의 1:1 대화를 열지 못했습니다: {{message}}",
-    "title": "AI 목록"
-  },
   "app": {
     "startupDiagnostics": {
       "settingsCorruption": {
@@ -32,7 +21,6 @@
     "filter": {
       "all": "전체",
       "archive": "보관함",
-      "dms": "1:1",
       "label": "대화 종류",
       "rooms": "채팅방"
     },

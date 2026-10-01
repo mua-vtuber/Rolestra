@@ -13,7 +13,7 @@ import {
 } from './support/isolated-app';
 import { addLocalAi } from './support/local-ai';
 import {
-  chatListFilter, chatListRow, clickRoomMenuItem, dmChatRow, generalChatRow, navButton, openDmFromAiList,
+  chatListFilter, chatListRow, clickRoomMenuItem, createRoom, generalChatRow, navButton,
   openRoomInfo,
 } from './support/messenger-ui';
 
@@ -78,6 +78,101 @@ test('rooms freeze personas and remain readable after archive and restart', asyn
     await expect(chatListRow(page, room.id)).toHaveCount(0);
     const remaining = await invokeInApp(page, 'room:list', undefined);
     expect(remaining.rooms.map((entry) => entry.id)).toEqual([other.id]);
+  } finally {
+    if (isolated) await isolated.app.close().catch(() => {});
+    await fake.close();
+    if (isolated) await rm(isolated.tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a background room context menu keeps the active room selected and targets its own actions', async ({}, testInfo) => {
+  test.setTimeout(120_000);
+  const fake = await startFakeProvider();
+  let isolated: IsolatedApp | null = null;
+  try {
+    isolated = await launchIsolatedApp({ ollamaHost: fake.baseUrl });
+    const page = await isolated.app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    const provider = await addLocalAi(page, fake, 'Context AI', FAKE_OLLAMA_MODEL);
+    await page.reload();
+    const activeRoomId = await createRoom(page, 'Keep this room open', [provider.id]);
+    await sendMessage(page, 'E2E_CONTEXT_KEEP this conversation intact.');
+    await expect(page.getByTestId('thread-message-list').getByText('CF4_REPLY_OTHER', { exact: true }))
+      .toBeVisible({ timeout: 20_000 });
+    const targetRoomId = await createRoom(page, 'Background action target', [provider.id]);
+    const menu = page.getByTestId('room-menu');
+    const menuItems = async () => menu.getByRole('menuitem').evaluateAll((items) => items.map((item) => ({
+      testId: item.getAttribute('data-testid'), label: item.textContent,
+    })));
+
+    await page.getByTestId('room-menu-open').click();
+    await expect(menu).toBeVisible();
+    const headerItems = await menuItems();
+    expect(headerItems.map((item) => item.testId)).toEqual(['chat-post-opinion', 'room-archive-open']);
+    await page.keyboard.press('Escape');
+    await chatListRow(page, activeRoomId).click();
+    await chatListRow(page, targetRoomId).click({ button: 'right' });
+    await expect(menu).toBeVisible();
+    expect(await menuItems()).toEqual(headerItems);
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', activeRoomId);
+    await expect(chatListRow(page, activeRoomId)).toHaveAttribute('data-active', 'true');
+    await expect(chatListRow(page, targetRoomId)).toHaveAttribute('data-active', 'false');
+    await page.screenshot({ path: testInfo.outputPath('background-room-context-menu.png'), fullPage: true });
+
+    // Opinion posting uses the clicked room while the current thread stays open.
+    await page.getByTestId('chat-post-opinion').click();
+    await expect(page.getByTestId('post-opinion-modal')).toHaveAttribute('data-channel-id', targetRoomId);
+    await page.getByTestId('post-opinion-title').fill('Background room proposal');
+    await page.getByTestId('post-opinion-content').fill('Only the background room receives this proposal.');
+    await page.getByTestId('post-opinion-submit').click();
+    await expect(page.getByTestId('post-opinion-modal')).toBeHidden();
+    const targetCards = await invokeInApp(page, 'opinion:listGeneralCards', { channelId: targetRoomId });
+    const activeCards = await invokeInApp(page, 'opinion:listGeneralCards', { channelId: activeRoomId });
+    expect(targetCards.result.cards.map((card) => card.opinion.title)).toEqual(['Background room proposal']);
+    expect(activeCards.result.cards).toEqual([]);
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', activeRoomId);
+
+    // Dismissing the archive confirmation must leave the target writable.
+    await chatListRow(page, targetRoomId).click({ button: 'right' });
+    await page.getByTestId('room-archive-open').click();
+    await expect(page.getByTestId('room-action-dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('room-action-dialog')).toBeHidden();
+    const beforeArchive = await invokeInApp(page, 'room:list', undefined);
+    expect(beforeArchive.rooms.find((room) => room.id === targetRoomId)?.archivedAt).toBeNull();
+    await chatListRow(page, targetRoomId).click({ button: 'right' });
+    await page.getByTestId('room-archive-open').click();
+    await page.getByTestId('room-action-confirm').click();
+    await expect(page.getByTestId('room-action-dialog')).toBeHidden();
+    await expect(chatListRow(page, targetRoomId)).toHaveCount(0);
+    const afterArchive = await invokeInApp(page, 'room:list', undefined);
+    expect(afterArchive.rooms.find((room) => room.id === targetRoomId)).toMatchObject({ readOnly: true });
+    expect(afterArchive.rooms.find((room) => room.id === activeRoomId)).toMatchObject({
+      readOnly: false, archivedAt: null,
+    });
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', activeRoomId);
+    await expect(page.getByTestId('composer-textarea')).toBeEnabled();
+
+    await chatListFilter(page, 'archive').click();
+    await chatListRow(page, targetRoomId).click({ button: 'right' });
+    await expect(menu.getByRole('menuitem')).toHaveCount(1);
+    await expect(page.getByTestId('room-delete-open')).toBeVisible();
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', activeRoomId);
+    await page.getByTestId('room-delete-open').click();
+    await expect(page.getByTestId('room-action-dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('room-action-dialog')).toBeHidden();
+    await expect(chatListRow(page, targetRoomId)).toBeVisible();
+    await chatListRow(page, targetRoomId).click({ button: 'right' });
+    await page.getByTestId('room-delete-open').click();
+    await page.getByTestId('room-action-confirm').click();
+    await expect(chatListRow(page, targetRoomId)).toHaveCount(0);
+    const afterDelete = await invokeInApp(page, 'room:list', undefined);
+    expect(afterDelete.rooms.map((room) => room.id)).toEqual([activeRoomId]);
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', activeRoomId);
+    await expect(page.getByTestId('composer-textarea')).toBeEnabled();
+    await expect(page.getByTestId('thread-message-list').getByText('E2E_CONTEXT_KEEP this conversation intact.', { exact: true }))
+      .toBeVisible();
   } finally {
     if (isolated) await isolated.app.close().catch(() => {});
     await fake.close();
@@ -373,6 +468,11 @@ test('chat setup, history, search, profile and settings survive a real restart',
     await expect(window.getByTestId('chat-empty-connect')).toBeVisible();
     await expect(window.getByTestId('sidebar-section-projects')).toHaveCount(0);
     await expect(window.getByTestId('onboarding-page')).toHaveCount(0);
+    await expect(window.locator('[data-testid="nav-rail"] [data-nav-id]')).toHaveCount(2);
+    await expect(window.locator('[data-testid="nav-rail"] [data-nav-id]').nth(1))
+      .toHaveAttribute('data-nav-id', 'settings');
+    await expect(window.locator('[data-nav-id="ai-list"]')).toHaveCount(0);
+    await expect(window.locator('[data-testid="chat-list-filter"][data-filter="dms"]')).toHaveCount(0);
     await expect.soft(window.getByTestId('composer-textarea'),
       'Fresh chat composer must fit fully inside the viewport').toBeInViewport({ ratio: 1 });
     const emptyChatScreenshot = testInfo.outputPath('chat-empty.png');
@@ -437,6 +537,7 @@ test('chat setup, history, search, profile and settings survive a real restart',
 
     await openRoomInfo(window);
     await window.getByTestId('member-row-trigger').first().click();
+    await expect(window.getByTestId('profile-popover-start-dm')).toHaveCount(0);
     await window.getByTestId('profile-popover-edit').click();
     await window.getByTestId('profile-editor-character-sheet').fill(
       'Role: conversation partner\nPersonality: warm and curious\nExpertise: everyday conversation',
@@ -492,13 +593,12 @@ test('chat setup, history, search, profile and settings survive a real restart',
       ),
     ).toBe(true);
 
-    // A DM starts from the AI list (R2-3).
-    await openDmFromAiList(window, providerId);
-    await expect(dmChatRow(window, providerId)).toHaveAttribute('data-active', 'true');
-    await expect(window.getByTestId('thread')).toHaveAttribute('data-channel-id', /.+/);
-    await sendMessage(window, 'CF4_DM_MESSAGE hello privately.');
+    // A single-AI conversation uses the same room creation flow as any group.
+    const singleAiRoomId = await createRoom(window, 'Conversation partner', [providerId]);
+    await expect(chatListRow(window, singleAiRoomId)).toHaveAttribute('data-active', 'true');
+    await sendMessage(window, 'CF4_SINGLE_AI_MESSAGE hello.');
     await expect(
-      window.getByTestId('thread-message-list').getByText('CF4_REPLY_DM_1'),
+      window.getByTestId('thread-message-list').getByText('CF4_REPLY_OTHER'),
     ).toBeVisible({ timeout: 20_000 });
 
     await navButton(window, 'settings').click();
@@ -579,13 +679,13 @@ test('chat setup, history, search, profile and settings survive a real restart',
     // storedSecretRef, so it issued a stray config:delete-secret for the key
     // this provider just registered with. The next real call then failed with
     // "API key not found" (provider_error). Talk to THIS provider right after
-    // registration — a DM keeps the exchange isolated to this one provider —
+    // registration — a single-AI room isolates this provider's exchange —
     // and confirm the fake server actually received the test key as a Bearer
     // token, and that the reply renders.
     const apiProviderId = apiProvider!.id;
-    await openDmFromAiList(window, apiProviderId);
-    await expect(dmChatRow(window, apiProviderId)).toHaveAttribute('data-active', 'true');
-    await expect(window.getByTestId('thread')).toHaveAttribute('data-channel-id', /.+/);
+    await navButton(window, 'messenger').click();
+    const apiRoomId = await createRoom(window, 'API key check', [apiProviderId]);
+    await expect(chatListRow(window, apiRoomId)).toHaveAttribute('data-active', 'true');
     await sendMessage(window, 'CF4_API_KEY_CHECK please respond.');
     await expect(
       window.getByTestId('thread-message-list').getByText('CF4_REPLY_OTHER'),
@@ -596,16 +696,15 @@ test('chat setup, history, search, profile and settings survive a real restart',
     expect(apiKeyCheckRequest).toBeDefined();
     expect(apiKeyCheckRequest?.authorization).toBe('Bearer dummy-e2e-key-only');
 
-    // Return to the original DM so the restart check below still verifies
-    // that the last active DM is the one restored.
-    await dmChatRow(window, providerId).click();
-    await expect(dmChatRow(window, providerId)).toHaveAttribute('data-active', 'true');
+    // The last active single-AI room is restored after restart.
+    await chatListRow(window, singleAiRoomId).click();
+    await expect(chatListRow(window, singleAiRoomId)).toHaveAttribute('data-active', 'true');
 
     const restartedWindow = await restartIsolatedApp(isolated);
-    const restoredDmEntry = dmChatRow(restartedWindow, providerId);
-    await expect(restoredDmEntry).toHaveAttribute('data-active', 'true');
+    const restoredRoomEntry = chatListRow(restartedWindow, singleAiRoomId);
+    await expect(restoredRoomEntry).toHaveAttribute('data-active', 'true');
     await expect(
-      restartedWindow.getByTestId('thread-message-list').getByText('CF4_REPLY_DM_1'),
+      restartedWindow.getByTestId('thread-message-list').getByText('CF4_REPLY_OTHER'),
     ).toBeVisible();
     await expect(restartedWindow.locator('html')).toHaveAttribute('data-theme', 'retro');
     await generalChatRow(restartedWindow).click();

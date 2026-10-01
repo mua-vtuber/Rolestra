@@ -7,8 +7,10 @@
  * A preview must show the *other* theme while the current one is active,
  * so it reads that theme's values from the token object (`THEMES`, same
  * source as `tokens.css`) for the brightness currently rendered — no
- * color is written here. The preview text describes the layout parts; it
- * is not a sample conversation.
+ * color is written here. The whole card, including its caption, owns its
+ * colors and typography so selecting another theme cannot change its layout.
+ * Cards sit above the shell's retro scanlines to keep both previews independent.
+ * The preview text describes the layout parts; it is not a sample conversation.
  */
 import type { CSSProperties, ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -98,7 +100,13 @@ export function ThemeSection(): ReactElement {
           const preview = THEMES[comboKey(key, mode)];
           return (
             <ChoiceItem key={key} value={key} data-testid="settings-theme-card" data-key={key}
-              className="flex w-72 flex-col text-left data-[state=checked]:border-2">
+              className="relative z-10 flex w-72 flex-col text-left"
+              style={{
+                background: preview.bgCanvas, color: preview.fg,
+                fontFamily: preview.font, fontWeight: 400,
+                clipPath: preview.controlClip, borderWidth: 2,
+                borderColor: themeKey === key ? preview.brand : preview.border,
+              }}>
               <span data-testid="settings-theme-preview" data-layout={preview.messageLayout}
                 className="flex h-32 w-full flex-col justify-center gap-2 border-b p-3.5"
                 style={{ background: preview.bgCanvas, borderColor: preview.borderSoft }}>
@@ -106,9 +114,9 @@ export function ThemeSection(): ReactElement {
                   ? <BubblesPreview preview={preview} />
                   : <LogPreview preview={preview} />}
               </span>
-              <span className="flex flex-col gap-0.5 px-3.5 py-3">
+              <span className="flex flex-1 flex-col gap-0.5 px-3.5 py-3" style={{ background: preview.panelBg }}>
                 <span className="text-base font-bold">{themeName(t, key)}</span>
-                <span className="text-xs font-normal text-fg-muted">{themeDescription(t, key)}</span>
+                <span className="text-xs font-normal" style={{ color: preview.fgMuted }}>{themeDescription(t, key)}</span>
               </span>
             </ChoiceItem>
           );

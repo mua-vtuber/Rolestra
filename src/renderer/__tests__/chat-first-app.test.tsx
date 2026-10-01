@@ -106,14 +106,15 @@ describe('chat-first shell', () => {
       /^(project|queue|meeting|approval|execution|handoff):/.test(channel))).toEqual([]);
   });
 
-  it('restores a saved DM instead of replacing it with general', async () => {
+  it('replaces a saved legacy DM with general without displaying a DM entry', async () => {
     stubBridge();
     useActiveChannelStore.setState({ globalChannelId: dm.id, selectedScope: 'global' });
     render(<App />);
     await waitFor(() => {
-      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(dm.id);
+      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(general.id);
     });
-    expect(useActiveChannelStore.getState().globalChannelId).toBe(dm.id);
+    expect(useActiveChannelStore.getState().globalChannelId).toBe(general.id);
+    expect(document.querySelector('[data-testid="chat-list-row"][data-kind="dm"]')).toBeNull();
   });
 
   it('falls back from a missing saved DM after authoritative lists load', async () => {
@@ -131,13 +132,11 @@ describe('chat-first shell', () => {
     useActiveChannelStore.setState({ globalChannelId: dm.id, selectedScope: 'project' });
     render(<App />);
     await waitFor(() => expect(useActiveChannelStore.getState().selectedScope).toBe('global'));
-    expect(useActiveChannelStore.getState().globalChannelId).toBe(dm.id);
+    await waitFor(() => expect(useActiveChannelStore.getState().globalChannelId).toBe(general.id));
   });
 
-  it('recovers a valid DM stored only in the old project slot before choosing general', async () => {
-    let finishDms: (channels: Channel[]) => void = () => {};
-    const delayedDms = new Promise<Channel[]>((resolve) => { finishDms = resolve; });
-    stubBridge({ dms: delayedDms });
+  it('does not restore a legacy DM saved in the old project slot', async () => {
+    stubBridge();
     localStorage.setItem('rolestra.activeProject.v1', JSON.stringify({
       state: { activeProjectId: 'legacy-project' }, version: 0,
     }));
@@ -150,26 +149,23 @@ describe('chat-first shell', () => {
     await waitFor(() => {
       expect(document.querySelector('[data-testid="chat-list-row"][data-kind="general"]')).not.toBeNull();
     });
-    expect(useActiveChannelStore.getState().globalChannelId).toBeNull();
-    await act(async () => { finishDms([dm]); });
     await waitFor(() => {
-      expect(useActiveChannelStore.getState().globalChannelId).toBe(dm.id);
-      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(dm.id);
+      expect(useActiveChannelStore.getState().globalChannelId).toBe(general.id);
+      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(general.id);
     });
   });
 
-  // spec 2026-10-01-messenger-redesign.md R2-1: rail = logo, chat, AI list,
-  // spacer, settings; no top bar, and message search lives in the chat list.
+  // Follow-up: chat and settings are the only rail entries; legacy DMs stay hidden.
   it('shows the chat list and the rail without a top bar', async () => {
     stubBridge();
     render(<App />);
     expect(await screen.findByTestId('chat-list')).toBeTruthy();
     const navIds = [...document.querySelectorAll('[data-nav-id]')].map((node) => node.getAttribute('data-nav-id'));
-    expect(navIds).toEqual(['messenger', 'ai-list', 'settings']);
+    expect(navIds).toEqual(['messenger', 'settings']);
     expect(screen.queryByTestId('shell-topbar')).toBeNull();
     expect(screen.queryByTestId('shell-topbar-search')).toBeNull();
     await waitFor(() => {
-      expect(document.querySelectorAll('[data-testid="chat-list-row"]').length).toBe(2);
+      expect(document.querySelectorAll('[data-testid="chat-list-row"]').length).toBe(1);
     });
   });
 

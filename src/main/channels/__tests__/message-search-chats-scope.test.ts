@@ -1,7 +1,7 @@
 /**
  * The chat list's search field (spec 2026-10-01-messenger-redesign.md R2-2)
  * searches every conversation the user sees — general, rooms (archived
- * ones too) and DMs — but never the archived work-era project channels.
+ * ones too) — but never legacy DMs or archived work-era project channels.
  */
 import Database from 'better-sqlite3';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -43,9 +43,21 @@ beforeEach(() => {
 afterEach(() => db.close());
 
 describe('message search — every chat conversation', () => {
-  it('finds rows in general, rooms (archived too) and DMs, not in project or stray channels', () => {
+  it('finds general and room messages, including archived rooms, but excludes legacy DMs and other channels', () => {
     const hits = new MessageRepository(db).searchWithContext('needle', { chatsOnly: true });
-    expect(hits.map((hit) => hit.channelId).sort()).toEqual(['archived-room', 'dm', 'general', 'room']);
+    expect(hits.map((hit) => hit.channelId).sort()).toEqual(['archived-room', 'general', 'room']);
+  });
+
+  it('excludes a more relevant legacy DM before applying the result limit', () => {
+    message('ranked-dm', 'dm', 'limited limited limited limited');
+    message('ranked-room', 'room', 'limited in a room');
+    message('ranked-general', 'general', 'limited in general');
+    const repo = new MessageRepository(db);
+
+    expect(repo.searchWithContext('limited', { limit: 1 })[0]?.channelId).toBe('dm');
+    const hits = repo.searchWithContext('limited', { chatsOnly: true, limit: 2 });
+    expect(hits.map((hit) => hit.channelId).sort()).toEqual(['general', 'room']);
+    expect(repo.searchWithContext('limited', { channelId: 'dm' })[0]?.id).toBe('ranked-dm');
   });
 
   it('cannot be combined with a channel or project scope', () => {

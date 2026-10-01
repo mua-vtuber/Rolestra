@@ -5,7 +5,7 @@
  * unread as `(2)`.
  */
 import { clsx } from 'clsx';
-import type { ReactElement } from 'react';
+import type { KeyboardEvent, MouseEvent, ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useTheme } from '../../theme/use-theme';
@@ -23,10 +23,11 @@ export interface ChatListRowProps {
   active: boolean;
   memberById: ReadonlyMap<string, MemberView>;
   onSelect: (channelId: string) => void;
+  onOpenMenu?: (channelId: string, position: { x: number; y: number }, trigger: HTMLButtonElement) => void;
 }
 
 export function ChatListRow({
-  summary, label, preview, time, unread, active, memberById, onSelect,
+  summary, label, preview, time, unread, active, memberById, onSelect, onOpenMenu,
 }: ChatListRowProps): ReactElement {
   const { t } = useTranslation();
   const { token } = useTheme();
@@ -39,7 +40,19 @@ export function ChatListRow({
     'data-active': active ? 'true' : 'false',
     'data-unread': String(summary.unreadCount),
     'aria-current': active ? ('true' as const) : undefined,
+    'aria-haspopup': onOpenMenu ? ('menu' as const) : undefined,
     onClick: () => onSelect(summary.channelId),
+    onContextMenu: (event: MouseEvent<HTMLButtonElement>) => {
+      if (!onOpenMenu) return;
+      event.preventDefault();
+      onOpenMenu(summary.channelId, { x: event.clientX, y: event.clientY }, event.currentTarget);
+    },
+    onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => {
+      if (!onOpenMenu || !(event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) return;
+      event.preventDefault();
+      const bounds = event.currentTarget.getBoundingClientRect();
+      onOpenMenu(summary.channelId, { x: bounds.left, y: bounds.bottom }, event.currentTarget);
+    },
   };
 
   if (token.messageLayout === 'log') {

@@ -22,7 +22,6 @@ const general = chatChannelForTest({
   id: 'general-1', projectId: null, name: 'General',
   kind: 'system_general', readOnly: false, createdAt: 1,
 });
-const dm = chatChannelForTest({ id: 'dm-1', projectId: null, name: 'dm:ai-a', kind: 'dm', readOnly: false, createdAt: 2 });
 const room: Channel = {
   ...general, id: 'room-1', name: 'Room', kind: 'user', isChatRoom: true, role: null, archivedAt: null,
 };
@@ -42,7 +41,6 @@ function stubBridge(options: {
     switch (channel) {
       case 'room:list': return { rooms: options.rooms ?? [] };
       case 'channel:get-global-general': return { channel: general };
-      case 'channel:list': return { channels: [dm] };
       case 'channel:list-members': return { members: MEMBERS };
       case 'opinion:listGeneralCards': return { result: { channelId: (data as { channelId: string }).channelId, cards: [] } };
       case 'message:list-by-channel': return { messages: options.history ?? [] };
@@ -95,14 +93,8 @@ describe('pass button (F1)', () => {
     view.unmount();
 
     open(room);
-    const roomView = render(<Thread />);
-    await screen.findByTestId('chat-pass-turn');
-    roomView.unmount();
-
-    open(dm);
     render(<Thread />);
-    await screen.findByTestId('composer');
-    expect(screen.queryByTestId('chat-pass-turn')).toBeNull();
+    await screen.findByTestId('chat-pass-turn');
   });
 
   it('reads [넘기기] next to the log prompt in the log layout (R3-7)', async () => {
@@ -200,7 +192,7 @@ describe('pass button (F1)', () => {
 });
 
 describe('writing indicator (F5)', () => {
-  it('shows under the message list with room names, in rooms and DMs alike', async () => {
+  it('shows under the message list with participant names in rooms and general', async () => {
     stubBridge({ rooms: [room] });
     open(room);
     const view = render(<Thread />);
@@ -214,10 +206,10 @@ describe('writing indicator (F5)', () => {
       .toBe('Bob → Alice 귓속말 입력 중…'));
     view.unmount();
 
-    open(dm);
+    open(general);
     render(<Thread />);
     await screen.findByTestId('chat-activity-indicator');
-    act(() => useChatActivityStore.getState().apply({ channelId: dm.id, providerId: 'ai-a', phase: 'writing', kind: 'turn' }));
+    act(() => useChatActivityStore.getState().apply({ channelId: general.id, providerId: 'ai-a', phase: 'writing', kind: 'turn' }));
     await waitFor(() => expect(screen.getByTestId('chat-activity-indicator').textContent).toBe('Alice 입력 중…'));
   });
 });

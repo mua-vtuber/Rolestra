@@ -12,6 +12,7 @@ import { rm } from 'node:fs/promises';
 import { passPublicLine, startFakeProvider, type FakeProvider } from './support/fake-provider';
 import { invokeInApp, launchIsolatedApp, sendMessage, type IsolatedApp } from './support/isolated-app';
 import { addLocalAi } from './support/local-ai';
+import { createRoom } from './support/messenger-ui';
 
 /** Model-facing pass line and stored code, as main defines them (chat-whisper-output.ts, message-types.ts). */
 const PASS_MODEL_LINE = 'The user added nothing and let the conversation continue.';
@@ -20,20 +21,6 @@ const PASS_CODE = 'user_pass';
 async function addProviders(page: Page, fake: FakeProvider,
   entries: Array<{ name: string; model: string }>): Promise<Array<{ id: string; displayName: string }>> {
   return Promise.all(entries.map(({ name, model }) => addLocalAi(page, fake, name, model)));
-}
-
-/** Creates a room through the dialog; the thread switches to it. */
-async function createRoom(page: Page, name: string, providerIds: string[]): Promise<string> {
-  await page.getByTestId('room-create-open').click();
-  await page.getByTestId('room-create-name').fill(name);
-  for (const providerId of providerIds) await page.getByTestId(`room-participant-${providerId}`).check();
-  await page.getByTestId('room-create-submit').click();
-  await expect(page.getByTestId('room-create-dialog')).toBeHidden();
-  const { rooms } = await invokeInApp(page, 'room:list', undefined);
-  const room = rooms.find((entry) => entry.name === name);
-  if (!room) throw new Error(`Room was not created: ${name}`);
-  await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', room.id);
-  return room.id;
 }
 
 test('the pass button starts a round without user text while the writing indicator follows each turn', async ({}, testInfo) => {
@@ -99,6 +86,24 @@ test('the pass button starts a round without user text while the writing indicat
     const { channel: dm } = await invokeInApp(page, 'dm:create', { providerId: alice!.id });
     await expect(invokeInApp(page, 'chat:pass-turn', { channelId: dm.id }))
       .rejects.toThrow(/chat_pass_rejected:dm_channel/);
+    // Legacy DM services still handle existing conversations, but neither
+    // the chat list nor its cross-chat search can open them from the UI.
+    await invokeInApp(page, 'message:append', { channelId: dm.id, content: 'CF4_DM_MESSAGE hello privately.' });
+    await expect.poll(async () => {
+      const response = await invokeInApp(page, 'message:list-by-channel', { channelId: dm.id });
+      return response.messages.some((message) => message.content === 'CF4_REPLY_DM_1');
+    }, { timeout: 20_000 }).toBe(true);
+    const legacySearch = await invokeInApp(page, 'message:search', {
+      query: 'CF4_DM_MESSAGE', scope: { kind: 'channel', channelId: dm.id },
+    });
+    expect(legacySearch.hits).toHaveLength(1);
+    const chatSearch = await invokeInApp(page, 'message:search', {
+      query: 'CF4_DM_MESSAGE', scope: { kind: 'chats' },
+    });
+    expect(chatSearch.hits).toEqual([]);
+    await page.reload();
+    await expect(page.getByTestId('thread')).toHaveAttribute('data-channel-id', roomId);
+    await expect(page.locator('[data-testid="chat-list-row"][data-kind="dm"]')).toHaveCount(0);
   } finally {
     if (isolated) await isolated.app.close().catch(() => {});
     await fake.close();

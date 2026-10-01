@@ -1,15 +1,4 @@
 {
-  "aiList": {
-    "description": "Select an AI to open a one-on-one chat with it.",
-    "dmLoadFailed": "Could not load the one-on-one chats: {{message}}",
-    "empty": "No AIs yet. Add one in Settings.",
-    "loadFailed": "Could not load the AI list: {{message}}",
-    "loading": "Loading…",
-    "nav": "AIs",
-    "noCharacterSheet": "No character sheet yet",
-    "openFailed": "Could not open a chat with {{name}}: {{message}}",
-    "title": "AIs"
-  },
   "app": {
     "startupDiagnostics": {
       "settingsCorruption": {
@@ -32,7 +21,6 @@
     "filter": {
       "all": "All",
       "archive": "Archive",
-      "dms": "1:1",
       "label": "Conversation type",
       "rooms": "Rooms"
     },
