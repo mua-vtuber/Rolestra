@@ -52,7 +52,11 @@ function ApiForm({ state }: { state: ProviderConnectState }): ReactElement {
           {t(`providerConnect.modelListError.${state.modelListErrorReason}`)}
         </p>
       ) : null}
-      {state.modelOptions !== null ? (
+      {state.modelOptions?.length === 0 ? (
+        <p data-testid="provider-connect-model-list-empty" role="status" className="text-sm text-fg-muted">
+          {t('providerConnect.modelListEmpty')}
+        </p>
+      ) : state.modelOptions !== null ? (
         <label className="block text-sm">{t('providerConnect.model')}
           <select data-testid="provider-connect-model-select" value={state.model} disabled={pending}
             onChange={(event) => state.setModel(event.target.value)} className={FIELD_CLASS}>

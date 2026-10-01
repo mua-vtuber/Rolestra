@@ -450,6 +450,7 @@
       "unreachable": "{{address}}에 연결하지 못했습니다."
     },
     "model": "모델",
+    "modelListEmpty": "조회된 목록에서 호환되는 채팅 모델을 찾지 못했습니다.",
     "modelListError": {
       "auth": "API 키를 확인하세요. 모델 목록을 가져올 권한이 없습니다.",
       "network": "서비스에 연결하지 못했습니다. 네트워크 상태를 확인하고 다시 시도하세요.",

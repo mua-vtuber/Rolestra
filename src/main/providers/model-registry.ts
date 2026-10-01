@@ -6,10 +6,10 @@
  * fetch / auth / parse failures surface as specific Error subclasses
  * (ModelRegistryAuthError / ModelRegistryNetworkError /
  * ModelRegistryParseError) so callers can distinguish "wrong key" from
- * "service down" from "stale catalog". When no API key is supplied,
- * the static catalog is returned as a known-stale catalog (legitimate
- * UX — user has not chosen to fetch live yet).
+ * "service down" from "stale catalog". Google chat models require a
+ * live listing; other canonical APIs keep their static no-key catalogs.
  */
+import { z } from 'zod';
 import type { ModelListType } from '../../shared/provider-types';
 import { MODEL_REGISTRY_FETCH_TIMEOUT_MS } from '../../shared/timeouts';
 import { API_SERVICE_ENDPOINTS } from '../../shared/api-service-catalog';
@@ -57,9 +57,10 @@ export const ANTHROPIC_API_ENDPOINT = API_SERVICE_ENDPOINTS.anthropic;
 export const GOOGLE_GENAI_API_ENDPOINT = API_SERVICE_ENDPOINTS.google;
 
 /**
- * Static catalog returned when no API key is configured. Once the user
- * provides a key, live fetch takes over; failures throw rather than
- * silently substituting these entries.
+ * Static catalogs for APIs that permit suggestions without a key.
+ * Google requires a live listing and deliberately has no fallback.
+ * Once the user provides a key, failures throw rather than silently
+ * substituting these entries.
  */
 const API_MODELS_STATIC_CATALOG: Record<string, string[]> = {
   [OPENAI_API_ENDPOINT]: ['gpt-4o', 'gpt-4o-mini', 'o3-mini'],
@@ -68,11 +69,30 @@ const API_MODELS_STATIC_CATALOG: Record<string, string[]> = {
     'claude-opus-4-20250514',
     'claude-haiku-4-5-20251001',
   ],
-  [GOOGLE_GENAI_API_ENDPOINT]: [
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-  ],
 };
+
+/**
+ * Reviewed text-generation IDs as of 2026-10-01. This is an eligibility
+ * filter, never a fallback: each ID must also appear in the live models
+ * response with generateContent. Listing does not guarantee quota or
+ * account entitlement. Aliases and unreviewed IDs are excluded.
+ *
+ * https://ai.google.dev/gemini-api/docs/models
+ * https://ai.google.dev/gemini-api/docs/models/gemini-3.1-pro-preview
+ * https://ai.google.dev/gemini-api/docs/deprecations
+ * https://ai.google.dev/api/models
+ */
+const GOOGLE_CHAT_MODEL_IDS = new Set([
+  'gemini-3.8-flash',
+  'gemini-3.7-flash',
+  'gemini-3.6-flash',
+  'gemini-3.5-flash',
+  'gemini-3.5-flash-lite',
+  'gemini-3.1-flash-lite',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-pro-preview-customtools',
+  'gemini-3-flash-preview',
+]);
 
 /**
  * Authentication failure (HTTP 401/403). Distinct from a network
@@ -158,10 +178,17 @@ function isGoogleEndpoint(endpoint: string): boolean {
   return endpoint.includes('generativelanguage.googleapis.com');
 }
 
-type GoogleModelInfo = {
-  name: string;
-  supportedGenerationMethods?: string[];
-};
+const GOOGLE_MODEL_SCHEMA = z.object({
+  name: z.string(),
+  supportedGenerationMethods: z.array(z.string()).optional(),
+});
+
+const GOOGLE_MODEL_PAGE_SCHEMA = z.object({
+  models: z.array(GOOGLE_MODEL_SCHEMA).optional(),
+  nextPageToken: z.string().optional(),
+});
+
+type GoogleModelInfo = z.infer<typeof GOOGLE_MODEL_SCHEMA>;
 
 function isEmbeddingModelId(modelId: string): boolean {
   const id = modelId.toLowerCase();
@@ -233,13 +260,6 @@ async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[
         },
         controller.signal,
       );
-    } else if (isGoogleEndpoint(endpoint)) {
-      body = await fetchJson<unknown>(
-        endpoint,
-        `${endpoint}/models?key=${encodeURIComponent(apiKey)}`,
-        {},
-        controller.signal,
-      );
     } else {
       body = await fetchJson<unknown>(
         endpoint,
@@ -247,11 +267,6 @@ async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[
         { headers: { 'Authorization': `Bearer ${apiKey}` } },
         controller.signal,
       );
-    }
-
-    if (isGoogleEndpoint(endpoint)) {
-      const models = (body as { models?: { name: string }[] }).models ?? [];
-      return models.map((m) => m.name.replace(/^models\//, ''));
     }
 
     const data = (body as { data?: { id: string }[] }).data ?? [];
@@ -262,7 +277,8 @@ async function fetchApiModels(endpoint: string, apiKey: string): Promise<string[
 }
 
 /**
- * Fetch Google models with supportedGenerationMethods metadata.
+ * Fetch all Google model pages within one shared timeout, retaining
+ * supportedGenerationMethods metadata for chat and embedding policies.
  *
  * @throws ModelRegistryAuthError on HTTP 401/403
  * @throws ModelRegistryNetworkError on connection failure / non-2xx / abort
@@ -272,13 +288,30 @@ async function fetchGoogleModelsDetailed(endpoint: string, apiKey: string): Prom
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), MODEL_REGISTRY_FETCH_TIMEOUT_MS);
   try {
-    const body = await fetchJson<{ models?: GoogleModelInfo[] }>(
-      endpoint,
-      `${endpoint}/models?key=${encodeURIComponent(apiKey)}`,
-      {},
-      controller.signal,
-    );
-    return body.models ?? [];
+    const models: GoogleModelInfo[] = [];
+    const seenPageTokens = new Set<string>();
+    let pageToken: string | undefined;
+    while (true) {
+      const url = new URL(`${endpoint}/models`);
+      url.searchParams.set('pageSize', '1000');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const body = await fetchJson<unknown>(
+        endpoint,
+        url.toString(),
+        { headers: { 'x-goog-api-key': apiKey } },
+        controller.signal,
+      );
+      const parsed = GOOGLE_MODEL_PAGE_SCHEMA.safeParse(body);
+      if (!parsed.success) throw new ModelRegistryParseError(endpoint, parsed.error);
+      models.push(...(parsed.data.models ?? []));
+      const nextPageToken = parsed.data.nextPageToken;
+      if (!nextPageToken) return models;
+      if (seenPageTokens.has(nextPageToken)) {
+        throw new ModelRegistryParseError(endpoint, 'Repeated Google models page token');
+      }
+      seenPageTokens.add(nextPageToken);
+      pageToken = nextPageToken;
+    }
   } finally {
     clearTimeout(timeout);
   }
@@ -291,9 +324,9 @@ async function fetchGoogleModelsDetailed(endpoint: string, apiKey: string): Prom
  *                  `providers/local/ollama-detector.ts` instead.
  * @param key     - For CLI: command path. For API: endpoint URL.
  * @param apiKey  - Resolved API key (only for 'api' type). When omitted
- *                  for an API endpoint, returns the static catalog as a
- *                  known-stale list. When provided, attempts live fetch
- *                  and propagates ModelRegistry* errors on failure.
+ *                  for Google, returns no suggestions. Other canonical
+ *                  APIs return a static catalog. When provided, attempts
+ *                  live fetch and propagates ModelRegistry* errors.
  * @returns Array of model identifiers.
  *
  * @throws ModelRegistryAuthError / ModelRegistryNetworkError /
@@ -312,7 +345,8 @@ export async function getModelsForProvider(
     if (apiKey) {
       if (isGoogleEndpoint(key)) {
         const detailed = await fetchGoogleModelsDetailed(key, apiKey);
-        return filterGoogleModelsByMethod(detailed, 'generateContent');
+        return [...new Set(filterGoogleModelsByMethod(detailed, 'generateContent')
+          .filter((modelId) => GOOGLE_CHAT_MODEL_IDS.has(modelId)))];
       }
       const live = await fetchApiModels(key, apiKey);
       return live.filter((m) => !isEmbeddingModelId(m));

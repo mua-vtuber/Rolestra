@@ -6,7 +6,7 @@
  * 연결" / "다시 찾기", then the added step. The API flow and its secret
  * cleanup rules (F1, A1 regressions) are unchanged.
  */
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { StrictMode, useState, type ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -489,6 +489,121 @@ describe('API — key + model loading (F1-3..F1-5)', () => {
     const select = await screen.findByTestId('provider-connect-model-select');
     const options = Array.from(select.querySelectorAll('option')).map((o) => o.textContent);
     expect(options).toEqual(['claude-opus-4-6', 'claude-sonnet-4-6']);
+  });
+
+  it('explains an empty model list without offering a blank selection or allowing an add', async () => {
+    const invoke = stubBridge({ listModelsResult: { ok: true, models: [] } });
+    renderDialog();
+    await loadModelsForOfficialService(invoke);
+
+    const notice = await screen.findByTestId('provider-connect-model-list-empty');
+    expect(notice.textContent).toContain('채팅');
+    expect(screen.queryByTestId('provider-connect-model-select')).toBeNull();
+    expect(screen.queryByTestId('provider-connect-model')).toBeNull();
+    expect((screen.getByTestId('provider-connect-submit') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it.each(['failure result', 'rejected request'] as const)(
+    'discards the previous selection when refreshing models ends with a %s', async (failure) => {
+      const invoke = stubBridge();
+      renderDialog();
+      await loadModelsForOfficialService(invoke);
+      const select = await screen.findByTestId('provider-connect-model-select');
+      fireEvent.change(select, { target: { value: 'model-b' } });
+      expect((screen.getByTestId('provider-connect-submit') as HTMLButtonElement).disabled).toBe(false);
+
+      if (failure === 'failure result') invoke.mockResolvedValueOnce({ ok: false, reason: 'network' });
+      else invoke.mockRejectedValueOnce(new Error('bridge down'));
+      fireEvent.click(screen.getByTestId('provider-connect-load-models'));
+
+      await screen.findByTestId(failure === 'failure result'
+        ? 'provider-connect-model-list-error' : 'provider-connect-error');
+      expect(screen.queryByTestId('provider-connect-model-select')).toBeNull();
+      expect((screen.getByTestId('provider-connect-submit') as HTMLButtonElement).disabled).toBe(true);
+      fireEvent.click(screen.getByTestId('provider-connect-submit'));
+      expect(invoke.mock.calls.some(([channel]) => channel === 'provider:add')).toBe(false);
+    },
+  );
+
+  it.each(['key', 'endpoint', 'service', 'close'] as const)(
+    'ignores a delayed model list after changing the %s', async (change) => {
+      let resolveModels!: (result: { ok: true; models: string[] }) => void;
+      const modelsPromise = new Promise<{ ok: true; models: string[] }>((resolve) => { resolveModels = resolve; });
+      const invoke = stubBridge();
+      const original = invoke.getMockImplementation()!;
+      invoke.mockImplementation((channel, data) => channel === 'provider:list-models' ? modelsPromise : original(channel, data));
+      render(<ConditionalProviderConnect onConnected={vi.fn()} />);
+      fireEvent.click(await enabled('provider-connect-service-other'));
+      fireEvent.change(screen.getByTestId('provider-connect-name'), { target: { value: 'Custom AI' } });
+      fireEvent.change(screen.getByTestId('provider-connect-endpoint'), { target: { value: 'https://api.example.test/v1' } });
+      fireEvent.change(screen.getByTestId('provider-connect-secret'), { target: { value: 'private-token' } });
+      fireEvent.click(screen.getByTestId('provider-connect-load-models'));
+      await waitFor(() => expect(invoke).toHaveBeenCalledWith('provider:list-models', expect.any(Object)));
+
+      if (change === 'key') fireEvent.change(screen.getByTestId('provider-connect-secret'), { target: { value: 'another-key' } });
+      else if (change === 'endpoint') fireEvent.change(screen.getByTestId('provider-connect-endpoint'), { target: { value: 'https://other.example.test/v1' } });
+      else fireEvent.click(screen.getByTestId(change === 'close' ? 'provider-connect-close' : 'provider-connect-service-google'));
+      await act(async () => { resolveModels({ ok: true, models: ['stale-model'] }); });
+
+      expect(screen.queryByTestId('provider-connect-model-select')).toBeNull();
+      if (change !== 'close') {
+        expect((screen.getByTestId('provider-connect-submit') as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByTestId('provider-connect-load-models') as HTMLButtonElement).textContent).toContain('불러오기');
+      }
+    },
+  );
+
+  it('cleans up a newly stored key if the dialog closed before storage finished', async () => {
+    let resolveStore!: (result: { success: boolean }) => void;
+    const storePromise = new Promise<{ success: boolean }>((resolve) => { resolveStore = resolve; });
+    const invoke = stubBridge();
+    const original = invoke.getMockImplementation()!;
+    invoke.mockImplementation((channel, data) => channel === 'config:set-secret' ? storePromise : original(channel, data));
+    render(<ConditionalProviderConnect onConnected={vi.fn()} />);
+    fireEvent.click(await enabled('provider-connect-service-google'));
+    fireEvent.change(screen.getByTestId('provider-connect-secret'), { target: { value: 'private-token' } });
+    fireEvent.click(screen.getByTestId('provider-connect-load-models'));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('config:set-secret', expect.any(Object)));
+    const storeCall = invoke.mock.calls.find(([channel]) => channel === 'config:set-secret');
+
+    fireEvent.click(screen.getByTestId('provider-connect-close'));
+    await act(async () => { resolveStore({ success: true }); });
+
+    expect(invoke).toHaveBeenCalledWith('config:delete-secret', { key: (storeCall?.[1] as { key: string }).key });
+    expect(invoke.mock.calls.filter(([channel]) => channel === 'config:delete-secret')).toHaveLength(1);
+    expect(invoke.mock.calls.some(([channel]) => channel === 'provider:list-models')).toBe(false);
+  });
+
+  it('keeps a newer model request loading when an obsolete refresh completes', async () => {
+    const invoke = stubBridge();
+    renderDialog();
+    await loadModelsForOfficialService(invoke);
+    await screen.findByTestId('provider-connect-model-select');
+    let resolveOld!: (result: { ok: true; models: string[] }) => void;
+    let resolveCurrent!: (result: { ok: true; models: string[] }) => void;
+    const oldPromise = new Promise<{ ok: true; models: string[] }>((resolve) => { resolveOld = resolve; });
+    const currentPromise = new Promise<{ ok: true; models: string[] }>((resolve) => { resolveCurrent = resolve; });
+    const original = invoke.getMockImplementation()!;
+    let listCalls = 0;
+    invoke.mockImplementation((channel, data) => {
+      if (channel === 'provider:list-models') return listCalls++ === 0 ? oldPromise : currentPromise;
+      return original(channel, data);
+    });
+
+    fireEvent.click(screen.getByTestId('provider-connect-load-models'));
+    expect(screen.queryByTestId('provider-connect-model-select')).toBeNull();
+    expect((screen.getByTestId('provider-connect-submit') as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(screen.getByTestId('provider-connect-secret'), { target: { value: 'another-key' } });
+    fireEvent.click(screen.getByTestId('provider-connect-load-models'));
+    await waitFor(() => expect(listCalls).toBe(2));
+
+    await act(async () => { resolveOld({ ok: true, models: ['obsolete-model'] }); });
+    expect(screen.queryByTestId('provider-connect-model-select')).toBeNull();
+    expect((screen.getByTestId('provider-connect-load-models') as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => { resolveCurrent({ ok: true, models: ['current-model'] }); });
+    expect((await screen.findByTestId('provider-connect-model-select') as HTMLSelectElement).value).toBe('current-model');
+    expect((screen.getByTestId('provider-connect-submit') as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('changing the key after a successful load discards the stored secret and clears the model list', async () => {

@@ -456,6 +456,7 @@
       "unreachable": "Could not reach {{address}}."
     },
     "model": "Model",
+    "modelListEmpty": "No compatible chat models were found.",
     "modelListError": {
       "auth": "Check your API key — it does not have permission to list models.",
       "network": "Could not reach the service. Check your network and try again.",

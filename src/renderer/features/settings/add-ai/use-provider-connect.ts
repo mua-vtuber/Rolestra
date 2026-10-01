@@ -69,11 +69,13 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
   const [modelListErrorReason, setModelListErrorReason] = useState<ModelListFailureReason | null>(null);
   // Only "other" lets the user type a model name when listing fails (F1-8).
   const [manualModel, setManualModel] = useState(false);
+  const modelRequestRef = useRef(0);
+  const closingRef = useRef(false);
 
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
-    return () => { mountedRef.current = false; };
+    return () => { mountedRef.current = false; modelRequestRef.current += 1; };
   }, []);
 
   /** In the dialog while it is open; as an app notice once it is closing or gone. */
@@ -100,6 +102,8 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
   }, [report, setStoredSecretRefState, t]);
 
   const resetModelState = useCallback((): void => {
+    modelRequestRef.current += 1;
+    setLoadingModels(false);
     setModelOptions(null);
     setModelListErrorReason(null);
     setManualModel(false);
@@ -107,6 +111,7 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
   }, []);
 
   const close = useCallback((): void => {
+    closingRef.current = true;
     registeredRef.current = false;
     setRegistered(false);
     // While provider:add is in flight the registration owns the key cleanup.
@@ -127,6 +132,7 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
 
   // F1-3: an official service locks its endpoint and pre-fills a free name.
   const selectService = useCallback((next: ApiServiceChoice): void => {
+    closingRef.current = false;
     void discardStoredSecret(false);
     resetModelState();
     setSecret('');
@@ -140,8 +146,8 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
   const handleSecretChange = useCallback((value: string): void => {
     setSecret(value);
     if (storedSecretRef !== null) void discardStoredSecret(false);
-    if (modelOptions !== null || modelListErrorReason !== null) resetModelState();
-  }, [discardStoredSecret, modelListErrorReason, modelOptions, resetModelState, storedSecretRef]);
+    resetModelState();
+  }, [discardStoredSecret, resetModelState, storedSecretRef]);
 
   const handleEndpointChange = useCallback((value: string): void => {
     setEndpoint(value);
@@ -157,8 +163,10 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
       setError(t('providerConnect.invalidEndpoint'));
       return;
     }
+    resetModelState();
+    const request = modelRequestRef.current;
+    const isCurrentRequest = (): boolean => mountedRef.current && modelRequestRef.current === request;
     setLoadingModels(true);
-    setModelListErrorReason(null);
     setError(null);
     let ref = storedSecretRef;
     if (ref === null) {
@@ -166,14 +174,26 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
       try {
         await invoke('config:set-secret', { key: ref, value: trimmedSecret });
       } catch (reason) {
-        setError(keyStoreFailureText(t, reason));
-        setLoadingModels(false);
+        if (isCurrentRequest()) {
+          setError(keyStoreFailureText(t, reason));
+          setLoadingModels(false);
+        }
+        return;
+      }
+      if (!isCurrentRequest()) {
+        // This fresh key never became dialog state or a registered provider's key.
+        try {
+          await invoke('config:delete-secret', { key: ref });
+        } catch (reason) {
+          report(keyCleanupFailureText(t, reason), closingRef.current);
+        }
         return;
       }
       setStoredSecretRefState(ref);
     }
     try {
       const result = await invoke('provider:list-models', { type: 'api', key: trimmedEndpoint, apiKeyRef: ref });
+      if (!isCurrentRequest()) return;
       if (result.ok) {
         setModelOptions(result.models);
         setManualModel(false);
@@ -185,11 +205,11 @@ export function useProviderConnect({ providers, onOpenChange, onConnected, onLoc
       }
     } catch (reason) {
       // Not one of the three list-model reasons (auth / network / parse).
-      setError(modelListFailureText(t, reason));
+      if (isCurrentRequest()) setError(modelListFailureText(t, reason));
     } finally {
-      setLoadingModels(false);
+      if (isCurrentRequest()) setLoadingModels(false);
     }
-  }, [endpoint, secret, service, storedSecretRef, setStoredSecretRefState, t]);
+  }, [endpoint, secret, service, storedSecretRef, report, resetModelState, setStoredSecretRefState, t]);
 
   const register = useCallback(async (
     run: () => Promise<{ provider: ProviderInfo }>,
