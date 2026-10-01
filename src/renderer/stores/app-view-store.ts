@@ -24,8 +24,6 @@ export type AppView =
   | 'dashboard'
   | 'project-dashboard'
   | 'messenger'
-  /** Registered AIs; picking one opens its DM (spec 2026-10-01 R2-4). */
-  | 'ai-list'
   | 'settings'
   | 'onboarding';
 

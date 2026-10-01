@@ -2,7 +2,7 @@
 
 /**
  * ChatListColumn (spec 2026-10-01-messenger-redesign.md R2-2): one list of
- * every conversation ordered by activity, the 전체 / 채팅방 / 1:1 / 보관함
+ * rooms and general ordered by activity, the 전체 / 채팅방 / 보관함
  * filters, unread badges (99+), the log-layout rows, the hand-off to the
  * message search, and a failed read shown as an error.
  */
@@ -82,19 +82,18 @@ afterEach(() => {
 });
 
 describe('ChatListColumn — list and filters', () => {
-  it('mixes general, rooms and DMs by last activity and keeps archived rooms out of 전체', () => {
+  it('orders general and rooms by activity and keeps DMs and archived rooms out of 전체', () => {
     renderColumn('tactical');
-    expect(rowIds()).toEqual(['room-1', 'dm-1', 'general-1']);
+    expect(rowIds()).toEqual(['room-1', 'general-1']);
   });
 
-  it('switches between 채팅방, 1:1 and 보관함', () => {
+  it('switches between 채팅방 and 보관함 without offering a DM filter', () => {
     renderColumn('tactical');
     const filter = (id: string) => document.querySelector(`[data-testid="chat-list-filter"][data-filter="${id}"]`) as HTMLElement;
     fireEvent.click(filter('rooms'));
     expect(rowIds()).toEqual(['room-1', 'general-1']);
     expect(filter('rooms').getAttribute('aria-selected')).toBe('true');
-    fireEvent.click(filter('dms'));
-    expect(rowIds()).toEqual(['dm-1']);
+    expect(document.querySelector('[data-filter="dms"]')).toBeNull();
     fireEvent.click(filter('archive'));
     expect(rowIds()).toEqual(['room-old']);
   });
@@ -103,30 +102,28 @@ describe('ChatListColumn — list and filters', () => {
     const { onSelectChannel } = renderColumn('tactical');
     const rows = screen.getAllByTestId('chat-list-row');
     expect(rows[0]?.textContent).toContain('새벽 감성 토크');
-    expect(rows[1]?.textContent).toContain('루나');
-    expect(rows[2]?.textContent).toContain('일반 채널');
+    expect(rows[1]?.textContent).toContain('일반 채널');
     expect(rows[0]?.getAttribute('data-active')).toBe('true');
-    expect(rows[1]?.getAttribute('data-provider-id')).toBe('ai-luna');
     const badges = screen.getAllByTestId('chat-list-unread').map((badge) => badge.textContent);
-    expect(badges).toEqual(['99+', '2']);
+    expect(badges).toEqual(['99+']);
     fireEvent.click(rows[1] as HTMLElement);
-    expect(onSelectChannel).toHaveBeenCalledWith('dm-1');
+    expect(onSelectChannel).toHaveBeenCalledWith('general-1');
   });
 
-  it('draws a room as a cluster of up to three initials and a DM as that AI', () => {
+  it('draws rooms as clusters of up to three initials', () => {
     renderColumn('tactical');
     const avatars = screen.getAllByTestId('chat-list-avatar');
-    expect(avatars.map((avatar) => avatar.getAttribute('data-avatar'))).toEqual(['cluster', 'dm', 'cluster']);
+    expect(avatars.map((avatar) => avatar.getAttribute('data-avatar'))).toEqual(['cluster', 'cluster']);
     expect(avatars[0]?.textContent).toBe('루해소');
   });
 
   it('filters by the search text and hands the query to the message search', () => {
     const { onSearchMessages } = renderColumn('tactical');
     const input = screen.getByTestId('chat-list-search');
-    fireEvent.change(input, { target: { value: '루나' } });
-    expect(rowIds()).toEqual(['dm-1']);
+    fireEvent.change(input, { target: { value: '새벽' } });
+    expect(rowIds()).toEqual(['room-1']);
     fireEvent.click(screen.getByTestId('chat-list-search-messages'));
-    expect(onSearchMessages).toHaveBeenCalledWith('루나');
+    expect(onSearchMessages).toHaveBeenCalledWith('새벽');
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(onSearchMessages).toHaveBeenCalledTimes(2);
     fireEvent.change(input, { target: { value: 'nothing-matches' } });
@@ -135,15 +132,15 @@ describe('ChatListColumn — list and filters', () => {
 });
 
 describe('ChatListColumn — log layout', () => {
-  it('tags rows [방] / [1:1], inverts the selected row and writes unread as (n)', () => {
+  it('tags rows [방], inverts the selected row and writes unread as (n)', () => {
     renderColumn('retro');
     const rows = screen.getAllByTestId('chat-list-row');
     expect(rows[0]?.textContent).toContain('[방] 새벽 감성 토크');
-    expect(rows[1]?.textContent).toContain('[1:1] 루나');
+    expect(rows[1]?.textContent).toContain('[방] 일반 채널');
     expect(rows[0]?.className).toContain('bg-brand');
     expect(rows[1]?.className).not.toContain('bg-brand');
     expect(screen.queryByTestId('chat-list-avatar')).toBeNull();
-    expect(screen.getAllByTestId('chat-list-unread').map((badge) => badge.textContent)).toEqual(['(99+)', '(2)']);
+    expect(screen.getAllByTestId('chat-list-unread').map((badge) => badge.textContent)).toEqual(['(99+)']);
   });
 });
 
@@ -173,6 +170,6 @@ describe('ChatListColumn — read states', () => {
     renderColumn('tactical');
     expect(screen.getByTestId('chat-list-loading')).toBeTruthy();
     useChannelSummaryStore.setState({ summaries: SUMMARIES });
-    await waitFor(() => expect(rowIds()).toEqual(['room-1', 'dm-1', 'general-1']));
+    await waitFor(() => expect(rowIds()).toEqual(['room-1', 'general-1']));
   });
 });

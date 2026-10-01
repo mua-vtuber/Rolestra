@@ -40,22 +40,22 @@ describe('chat list filters and order', () => {
   const dm = summary({ channelId: 'dm', kind: 'dm', participants: [LUNA], lastActivityAt: 10 });
   const all = [general, room, archived, dm];
 
-  it('전체 hides archived rooms; 채팅방 has rooms and general; 1:1 has DMs; 보관함 only archived rooms', () => {
-    expect(all.filter((s) => matchesFilter(s, 'all')).map((s) => s.channelId)).toEqual(['general', 'room', 'dm']);
+  it('hides legacy DMs from every filter and keeps the archive separate', () => {
+    expect(all.filter((s) => matchesFilter(s, 'all')).map((s) => s.channelId)).toEqual(['general', 'room']);
     expect(all.filter((s) => matchesFilter(s, 'rooms')).map((s) => s.channelId)).toEqual(['general', 'room']);
-    expect(all.filter((s) => matchesFilter(s, 'dms')).map((s) => s.channelId)).toEqual(['dm']);
     expect(all.filter((s) => matchesFilter(s, 'archive')).map((s) => s.channelId)).toEqual(['old']);
   });
 
   it('orders by last activity, newest first, with a stable tie-break', () => {
     const tie = summary({ channelId: 'a-tie', kind: 'room', lastActivityAt: 30 });
-    expect(visibleRows(t, [...all, tie], 'all', '').map((s) => s.channelId)).toEqual(['a-tie', 'room', 'general', 'dm']);
+    expect(visibleRows(t, [...all, tie], 'all', '').map((s) => s.channelId)).toEqual(['a-tie', 'room', 'general']);
   });
 
   it('matches the query against the name and the preview', () => {
-    const withMessage = { ...dm, lastMessage: last({}) };
-    expect(visibleRows(t, [general, room, withMessage], 'all', '감성').map((s) => s.channelId)).toEqual(['room']);
-    expect(visibleRows(t, [general, room, withMessage], 'all', '별 보러').map((s) => s.channelId)).toEqual(['dm']);
+    const withMessage = { ...room, lastMessage: last({}) };
+    expect(visibleRows(t, [general, withMessage], 'all', '감성').map((s) => s.channelId)).toEqual(['room']);
+    expect(visibleRows(t, [general, withMessage], 'all', '별 보러').map((s) => s.channelId)).toEqual(['room']);
+    expect(visibleRows(t, [{ ...dm, lastMessage: last({}) }], 'all', '별 보러')).toEqual([]);
   });
 });
 

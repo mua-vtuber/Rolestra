@@ -95,6 +95,8 @@ export interface ThemeToken {
   messageLayout: MessageLayout;
   /** Text shown before a screen title (retro `'> '`, tactical none). */
   titlePrefix: string;
+  /** Pixels added to every step of the type scale (retro -1: its mono fonts draw larger at the same size). */
+  typeScaleOffset: number;
   bubbleMineBg: string;
   bubbleMineFg: string;
   bubbleMineBorder: string;
@@ -193,6 +195,7 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     badgeRadius: "square",
     messageLayout: "bubbles",
     titlePrefix: "",
+    typeScaleOffset: 0,
     bubbleMineBg: "#0072ad",
     bubbleMineFg: "#ffffff",
     bubbleMineBorder: "#0072ad",
@@ -283,6 +286,7 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     badgeRadius: "square",
     messageLayout: "bubbles",
     titlePrefix: "",
+    typeScaleOffset: 0,
     bubbleMineBg: "rgba(97,200,255,0.16)",
     bubbleMineFg: "#e9f7ff",
     bubbleMineBorder: "rgba(97,200,255,0.6)",
@@ -373,6 +377,7 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     badgeRadius: "square",
     messageLayout: "log",
     titlePrefix: "> ",
+    typeScaleOffset: -1,
     bubbleMineBg: "#1c1c1c",
     bubbleMineFg: "#f6f6f6",
     bubbleMineBorder: "#1c1c1c",
@@ -463,6 +468,7 @@ export const THEMES: Record<ThemeComboKey, ThemeToken> = {
     badgeRadius: "square",
     messageLayout: "log",
     titlePrefix: "> ",
+    typeScaleOffset: -1,
     bubbleMineBg: "#132015",
     bubbleMineFg: "#c5ff9a",
     bubbleMineBorder: "#89f09a",

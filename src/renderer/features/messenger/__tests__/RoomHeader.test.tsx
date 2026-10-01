@@ -63,6 +63,18 @@ afterEach(() => {
 });
 
 describe('RoomHeader', () => {
+  it('closes an archive confirmation when the room is archived instead of changing it to deletion', async () => {
+    const props = { channel: room, title: room.name, members: MEMBERS, drawerOpen: false,
+      onToggleDrawer: vi.fn(), onNavigate: vi.fn() };
+    const view = render(<ThemeProvider><RoomHeader {...props} /></ThemeProvider>);
+    fireEvent.click(screen.getByTestId('room-menu-open'));
+    fireEvent.click(await screen.findByTestId('room-archive-open'));
+    expect(screen.getByTestId('room-action-confirm').textContent).toBe(t('rooms.archive'));
+    view.rerender(<ThemeProvider><RoomHeader {...props}
+      channel={{ ...room, readOnly: true, archivedAt: 5 }} /></ThemeProvider>);
+    expect(screen.queryByTestId('room-action-dialog')).toBeNull();
+  });
+
   it('bubbles: stacked avatars, the room name and "이름들 · AI N명"', () => {
     renderHeader('tactical', room, room.name, MEMBERS);
     expect(screen.getByTestId('room-header-avatars').querySelectorAll('[data-testid="avatar"]')).toHaveLength(3);

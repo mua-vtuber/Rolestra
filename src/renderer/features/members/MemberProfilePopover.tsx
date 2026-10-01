@@ -1,37 +1,6 @@
 /**
- * MemberProfilePopover — light-weight profile card with 4 actions
- * (R8-Task6, spec §7.1 + §7.2).
- *
- * Opened from any member-bearing surface (message bubble avatar, MemberRow,
- * PeopleWidget). Renders the persisted profile fields + work-status + 4
- * action buttons:
- *
- *   1. 편집           → calls `onEdit()` (parent opens MemberProfileEditModal)
- *   2. 외근 ↔ 출근    → `member:set-status` (target inferred from current status)
- *   3. 연락해보기     → `member:reconnect` + updates the local status indicator
- *   4. DM 시작        → reuses StartDmButton's IPC chain (channel:create kind=dm)
- *
- * Why a popover (not a modal):
- *   The member profile is something users want to glance at, not commit to
- *   editing. The popover dismisses on outside click / ESC and never
- *   blocks the underlying view. Editing — which IS commit-worthy — gets
- *   the heavier modal (Task 4) only when the user explicitly clicks
- *   "편집" (D6 in plan).
- *
- * Mutation surfaces:
- *   The popover owns short-lived `pendingAction` + `actionError` state for
- *   the 3 IPC actions (set-status, reconnect, DM). They're independent —
- *   user can fire reconnect while a previous DM call is in flight (the
- *   underlying IPCs are independent on the Main side).
- *
- * Status indicator update strategy (R8-D8):
- *   We do NOT subscribe to a stream. The popover is the only surface that
- *   needs to see the new status immediately (other surfaces refresh on
- *   their next mount). Reconnect's IPC response carries the new status —
- *   we set it locally. Set-status returns `success: true`, so we
- *   optimistically apply the target status without a refetch (the
- *   underlying DB write is synchronous; the next `member:list` mount
- *   pickup will confirm).
+ * Character profile with editing and reconnect actions. Room snapshots
+ * remain read-only. Reconnect updates the local status from its IPC result.
  */
 
 import * as Popover from '@radix-ui/react-popover';
@@ -44,12 +13,10 @@ import { WorkStatusDot } from '../../components/members/WorkStatusDot';
 import { Button } from '../../components/primitives/button';
 import { invoke } from '../../ipc/invoke';
 import { usePanelClipStyle } from '../../theme/use-panel-clip-style';
-import type { Channel } from '../../../shared/channel-types';
 import type {
   MemberView,
   WorkStatus,
 } from '../../../shared/member-profile-types';
-import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
 
 export interface MemberProfilePopoverProps {
   open: boolean;
@@ -67,17 +34,10 @@ export interface MemberProfilePopoverProps {
   customAvatarSrc?: string;
   /** Called when the user clicks "편집". Parent opens the EditModal. */
   onEdit(): void;
-  /** Called when DM is created so the parent can route to messenger view. */
-  onDmStarted?(channel: Channel): void;
   className?: string;
 }
 
-type PendingAction = 'reconnect' | 'start-dm' | null;
-
-function isDuplicateDm(err: unknown): boolean {
-  if (!err || typeof err !== 'object') return false;
-  return (err as { name?: unknown }).name === 'DuplicateDmError';
-}
+type PendingAction = 'reconnect' | null;
 
 export function MemberProfilePopover({
   open,
@@ -86,7 +46,6 @@ export function MemberProfilePopover({
   trigger,
   customAvatarSrc,
   onEdit,
-  onDmStarted,
   className,
 }: MemberProfilePopoverProps): ReactElement {
   const { t } = useTranslation();
@@ -116,42 +75,6 @@ export function MemberProfilePopover({
       setPending(null);
     }
   }, [member.providerId, t]);
-
-  const handleStartDm = useCallback(async (): Promise<void> => {
-    setPending('start-dm');
-    setActionError(null);
-    let resolved: Channel | null = null;
-    try {
-      const { channel } = await invoke('dm:create', {
-        providerId: member.providerId,
-      });
-      resolved = channel;
-    } catch (e) {
-      if (isDuplicateDm(e)) {
-        try {
-          const { channels } = await invoke('channel:list', {
-            projectId: null,
-          });
-          const existing = channels.find(
-            (c) => c.kind === 'dm' && c.name === `dm:${member.providerId}`,
-          );
-          if (existing) resolved = existing;
-        } catch {
-          // fall through to error
-        }
-      }
-      if (!resolved) {
-        setActionError(t('profile.popover.errors.dmFailed'));
-      }
-    } finally {
-      setPending(null);
-    }
-    if (resolved) {
-      notifyChannelsChanged();
-      onDmStarted?.(resolved);
-      onOpenChange(false);
-    }
-  }, [member.providerId, onDmStarted, onOpenChange, t]);
 
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
@@ -239,16 +162,6 @@ export function MemberProfilePopover({
               {pending === 'reconnect'
                 ? t('profile.popover.reconnecting')
                 : t('profile.popover.actions.reconnect')}
-            </Button>
-            <Button
-              type="button"
-              tone="ghost"
-              size="sm"
-              data-testid="profile-popover-start-dm"
-              disabled={pending !== null}
-              onClick={() => void handleStartDm()}
-            >
-              {t('profile.popover.actions.startDm')}
             </Button>
           </footer>}
 

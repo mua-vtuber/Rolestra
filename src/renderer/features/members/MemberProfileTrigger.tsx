@@ -20,7 +20,6 @@ import { useCallback, useState, type ReactElement, type ReactNode } from 'react'
 
 import { MemberProfilePopover } from './MemberProfilePopover';
 import { MemberProfileEditModal } from './MemberProfileEditModal';
-import type { Channel } from '../../../shared/channel-types';
 import type { MemberView } from '../../../shared/member-profile-types';
 
 export interface MemberProfileTriggerProps {
@@ -32,8 +31,6 @@ export interface MemberProfileTriggerProps {
   children: ReactNode;
   /** Pre-resolved URL for member.avatarKind='custom'. */
   customAvatarSrc?: string;
-  /** Forwarded to the popover so the parent can route after DM creation. */
-  onDmStarted?(channel: Channel): void;
   className?: string;
 }
 
@@ -41,7 +38,6 @@ export function MemberProfileTrigger({
   member,
   children,
   customAvatarSrc,
-  onDmStarted,
   className,
 }: MemberProfileTriggerProps): ReactElement {
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -61,7 +57,6 @@ export function MemberProfileTrigger({
         trigger={children}
         customAvatarSrc={customAvatarSrc}
         onEdit={handleEdit}
-        onDmStarted={onDmStarted}
         className={className}
       />
       <MemberProfileEditModal

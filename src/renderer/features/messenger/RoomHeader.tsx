@@ -5,8 +5,8 @@
  * - Bubbles: overlapping participant avatars, the name, and "이름들 · AI N명"
  *   (a DM says "1:1 대화").
  * - Log: `> 이름` and "참가자: …", no avatars.
- * - Right side: "귓속말까지 보는 중" (rooms and the general channel, where AIs
- *   whisper), in-room search, the room-info drawer toggle and the ⋯ menu.
+ * - The ⋯ menu sits beside the title. The right side holds the observer
+ *   marker, in-room search, and the room-info drawer toggle at the edge.
  *
  * Mounted with `key={channel.id}`, so an open opinion draft, confirm
  * dialog or search closes when the user switches conversations.
@@ -49,7 +49,7 @@ export function RoomHeader({
   const { t } = useTranslation();
   const { token } = useTheme();
   const [opinionOpen, setOpinionOpen] = useState(false);
-  const [roomActionOpen, setRoomActionOpen] = useState(false);
+  const [roomAction, setRoomAction] = useState<'archive' | 'delete' | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
   const logLayout = token.messageLayout === 'log';
   const group = channel.kind === 'system_general' || channel.isChatRoom === true;
@@ -74,9 +74,17 @@ export function RoomHeader({
         </span>
       )}
       <div className="min-w-0 flex-1">
-        <h2 data-testid="room-title" className="truncate font-display text-room-title font-bold text-fg">
-          {token.titlePrefix}{title}
-        </h2>
+        <div className="flex min-w-0 items-center gap-1">
+          <h2 data-testid="room-title" className="truncate font-display text-room-title font-bold text-fg">
+            {token.titlePrefix}{title}
+          </h2>
+          <RoomMenu channel={channel} actions={{
+            onPostOpinion: canPostOpinion ? () => setOpinionOpen(true) : undefined,
+            onArchiveRoom: channel.isChatRoom ? () => setRoomAction('archive') : undefined,
+            onDeleteRoom: channel.isChatRoom ? () => setRoomAction('delete') : undefined,
+            onDeleteDm: channel.kind === 'dm' && onDeleteDm ? () => onDeleteDm(channel.id) : undefined,
+          }} />
+        </div>
         <div data-testid="room-subtitle" className="truncate text-meta text-fg-muted">{subtitle}</div>
       </div>
       {group ? (
@@ -103,19 +111,14 @@ export function RoomHeader({
         className={`flex h-10 w-10 shrink-0 items-center justify-center hover:text-fg ${drawerOpen ? 'text-brand-text' : 'text-fg-muted'}`}>
         <LineIcon name="panel" size={18} stroke={2} />
       </button>
-      <RoomMenu channel={channel} actions={{
-        onPostOpinion: canPostOpinion ? () => setOpinionOpen(true) : undefined,
-        onArchiveRoom: channel.isChatRoom ? () => setRoomActionOpen(true) : undefined,
-        onDeleteRoom: channel.isChatRoom ? () => setRoomActionOpen(true) : undefined,
-        onDeleteDm: channel.kind === 'dm' && onDeleteDm ? () => onDeleteDm(channel.id) : undefined,
-      }} />
       {canPostOpinion ? (
         <PostOpinionModal open={opinionOpen} onOpenChange={setOpinionOpen} channelId={channel.id}
           onPosted={(opinion) => notifyOpinionCardsChanged(opinion.channelId)} />
       ) : null}
       {channel.isChatRoom ? (
         <RoomControls channelId={channel.id} readOnly={channel.readOnly}
-          open={roomActionOpen} onOpenChange={setRoomActionOpen} />
+          open={roomAction === (channel.readOnly ? 'delete' : 'archive')}
+          onOpenChange={(open) => { if (!open) setRoomAction(null); }} />
       ) : null}
       <MessageSearchView open={searchOpen} onOpenChange={setSearchOpen}
         scope={{ kind: 'channel', channelId: channel.id, channelName: title }}

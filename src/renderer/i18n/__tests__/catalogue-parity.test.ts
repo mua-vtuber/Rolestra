@@ -19,7 +19,7 @@ const LIVE_CHAT_KEYS = [
   'chat.nav',
   'chatList.title',
   'chatList.search.placeholder',
-  'aiList.title',
+  'settings.title',
   'room.header.observing',
   'chat.emptyProviders',
   'providerConnect.title',

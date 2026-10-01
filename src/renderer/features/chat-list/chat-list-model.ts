@@ -4,8 +4,8 @@
  *
  * - Order: newest activity first; the channel id breaks ties so the order
  *   never flickers.
- * - Filters: 전체 = every conversation except archived rooms; 채팅방 = active
- *   rooms and the general channel; 1:1 = DMs; 보관함 = archived rooms only.
+ * - Filters: 전체/채팅방 = active rooms and the general channel;
+ *   보관함 = archived rooms only. Legacy DMs have no user-facing entry.
  * - Preview: "이름: 내용" for rooms and general, plain content for a DM's AI,
  *   "나: 내용" for the user; a whisper shows only "A → B 귓속말"; notice and
  *   pass rows are translated from their codes (`chat-notice.ts`).
@@ -20,7 +20,7 @@ import {
 } from '../../../shared/channel-summary-types';
 import type { MessageMeta } from '../../../shared/message-types';
 
-export const CHAT_LIST_FILTERS = ['all', 'rooms', 'dms', 'archive'] as const;
+export const CHAT_LIST_FILTERS = ['all', 'rooms', 'archive'] as const;
 export type ChatListFilter = (typeof CHAT_LIST_FILTERS)[number];
 
 export function isArchivedRoom(summary: ChannelSummary): boolean {
@@ -28,10 +28,10 @@ export function isArchivedRoom(summary: ChannelSummary): boolean {
 }
 
 export function matchesFilter(summary: ChannelSummary, filter: ChatListFilter): boolean {
+  if (summary.kind === 'dm') return false;
   switch (filter) {
     case 'all': return !isArchivedRoom(summary);
-    case 'rooms': return summary.kind !== 'dm' && !isArchivedRoom(summary);
-    case 'dms': return summary.kind === 'dm';
+    case 'rooms': return !isArchivedRoom(summary);
     case 'archive': return isArchivedRoom(summary);
   }
 }

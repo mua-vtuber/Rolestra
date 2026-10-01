@@ -5,7 +5,7 @@
  *
  * Title with the "새 채팅방" button (existing room create flow), a search
  * field that filters the list by name / preview and offers a message
- * search across every conversation, the 전체 / 채팅방 / 1:1 / 보관함
+ * search across every conversation, the 전체 / 채팅방 / 보관함
  * filters, and one list ordered by last activity. Rows come from
  * `channel-summary-store.ts`; a failed read is shown, never an empty list.
  */
@@ -21,6 +21,7 @@ import { useMinuteClock } from '../../hooks/use-minute-clock';
 import { useChannelSummaryStore } from '../../stores/channel-summary-store';
 import { useTheme } from '../../theme/use-theme';
 import { CreateRoom } from '../rooms/CreateRoom';
+import type { Channel } from '../../../shared/channel-types';
 import type { MemberView } from '../../../shared/member-profile-types';
 import {
   CHAT_LIST_FILTERS,
@@ -32,24 +33,26 @@ import {
   type ChatListFilter,
 } from './chat-list-model';
 import { ChatListRow } from './ChatListRow';
+import { ChatListContextMenu } from './ChatListContextMenu';
 
 function filterLabel(t: TFunction, filter: ChatListFilter): string {
   switch (filter) {
     case 'all': return t('chatList.filter.all');
     case 'rooms': return t('chatList.filter.rooms');
-    case 'dms': return t('chatList.filter.dms');
     case 'archive': return t('chatList.filter.archive');
   }
 }
 
 export interface ChatListColumnProps {
+  /** Full metadata from the same global channel list used by the open conversation. */
+  channels?: Channel[];
   activeChannelId: string | null;
   onSelectChannel: (channelId: string) => void;
   /** Opens the message search across every conversation with this query. */
   onSearchMessages: (query: string) => void;
 }
 
-export function ChatListColumn({ activeChannelId, onSelectChannel, onSearchMessages }: ChatListColumnProps): ReactElement {
+export function ChatListColumn({ channels = [], activeChannelId, onSelectChannel, onSearchMessages }: ChatListColumnProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { token } = useTheme();
   const summaries = useChannelSummaryStore((state) => state.summaries);
@@ -58,7 +61,12 @@ export function ChatListColumn({ activeChannelId, onSelectChannel, onSearchMessa
   const [filter, setFilter] = useState<ChatListFilter>('all');
   const [query, setQuery] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
+  const [contextTarget, setContextTarget] = useState<{
+    channelId: string; x: number; y: number; trigger: HTMLButtonElement; open: boolean;
+  } | null>(null);
   const logLayout = token.messageLayout === 'log';
+  const channelById = useMemo(() => new Map(channels.map((channel) => [channel.id, channel])), [channels]);
+  const contextChannel = contextTarget ? channelById.get(contextTarget.channelId) : undefined;
 
   const memberById = useMemo(() => new Map<string, MemberView>(
     (members ?? []).map((member) => [member.providerId, member])), [members]);
@@ -140,13 +148,20 @@ export function ChatListColumn({ activeChannelId, onSelectChannel, onSearchMessa
                   preview={previewText(t, summary)}
                   time={listTimeLabel(t, summary.lastActivityAt, now, i18n.language)}
                   unread={unreadLabel(summary.unreadCount)} active={summary.channelId === activeChannelId}
-                  memberById={memberById} onSelect={onSelectChannel} />
+                  memberById={memberById} onSelect={onSelectChannel}
+                  onOpenMenu={channelById.has(summary.channelId) ? (channelId, position, trigger) => {
+                    setContextTarget({ channelId, ...position, trigger, open: true });
+                  } : undefined} />
               </li>
             ))}
           </ul>
         )}
       </div>
       {createOpen ? <CreateRoom open onOpenChange={setCreateOpen} onCreated={onSelectChannel} /> : null}
+      {contextTarget && contextChannel ? (
+        <ChatListContextMenu key={`${contextChannel.id}:${contextChannel.readOnly}`} channel={contextChannel} target={contextTarget}
+          onOpenChange={(open) => setContextTarget((target) => target ? { ...target, open } : null)} />
+      ) : null}
     </section>
   );
 }

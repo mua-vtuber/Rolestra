@@ -139,11 +139,11 @@ const SEARCHABLE_ROW_SQL = `NOT (m.author_kind = 'user' AND json_extract(m.meta_
 
 /**
  * A conversation of the chat app (alias `c` = channels): the global general
- * channel, a DM, or a projectless chat room. Archived work-era project
- * channels stay out of chat search.
+ * channel or a projectless chat room. Legacy DMs and work-era project
+ * channels stay out of chat search, before the result limit is applied.
  */
-const CHAT_CHANNEL_SQL = `(c.project_id IS NULL AND (c.kind IN ('system_general', 'dm') OR
-  EXISTS (SELECT 1 FROM chat_rooms r WHERE r.channel_id = c.id)))`;
+const CHAT_CHANNEL_SQL = `(c.project_id IS NULL AND (c.kind = 'system_general' OR
+  (c.kind = 'user' AND EXISTS (SELECT 1 FROM chat_rooms r WHERE r.channel_id = c.id))))`;
 
 /** Maximum rows either list/search will ever return. Matches the spec's UX cap. */
 export const MESSAGE_LIST_MAX_LIMIT = 200;
@@ -167,7 +167,7 @@ export interface ListByChannelOptions {
 export interface SearchOptions {
   channelId?: string;
   projectId?: string;
-  /** Only chat conversations: general, projectless rooms, DMs (`CHAT_CHANNEL_SQL`). */
+  /** Only current chat conversations: general and projectless rooms (`CHAT_CHANNEL_SQL`). */
   chatsOnly?: boolean;
   /** Maximum rows to return. Clamped to `[1, MESSAGE_SEARCH_MAX_LIMIT]`. */
   limit?: number;

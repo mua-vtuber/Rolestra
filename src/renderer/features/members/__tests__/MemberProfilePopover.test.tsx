@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * MemberProfilePopover — 4 액션 IPC wire (R8-Task6).
+ * MemberProfilePopover — profile editing and reconnect actions.
  */
 
 import {
@@ -56,10 +56,6 @@ vi.mock('../../../ipc/invoke', () => ({
     }
     return invokeResponses.get(channel);
   },
-}));
-
-vi.mock('../../../hooks/channel-invalidation-bus', () => ({
-  notifyChannelsChanged: vi.fn(),
 }));
 
 import { MemberProfilePopover } from '../MemberProfilePopover';
@@ -182,64 +178,19 @@ describe('MemberProfilePopover — room snapshot persona (STEP 3b)', () => {
   });
 });
 
-describe('MemberProfilePopover — DM 시작', () => {
-  it('happy path: dm:create succeeds → onDmStarted + popover closes', async () => {
-    const channel = {
-      id: 'ch-dm-1',
-      projectId: null,
-      kind: 'dm' as const,
-      name: 'dm:p1',
-      createdAt: 1,
-      lastMessageAt: 0,
-    };
-    invokeResponses.set('dm:create', { channel });
-    const onDmStarted = vi.fn();
-    const onOpenChange = vi.fn();
-    render(
-      <MemberProfilePopover
-        open
-        onOpenChange={onOpenChange}
-        member={makeMember()}
-        onEdit={() => {}}
-        onDmStarted={onDmStarted}
-      />,
-    );
-    fireEvent.click(screen.getByTestId('profile-popover-start-dm'));
-    await waitFor(() => expect(onDmStarted).toHaveBeenCalledWith(channel));
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-  });
-
-  it('falls back to channel:list when dm:create throws DuplicateDmError', async () => {
-    const dupErr = new Error('dup') as Error & { name: string };
-    dupErr.name = 'DuplicateDmError';
-    invokeReject = dupErr;
-    invokeRejectChannels = ['dm:create'];
-    invokeResponses.set('channel:list', {
-      channels: [
-        {
-          id: 'ch-dm-existing',
-          projectId: null,
-          kind: 'dm',
-          name: 'dm:p1',
-          createdAt: 1,
-          lastMessageAt: 0,
-        },
-      ],
-    });
-    const onDmStarted = vi.fn();
+describe('MemberProfilePopover — room-focused navigation', () => {
+  it('offers editing and reconnect without an entry to a private DM', () => {
     render(
       <MemberProfilePopover
         open
         onOpenChange={() => {}}
         member={makeMember()}
         onEdit={() => {}}
-        onDmStarted={onDmStarted}
       />,
     );
-    fireEvent.click(screen.getByTestId('profile-popover-start-dm'));
-    await waitFor(() => {
-      expect(onDmStarted).toHaveBeenCalled();
-      expect(onDmStarted.mock.calls[0][0].id).toBe('ch-dm-existing');
-    });
+    expect(screen.getByTestId('profile-popover-edit')).toBeTruthy();
+    expect(screen.getByTestId('profile-popover-reconnect')).toBeTruthy();
+    expect(screen.queryByTestId('profile-popover-start-dm')).toBeNull();
+    expect(invokeCalls).toEqual([]);
   });
 });

@@ -61,17 +61,11 @@ function resetStore(): void {
 
 function stubEmptyChannelBridge(
   general: Channel | null | Promise<Channel | null> = null,
-  dms: Channel[] | Promise<Channel[]> = [],
+  rooms: Channel[] | Promise<Channel[]> = [],
 ) {
   const invoke = vi.fn(async (channel: string, data?: unknown) => {
     switch (channel) {
-      case 'room:list': return { rooms: [] };
-      case 'channel:list':
-        return {
-          channels: (data as { projectId: string | null }).projectId === null
-            ? await dms
-            : [],
-        };
+      case 'room:list': return { rooms: await rooms };
       case 'channel:get-global-general':
         return { channel: await general };
       case 'channel:list-members':
@@ -156,14 +150,14 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     });
   });
 
-  it('keeps known general usable while DM listing is pending and after it fails', async () => {
+  it('keeps known general usable while room listing is pending and after it fails', async () => {
     const general = chatChannelForTest({
       id: 'c-general', projectId: null, name: 'general',
       kind: 'system_general', readOnly: false, createdAt: 1_700_000_000_000,
     });
-    let rejectDms: (reason: Error) => void = () => {};
-    const dms = new Promise<Channel[]>((_resolve, reject) => { rejectDms = reject; });
-    stubEmptyChannelBridge(general, dms);
+    let rejectRooms: (reason: Error) => void = () => {};
+    const rooms = new Promise<Channel[]>((_resolve, reject) => { rejectRooms = reject; });
+    stubEmptyChannelBridge(general, rooms);
     useActiveChannelStore.setState({ globalChannelId: general.id, selectedScope: 'global' });
     renderPage();
 
@@ -174,44 +168,44 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('member-panel').getAttribute('data-channel-id')).toBe(general.id);
     });
-    await act(async () => { rejectDms(new Error('dm list unavailable')); });
+    await act(async () => { rejectRooms(new Error('room list unavailable')); });
     expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(general.id);
     expect(useActiveChannelStore.getState().globalChannelId).toBe(general.id);
   });
 
-  it('keeps known DM usable while general metadata is pending and after it fails', async () => {
-    const dm = chatChannelForTest({
-      id: 'c-dm', projectId: null, name: 'dm:ai-1',
-      kind: 'dm', readOnly: false, createdAt: 1_700_000_000_000,
+  it('keeps a known room usable while general metadata is pending and after it fails', async () => {
+    const room = chatChannelForTest({
+      id: 'c-room', projectId: null, name: 'Campfire',
+      kind: 'user', isChatRoom: true, readOnly: false, createdAt: 1_700_000_000_000,
     });
     let rejectGeneral: (reason: Error) => void = () => {};
     const general = new Promise<Channel | null>((_resolve, reject) => { rejectGeneral = reject; });
-    stubEmptyChannelBridge(general, [dm]);
-    useActiveChannelStore.setState({ globalChannelId: dm.id, selectedScope: 'global' });
+    stubEmptyChannelBridge(general, [room]);
+    useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(dm.id);
+      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(room.id);
     });
     await openDrawer();
     await waitFor(() => {
-      expect(screen.getByTestId('member-panel').getAttribute('data-channel-id')).toBe(dm.id);
+      expect(screen.getByTestId('member-panel').getAttribute('data-channel-id')).toBe(room.id);
     });
     await act(async () => { rejectGeneral(new Error('general unavailable')); });
-    expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(dm.id);
-    expect(useActiveChannelStore.getState().globalChannelId).toBe(dm.id);
+    expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(room.id);
+    expect(useActiveChannelStore.getState().globalChannelId).toBe(room.id);
   });
 
   it('defers clearing an unknown global ID until both lists have loaded', async () => {
-    let resolveDms: (channels: Channel[]) => void = () => {};
-    const dms = new Promise<Channel[]>((resolve) => { resolveDms = resolve; });
-    stubEmptyChannelBridge(null, dms);
+    let resolveRooms: (channels: Channel[]) => void = () => {};
+    const rooms = new Promise<Channel[]>((resolve) => { resolveRooms = resolve; });
+    stubEmptyChannelBridge(null, rooms);
     useActiveChannelStore.setState({ globalChannelId: 'c-deleted', selectedScope: 'global' });
     renderPage();
 
     await waitFor(() => expect(screen.getByTestId('messenger-thread')).toBeTruthy());
     expect(useActiveChannelStore.getState().globalChannelId).toBe('c-deleted');
-    await act(async () => { resolveDms([]); });
+    await act(async () => { resolveRooms([]); });
     await waitFor(() => expect(useActiveChannelStore.getState().globalChannelId).toBeNull());
   });
 
@@ -234,27 +228,27 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
   });
 
   it('opens the conversation picked in the chat list', async () => {
-    const dm = chatChannelForTest({
-      id: 'c-dm', projectId: null, name: 'dm:ai-1',
-      kind: 'dm', readOnly: false, createdAt: 1_700_000_000_000,
+    const room = chatChannelForTest({
+      id: 'c-room', projectId: null, name: 'Campfire',
+      kind: 'user', isChatRoom: true, readOnly: false, createdAt: 1_700_000_000_000,
     });
-    stubEmptyChannelBridge(null, [dm]);
+    stubEmptyChannelBridge(null, [room]);
     const summary: ChannelSummary = {
-      channelId: dm.id, kind: 'dm', name: dm.name, archivedAt: null,
+      channelId: room.id, kind: 'room', name: room.name, archivedAt: null,
       participants: [{ providerId: 'ai-1', displayName: 'Luna' }],
-      lastMessage: null, lastActivityAt: dm.createdAt, unreadCount: 0,
+      lastMessage: null, lastActivityAt: room.createdAt, unreadCount: 0,
     };
     useChannelSummaryStore.setState({ summaries: [summary] });
     renderPage();
 
     const row = await screen.findByTestId('chat-list-row');
-    expect(row.textContent).toContain('Luna');
+    expect(row.textContent).toContain(room.name);
     fireEvent.click(row);
-    expect(useActiveChannelStore.getState().globalChannelId).toBe(dm.id);
+    expect(useActiveChannelStore.getState().globalChannelId).toBe(room.id);
     await waitFor(() => {
-      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(dm.id);
+      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(room.id);
     });
-    expect(screen.getByTestId('room-title').textContent).toContain('Luna');
+    expect(screen.getByTestId('room-title').textContent).toContain(room.name);
   });
 });
 
