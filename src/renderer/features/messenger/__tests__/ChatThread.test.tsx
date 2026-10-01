@@ -67,7 +67,30 @@ beforeEach(() => {
   });
   void i18next.changeLanguage('ko');
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+// jsdom has no layout engine; model overflowing rows while keeping the real
+// Thread, message hook, IPC fetch and stream subscription under test.
+function stubMessageLayout(): void {
+  vi.spyOn(Element.prototype, 'clientHeight', 'get').mockReturnValue(200);
+  vi.spyOn(Element.prototype, 'scrollHeight', 'get').mockImplementation(function (this: Element) {
+    return this.querySelectorAll('[data-message-id]').length * 300;
+  });
+}
+
+function stubMessageStream(): (message: ChannelMessage) => void {
+  const listeners = new Map<string, Set<(payload: unknown) => void>>();
+  vi.stubGlobal('arena', {
+    ...window.arena,
+    onStream: (channel: string, listener: (payload: unknown) => void) => {
+      const subscribers = listeners.get(channel) ?? new Set<(payload: unknown) => void>();
+      subscribers.add(listener);
+      listeners.set(channel, subscribers);
+      return () => subscribers.delete(listener);
+    },
+  });
+  return (message) => listeners.get('stream:channel-message')?.forEach((listener) => listener({ message }));
+}
 
 /** The header actions sit in the room menu (spec 2026-10-01-messenger-redesign.md R3-1). */
 async function openRoomMenu(): Promise<void> {
@@ -81,6 +104,48 @@ async function clickMenuItem(testId: string): Promise<void> {
 }
 
 describe('chat thread', () => {
+  it('opens loaded history at the latest message and resets following when switching rooms', async () => {
+    stubBridge([room]);
+    stubMessageLayout();
+    render(<Thread />);
+    await screen.findByText('Hello from history');
+    const list = screen.getByTestId('thread-message-list');
+    expect(list.scrollTop).toBe(300);
+
+    list.scrollTop = 0;
+    fireEvent.scroll(list);
+    act(() => useActiveChannelStore.setState({ globalChannelId: room.id }));
+    await waitFor(() => expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(room.id));
+    await screen.findByText('Hello from history');
+    expect(screen.getByTestId('thread-message-list').scrollTop).toBe(300);
+  });
+
+  it('follows incoming messages until scrolled up and resumes at the bottom', async () => {
+    stubBridge();
+    stubMessageLayout();
+    const receive = stubMessageStream();
+    render(<Thread />);
+    await screen.findByText('Hello from history');
+    const list = screen.getByTestId('thread-message-list');
+    const incoming: ChannelMessage = {
+      id: 'ai-1', channelId: general.id, meetingId: null,
+      authorId: 'ai', authorKind: 'member', role: 'assistant',
+      content: 'First incoming message', meta: null, createdAt: 1_700_000_000_001,
+    };
+
+    act(() => receive(incoming));
+    expect(list.scrollTop).toBe(600);
+    list.scrollTop = 50;
+    fireEvent.scroll(list);
+    act(() => receive({ ...incoming, id: 'ai-2', content: 'Second incoming message' }));
+    expect(list.scrollTop).toBe(50);
+
+    list.scrollTop = 700;
+    fireEvent.scroll(list);
+    act(() => receive({ ...incoming, id: 'ai-3', content: 'Third incoming message' }));
+    expect(list.scrollTop).toBe(1200);
+  });
+
   it('renders general history and composer without work IPC', async () => {
     const invoke = stubBridge();
     render(<Thread />);

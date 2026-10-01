@@ -9,7 +9,7 @@
  * stored message of the open conversation changes it is sent to
  * `channel:mark-read`, and the chat list row drops to 0 unread.
  */
-import { useEffect, useMemo, useState, type ReactElement } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { notifyError } from '../../components/ErrorBoundary';
@@ -55,6 +55,31 @@ export function Thread({ onDeleteDm, className }: ThreadProps): ReactElement {
     state.summaries?.find((item) => item.channelId === activeChannelId) ?? null);
   const visible = useDocumentVisible();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const messageListRef = useRef<HTMLDivElement>(null);
+  const followLatestRef = useRef(true);
+  const viewportSizeRef = useRef({ width: 0, height: 0 });
+
+  useLayoutEffect(() => {
+    followLatestRef.current = true;
+    const list = messageListRef.current;
+    if (list === null) return;
+    viewportSizeRef.current = { width: list.clientWidth, height: list.clientHeight };
+    if (typeof ResizeObserver === 'undefined') return;
+    // Composer/window size changes can hide the newest row without adding a message.
+    const observer = new ResizeObserver(() => {
+      if (followLatestRef.current) list.scrollTop = list.scrollHeight;
+      viewportSizeRef.current = { width: list.clientWidth, height: list.clientHeight };
+    });
+    observer.observe(list);
+    return () => observer.disconnect();
+  }, [activeChannel?.id]);
+
+  useLayoutEffect(() => {
+    const list = messageListRef.current;
+    // Use the position remembered before rows grew, including replies taller
+    // than the viewport. Reading the new distance here would stop following.
+    if (list !== null && followLatestRef.current) list.scrollTop = list.scrollHeight;
+  }, [activeChannel?.id, messages, token.messageLayout, drawerOpen]);
 
   const speakers = useMemo(() => new Map<string, MessageSpeaker>((members ?? []).map(
     (member, seat) => [member.providerId, { name: member.displayName, seat, profile: member }])), [members]);
@@ -104,7 +129,15 @@ export function Thread({ onDeleteDm, className }: ThreadProps): ReactElement {
             {t('rooms.readOnly')}
           </p>
         ) : null}
-        <div data-testid="thread-message-list" data-layout={token.messageLayout}
+        <div ref={messageListRef} data-testid="thread-message-list" data-layout={token.messageLayout}
+          onScroll={(event) => {
+            const list = event.currentTarget;
+            // A resize can emit scroll before ResizeObserver restores the bottom.
+            // That event is not the reader choosing to leave the latest message.
+            const size = viewportSizeRef.current;
+            if (list.clientWidth !== size.width || list.clientHeight !== size.height) return;
+            followLatestRef.current = list.scrollHeight - list.clientHeight - list.scrollTop <= 48;
+          }}
           className={`flex min-h-0 flex-1 flex-col overflow-y-auto px-7 pb-2 pt-4 ${token.messageLayout === 'log' ? 'gap-3.5' : 'gap-0'}`}>
           {hasOlder ? <button type="button" data-testid="chat-load-older" disabled={loadingOlder}
             onClick={() => { void loadOlder(); }}
@@ -120,7 +153,10 @@ export function Thread({ onDeleteDm, className }: ThreadProps): ReactElement {
         </div>
         <ChatActivityIndicator key={`activity-${activeChannel.id}`} channelId={activeChannel.id} names={nameByProvider} />
         <Composer channelId={activeChannel.id} readOnly={activeChannel.readOnly}
-          onSendSuccess={() => void refresh()}
+          onSendSuccess={() => {
+            followLatestRef.current = true;
+            void refresh();
+          }}
           actions={isGroup(activeChannel) && !activeChannel.readOnly
             ? <PassTurnButton key={`pass-${activeChannel.id}`} channelId={activeChannel.id} />
             : null} />
