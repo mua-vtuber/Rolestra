@@ -151,6 +151,7 @@ describe('v3 migrations 008-011 — schema contract', () => {
         '034-character-sheet',
         '035-whisper-threads',
         '036-channel-read-state',
+        '037-vote-result-message',
       ]);
     });
   });
@@ -512,9 +513,10 @@ describe('v3 migrations 008-011 — schema contract', () => {
       // and 032-whispers; the 2026-09-28 whisper rules added 033-whisper-pairs;
       // F3 (spec 2026-09-29-ai-setup-and-character.md) added 034-character-sheet;
       // whisper threads (spec 2026-10-01 F2) added 035-whisper-threads;
-      // the chat list unread counts (spec 2026-10-01 R4) added 036-channel-read-state.
+      // The chat list unread counts added 036-channel-read-state;
+      // once-only vote result delivery added 037-vote-result-message.
       // The test stays at "no-op on re-run" — only the absolute count changes.
-      expect(before.c).toBe(36);
+      expect(before.c).toBe(37);
 
       // A second pass must not throw (would throw on duplicate CREATE TABLE
       // because v3 migrations omit IF NOT EXISTS, so this proves the migrator
@@ -524,7 +526,7 @@ describe('v3 migrations 008-011 — schema contract', () => {
       const after = db
         .prepare('SELECT COUNT(*) AS c FROM migrations')
         .get() as { c: number };
-      expect(after.c).toBe(36);
+      expect(after.c).toBe(37);
     });
   });
 });

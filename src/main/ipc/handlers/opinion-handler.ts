@@ -67,3 +67,9 @@ export function handleOpinionGetVote(
 ): IpcResponse<'opinion:getVote'> {
   return { result: getChatVoteService().getVote(data.opinionId) };
 }
+
+export function handleOpinionSendVoteResult(
+  data: IpcRequest<'opinion:sendVoteResult'>,
+): IpcResponse<'opinion:sendVoteResult'> {
+  return { result: getChatVoteService().sendResult(data.opinionId) };
+}

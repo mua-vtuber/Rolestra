@@ -16,6 +16,7 @@ import type {
   MessageRole,
   CHAT_PASS_CODE,
 } from './message-types';
+import type { ChatVoteResult } from './chat-vote-types';
 
 export type ChannelSummaryKind = 'general' | 'room' | 'dm';
 
@@ -33,6 +34,7 @@ export interface ChannelSummaryNoticeMeta {
   chatErrorSpeakerName?: string;
   chatSilence?: ChatSilenceNotice;
   chatPass?: typeof CHAT_PASS_CODE;
+  chatVoteResult?: ChatVoteResult;
 }
 
 export interface ChannelSummaryLastMessage {

@@ -222,9 +222,26 @@ function GeneralCardItem({ card, readOnly, onVote }: GeneralCardItemProps): Reac
             {t('messenger.ssmBox.variants.general.aiVote.error')}
           </p>
         ) : null}
+        {aiVote.sendError ? (
+          <p role="alert" data-testid="chat-vote-send-error" className="text-xs text-danger-text">
+            {t('messenger.ssmBox.variants.general.aiVote.sendError')}
+          </p>
+        ) : null}
         {vote ? (
           <div data-testid="chat-vote-results" data-card-id={opinion.id} data-status={vote.status} className="space-y-1.5">
-            <p className="text-[10px] text-fg-muted">{t(`messenger.ssmBox.variants.general.aiVote.status.${vote.status}`)}</p>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] text-fg-muted">{t(`messenger.ssmBox.variants.general.aiVote.status.${vote.status}`)}</p>
+              <button type="button" data-testid="chat-vote-send-result" data-card-id={opinion.id}
+                disabled={readOnly || vote.status !== 'completed' || aiVote.sending || vote.resultMessageId !== null}
+                onClick={() => { void aiVote.sendResult(); }}
+                className="rounded border border-brand px-2 py-0.5 text-[11px] font-semibold text-brand-text disabled:opacity-50">
+                {vote.resultMessageId !== null
+                  ? t('messenger.ssmBox.variants.general.aiVote.sent')
+                  : aiVote.sending
+                    ? t('messenger.ssmBox.variants.general.aiVote.sending')
+                    : t('messenger.ssmBox.variants.general.aiVote.sendResult')}
+              </button>
+            </div>
             <div data-testid="chat-vote-counts" className="flex flex-wrap gap-x-2 text-[10px] text-fg-muted">
               {(['agree', 'oppose', 'abstain', 'pending', 'failed'] as const).map((key) => (
                 <span key={key}>{t(`messenger.ssmBox.variants.general.aiVote.count.${key}`, { count: vote.counts[key] })}</span>

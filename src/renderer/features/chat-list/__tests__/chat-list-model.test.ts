@@ -109,6 +109,18 @@ describe('chat list labels', () => {
     expect(updated.unreadCount).toBe(2);
   });
 
+  it('preserves a streamed vote-result summary for a translated preview without raising unread counts', () => {
+    const room = summary({ channelId: 'r', kind: 'room', unreadCount: 2 });
+    const updated = patchSummary(room, {
+      id: 'result', channelId: 'r', meetingId: null, authorId: 'user', authorKind: 'user',
+      role: 'user', content: 'vote_result', createdAt: 2,
+      meta: { chatVoteResult: { voteId: 'private-vote-id', title: '내일 일정',
+        counts: { agree: 2, oppose: 1, abstain: 0, failed: 1 } } },
+    }, false);
+    expect(previewText(t, updated)).toBe('투표 결과 · 내일 일정: 찬성 2 · 반대 1 · 보류 0 · 미응답 1');
+    expect(updated.unreadCount).toBe(2);
+  });
+
   it('shows today as hh:mm, yesterday as 어제, then the date', () => {
     const now = new Date(2026, 9, 1, 22, 0).getTime();
     expect(listTimeLabel(t, new Date(2026, 9, 1, 9, 5).getTime(), now, 'ko')).toBe('09:05');

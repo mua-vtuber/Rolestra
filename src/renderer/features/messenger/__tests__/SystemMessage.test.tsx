@@ -55,6 +55,31 @@ afterEach(() => {
 });
 
 describe('SystemMessage — layout shape', () => {
+  it.each([
+    ['ko', 'tactical', '투표 결과 · 내일 일정: 찬성 2 · 반대 1 · 보류 0 · 미응답 1'],
+    ['en', 'retro', '* Vote result · 내일 일정: Agree 2 · Oppose 1 · Abstain 0 · No response 1'],
+  ] as const)('renders only the result title and aggregate counts in %s', async (language, theme, expected) => {
+    await i18next.changeLanguage(language);
+    renderWithTheme(theme, <SystemMessage message={makeSystemMessage({
+      authorId: 'user', authorKind: 'user', role: 'user', content: 'vote_result',
+      meta: { chatVoteResult: { voteId: 'private-vote-id', title: '내일 일정',
+        counts: { agree: 2, oppose: 1, abstain: 0, failed: 1 } } },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent).toBe(expected);
+    expect(screen.getByTestId('system-message').textContent).not.toContain('private-vote-id');
+  });
+
+  it('omits zero failed counts and translates the fallback for a missing result title', async () => {
+    await i18next.changeLanguage('ko');
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      authorId: 'user', authorKind: 'user', role: 'user', content: 'vote_result',
+      meta: { chatVoteResult: { voteId: 'v', title: '',
+        counts: { agree: 1, oppose: 0, abstain: 1, failed: 0 } } },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent)
+      .toBe('투표 결과 · (제목 없음): 찬성 1 · 반대 0 · 보류 1');
+  });
+
   it('tactical: a centered band in the notice colors, content as-is', () => {
     renderWithTheme(
       'tactical',

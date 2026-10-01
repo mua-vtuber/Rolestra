@@ -111,6 +111,20 @@ describe('SearchResultRow', () => {
 describe('SearchResultRow — chat error notices (D4)', () => {
   afterEach(() => cleanup());
 
+  it('translates user-authored vote results as plain text instead of showing a raw code snippet', async () => {
+    await i18next.changeLanguage('en');
+    render(<SearchResultRow hit={hit({
+      authorId: 'user', authorKind: 'user', role: 'user', content: 'vote_result',
+      meta: { chatVoteResult: { voteId: 'private-vote-id', title: '<Launch>',
+        counts: { agree: 2, oppose: 1, abstain: 0, failed: 1 } } },
+      snippet: 'vote_<mark>result</mark>',
+    })} onSelect={() => {}} locale="en-US" />);
+    const snippet = screen.getByTestId('search-result-snippet');
+    expect(snippet.textContent).toBe('Vote result · <Launch>: Agree 2 · Oppose 1 · Abstain 0 · No response 1');
+    expect(snippet.querySelector('launch')).toBeNull();
+    expect(snippet.querySelector('mark')).toBeNull();
+  });
+
   it('shows the exhausted AI name as plain text instead of a raw quota snippet', async () => {
     await i18next.changeLanguage('en');
     render(<SearchResultRow hit={hit({

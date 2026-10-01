@@ -316,7 +316,7 @@ test('room opinion voting starts explicitly and retains distinct results after r
   const fake = await startFakeProvider();
   let isolated: IsolatedApp | null = null;
   const voteRequestCount = (): number => fake.requests.filter(
-    (request) => request.model?.startsWith('e2e-vote-'),
+    (request) => request.messages.some((message) => message.content.includes('Respond with only JSON {"opinion"')),
   ).length;
   try {
     isolated = await launchIsolatedApp({ ollamaHost: fake.baseUrl });
@@ -402,6 +402,45 @@ test('room opinion voting starts explicitly and retains distinct results after r
     const duplicate = await invokeInApp(page, 'opinion:startVote', { opinionId: opinion.id });
     expect(duplicate.result.id).toBe(vote.id);
     expect(voteRequestCount()).toBe(4);
+
+    const sendResult = resultPanel.getByTestId('chat-vote-send-result');
+    await expect(sendResult).toBeEnabled();
+    await sendResult.click();
+    await expect(sendResult).toBeDisabled();
+    await expect(sendResult).toHaveText(/전송 완료|Sent/);
+    await expect(page.getByTestId('thread-message-list').getByText('CF4_REPLY_OTHER', { exact: true })).toHaveCount(4);
+    const { result: sentVote } = await invokeInApp(page, 'opinion:getVote', { opinionId: opinion.id });
+    expect(sentVote?.resultMessageId).toBeTruthy();
+    const history = await invokeInApp(page, 'message:list-by-channel', { channelId: room.id });
+    const notice = history.messages.find((message) => message.id === sentVote?.resultMessageId);
+    expect(notice?.meta?.chatVoteResult).toEqual({ voteId: vote.id, title: 'Adopt the proposal',
+      counts: { agree: 1, oppose: 1, abstain: 1, failed: 1 } });
+    const noticeLine = page.getByTestId('system-message-body').filter({ hasText: 'Adopt the proposal' });
+    await expect(noticeLine).toContainText(/찬성 1|Agree 1/);
+    await expect(noticeLine).toContainText(/미응답 1|Unanswered 1/);
+    const reactions = fake.requests.filter((request) => request.messages.some((message) =>
+      message.content.includes('The user shared the final vote result')));
+    expect(reactions).toHaveLength(4);
+    for (const request of reactions) {
+      const context = JSON.stringify(request.messages);
+      expect(context).toContain('agree: 1');
+      expect(context).toContain('unanswered: 1');
+      for (const reason of ['The plan is practical.', 'The cost is too high.', 'More evidence is needed.']) {
+        expect(context).not.toContain(reason);
+      }
+    }
+    const repeat = await invokeInApp(page, 'opinion:sendVoteResult', { opinionId: opinion.id });
+    expect(repeat.result.resultMessageId).toBe(sentVote?.resultMessageId);
+    expect((await invokeInApp(page, 'message:list-by-channel', { channelId: room.id })).messages
+      .filter((message) => message.meta?.chatVoteResult)).toHaveLength(1);
+    await page.screenshot({ path: testInfo.outputPath('vote-result-sent.png'), fullPage: true });
+
+    page = await restartIsolatedApp(isolated);
+    await openRoomInfo(page);
+    const persistedSend = page.getByTestId('chat-vote-send-result');
+    await expect(persistedSend).toBeDisabled();
+    await expect(persistedSend).toHaveText(/전송 완료|Sent/);
+    await expect(page.getByTestId('thread-message-list').getByText('CF4_REPLY_OTHER', { exact: true })).toHaveCount(4);
     await clickRoomMenuItem(page, 'room-archive-open');
     await page.getByTestId('room-action-confirm').click();
     await expect(page.getByTestId('room-archived-notice')).toBeVisible();
@@ -429,7 +468,7 @@ test('room opinion voting starts explicitly and retains distinct results after r
     await openRoomInfo(page);
     await expect(page.locator(`[data-testid="chat-vote-results"][data-card-id="${opinion.id}"]`)).toBeVisible();
     const persisted = await invokeInApp(page, 'opinion:getVote', { opinionId: opinion.id });
-    expect(persisted.result).toEqual(vote);
+    expect(persisted.result).toEqual(sentVote);
     expect(voteRequestCount()).toBe(4);
     await page.screenshot({ path: testInfo.outputPath('vote-archived.png'), fullPage: true });
   } finally {

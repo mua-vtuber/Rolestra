@@ -6,7 +6,7 @@ import {
 } from './meeting-flow-types';
 
 export const APP_NAME = 'Rolestra';
-export const APP_VERSION = '0.1.0';
+export const APP_VERSION = '0.1.1';
 
 /**
  * Ordered list of meeting phase strings.

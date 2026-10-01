@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { GeneralVariant } from '../SsmBox/GeneralVariant';
 import { i18next } from '../../../i18n';
 import { ThemeProvider } from '../../../theme/theme-provider';
+import { useChatVote } from '../../../hooks/use-chat-vote';
 import type { GeneralOpinionCard, Opinion } from '../../../../shared/opinion-types';
 
 function card(id: string, channelId = 'room-a'): GeneralOpinionCard {
@@ -20,7 +21,7 @@ function card(id: string, channelId = 'room-a'): GeneralOpinionCard {
 
 const completedVote = {
   id: 'vote-a', opinionId: 'op-a', channelId: 'room-a', status: 'completed',
-  createdAt: 1, completedAt: 2,
+  createdAt: 1, completedAt: 2, resultMessageId: null,
   participants: [
     { providerId: 'ai-1', displayName: 'Alpha', status: 'submitted', opinion: 'Ship it', vote: 'agree', error: null },
     { providerId: 'ai-2', displayName: 'Beta', status: 'submitted', opinion: 'Wait for QA', vote: 'oppose', error: null },
@@ -41,6 +42,7 @@ function setup(overrides?: {
   listCards?: (channelId: string) => Promise<GeneralOpinionCard[]>;
   getVote?: (opinionId: string) => Promise<unknown>;
   startVote?: (opinionId: string) => Promise<unknown>;
+  sendVoteResult?: (opinionId: string) => Promise<unknown>;
 }) {
   const invoke = vi.fn(async (channel: string, data: { channelId?: string; opinionId?: string }) => {
     if (channel === 'opinion:listGeneralCards') {
@@ -49,6 +51,7 @@ function setup(overrides?: {
     }
     if (channel === 'opinion:getVote') return { result: await (overrides?.getVote?.(data.opinionId!) ?? Promise.resolve(null)) };
     if (channel === 'opinion:startVote') return { result: await (overrides?.startVote?.(data.opinionId!) ?? Promise.resolve(completedVote)) };
+    if (channel === 'opinion:sendVoteResult') return { result: await (overrides?.sendVoteResult?.(data.opinionId!) ?? Promise.resolve({ ...completedVote, resultMessageId: 'result-a' })) };
     throw new Error(`Unexpected IPC ${channel}`);
   });
   (window as unknown as { arena: unknown }).arena = { platform: 'linux', invoke, onStream: () => () => {} };
@@ -63,6 +66,114 @@ beforeEach(() => { void i18next.changeLanguage('en'); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); delete (window as { arena?: unknown }).arena; });
 
 describe('chat opinion AI vote', () => {
+  it('coalesces sends before rerender and keeps the next card locked when an older request finishes', async () => {
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    const invoke = setup({
+      getVote: async (opinionId) => ({ ...completedVote, opinionId }),
+      sendVoteResult: (opinionId) => opinionId === 'op-a' ? first.promise : second.promise,
+    });
+    const { result, rerender } = renderHook(({ id }) => useChatVote(id), { initialProps: { id: 'op-a' } });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { void result.current.sendResult(); void result.current.sendResult(); });
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult')).toHaveLength(1);
+
+    rerender({ id: 'op-b' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => { void result.current.sendResult(); });
+    await act(async () => { first.resolve({ ...completedVote, resultMessageId: 'result-a' }); await first.promise; });
+    expect(result.current.sending).toBe(true);
+    expect(result.current.vote?.opinionId).toBe('op-b');
+    expect(result.current.vote?.resultMessageId).toBeNull();
+    act(() => { void result.current.sendResult(); });
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult'))
+      .toEqual([['opinion:sendVoteResult', { opinionId: 'op-a' }], ['opinion:sendVoteResult', { opinionId: 'op-b' }]]);
+    await act(async () => {
+      second.resolve({ ...completedVote, opinionId: 'op-b', resultMessageId: 'result-b' });
+      await second.promise;
+    });
+    expect(result.current.sending).toBe(false);
+    expect(result.current.vote?.resultMessageId).toBe('result-b');
+  });
+
+  it('sends a completed result only on request and keeps the persisted sent state after remount', async () => {
+    const pending = deferred<unknown>();
+    let savedVote: unknown = completedVote;
+    const invoke = setup({ getVote: async () => savedVote, sendVoteResult: () => pending.promise });
+    const view = show();
+    const button = await screen.findByRole('button', { name: 'Send result' });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult')).toHaveLength(0);
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect((screen.getByRole('button', { name: 'Sending…' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult'))
+      .toEqual([['opinion:sendVoteResult', { opinionId: 'op-a' }]]);
+    savedVote = { ...completedVote, resultMessageId: 'result-a' };
+    await act(async () => { pending.resolve(savedVote); await pending.promise; });
+    expect((screen.getByRole('button', { name: 'Sent' }) as HTMLButtonElement).disabled).toBe(true);
+    view.unmount();
+
+    show();
+    expect((await screen.findByRole('button', { name: 'Sent' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult')).toHaveLength(1);
+  });
+
+  it.each(['running', 'interrupted'] as const)('disables result sending when the vote is %s', async (status) => {
+    const invoke = setup({ getVote: async () => ({ ...completedVote, status }) });
+    show();
+    const button = await screen.findByRole('button', { name: 'Send result' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult')).toHaveLength(0);
+  });
+
+  it('disables result sending for archived rooms even when the vote completed', async () => {
+    const invoke = setup({ getVote: async () => completedVote });
+    show('room-a', true);
+    const button = await screen.findByRole('button', { name: 'Send result' });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(button);
+    expect(invoke.mock.calls.filter(([name]) => name === 'opinion:sendVoteResult')).toHaveLength(0);
+  });
+
+  it('keeps a failed result send retryable without exposing a backend error', async () => {
+    let attempts = 0;
+    setup({ getVote: async () => completedVote, sendVoteResult: async () => {
+      if (++attempts === 1) throw new Error('private backend detail');
+      return { ...completedVote, resultMessageId: 'result-a' };
+    } });
+    show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Send result' }));
+    const error = await screen.findByTestId('chat-vote-send-error');
+    expect(error.textContent).toBe('Could not send the vote result. Please try again.');
+    expect(screen.queryByText('private backend detail')).toBeNull();
+    const retry = screen.getByRole('button', { name: 'Send result' });
+    expect((retry as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(retry);
+    await screen.findByRole('button', { name: 'Sent' });
+    expect(screen.queryByTestId('chat-vote-send-error')).toBeNull();
+  });
+
+  it.each(['resolve', 'reject'] as const)('ignores a send %s after changing rooms', async (outcome) => {
+    const stale = deferred<unknown>();
+    setup({ getVote: async (id) => ({ ...completedVote, opinionId: id }), sendVoteResult: () => stale.promise });
+    const view = show();
+    fireEvent.click(await screen.findByRole('button', { name: 'Send result' }));
+    view.rerender(<ThemeProvider><GeneralVariant channelId="room-b" readOnly={false} /></ThemeProvider>);
+    await screen.findByText('Topic op-b');
+    await screen.findByRole('button', { name: 'Send result' });
+    await act(async () => {
+      if (outcome === 'resolve') stale.resolve({ ...completedVote, resultMessageId: 'result-a' });
+      else stale.reject(new Error('old room send failure'));
+      await stale.promise.catch(() => {});
+    });
+    expect((screen.getByRole('button', { name: 'Send result' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByTestId('chat-vote-send-error')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Sent' })).toBeNull();
+  });
+
   it('only starts on explicit card action and suppresses a duplicate click while starting', async () => {
     const pending = deferred<typeof completedVote>();
     const invoke = setup({ startVote: () => pending.promise });

@@ -19,6 +19,6 @@ describe('shared/constants', () => {
   });
 
   it('APP_VERSION should match package.json version', () => {
-    expect(APP_VERSION).toBe('0.1.0');
+    expect(APP_VERSION).toBe('0.1.1');
   });
 });

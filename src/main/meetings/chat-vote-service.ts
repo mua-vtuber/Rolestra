@@ -3,6 +3,8 @@ import type { AbsolutePath } from '../../shared/absolute-path';
 import type { ChatVote, ChatVoteError, ChatVoteValue } from '../../shared/chat-vote-types';
 import type { Message as ProviderMessage } from '../../shared/provider-types';
 import type { Message, MessageViewer } from '../../shared/message-types';
+import { CHAT_VOTE_RESULT_CODE, USER_AUTHOR_LITERAL } from '../../shared/message-types';
+import type { MessageService } from '../channels/message-service';
 import type { BaseProvider } from '../providers/provider-interface';
 import type { OpinionRepository } from './opinion-repository';
 import { ChatVoteRepository, type VoteParticipantSnapshot } from './chat-vote-repository';
@@ -35,6 +37,11 @@ export interface ChatVoteProviderLookup {
   listInstances?(): BaseProvider[];
 }
 export type IsolatedVoteProviderFactory = (provider: BaseProvider) => VoteProvider;
+
+export interface ChatVoteResultDelivery {
+  append: Pick<MessageService, 'append'>['append'];
+  assertWritable(channelId: string): void;
+}
 
 /** W9: the same single-code-fence tolerance as the room-turn and private-reply parsers. */
 function parseResponse(raw: string): { opinion: string; vote: ChatVoteValue } | null {
@@ -71,12 +78,54 @@ export class ChatVoteService {
     // for "no persona source was supplied", not a fabricated placeholder.
     private readonly globalPersona: (provider: BaseProvider) => string = () => '',
     private readonly timeoutMs = CHAT_RESPONSE_TIMEOUT_MS,
+    private readonly resultDelivery?: ChatVoteResultDelivery,
   ) {
     // An unfinished persisted run cannot be resumed: it has no live model call.
     this.repo.interruptRunning();
   }
 
   getVote(opinionId: string): ChatVote | null { return this.repo.getByOpinion(opinionId); }
+
+  sendResult(opinionId: string): ChatVote {
+    if (this.shuttingDown) throw new Error('Chat vote service is shutting down');
+    const opinion = this.opinions.get(opinionId);
+    if (!opinion || opinion.meetingId !== null ||
+        (opinion.kind !== 'self-raised' && opinion.kind !== 'user-raised')) {
+      throw new Error(`Chat opinion not found: ${opinionId}`);
+    }
+    const room = this.rooms.get(opinion.channelId);
+    if (room?.archivedAt != null) throw new Error(`Chat room archived: ${opinion.channelId}`);
+    if (!room && !this.isGlobalGeneral(opinion.channelId)) {
+      throw new Error(`Chat room not found: ${opinion.channelId}`);
+    }
+    const vote = this.getVote(opinionId);
+    if (!vote || vote.status !== 'completed' || vote.channelId !== opinion.channelId) {
+      throw new Error(`Chat vote must be completed: ${opinionId}`);
+    }
+    if (!this.resultDelivery) throw new Error('Chat vote result delivery is unavailable');
+    this.resultDelivery.assertWritable(opinion.channelId);
+    if (vote.resultMessageId !== null) return vote;
+    try {
+      // append commits before its message event starts the normal AI round.
+      // A DB trigger commits its durable delivery marker in the same insert.
+      const message = this.resultDelivery.append({
+        channelId: opinion.channelId, meetingId: null, authorId: USER_AUTHOR_LITERAL,
+        authorKind: 'user', role: 'user', content: CHAT_VOTE_RESULT_CODE,
+        meta: { chatVoteResult: {
+          voteId: vote.id, title: opinion.title ?? '',
+          counts: { agree: vote.counts.agree, oppose: vote.counts.oppose,
+            abstain: vote.counts.abstain, failed: vote.counts.failed },
+        } },
+      });
+      return { ...vote, resultMessageId: message.id };
+    } catch (error) {
+      // Another service may have inserted the same result after our read.
+      // The delivery table's vote-id key chooses one row; only that append emits.
+      const raced = this.getVote(opinionId);
+      if (raced?.resultMessageId) return raced;
+      throw error;
+    }
+  }
 
   startVote(opinionId: string): ChatVote {
     if (this.shuttingDown) throw new Error('Chat vote service is shutting down');

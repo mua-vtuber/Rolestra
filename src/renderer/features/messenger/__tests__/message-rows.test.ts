@@ -34,6 +34,16 @@ const pass = (id: string, at: number): Message => msg(id, 'user', at, {
 });
 
 describe('buildMessageRows — bubbles', () => {
+  it.each(['bubbles', 'log'] as const)('separates a user-authored vote result from speech in %s', (layout) => {
+    const result = msg('result', 'user', BASE + 1, {
+      content: 'vote_result', meta: { chatVoteResult: { voteId: 'v', title: 'Topic',
+        counts: { agree: 1, oppose: 0, abstain: 0, failed: 0 } } },
+    });
+    const rows = buildMessageRows([msg('u1', 'user', BASE), result, msg('u2', 'user', BASE + 2)], layout);
+    expect(rows.map((row) => row.kind)).toEqual(layout === 'log'
+      ? ['date', 'log-block', 'notice', 'log-block'] : ['date', 'message', 'notice', 'message']);
+  });
+
   it('shows name and avatar only on the first of consecutive messages by one speaker', () => {
     const rows = buildMessageRows([
       msg('u1', 'user', BASE), msg('a1', 'ai-a', BASE + 1), msg('a2', 'ai-a', BASE + 2), msg('b1', 'ai-b', BASE + 3),

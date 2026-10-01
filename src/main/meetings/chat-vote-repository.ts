@@ -33,6 +33,8 @@ export class ChatVoteRepository {
   }
 
   private fromRow(row: VoteRow): ChatVote {
+    const delivery = this.db.prepare('SELECT message_id FROM chat_vote_result_deliveries WHERE vote_id = ?')
+      .get(row.id) as { message_id: string } | undefined;
     const participants = (this.db.prepare(`SELECT provider_id,display_name,persona,status,opinion,vote,error
       FROM chat_vote_participants WHERE vote_id = ? ORDER BY sort_order`).all(row.id) as ParticipantRow[])
       .map((part) => ({ providerId: part.provider_id, displayName: part.display_name,
@@ -45,7 +47,7 @@ export class ChatVoteRepository {
     }
     return { id: row.id, opinionId: row.opinion_id, channelId: row.channel_id,
       status: row.status, createdAt: row.created_at, completedAt: row.completed_at,
-      participants, counts };
+      resultMessageId: delivery?.message_id ?? null, participants, counts };
   }
 
   insert(id: string, opinionId: string, channelId: string, participants: VoteParticipantSnapshot[]): void {

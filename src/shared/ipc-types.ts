@@ -276,6 +276,10 @@ export type IpcChannelMap = {
     request: { opinionId: string };
     response: { result: ChatVote | null };
   };
+  'opinion:sendVoteResult': {
+    request: { opinionId: string };
+    response: { result: ChatVote };
+  };
   'member:list': {
     request: undefined;
     response: { members: MemberView[] };
@@ -371,6 +375,7 @@ export const LIVE_IPC_CHANNELS = [
   "opinion:toggleLightVote",
   "opinion:startVote",
   "opinion:getVote",
+  "opinion:sendVoteResult",
   "member:list",
   "member:get-profile",
   "member:update-profile",

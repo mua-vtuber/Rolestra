@@ -242,6 +242,10 @@
               "pending": "Pending",
               "submitted": "Submitted"
             },
+            "sendError": "Could not send the vote result. Please try again.",
+            "sending": "Sending…",
+            "sendResult": "Send result",
+            "sent": "Sent",
             "start": "Start AI vote",
             "starting": "Starting AI vote...",
             "status": {
@@ -308,6 +312,10 @@
       "empty": "No messages yet",
       "error": "Couldn't load messages. Please try again.",
       "loading": "Loading messages…"
+    },
+    "voteResult": {
+      "row": "Vote result · {{title}}: Agree {{agree}} · Oppose {{oppose}} · Abstain {{abstain}}",
+      "withFailed": "{{result}} · No response {{failed}}"
     },
     "whisper": {
       "errors": {

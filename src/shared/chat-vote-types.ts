@@ -3,6 +3,13 @@ export type ChatVoteParticipantStatus = 'pending' | 'submitted' | 'failed';
 export type ChatVoteError = 'provider_unavailable' | 'invalid_response' | 'provider_error' | 'timeout' | 'interrupted';
 export type ChatVoteValue = 'agree' | 'oppose' | 'abstain';
 
+/** Public result payload. Individual ballots and reasons never belong here. */
+export interface ChatVoteResult {
+  voteId: string;
+  title: string;
+  counts: { agree: number; oppose: number; abstain: number; failed: number };
+}
+
 export interface ChatVoteParticipant {
   providerId: string;
   displayName: string;
@@ -19,6 +26,7 @@ export interface ChatVote {
   status: ChatVoteStatus;
   createdAt: number;
   completedAt: number | null;
+  resultMessageId: string | null;
   participants: ChatVoteParticipant[];
   counts: {
     agree: number;

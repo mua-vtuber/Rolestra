@@ -55,6 +55,7 @@ const opinionService = {
     ({ opinionId, effect: 'inserted', userVote: vote, agreeCount: 1, opposeCount: 0 })),
 };
 const chatVoteService = {
+  sendResult: vi.fn((opinionId: string) => ({ id: 'vote-1', opinionId, resultMessageId: 'result-1' })),
   startVote: vi.fn((opinionId: string) => ({ id: 'vote-1', opinionId })),
   getVote: vi.fn((opinionId: string) => ({ id: 'vote-1', opinionId })),
 };
@@ -86,6 +87,7 @@ describe('chat opinion vote IPC boundary', () => {
     expect([...registered.keys()].sort()).toEqual([...LIVE_IPC_CHANNELS].sort());
     expect(registered.has('opinion:startVote')).toBe(true);
     expect(registered.has('opinion:getVote')).toBe(true);
+    expect(registered.has('opinion:sendVoteResult')).toBe(true);
     expect(registered.has('meeting:resume')).toBe(false);
   });
 
@@ -102,12 +104,16 @@ describe('chat opinion vote IPC boundary', () => {
       .resolves.toEqual({ result: { id: 'vote-1', opinionId: `${channelId}-op` } });
     expect(opinionService.postFromGeneralChannel).toHaveBeenCalledWith(post(channelId));
     expect(chatVoteService.startVote).toHaveBeenCalledWith(`${channelId}-op`);
+    await expect(call('opinion:sendVoteResult', { opinionId: `${channelId}-op` }))
+      .resolves.toMatchObject({ result: { resultMessageId: 'result-1' } });
   });
 
   it.each(['dm', 'project', 'missing', 'archived'])('rejects %s card and vote mutations', async (channelId) => {
     await expect(call('opinion:postFromGeneral', post(channelId))).rejects.toThrow();
     await expect(call('opinion:toggleLightVote', { opinionId: `${channelId}-op`, vote: 'agree' })).rejects.toThrow();
     await expect(call('opinion:startVote', { opinionId: `${channelId}-op` })).rejects.toThrow();
+    await expect(call('opinion:sendVoteResult', { opinionId: `${channelId}-op` })).rejects.toThrow();
+    expect(chatVoteService.sendResult).not.toHaveBeenCalled();
     expect(opinionService.postFromGeneralChannel).not.toHaveBeenCalled();
     expect(opinionService.toggleLightVote).not.toHaveBeenCalled();
     expect(chatVoteService.startVote).not.toHaveBeenCalled();
@@ -129,6 +135,7 @@ describe('chat opinion vote IPC boundary', () => {
     for (const opinionId of ['', 'x'.repeat(129), 123, null]) {
       await expect(call('opinion:startVote', { opinionId })).rejects.toThrow();
       await expect(call('opinion:getVote', { opinionId })).rejects.toThrow();
+      await expect(call('opinion:sendVoteResult', { opinionId })).rejects.toThrow();
     }
     expect(opinionService.postFromGeneralChannel).not.toHaveBeenCalled();
     expect(chatVoteService.startVote).not.toHaveBeenCalled();

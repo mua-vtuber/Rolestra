@@ -45,6 +45,7 @@ import { migration as m033 } from './033-whisper-pairs';
 import { migration as m034 } from './034-character-sheet';
 import { migration as m035 } from './035-whisper-threads';
 import { migration as m036 } from './036-channel-read-state';
+import { migration as m037 } from './037-vote-result-message';
 
 /**
  * Ordered list of all v3 migrations.
@@ -87,4 +88,5 @@ export const migrations: Migration[] = [
   m034,
   m035,
   m036,
+  m037,
 ];

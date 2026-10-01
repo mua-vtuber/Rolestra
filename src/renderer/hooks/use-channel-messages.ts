@@ -26,7 +26,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 
 import { useThrowToBoundary } from '../components/ErrorBoundary';
 import { invoke } from '../ipc/invoke';
-import { USER_AUTHOR_LITERAL, isChatPassMessage, type Message } from '../../shared/message-types';
+import { USER_AUTHOR_LITERAL, isChatPassMessage, isChatVoteResultMessage, type Message } from '../../shared/message-types';
 import type { StreamChannelMessagePayload } from '../../shared/stream-events';
 
 export interface UseChannelMessagesOptions {
@@ -206,9 +206,8 @@ export function useChannelMessages(
           messagesChannelRef.current !== channelId) return;
         const incoming = payload.message;
         if (incoming.channelId !== channelId) return;
-        // A pass row (spec 2026-10-01 F1) has no optimistic copy to reconcile,
-        // so it arrives through the stream like an AI message.
-        if (incoming.authorKind === 'user' && !isChatPassMessage(incoming)) return;
+        // Pass and vote-result rows have no optimistic copy to reconcile.
+        if (incoming.authorKind === 'user' && !isChatPassMessage(incoming) && !isChatVoteResultMessage(incoming)) return;
         setMessages((prev) => {
           if (prev === null) return [incoming];
           if (prev.some((m) => m.id === incoming.id)) return prev;

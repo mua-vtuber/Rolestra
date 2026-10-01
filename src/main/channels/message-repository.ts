@@ -130,12 +130,12 @@ function rowToSearchHit(row: MessageSearchHitRow): MessageSearchHit {
 }
 
 /**
- * Rows search never returns: pass rows (spec 2026-10-01 F1), which store
- * only `CHAT_PASS_CODE` and are not conversation text. They still appear in
- * the channel list and in model input (as the pass line). Applied to every
+ * Code-only pass and shared-vote notices are not searchable conversation
+ * text. They still appear in the channel list and model input. Applied to every
  * search query next to the visibility policy.
  */
-const SEARCHABLE_ROW_SQL = `NOT (m.author_kind = 'user' AND json_extract(m.meta_json, '$.chatPass') IS NOT NULL)`;
+const SEARCHABLE_ROW_SQL = `NOT (m.author_kind = 'user' AND (
+  json_extract(m.meta_json, '$.chatPass') IS NOT NULL OR json_extract(m.meta_json, '$.chatVoteResult') IS NOT NULL))`;
 
 /**
  * A conversation of the chat app (alias `c` = channels): the global general

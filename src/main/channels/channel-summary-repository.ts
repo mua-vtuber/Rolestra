@@ -73,7 +73,7 @@ const PARTICIPANTS_SQL = `
     JOIN providers p ON p.id = cm.provider_id
   ORDER BY 1, 4`;
 
-const NOTICE_META_KEYS = ['chatError', 'chatErrorDetail', 'chatErrorSpeakerName', 'chatSilence', 'chatPass'] as const;
+const NOTICE_META_KEYS = ['chatError', 'chatErrorDetail', 'chatErrorSpeakerName', 'chatSilence', 'chatPass', 'chatVoteResult'] as const;
 
 function summaryKind(row: SummaryRow): ChannelSummaryKind {
   if (row.kind === 'system_general') return 'general';

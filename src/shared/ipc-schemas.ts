@@ -259,6 +259,7 @@ export const v3ChannelSchemas = {
   'opinion:toggleLightVote': opinionToggleLightVoteSchema,
   'opinion:startVote': z.object({ opinionId: z.string().min(1).max(128) }),
   'opinion:getVote': z.object({ opinionId: z.string().min(1).max(128) }),
+  'opinion:sendVoteResult': z.strictObject({ opinionId: z.string().min(1).max(128) }),
   'member:list': z.undefined(),
   'member:get-profile': z.object({ providerId: z.string().min(1).max(128) }),
   'member:update-profile': z.object({

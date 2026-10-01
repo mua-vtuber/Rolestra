@@ -107,7 +107,8 @@ function plainReplyFor(latestUserMessage: string, model: string | undefined): st
 function decideReply(body: ChatRequest, whisperRecipientName: string | null): string {
   const has = (marker: string): boolean => body.messages.some((message) => message.content.includes(marker));
   const latestUserMessage = body.messages.filter((message) => message.role === 'user').at(-1)?.content ?? '';
-  if (body.model && VOTE_REPLIES[body.model] !== undefined) return VOTE_REPLIES[body.model]!;
+  if (body.model && VOTE_REPLIES[body.model] !== undefined &&
+    has('Respond with only JSON {"opinion"')) return VOTE_REPLIES[body.model]!;
   const isPrivateReply = has(PRIVATE_REPLY_MARKER);
   const isGroup = isPrivateReply || has(ROOM_TURN_MARKER);
   const plainReply = plainReplyFor(latestUserMessage, body.model);

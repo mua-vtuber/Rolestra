@@ -38,7 +38,7 @@ import { handleChatListActiveRounds } from './handlers/chat-round-handler';
 import {
   handleOpinionPostFromGeneral, handleOpinionListGeneralCards,
   handleOpinionToggleLightVote,
-  handleOpinionStartVote, handleOpinionGetVote,
+  handleOpinionStartVote, handleOpinionGetVote, handleOpinionSendVoteResult,
 } from './handlers/opinion-handler';
 import {
   handleMemberList, handleMemberGetProfile, handleMemberUpdateProfile,
@@ -259,6 +259,15 @@ export function registerIpcHandlers(
     }
     requireChatOpinionChannel(channels, opinion.channelId, rooms, false);
     return handleOpinionGetVote(data);
+  });
+  handle('opinion:sendVoteResult', (data) => {
+    const opinion = opinions.get(data.opinionId);
+    if (!opinion || opinion.meetingId !== null ||
+      !['self-raised', 'user-raised'].includes(opinion.kind)) {
+      throw new Error(`Chat opinion not found: ${data.opinionId}`);
+    }
+    requireChatOpinionChannel(channels, opinion.channelId, rooms, true);
+    return handleOpinionSendVoteResult(data);
   });
 
   handle('member:list', () => handleMemberList());

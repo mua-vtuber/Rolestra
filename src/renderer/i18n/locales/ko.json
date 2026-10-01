@@ -240,6 +240,10 @@
               "pending": "대기",
               "submitted": "제출"
             },
+            "sendError": "투표 결과를 전송하지 못했습니다. 다시 시도해 주세요.",
+            "sending": "전송 중…",
+            "sendResult": "결과 전송",
+            "sent": "전송 완료",
             "start": "AI 투표 시작",
             "starting": "AI 투표 시작 중...",
             "status": {
@@ -303,6 +307,10 @@
       "empty": "아직 메시지가 없습니다",
       "error": "메시지를 불러오지 못했습니다. 다시 시도해 주세요.",
       "loading": "메시지를 불러오는 중…"
+    },
+    "voteResult": {
+      "row": "투표 결과 · {{title}}: 찬성 {{agree}} · 반대 {{oppose}} · 보류 {{abstain}}",
+      "withFailed": "{{result}} · 미응답 {{failed}}"
     },
     "whisper": {
       "errors": {

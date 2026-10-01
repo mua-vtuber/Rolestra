@@ -148,6 +148,11 @@ export function createChatServices(arenaRoot: ArenaRootService, chatCliInstructi
         characterSheet: profile.characterSheet,
       });
     },
+    undefined,
+    {
+      append: (input) => messageService.append(input),
+      assertWritable: (channelId) => assertChatCardChannel(channelId, true),
+    },
   );
   chatRoomService.on('closed', ({ channelId }: { channelId: string }) => chatVoteService.interruptChannel(channelId));
 

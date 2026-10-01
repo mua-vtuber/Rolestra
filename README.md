@@ -18,7 +18,7 @@ Join the conversation yourself, or let the AIs take another turn while you watch
 
 On Windows x64, you can get started with a single portable executable. You do not need to install Node.js, npm, or Git to run Rolestra.
 
-**[View releases](https://github.com/mua-vtuber/Rolestra/releases)** · First public release in preparation
+**[Download the latest Windows portable release](https://github.com/mua-vtuber/Rolestra/releases/latest)**
 
 1. Download `Rolestra-VERSION-windows-x64-Portable.exe` from the release list.
 2. Place it in a folder of your choice and double-click it.
@@ -54,6 +54,7 @@ The portable version stores conversations and settings on this computer. Moving 
 - In the general channel or a chat room, use **More (⋯) → Post opinion** to create an opinion card. Open **Room info** and select **Start AI vote** on the card to request the AIs' judgments.
 - Review each AI's vote and reasoning. Voting begins only when you start it.
 - Votes use public conversation context. Failed responses and timeouts are shown separately from valid votes.
+- After voting completes, select **Send result** to share the proposal title and final tally with the room and start one round of AI responses. Individual ballots and reasons are not shared.
 
 #### Conversation history and appearance
 
@@ -179,7 +180,7 @@ The `license` field in `package.json` is currently set to `UNLICENSED`. No separ
 
 Windows x64에서는 포터블 실행 파일 하나로 시작할 수 있습니다. 롤레스트라를 실행하기 위해 Node.js, npm, Git을 설치할 필요는 없습니다.
 
-**[배포 파일 확인하기](https://github.com/mua-vtuber/Rolestra/releases)** · 첫 공개 릴리스 준비 중
+**[최신 Windows 포터블 다운로드](https://github.com/mua-vtuber/Rolestra/releases/latest)**
 
 1. 배포 목록에서 `Rolestra-버전-windows-x64-Portable.exe` 파일을 받습니다.
 2. 원하는 폴더에 두고 더블클릭합니다.
@@ -215,6 +216,7 @@ Windows x64에서는 포터블 실행 파일 하나로 시작할 수 있습니�
 - 일반 채널과 채팅방의 **더 보기(⋯) → 의견 게시**에서 의견 카드를 만듭니다. **방 정보**를 열고 카드의 **AI 투표 시작**을 눌러 AI들의 판단을 요청합니다.
 - AI별 투표와 이유를 확인합니다. 투표는 사용자가 시작할 때 진행됩니다.
 - 투표에는 공개 대화 문맥을 사용하며, 응답 실패와 시간 초과는 정상 투표 결과와 구분해 표시합니다.
+- 투표 완료 후 **결과 전송**을 누르면 안건 제목과 최종 집계만 방에 공유하고 AI들이 한 차례 반응합니다. 개별 투표와 이유는 공유하지 않습니다.
 
 #### 대화 기록과 화면 설정
 

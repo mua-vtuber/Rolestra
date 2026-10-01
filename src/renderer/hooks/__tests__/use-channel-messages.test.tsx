@@ -50,6 +50,25 @@ describe('useChannelMessages', () => {
     expect(result.current.messages?.map((m) => m.id)).toEqual(['pass']);
   });
 
+  it('adds a streamed vote-result row once without waiting for a message send or refetch', async () => {
+    let emit: ((payload: { message: Message }) => void) | null = null;
+    vi.stubGlobal('arena', { platform: 'linux', invoke: vi.fn().mockResolvedValue({ messages: [] }),
+      onStream: (_type: string, listener: (payload: { message: Message }) => void) => {
+        emit = listener;
+        return () => { emit = null; };
+      } });
+    const { result } = renderHook(() => useChannelMessages('c-a'));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const notice = makeMessage({ id: 'result', content: 'vote_result',
+      meta: { chatVoteResult: { voteId: 'v', title: 'Topic', counts: { agree: 1, oppose: 0, abstain: 0, failed: 0 } } } });
+    act(() => {
+      emit?.({ message: notice });
+      emit?.({ message: notice });
+      emit?.({ message: { ...notice, id: 'other-room', channelId: 'room-b' } });
+    });
+    expect(result.current.messages).toEqual([notice]);
+  });
+
   it('channelId=null → idle (no IPC, loading=false)', async () => {
     const invoke = vi.fn();
     vi.stubGlobal('arena', { platform: 'linux', invoke });

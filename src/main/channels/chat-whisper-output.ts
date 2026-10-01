@@ -1,5 +1,5 @@
 import {
-  isChatPassMessage, type ChatErrorCode, type Message as ChannelMessage,
+  isChatPassMessage, isChatVoteResultMessage, type ChatErrorCode, type Message as ChannelMessage,
 } from '../../shared/message-types';
 import { ChatCliInstructionsInsideWorkspaceError } from '../files/chat-cli-instructions';
 import { ProviderUsageLimitError } from '../providers/provider-usage-limit-error';
@@ -205,8 +205,14 @@ const PASS_ROUND_LINE = 'The user passed without adding anything. Speak only if 
  */
 export const CHAT_PASS_MODEL_LINE = 'The user added nothing and let the conversation continue.';
 
-/** The body a model reads for a stored row: the pass line for a pass row, else the content. */
+/** Expand code-only public notices for every model input path. */
 export function modelFacingBody(message: Pick<ChannelMessage, 'authorKind' | 'role' | 'meta' | 'content'>): string {
+  if (isChatVoteResultMessage(message)) {
+    const { title, counts } = message.meta.chatVoteResult;
+    return `The user shared the final vote result for proposal ${JSON.stringify(title)}. ` +
+      `Final tally — agree: ${counts.agree}; oppose: ${counts.oppose}; abstain: ${counts.abstain}; unanswered: ${counts.failed}. ` +
+      'Individual ballots and reasons have not been shared. React to the result without inventing who voted for what.';
+  }
   return isChatPassMessage(message) ? CHAT_PASS_MODEL_LINE : message.content;
 }
 

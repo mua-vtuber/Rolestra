@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { chatNoticeText } from '../messenger/chat-notice';
 import type { MessageSearchHit } from '../../../shared/message-search-types';
 import { CHAT_WHISPER_THREAD_MAX_MESSAGES } from '../../../shared/chat-thread-limits';
+import { isChatVoteResultMessage } from '../../../shared/message-types';
 
 /**
  * HTML-escape 후 `<mark>` / `</mark>` 만 되살린다. snippet() 가 반환하는
@@ -67,7 +68,7 @@ export function SearchResultRow({
   // same translated text instead (shared with SystemMessage via
   // chat-notice.ts); it renders as plain text, not a highlighted snippet,
   // since there is nothing left to highlight.
-  const noticeText = hit.role === 'system' ? chatNoticeText(t, hit) : null;
+  const noticeText = hit.role === 'system' || isChatVoteResultMessage(hit) ? chatNoticeText(t, hit) : null;
   const safe = noticeText === null ? renderSafeSnippet(hit.snippet) : null;
 
   return (

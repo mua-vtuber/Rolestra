@@ -18,7 +18,7 @@ function open(): Database.Database {
 }
 
 const migration036 = migrations.find((item) => item.id === '036-channel-read-state');
-const BEFORE_036 = migrations.filter((item) => item.id !== '036-channel-read-state');
+const BEFORE_036 = migrations.filter((item) => item.id < '036-channel-read-state');
 
 /** A database as it stood before 036: the chain up to 035 only. */
 function openBefore036(): Database.Database {
@@ -73,9 +73,9 @@ function seedExistingChats(db: Database.Database): void {
 }
 
 describe('036 channel read state', () => {
-  it('is the last migration in the chain', () => {
+  it('follows the whisper-thread migration in the chain', () => {
     expect(migration036).toBeDefined();
-    expect(migrations[migrations.length - 1]?.id).toBe('036-channel-read-state');
+    expect(migrations[migrations.indexOf(migration036!) - 1]?.id).toBe('035-whisper-threads');
   });
 
   it('adds the read-marker table and the unread-count index', () => {

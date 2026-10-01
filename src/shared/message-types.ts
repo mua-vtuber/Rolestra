@@ -6,6 +6,7 @@
  */
 
 import type { OpinionKind } from './opinion-types';
+import type { ChatVoteResult } from './chat-vote-types';
 import type {
   MeetingReviewGateKind,
   MeetingReviewGateStatus,
@@ -102,6 +103,18 @@ export function isChatSilenceNotice(value: unknown): value is ChatSilenceNotice 
  * 영어 한 줄로 바꿔 보인다. 검색 결과에는 나오지 않는다.
  */
 export const CHAT_PASS_CODE = 'user_pass' as const;
+export const CHAT_VOTE_RESULT_CODE = 'vote_result' as const;
+
+export function isChatVoteResultMessage(message: Pick<Message, 'authorKind' | 'role' | 'meta'>):
+  message is Pick<Message, 'authorKind' | 'role' | 'meta'> & { meta: MessageMeta & { chatVoteResult: ChatVoteResult } } {
+  const result = message.meta?.chatVoteResult;
+  return message.authorKind === 'user' && message.role === 'user' &&
+    result != null && typeof result.voteId === 'string' && typeof result.title === 'string' &&
+    result.counts != null && ['agree', 'oppose', 'abstain', 'failed'].every((key) => {
+      const count = result.counts[key as keyof ChatVoteResult['counts']];
+      return Number.isSafeInteger(count) && count >= 0;
+    });
+}
 
 export function isChatPassMessage(message: Pick<Message, 'authorKind' | 'role' | 'meta'>): boolean {
   return message.authorKind === 'user' && message.role === 'user' &&
@@ -175,6 +188,8 @@ export interface MessageMeta {
   chatSilence?: ChatSilenceNotice;
   /** 넘기기 행 표시 (spec 2026-10-01 F1). {@link CHAT_PASS_CODE} 만 담는다. */
   chatPass?: typeof CHAT_PASS_CODE;
+  /** A user-shared public tally, rendered as a notice and visible to models. */
+  chatVoteResult?: ChatVoteResult;
   [k: string]: unknown;
 }
 

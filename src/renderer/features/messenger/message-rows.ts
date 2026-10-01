@@ -18,6 +18,7 @@
  */
 import {
   isChatPassMessage,
+  isChatVoteResultMessage,
   isObserverNotice,
   type Message as ChannelMessage,
 } from '../../../shared/message-types';
@@ -36,7 +37,8 @@ function dayKey(timestamp: number): string {
 }
 
 export function isNoticeRow(message: ChannelMessage): boolean {
-  return message.authorKind === 'system' || isObserverNotice(message) || isChatPassMessage(message);
+  return message.authorKind === 'system' || isObserverNotice(message) ||
+    isChatPassMessage(message) || isChatVoteResultMessage(message);
 }
 
 function isWhisper(message: ChannelMessage): boolean {
