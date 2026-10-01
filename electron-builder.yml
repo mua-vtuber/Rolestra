@@ -25,20 +25,14 @@ artifactName: "${productName}-${version}-${os}-${arch}.${ext}"
 
 win:
   target:
-    - target: nsis
+    - target: portable
       arch:
         - x64
   icon: assets/icon.ico
-  artifactName: "${productName}-${version}-windows-${arch}.${ext}"
 
-nsis:
-  oneClick: false
-  perMachine: false
-  allowElevation: true
-  allowToChangeInstallationDirectory: true
-  createDesktopShortcut: true
-  createStartMenuShortcut: true
-  shortcutName: Rolestra
+portable:
+  artifactName: "${productName}-${version}-windows-${arch}-Portable.${ext}"
+  requestExecutionLevel: user
 
 mac:
   target:

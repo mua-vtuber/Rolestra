@@ -8,7 +8,7 @@ name: Release packaging
 #
 # Each cell builds the Electron bundle (electron-vite) and runs
 # `electron-builder --<os>` to produce one of:
-#   - Windows : NSIS installer (.exe), x64
+#   - Windows : portable app (-Portable.exe), x64
 #   - macOS   : DMG (.dmg), arm64 + x64 universal — unsigned (R12+ signing)
 #   - Linux   : AppImage (.AppImage), x64
 #
@@ -44,7 +44,7 @@ jobs:
             artifact_glob: 'dist/electron/*.AppImage'
           - os: windows-latest
             target: win
-            artifact_glob: 'dist/electron/*.exe'
+            artifact_glob: 'dist/electron/*-Portable.exe'
           - os: macos-latest
             target: mac
             artifact_glob: 'dist/electron/*.dmg'
@@ -67,7 +67,7 @@ jobs:
       - name: Build renderer + main bundles
         run: npm run build
 
-      - name: Package (${{ matrix.target }})
+      - name: Package configured targets (${{ matrix.target }})
         env:
           # Skip electron-builder's auto-publish — Release attachment
           # happens in the dedicated job step below.
