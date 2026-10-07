@@ -27,7 +27,7 @@ describe('app-handler', () => {
       const result = handleGetInfo();
 
       expect(result.name).toBe('Rolestra');
-      expect(result.version).toBe('0.1.1');
+      expect(result.version).toBe('0.1.2');
     });
   });
 });
