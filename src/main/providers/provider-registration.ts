@@ -5,6 +5,7 @@
  * the DB row — the instance is discarded if the save fails, so a failed add
  * leaves nothing behind. Warm-up runs in the background.
  */
+import { cliCommandKey } from '../../shared/cli-command-key';
 import type { ProviderConfig, ProviderInfo } from '../../shared/provider-types';
 import { getConfigService } from '../config/instance';
 import { assertDisplayNameAvailable } from './display-name-uniqueness';
@@ -22,6 +23,11 @@ async function resolveApiKey(ref: string): Promise<string> {
 export async function registerProvider(requestedName: string, config: ProviderConfig): Promise<ProviderInfo> {
   if (config.type === 'cli' && !isSupportedChatCliCommand(config.command)) {
     throw new Error('Unsupported chat CLI command');
+  }
+  // A path goes stale when the CLI moves (add-ai-model.ts module note), so a
+  // new CLI AI must name the bare command and let every spawn find it on PATH.
+  if (config.type === 'cli' && config.command !== cliCommandKey(config.command)) {
+    throw new Error(`Chat CLI command must be the bare name '${cliCommandKey(config.command)}', not a path`);
   }
   const displayName = requestedName.trim();
   assertDisplayNameAvailable(displayName);

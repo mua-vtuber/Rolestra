@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { i18next } from '../../../../i18n';
 import type { DetectedCli } from '../../../../../shared/ipc-types';
 import type { ProviderInfo } from '../../../../../shared/provider-types';
-import { cliPathKey, isCliRegistered, supportedClis, uniqueDisplayName } from '../add-ai-model';
+import { cliConfig, isCliRegistered, supportedClis, uniqueDisplayName } from '../add-ai-model';
 
 const t = i18next.t.bind(i18next);
 
@@ -23,18 +23,20 @@ function detected(path: string, wslDistro?: string): DetectedCli {
   return { command: 'claude', displayName: 'Claude Code', path, ...(wslDistro === undefined ? {} : { wslDistro }) };
 }
 
-describe('CLI registration identity (command path + WSL distro)', () => {
-  it('reads Windows paths case- and slash-insensitively, POSIX paths exactly', () => {
-    expect(cliPathKey('C:\\Tools\\Claude.CMD')).toBe(cliPathKey('c:/tools/claude.cmd'));
-    expect(cliPathKey('/usr/bin/claude')).not.toBe(cliPathKey('/usr/bin/Claude'));
+describe('CLI registration identity (command name + WSL distro)', () => {
+  it('stores the bare command name, not the detected path', () => {
+    expect(cliConfig(detected('C:\\Users\\me\\AppData\\Local\\OpenAI\\Codex\\bin\\abc\\claude.exe')).command)
+      .toBe('claude');
+    expect(cliConfig(detected('/usr/bin/claude', 'Ubuntu'))).toMatchObject({ command: 'claude', wslDistro: 'Ubuntu' });
   });
 
-  it('matches a registered CLI only on the same path and the same distro', () => {
-    const providers = [cliProvider('/usr/bin/claude'), cliProvider('/home/u/.local/bin/claude', 'Ubuntu')];
+  it('matches a registered CLI on the same name and the same distro, wherever it was found', () => {
+    const providers = [cliProvider('claude'), cliProvider('claude', 'Ubuntu')];
     expect(isCliRegistered(detected('/usr/bin/claude'), providers)).toBe(true);
-    expect(isCliRegistered(detected('/usr/local/bin/claude'), providers)).toBe(false);
-    expect(isCliRegistered(detected('/usr/bin/claude', 'Ubuntu'), providers)).toBe(false);
-    expect(isCliRegistered(detected('/home/u/.local/bin/claude', 'Ubuntu'), providers)).toBe(true);
+    expect(isCliRegistered(detected('/usr/local/bin/claude'), providers)).toBe(true);
+    expect(isCliRegistered(detected('/usr/bin/claude', 'Ubuntu'), providers)).toBe(true);
+    expect(isCliRegistered(detected('/usr/bin/claude', 'Debian'), providers)).toBe(false);
+    expect(isCliRegistered(detected('/usr/bin/claude'), [cliProvider('codex')])).toBe(false);
   });
 
   it('offers only the chat CLIs', () => {

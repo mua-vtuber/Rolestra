@@ -198,6 +198,21 @@ describe('provider-handler', () => {
       expect(mockSaveProvider).not.toHaveBeenCalled();
     });
 
+    it('rejects a supported CLI given as a path, since a stored path goes stale', async () => {
+      await expect(handleProviderAdd({
+        displayName: 'Codex',
+        config: {
+          type: 'cli', command: 'C:\\Users\\me\\AppData\\Local\\OpenAI\\Codex\\bin\\abc\\codex.exe', args: [],
+          inputFormat: 'stdin-json', outputFormat: 'stream-json',
+          sessionStrategy: 'persistent', hangTimeout: { first: 1000, subsequent: 1000 },
+          model: 'unknown',
+        },
+      })).rejects.toThrow("Chat CLI command must be the bare name 'codex', not a path");
+      expect(mockCreateProvider).not.toHaveBeenCalled();
+      expect(mockRegister).not.toHaveBeenCalled();
+      expect(mockSaveProvider).not.toHaveBeenCalled();
+    });
+
     // F2-3: chat-room participants are told apart by display name in the
     // model's own input — a duplicate (even case-different) would make
     // transcripts ambiguous about who said what.

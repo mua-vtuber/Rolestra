@@ -186,19 +186,19 @@ describe('found on this computer — CLIs', () => {
     await waitFor(() => expect(onConnected).toHaveBeenCalledOnce());
     expect(invoke).toHaveBeenCalledWith('provider:add', expect.objectContaining({
       displayName: 'Codex',
-      config: expect.objectContaining({ type: 'cli', command: '/usr/bin/codex' }),
+      config: expect.objectContaining({ type: 'cli', command: 'codex' }),
     }));
     expect(invoke.mock.calls.some(([channel]) => channel.startsWith('project:') || channel.startsWith('onboarding:'))).toBe(false);
   });
 
-  it('shows "추가됨" for a CLI already registered at the same command path', async () => {
+  it('shows "추가됨" for a CLI already registered under the same command name', async () => {
     const invoke = stubBridge({
       detected: [
         { command: 'claude', displayName: 'Claude Code', path: 'C:\\Tools\\Claude.CMD' },
         { command: 'codex', displayName: 'Codex CLI', path: '/usr/bin/codex' },
       ],
       providers: [{ id: 'old', type: 'cli', displayName: 'Claude Code', config: {
-        type: 'cli', command: 'c:/tools/claude.cmd', args: [], inputFormat: 'stdin-json', outputFormat: 'stream-json',
+        type: 'cli', command: 'claude', args: [], inputFormat: 'stdin-json', outputFormat: 'stream-json',
         sessionStrategy: 'persistent', hangTimeout: { first: 1, subsequent: 1 }, model: 'unknown',
       } }],
     });
@@ -210,11 +210,11 @@ describe('found on this computer — CLIs', () => {
     expect(invoke.mock.calls.some(([channel]) => channel === 'provider:add')).toBe(false);
   });
 
-  it('treats the same path inside a WSL distro as a different CLI', async () => {
+  it('treats the same name inside a WSL distro as a different CLI', async () => {
     stubBridge({
       detected: [{ command: 'claude', displayName: 'Claude Code (WSL: Ubuntu)', path: '/usr/bin/claude', wslDistro: 'Ubuntu' }],
       providers: [{ id: 'old', type: 'cli', displayName: 'Claude Code', config: {
-        type: 'cli', command: '/usr/bin/claude', args: [], inputFormat: 'stdin-json', outputFormat: 'stream-json',
+        type: 'cli', command: 'claude', args: [], inputFormat: 'stdin-json', outputFormat: 'stream-json',
         sessionStrategy: 'persistent', hangTimeout: { first: 1, subsequent: 1 }, model: 'unknown',
       } }],
     });

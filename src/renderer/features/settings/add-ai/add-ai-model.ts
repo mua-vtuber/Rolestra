@@ -2,13 +2,14 @@
  * Pure rules of the AI add dialog (spec 2026-10-01-messenger-redesign.md R6).
  *
  * Registration identity of a detected CLI — "추가됨":
- *   a detected CLI counts as already added when a registered CLI AI has the
- *   same command path (`CliProviderConfig.command`, which is the path
- *   `provider:detect-cli` reported when it was added) and the same WSL
- *   distro (both none, or equal). Paths are compared with `/` and `\` read
- *   alike; a Windows-style path (drive letter, UNC or backslash) is compared
- *   case-insensitively, a POSIX path exactly. The same path inside a WSL
- *   distro is a different CLI.
+ *   a CLI AI stores the bare command name (`claude` / `codex`), never the
+ *   path `provider:detect-cli` found it at, and every spawn looks the name up
+ *   on PATH again. A stored path breaks as soon as the CLI moves: the Codex
+ *   desktop app keeps its codex.exe under a per-version folder and deletes the
+ *   old one on update, which turned every check into ENOENT. A detected CLI
+ *   therefore counts as already added when a registered CLI AI has the same
+ *   command name and the same WSL distro (both none, or equal); the same
+ *   name inside a WSL distro is a different CLI.
  *
  * Default names: the product name for a CLI, the model name for a local
  * model, the service's name for an API. A name another AI already uses
@@ -25,29 +26,19 @@ import type { CliProviderConfig, ProviderInfo } from '../../../../shared/provide
 const CLI_HANG_TIMEOUT_MS = 30_000;
 const CLI_MODEL_UNKNOWN = 'unknown';
 
-const WINDOWS_PATH_PATTERN = /^[a-z]:[\\/]|^\\\\|\\/i;
-
 export function supportedClis(list: readonly DetectedCli[]): DetectedCli[] {
   return list.filter((cli) => isSupportedChatCliKey(cli.command));
 }
 
-/** The comparable form of a CLI command path (see the module note). */
-export function cliPathKey(path: string): string {
-  const trimmed = path.trim();
-  const slashed = trimmed.replace(/\\/g, '/');
-  return WINDOWS_PATH_PATTERN.test(trimmed) ? slashed.toLowerCase() : slashed;
-}
-
 export function isCliRegistered(cli: DetectedCli, providers: readonly ProviderInfo[]): boolean {
-  const key = cliPathKey(cli.path);
   return providers.some((provider) => provider.config.type === 'cli' &&
-    cliPathKey(provider.config.command) === key &&
+    provider.config.command === cli.command &&
     (provider.config.wslDistro ?? null) === (cli.wslDistro ?? null));
 }
 
 export function cliConfig(cli: DetectedCli): CliProviderConfig {
   return {
-    type: 'cli', command: cli.path, args: [],
+    type: 'cli', command: cli.command, args: [],
     inputFormat: 'stdin-json', outputFormat: 'stream-json',
     sessionStrategy: 'persistent',
     hangTimeout: { first: CLI_HANG_TIMEOUT_MS, subsequent: CLI_HANG_TIMEOUT_MS },
