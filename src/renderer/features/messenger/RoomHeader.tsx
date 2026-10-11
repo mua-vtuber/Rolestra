@@ -38,13 +38,14 @@ export interface RoomHeaderProps {
   members: MemberView[] | null;
   drawerOpen: boolean;
   onToggleDrawer: () => void;
-  onDeleteDm?: (channelId: string) => void;
+  /** Opens the delete confirm for a DM or the general channel. */
+  onDeleteChannel?: (channelId: string) => void;
   /** Jump to a message found by the in-room search. */
   onNavigate: (channelId: string) => void;
 }
 
 export function RoomHeader({
-  channel, title, members, drawerOpen, onToggleDrawer, onDeleteDm, onNavigate,
+  channel, title, members, drawerOpen, onToggleDrawer, onDeleteChannel, onNavigate,
 }: RoomHeaderProps): ReactElement {
   const { t } = useTranslation();
   const { token } = useTheme();
@@ -82,7 +83,9 @@ export function RoomHeader({
             onPostOpinion: canPostOpinion ? () => setOpinionOpen(true) : undefined,
             onArchiveRoom: channel.isChatRoom ? () => setRoomAction('archive') : undefined,
             onDeleteRoom: channel.isChatRoom ? () => setRoomAction('delete') : undefined,
-            onDeleteDm: channel.kind === 'dm' && onDeleteDm ? () => onDeleteDm(channel.id) : undefined,
+            onDeleteDm: channel.kind === 'dm' && onDeleteChannel ? () => onDeleteChannel(channel.id) : undefined,
+            onDeleteGeneral: channel.kind === 'system_general' && onDeleteChannel
+              ? () => onDeleteChannel(channel.id) : undefined,
           }} />
         </div>
         <div data-testid="room-subtitle" className="truncate text-meta text-fg-muted">{subtitle}</div>

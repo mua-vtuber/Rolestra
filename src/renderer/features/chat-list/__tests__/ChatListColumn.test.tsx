@@ -55,13 +55,14 @@ function renderColumn(themeKey: ThemeKey, props: Partial<Parameters<typeof ChatL
   useThemeStore.setState({ themeKey, mode: 'dark' });
   const onSelectChannel = vi.fn();
   const onSearchMessages = vi.fn();
+  const onCreateRoom = vi.fn();
   render(
     <ThemeProvider>
       <ChatListColumn activeChannelId="room-1" onSelectChannel={onSelectChannel}
-        onSearchMessages={onSearchMessages} {...props} />
+        onSearchMessages={onSearchMessages} onCreateRoom={onCreateRoom} {...props} />
     </ThemeProvider>,
   );
-  return { onSelectChannel, onSearchMessages };
+  return { onSelectChannel, onSearchMessages, onCreateRoom };
 }
 
 function rowIds(): string[] {
@@ -171,5 +172,13 @@ describe('ChatListColumn — read states', () => {
     expect(screen.getByTestId('chat-list-loading')).toBeTruthy();
     useChannelSummaryStore.setState({ summaries: SUMMARIES });
     await waitFor(() => expect(rowIds()).toEqual(['room-1', 'general-1']));
+  });
+
+  it('asks the host to open the room create dialog from the + button, drawing none itself', () => {
+    const { onCreateRoom } = renderColumn('tactical');
+    fireEvent.click(screen.getByTestId('room-create-open'));
+    expect(onCreateRoom).toHaveBeenCalledOnce();
+    expect(screen.queryByTestId('room-create-dialog')).toBeNull();
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

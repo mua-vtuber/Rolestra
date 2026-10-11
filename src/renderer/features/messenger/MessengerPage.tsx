@@ -1,14 +1,17 @@
 /**
  * MessengerPage — the 채팅 view (spec 2026-10-01-messenger-redesign.md R2/R3):
- * the chat list column next to the open conversation. DM deletion (from
- * the room's ⋯ menu) confirms here.
+ * the chat list column next to the open conversation. DM and general channel
+ * deletion (from the room's ⋯ menu) confirm here, and the room create dialog
+ * lives here so both the chat list's + button and the thread's "대화방이
+ * 없어요" button open it (spec 2026-10-08 F1).
  */
 import { useCallback, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { ChannelDeleteConfirm } from '../channels/ChannelDeleteConfirm';
 import { ChatListColumn } from '../chat-list/ChatListColumn';
-import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
+import { CreateRoom } from '../rooms/CreateRoom';
+import { finishChannelDelete } from '../channels/finish-channel-delete';
 import { useGlobalChannelLists } from '../../hooks/use-global-channel-lists';
 import { useActiveChannelStore } from '../../stores/active-channel-store';
 import { Thread } from './Thread';
@@ -25,28 +28,28 @@ export function MessengerPage({ onSearchMessages, className }: MessengerPageProp
   const activeChannelId = useActiveChannelStore((state) => state.globalChannelId);
   const setGlobalChannelId = useActiveChannelStore((state) => state.setGlobalChannelId);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
   const deleteTarget = available.find((channel) => channel.id === deleteTargetId) ?? null;
 
   const handleDeleted = useCallback((channelId: string): void => {
     setDeleteTargetId(null);
-    if (useActiveChannelStore.getState().globalChannelId === channelId) {
-      setGlobalChannelId(null);
-    }
-    void notifyChannelsChanged();
-  }, [setGlobalChannelId]);
+    void finishChannelDelete(channelId);
+  }, []);
+  const openCreateRoom = useCallback((): void => setCreateOpen(true), []);
 
   return (
     <div data-testid="messenger-page" data-empty="false"
       className={`flex h-full min-h-0 min-w-0 flex-1 ${className ?? ''}`}>
       <ChatListColumn channels={available} activeChannelId={activeChannelId} onSelectChannel={setGlobalChannelId}
-        onSearchMessages={onSearchMessages} />
+        onSearchMessages={onSearchMessages} onCreateRoom={openCreateRoom} />
       <section data-testid="messenger-thread" aria-label={t('messenger.pane.thread')}
         className="flex min-h-0 min-w-0 flex-1">
-        <Thread onDeleteDm={setDeleteTargetId} />
+        <Thread onDeleteChannel={setDeleteTargetId} onCreateRoom={openCreateRoom} />
       </section>
       <ChannelDeleteConfirm open={deleteTargetId !== null}
         onOpenChange={(open) => { if (!open) setDeleteTargetId(null); }}
         channel={deleteTarget} onDeleted={handleDeleted} />
+      {createOpen ? <CreateRoom open onOpenChange={setCreateOpen} onCreated={setGlobalChannelId} /> : null}
     </div>
   );
 }

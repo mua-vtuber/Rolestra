@@ -2,7 +2,8 @@
  * RoomMenu — the ⋯ menu of the room header (spec
  * 2026-10-01-messenger-redesign.md R3-1). It holds the actions that used to
  * sit in the header row: 의견 게시 (general channel and writable rooms),
- * 대화 종료·보관 (an active room), 삭제 (an archived room) and DM 삭제.
+ * 대화 종료·보관 (an active room), 삭제 (an archived room), DM 삭제 and
+ * 일반 채널 삭제 (spec 2026-10-08 F1 — one confirm, no archive step).
  * Each item keeps its earlier test id. With no applicable action the menu
  * button is not drawn.
  */
@@ -19,6 +20,7 @@ export interface RoomMenuActions {
   onArchiveRoom?: () => void;
   onDeleteRoom?: () => void;
   onDeleteDm?: () => void;
+  onDeleteGeneral?: () => void;
 }
 
 interface MenuItem { testId: string; label: string; run: () => void; danger?: boolean }
@@ -41,6 +43,9 @@ export function roomMenuItems(
   }
   if (channel.kind === 'dm' && actions.onDeleteDm) {
     items.push({ testId: 'chat-delete-dm', label: t('messenger.channelHeader.delete'), run: actions.onDeleteDm, danger: true });
+  }
+  if (channel.kind === 'system_general' && actions.onDeleteGeneral) {
+    items.push({ testId: 'chat-delete-general', label: t('messenger.channelHeader.deleteGeneral'), run: actions.onDeleteGeneral, danger: true });
   }
   return items;
 }

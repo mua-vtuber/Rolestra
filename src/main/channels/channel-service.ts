@@ -33,8 +33,10 @@
  *     "one DM per provider" invariant.
  *   - `listDms()` / `listMembers(channelId)` / `get(id)` — reads used by
  *     the chat handlers and the whisper/opinion flows.
- *   - `getGlobalGeneralChannel()` / `ensureGlobalGeneralChannel()` — the
- *     single global #일반 channel (project_id IS NULL).
+ *   - `getGlobalGeneralChannel()` — the single global #일반 channel
+ *     (project_id IS NULL), or `null` once the user deleted it. Creating
+ *     it on first run and deleting it belong to `GeneralChannelService`
+ *     (spec 2026-10-08 F1).
  *   - `archiveConversation(channelId)` — dumps the global general
  *     channel's messages to disk and clears them ("새 대화 시작").
  *
@@ -219,7 +221,8 @@ export class ChannelService {
    * {@link DmChannelService.delete}, which already asserts
    * `channel.kind === 'dm'` before calling here, so the system-channel
    * guard below is defence-in-depth rather than a reachable branch on
-   * that call path.
+   * that call path. Deleting the global general channel does not go
+   * through here: `GeneralChannelService.delete` owns that path.
    *
    * @throws {ChannelNotFoundError}        unknown id.
    * @throws {SystemChannelProtectedError} channel.kind startsWith system_.
@@ -235,22 +238,12 @@ export class ChannelService {
 
   /**
    * R12-C — Returns the global general channel (project_id IS NULL,
-   * kind = 'system_general'). After migration 018 + ProjectService boot
-   * (`ensureGlobalGeneralChannel`) this row always exists.
-   *
-   * Throws when no row exists yet — callers should treat this as a boot
-   * sequencing bug rather than silently fall back to a per-project
-   * channel (would break the R12-C global-general invariant).
+   * kind = 'system_general'), or `null` when there is none: the user
+   * deleted it (spec 2026-10-08 F1), which is a normal state. A DB error
+   * while reading the row propagates.
    */
-  getGlobalGeneralChannel(): Channel {
-    const row = this.repo.getGlobalGeneralChannel();
-    if (!row) {
-      throw new ChannelError(
-        'getGlobalGeneralChannel: no global system_general row. ' +
-          'Did ensureGlobalGeneralChannel() run on app boot?',
-      );
-    }
-    return row;
+  getGlobalGeneralChannel(): Channel | null {
+    return this.repo.getGlobalGeneralChannel();
   }
 
   /**
@@ -314,38 +307,5 @@ export class ChannelService {
       try { this.archiveLifecycle?.resume(channelId); }
       finally { this.archivingConversations.delete(channelId); }
     }
-  }
-
-  /**
-   * R12-C — Boot-time idempotent: ensure exactly one global
-   * `system_general` row exists (project_id IS NULL). Called from
-   * the main process startup sequence (after migrations run). Returns
-   * the row whether it was just created or already existed.
-   *
-   * Migration 018 already collapsed any pre-existing per-project
-   * system_general rows down to one (oldest survives, project_id
-   * becomes NULL). This method handles fresh installs where no
-   * system_general row existed yet.
-   */
-  ensureGlobalGeneralChannel(): Channel {
-    const existing = this.repo.getGlobalGeneralChannel();
-    if (existing) return existing;
-    const channel: Channel = {
-      id: randomUUID(),
-      projectId: null,
-      name: '일반',
-      kind: 'system_general',
-      readOnly: false,
-      createdAt: Date.now(),
-      role: null,
-      purpose: null,
-      handoffMode: 'check',
-      // R12-C2 — 일반 채널 (system_general, 전역) 은 회의 X (잡담 정체성) 라 NULL.
-      maxRounds: null,
-      // R12-W T5 — system 채널은 회의 컨텍스트 X. D2 안전 측 default.
-      permissions: catalogDefaultForNullRole(),
-    };
-    this.repo.insert(channel);
-    return channel;
   }
 }

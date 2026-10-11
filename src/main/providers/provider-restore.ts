@@ -13,7 +13,7 @@ import { loadAllProviders } from './provider-repository';
 import { parseDepartmentHeadMap } from './department-head-map';
 import { createProvider, isSupportedChatCliCommand } from './factory';
 import { providerRegistry } from './registry';
-import { getConfigService } from '../config/instance';
+import { resolveStoredApiKey } from './api-key-resolver';
 import { tryGetLogger } from '../log/logger-accessor';
 
 /**
@@ -60,13 +60,6 @@ function parseSkillOverrides(
   }
 }
 
-/** Resolve an API key reference to the actual key value. */
-async function resolveApiKey(ref: string): Promise<string> {
-  const secret = getConfigService().getSecret(ref);
-  if (!secret) throw new Error(`API key not found: ${ref}`);
-  return secret;
-}
-
 /**
  * Restore all providers from DB into the in-memory registry.
  * Logs warnings for individual failures but does not throw.
@@ -97,7 +90,7 @@ export function restoreProvidersFromDb(): void {
         id: row.id,
         displayName: row.displayName,
         config,
-        resolveApiKey,
+        resolveApiKey: resolveStoredApiKey,
         roles: parseRoles(row.roles, row.id),
         skill_overrides: parseSkillOverrides(row.skillOverrides, row.id),
         isDepartmentHead: parseDepartmentHeadMap(row.isDepartmentHead, row.id),

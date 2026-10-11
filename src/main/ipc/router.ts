@@ -2,7 +2,9 @@ import { ipcMain } from 'electron';
 import type { ChannelService } from '../channels/channel-service';
 import type { ChatRoomService } from '../channels/chat-room-service';
 import type { OpinionRepository } from '../meetings/opinion-repository';
-import { requireChatChannel, requireChatOpinionChannel, requireDm, requireGlobalGeneral } from './chat-channel-boundary';
+import {
+  requireChatChannel, requireChatOpinionChannel, requireDeletableChatChannel, requireGlobalGeneral,
+} from './chat-channel-boundary';
 import type { IpcMeta, IpcChannel, IpcChannelMap } from '../../shared/ipc-types';
 import { CURRENT_SCHEMA_VERSION } from '../../shared/ipc-types';
 import { validateCriticalPayload, v3ChannelSchemas } from '../../shared/ipc-schemas';
@@ -175,8 +177,8 @@ export function registerIpcHandlers(
   });
   handle('channel:get-global-general', () => handleChannelGetGlobalGeneral());
   handle('channel:delete', (data) => {
-    requireDm(channels, data.id);
-    return handleChannelDelete(data);
+    const target = requireDeletableChatChannel(channels, data.id);
+    return handleChannelDelete(data, target);
   });
   handle('channel:archive-conversation', (data) => {
     requireGlobalGeneral(channels, data.channelId);

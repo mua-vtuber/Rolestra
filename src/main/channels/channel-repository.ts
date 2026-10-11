@@ -259,8 +259,8 @@ export class ChannelRepository {
   /**
    * R12-C — Returns the global general channel (project_id IS NULL,
    * kind = 'system_general'). After migration 018 there is at most one
-   * such row. Returns null when none exists yet (app boot before
-   * `ensureGlobalGeneralChannel`).
+   * such row. Returns null when none exists: the user deleted it, or app
+   * boot before `GeneralChannelService.provisionOnFirstRun`.
    */
   getGlobalGeneralChannel(): Channel | null {
     const row = this.db

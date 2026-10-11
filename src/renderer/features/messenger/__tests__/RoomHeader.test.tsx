@@ -41,13 +41,14 @@ const general = chatChannelForTest({
 function renderHeader(themeKey: ThemeKey, channel: Channel, title: string, members: MemberView[]) {
   useThemeStore.setState({ themeKey, mode: 'dark' });
   const onToggleDrawer = vi.fn();
+  const onDeleteChannel = vi.fn();
   render(
     <ThemeProvider>
       <RoomHeader channel={channel} title={title} members={members} drawerOpen={false}
-        onToggleDrawer={onToggleDrawer} onDeleteDm={vi.fn()} onNavigate={vi.fn()} />
+        onToggleDrawer={onToggleDrawer} onDeleteChannel={onDeleteChannel} onNavigate={vi.fn()} />
     </ThemeProvider>,
   );
-  return { onToggleDrawer };
+  return { onToggleDrawer, onDeleteChannel };
 }
 
 beforeEach(() => {
@@ -97,6 +98,19 @@ describe('RoomHeader', () => {
     expect(screen.queryByTestId('thread-whisper-observer-notice')).toBeNull();
   });
 
+  it('opens the delete confirm for the general channel and for a DM through onDeleteChannel', () => {
+    const { onDeleteChannel } = renderHeader('tactical', general, '일반 채널', MEMBERS);
+    fireEvent.click(screen.getByTestId('room-menu-open'));
+    fireEvent.click(screen.getByTestId('chat-delete-general'));
+    expect(onDeleteChannel).toHaveBeenCalledWith('general-1');
+    cleanup();
+
+    const dmView = renderHeader('tactical', dm, '루나', [MEMBERS[0] as MemberView]);
+    fireEvent.click(screen.getByTestId('room-menu-open'));
+    fireEvent.click(screen.getByTestId('chat-delete-dm'));
+    expect(dmView.onDeleteChannel).toHaveBeenCalledWith('dm-1');
+  });
+
   it('toggles the room-info drawer and opens the in-room search', () => {
     const { onToggleDrawer } = renderHeader('tactical', general, '일반 채널', MEMBERS);
     fireEvent.click(screen.getByTestId('room-info-toggle'));
@@ -109,7 +123,10 @@ describe('RoomHeader', () => {
 });
 
 describe('roomMenuItems', () => {
-  const all = { onPostOpinion: vi.fn(), onArchiveRoom: vi.fn(), onDeleteRoom: vi.fn(), onDeleteDm: vi.fn() };
+  const all = {
+    onPostOpinion: vi.fn(), onArchiveRoom: vi.fn(), onDeleteRoom: vi.fn(), onDeleteDm: vi.fn(),
+    onDeleteGeneral: vi.fn(),
+  };
   const ids = (channel: Channel) => roomMenuItems(t, channel, all).map((item) => item.testId);
 
   it('offers 의견 게시 and 보관 in a writable room, 삭제 in an archived one', () => {
@@ -117,8 +134,11 @@ describe('roomMenuItems', () => {
     expect(ids({ ...room, readOnly: true, archivedAt: 5 })).toEqual(['room-delete-open']);
   });
 
-  it('offers 의견 게시 in general and only DM deletion in a DM', () => {
-    expect(ids(general)).toEqual(['chat-post-opinion']);
+  it('offers 의견 게시 and its deletion in general, and only DM deletion in a DM', () => {
+    expect(ids(general)).toEqual(['chat-post-opinion', 'chat-delete-general']);
+    expect(roomMenuItems(t, general, all).at(-1)).toMatchObject({
+      label: t('messenger.channelHeader.deleteGeneral'), danger: true,
+    });
     expect(ids(dm)).toEqual(['chat-delete-dm']);
   });
 

@@ -1,3 +1,5 @@
+import type { ProviderFailureCause } from './provider-failure-types';
+
 export type ChatVoteStatus = 'running' | 'completed' | 'interrupted';
 export type ChatVoteParticipantStatus = 'pending' | 'submitted' | 'failed';
 export type ChatVoteError = 'provider_unavailable' | 'invalid_response' | 'provider_error' | 'timeout' | 'interrupted';
@@ -17,6 +19,10 @@ export interface ChatVoteParticipant {
   opinion: string | null;
   vote: ChatVoteValue | null;
   error: ChatVoteError | null;
+  /** Why a `provider_error` failure happened, when main could tell (spec 2026-10-08 F3). */
+  errorCause: ProviderFailureCause | null;
+  /** Short app-made marker for the cause (`HTTP 503`, `claude`), never provider text. */
+  errorDetail: string | null;
 }
 
 export interface ChatVote {

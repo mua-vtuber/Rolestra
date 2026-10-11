@@ -153,6 +153,8 @@ describe('v3 migrations 008-011 — schema contract', () => {
         '036-channel-read-state',
         '037-vote-result-message',
         '038-cli-command-name',
+        '039-install-markers',
+        '040-chat-vote-error-cause',
       ]);
     });
   });
@@ -516,9 +518,11 @@ describe('v3 migrations 008-011 — schema contract', () => {
       // whisper threads (spec 2026-10-01 F2) added 035-whisper-threads;
       // The chat list unread counts added 036-channel-read-state;
       // once-only vote result delivery added 037-vote-result-message;
-      // storing chat CLIs by command name added 038-cli-command-name.
+      // storing chat CLIs by command name added 038-cli-command-name;
+      // the install marker table added 039-install-markers; vote failure
+      // causes added 040-chat-vote-error-cause.
       // The test stays at "no-op on re-run" — only the absolute count changes.
-      expect(before.c).toBe(38);
+      expect(before.c).toBe(40);
 
       // A second pass must not throw (would throw on duplicate CREATE TABLE
       // because v3 migrations omit IF NOT EXISTS, so this proves the migrator
@@ -528,7 +532,7 @@ describe('v3 migrations 008-011 — schema contract', () => {
       const after = db
         .prepare('SELECT COUNT(*) AS c FROM migrations')
         .get() as { c: number };
-      expect(after.c).toBe(38);
+      expect(after.c).toBe(40);
     });
   });
 });

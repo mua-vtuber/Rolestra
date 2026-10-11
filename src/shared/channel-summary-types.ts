@@ -17,6 +17,7 @@ import type {
   CHAT_PASS_CODE,
 } from './message-types';
 import type { ChatVoteResult } from './chat-vote-types';
+import type { ProviderFailureCause } from './provider-failure-types';
 
 export type ChannelSummaryKind = 'general' | 'room' | 'dm';
 
@@ -31,6 +32,8 @@ export interface ChannelSummaryParticipant {
 export interface ChannelSummaryNoticeMeta {
   chatError?: ChatErrorCode;
   chatErrorDetail?: string;
+  chatErrorCause?: ProviderFailureCause;
+  chatErrorCauseDetail?: string;
   chatErrorSpeakerName?: string;
   chatSilence?: ChatSilenceNotice;
   chatPass?: typeof CHAT_PASS_CODE;

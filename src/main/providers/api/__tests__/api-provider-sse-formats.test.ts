@@ -360,6 +360,38 @@ describe('ApiProvider', () => {
       expect(messages.every(m => m.role !== 'system')).toBe(true);
     });
 
+    it.each([
+      ['overloaded_error', 'service-busy'],
+      ['rate_limit_error', 'rate-limited'],
+      ['authentication_error', 'auth'],
+    ])('names the cause of a mid-stream %s event (spec 2026-10-08 F3)', async (type, cause) => {
+      const provider = createAnthropicProvider();
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockSSEResponse([
+        'data: {"type":"content_block_delta","delta":{"text":"A"}}',
+        `data: {"type":"error","error":{"type":"${type}","message":"provider text"}}`,
+      ])));
+
+      const tokens: string[] = [];
+      const failure = await (async () => {
+        for await (const token of provider.streamCompletion([{ role: 'user', content: 'hi' }], '')) tokens.push(token);
+      })().then(() => null, (error: unknown) => error);
+      expect(tokens).toEqual(['A']);
+      expect(failure).toMatchObject({ name: 'ProviderCallError', failureCause: cause, failureDetail: null });
+    });
+
+    it('fails without a cause on an unlisted mid-stream error type', async () => {
+      const provider = createAnthropicProvider();
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockSSEResponse([
+        'data: {"type":"error","error":{"type":"api_error","message":"provider text"}}',
+      ])));
+
+      const failure = await collectTokens(provider.streamCompletion([{ role: 'user', content: 'hi' }], ''))
+        .then(() => null, (error: unknown) => error);
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toHaveProperty('failureCause');
+      expect((failure as Error).message).toContain('api_error');
+    });
+
     it('skips unparseable Anthropic SSE lines', async () => {
       const provider = createAnthropicProvider();
 

@@ -15,6 +15,7 @@ import { SystemRowInModelInputError } from '../../channels/message-visibility';
 import { CHAT_RUNTIME_ENVIRONMENT_RULE, withChatRuntimeRules } from '../../members/persona-builder';
 import { CHAT_PASS_MODEL_LINE } from '../../channels/chat-whisper-output';
 import { CHAT_PASS_CODE, type Message } from '../../../shared/message-types';
+import { ProviderCallError } from '../../providers/provider-call-error';
 
 const opened: Database.Database[] = [];
 afterEach(() => { for (const db of opened.splice(0)) db.close(); });
@@ -128,6 +129,23 @@ describe('chat vote runtime', () => {
     const result = service.getVote('op');
     expect(result?.counts).toEqual({ agree: 0, oppose: 0, abstain: 0, pending: 0, failed: 3, total: 3 });
     expect(result?.participants.map((part) => part.error)).toEqual(['invalid_response','invalid_response','provider_error']);
+  });
+
+  it('stores a known provider failure cause and leaves every other failure without one (spec 2026-10-08 F3)', async () => {
+    const { service, db } = setup({
+      a: new ProviderCallError('Local LLM error 503: busy', 'service-busy', 'HTTP 503'),
+      b: '{"opinion":"", "vote":"agree"}',
+      c: new Error('offline'),
+    });
+    service.startVote('op'); await settle();
+    expect(service.getVote('op')?.participants.map((part) => [part.error, part.errorCause, part.errorDetail])).toEqual([
+      ['provider_error', 'service-busy', 'HTTP 503'],
+      ['invalid_response', null, null],
+      ['provider_error', null, null],
+    ]);
+    // An unknown stored cause is broken data and is not hidden.
+    db.prepare("UPDATE chat_vote_participants SET error_cause = 'mystery' WHERE provider_id = 'c'").run();
+    expect(() => service.getVote('op')).toThrow(/Unknown vote failure cause "mystery"/);
   });
 
   it('interrupts on archive and rejects late responses', async () => {

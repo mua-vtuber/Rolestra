@@ -5,6 +5,9 @@ import type { BaseProvider } from '../../providers/provider-interface';
 import { DmAutoResponder, type DmAutoResponderDeps } from '../dm-auto-responder';
 import { ChatOutputLimitError, collectChatOutput } from '../chat-whisper-output';
 import { participantAlias } from '../participant-alias';
+import {
+  createChatRuntime, hintParticipants, privateReply, publicReply, reply, whisperTo,
+} from './chat-runtime-harness';
 
 const channel = { id: 'room', kind: 'user', projectId: null } as Channel;
 const source = { id: 'user-1', channelId: 'room', meetingId: null,
@@ -236,5 +239,47 @@ describe('whispers with the 2026-09-28 rules', () => {
   it('rejects output beyond 64 KiB before it can be parsed or stored', async () => {
     async function* oversized() { yield 'x'.repeat(65_537); }
     await expect(collectChatOutput(oversized())).rejects.toBeInstanceOf(ChatOutputLimitError);
+  });
+});
+
+describe('structured output reaches API/local calls of rooms and whisper replies only (spec 2026-10-08 F2)', () => {
+  it('room turns carry room_turn with the hint aliases, whisper replies private_reply, DMs nothing', async () => {
+    const rt = createChatRuntime({ api: ['alice', 'bob'] });
+    try {
+      const room = rt.createRoom('Room', ['alice', 'bob']);
+      rt.script('alice', whisperTo('bob', 'psst'), privateReply(null));
+      rt.script('bob', privateReply('heard you'), publicReply('hello all'));
+      await rt.sendUser(room, 'hi');
+
+      const [aliceTurn, bobReply] = [rt.callsFor('alice')[0]!, rt.callsFor('bob')[0]!];
+      const spec = aliceTurn.options?.structuredOutput as { name: string; schema: Record<string, unknown> };
+      expect(spec.name).toBe('room_turn');
+      const whispers = (spec.schema.properties as Record<string, { items?: { properties: Record<string, { enum?: string[] }> } }>).whispers;
+      expect(whispers?.items?.properties.recipientId?.enum).toEqual(hintParticipants(aliceTurn).map((item) => item.id));
+      expect((bobReply.options?.structuredOutput as { name: string }).name).toBe('private_reply');
+      expect((rt.callsFor('alice')[1]!.options?.structuredOutput as { name: string }).name).toBe('private_reply');
+      expect((rt.callsFor('bob')[1]!.options?.structuredOutput as { name: string }).name).toBe('room_turn');
+
+      const dm = rt.channels.createDm('alice');
+      rt.script('alice', reply('plain DM answer'));
+      await rt.sendUser(dm, 'hello');
+      expect(rt.callsFor('alice').at(-1)!.options?.structuredOutput).toBeUndefined();
+    } finally {
+      rt.close();
+    }
+  });
+
+  it('CLI room turns never get the schema in their options', async () => {
+    const rt = createChatRuntime({ cli: ['carl'], api: ['alice'] });
+    try {
+      const room = rt.createRoom('Room', ['carl', 'alice']);
+      rt.script('carl', publicReply('cli says hi'));
+      rt.script('alice', publicReply('api says hi'));
+      await rt.sendUser(room, 'hi');
+      expect(rt.callsFor('carl')[0]!.options).not.toHaveProperty('structuredOutput');
+      expect((rt.callsFor('alice')[0]!.options?.structuredOutput as { name: string }).name).toBe('room_turn');
+    } finally {
+      rt.close();
+    }
   });
 });

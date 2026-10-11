@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { CliOutputParser } from '../cli-output-parser';
 import { ProviderUsageLimitError } from '../../provider-usage-limit-error';
+import { ProviderCallError } from '../../provider-call-error';
 import type { CliRuntimeConfig } from '../cli-provider';
 
 // ---------------------------------------------------------------------------
@@ -309,6 +310,16 @@ describe('extractStructuredError', () => {
     const error = parser.extractStructuredError(raw);
     expect(error).toBeInstanceOf(Error);
     expect(error).not.toBeInstanceOf(ProviderUsageLimitError);
+  });
+
+  it('returns provider errors that carry their cause (spec 2026-10-08 F3)', () => {
+    expect(parser.createProviderError('HTTP 429 rate limit exceeded')).toMatchObject({
+      failureCause: 'rate-limited', failureDetail: null,
+    });
+    const login = parser.createProviderError('Please log in again', 'authentication_failed');
+    expect(login).toBeInstanceOf(ProviderCallError);
+    expect(login).toMatchObject({ failureCause: 'cli-login-required', message: 'CLI command failed: Please log in again' });
+    expect(parser.createProviderError('unexpected')).toMatchObject({ failureCause: 'cli-failed' });
   });
 
   it('recognizes a terminal Claude error even while intercepting permission events', () => {

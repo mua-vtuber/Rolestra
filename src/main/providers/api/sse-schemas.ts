@@ -95,6 +95,8 @@ export const anthropicEventSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('content_block_start') }),
   z.object({ type: z.literal('content_block_stop') }),
   z.object({ type: z.literal('ping') }),
+  // Mid-stream failure (overloaded, rate limit, ...): classified by its type only.
+  z.object({ type: z.literal('error'), error: z.object({ type: z.string() }) }),
 ]);
 
 export type AnthropicEvent = z.infer<typeof anthropicEventSchema>;

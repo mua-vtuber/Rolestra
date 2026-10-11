@@ -27,7 +27,7 @@ describe('DM delete closes the conversation (A6)', () => {
     const pending = rt.sendUser(dm, 'hello');
     await vi.waitFor(() => expect(rt.callsFor('bob')).toHaveLength(1));
     const append = vi.spyOn(rt.messages, 'append');
-    expect(handleChannelDelete({ id: dm.id })).toEqual({ success: true });
+    expect(handleChannelDelete({ id: dm.id }, 'dm')).toEqual({ success: true });
 
     expect(rt.callsFor('bob')[0]!.signal?.aborted).toBe(true);
     release?.();

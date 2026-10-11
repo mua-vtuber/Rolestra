@@ -17,6 +17,7 @@ import {
 import { modelFacingBody, unwrapSingleJsonFence } from '../channels/chat-whisper-output';
 import { withChatRuntimeRules } from '../members/persona-builder';
 import { participantAlias } from '../channels/participant-alias';
+import { describeChatFailure } from '../channels/chat-failure';
 import { SystemRowInModelInputError } from '../channels/message-visibility';
 
 type VoteProvider = Pick<BaseProvider, 'streamCompletion' | 'cooldown'>;
@@ -223,7 +224,8 @@ export class ChatVoteService {
       if (!current || current.status !== 'running') return;
       const provider = this.providers.get(part.providerId);
       if (!provider) {
-        this.repo.settleParticipant(voteId, part.providerId, { status: 'failed', opinion: null, vote: null, error: 'provider_unavailable' });
+        this.repo.settleParticipant(voteId, part.providerId, { status: 'failed', opinion: null, vote: null, error: 'provider_unavailable',
+          errorCause: null, errorDetail: null });
         continue;
       }
       const controller = new AbortController();
@@ -264,17 +266,20 @@ export class ChatVoteService {
         const parsed = parseResponse(raw);
         this.repo.settleParticipant(voteId, part.providerId,
           !this.providers.get(part.providerId)
-            ? { status: 'failed', opinion: null, vote: null, error: 'provider_unavailable' }
+            ? { status: 'failed', opinion: null, vote: null, error: 'provider_unavailable', errorCause: null, errorDetail: null }
             : parsed
-              ? { status: 'submitted', opinion: parsed.opinion, vote: parsed.vote, error: null }
-              : { status: 'failed', opinion: null, vote: null, error: 'invalid_response' });
-      } catch {
+              ? { status: 'submitted', opinion: parsed.opinion, vote: parsed.vote, error: null, errorCause: null, errorDetail: null }
+              : { status: 'failed', opinion: null, vote: null, error: 'invalid_response', errorCause: null, errorDetail: null });
+      } catch (error) {
         const code: ChatVoteError = !this.providers.get(part.providerId)
           ? 'provider_unavailable' : timedOut
           ? 'timeout' : oversized ? 'invalid_response'
             : controller.signal.aborted ? 'interrupted' : 'provider_error';
+        // Only a provider failure can carry a known cause (spec 2026-10-08 F3).
+        const failure = code === 'provider_error' ? describeChatFailure(error, false, provider.config) : null;
         this.repo.settleParticipant(voteId, part.providerId, {
           status: 'failed', opinion: null, vote: null, error: code,
+          errorCause: failure?.cause ?? null, errorDetail: failure?.causeDetail ?? null,
         });
       } finally {
         if (timer) clearTimeout(timer);

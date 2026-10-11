@@ -3,6 +3,8 @@ import { useMemo, useRef, useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { notifyOpinionCardsChanged } from '../../hooks/opinion-card-invalidation-bus';
+import { ChannelDeleteConfirm } from '../channels/ChannelDeleteConfirm';
+import { finishChannelDelete } from '../channels/finish-channel-delete';
 import { PostOpinionModal } from '../messenger/PostOpinionModal';
 import { RoomMenuContent, roomMenuItems } from '../messenger/RoomMenu';
 import { RoomControls } from '../rooms/RoomControls';
@@ -17,7 +19,7 @@ interface ChatListContextMenuProps {
 /** Actions keep the clicked channel separate from the currently selected conversation. */
 export function ChatListContextMenu({ channel, target, onOpenChange }: ChatListContextMenuProps): ReactElement {
   const { t } = useTranslation();
-  const [action, setAction] = useState<'opinion' | 'archive' | 'delete' | null>(null);
+  const [action, setAction] = useState<'opinion' | 'archive' | 'delete' | 'delete-general' | null>(null);
   const restoreFocusOnClose = useRef(false);
   const { x, y, trigger, open } = target;
   const anchor = useMemo(() => ({ current: {
@@ -36,6 +38,7 @@ export function ChatListContextMenu({ channel, target, onOpenChange }: ChatListC
     onPostOpinion: () => setAction('opinion'),
     onArchiveRoom: () => setAction('archive'),
     onDeleteRoom: () => setAction('delete'),
+    onDeleteGeneral: () => setAction('delete-general'),
   });
   const canPostOpinion = (channel.kind === 'system_general' || channel.isChatRoom) && !channel.readOnly;
   const canConfirmRoomAction = channel.isChatRoom && (
@@ -62,6 +65,10 @@ export function ChatListContextMenu({ channel, target, onOpenChange }: ChatListC
       ) : null}
       {canConfirmRoomAction ? (
         <RoomControls open channelId={channel.id} readOnly={action === 'delete'} onOpenChange={closeAction} />
+      ) : null}
+      {action === 'delete-general' && channel.kind === 'system_general' ? (
+        <ChannelDeleteConfirm open channel={channel} onOpenChange={closeAction}
+          onDeleted={(channelId) => { void finishChannelDelete(channelId); }} />
       ) : null}
     </>
   );

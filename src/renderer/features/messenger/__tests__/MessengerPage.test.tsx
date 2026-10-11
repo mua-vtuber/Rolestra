@@ -227,6 +227,59 @@ describe('MessengerPage — empty / active rendering (R5-Task3)', () => {
     expect(screen.queryByTestId('channel-rail')).toBeNull();
   });
 
+  it('offers to create a room when no general channel and no active room exist (spec 2026-10-08 F1)', async () => {
+    const archived = chatChannelForTest({
+      id: 'c-archived', projectId: null, name: 'Old', kind: 'user', isChatRoom: true,
+      readOnly: true, archivedAt: 5, createdAt: 1,
+    });
+    stubEmptyChannelBridge(null, [archived]);
+    renderPage();
+
+    const empty = await screen.findByTestId('thread-no-conversations');
+    expect(empty.textContent).toContain('대화방이 없어요');
+    expect(empty.textContent).toContain('새 대화방을 만들어 AI들과 이야기를 시작해 보세요.');
+    expect(screen.queryByTestId('thread-empty-state')).toBeNull();
+    expect(screen.queryByTestId('room-create-dialog')).toBeNull();
+    fireEvent.click(screen.getByTestId('thread-create-room'));
+    expect(await screen.findByTestId('room-create-dialog')).toBeTruthy();
+  });
+
+  it('shows a failed list read with a retry instead of "select a channel" (spec 2026-10-08 F1, QA)', async () => {
+    let failRooms = true;
+    const invoke = stubEmptyChannelBridge(null, []);
+    const base = invoke.getMockImplementation()!;
+    invoke.mockImplementation(async (channel: string, data?: unknown) => {
+      if (channel === 'room:list' && failRooms) throw new Error('room list exploded');
+      return base(channel, data);
+    });
+    renderPage();
+
+    const failure = await screen.findByTestId('thread-load-error');
+    expect(failure.textContent).toContain('대화 목록을 불러오지 못했습니다.');
+    expect(failure.textContent).toContain('room list exploded');
+    expect(screen.queryByTestId('thread-empty-state')).toBeNull();
+    expect(screen.queryByTestId('thread-no-conversations')).toBeNull();
+
+    failRooms = false;
+    fireEvent.click(screen.getByTestId('thread-load-retry'));
+    expect(await screen.findByTestId('thread-no-conversations')).toBeTruthy();
+    expect(screen.queryByTestId('thread-load-error')).toBeNull();
+  });
+
+  it('keeps "select a channel" when a conversation exists but none is selected', async () => {
+    const room = chatChannelForTest({
+      id: 'c-room', projectId: null, name: 'Campfire', kind: 'user', isChatRoom: true,
+      readOnly: false, archivedAt: null, createdAt: 1,
+    });
+    const invoke = stubEmptyChannelBridge(null, [room]);
+    renderPage();
+
+    await waitFor(() => expect(invoke.mock.calls.map((call) => call[0])).toContain('room:list'));
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(screen.getByTestId('thread-empty-state')).toBeTruthy();
+    expect(screen.queryByTestId('thread-no-conversations')).toBeNull();
+  });
+
   it('opens the conversation picked in the chat list', async () => {
     const room = chatChannelForTest({
       id: 'c-room', projectId: null, name: 'Campfire',

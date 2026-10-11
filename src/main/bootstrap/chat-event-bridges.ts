@@ -4,6 +4,7 @@ import { ChatSessionCoordinator } from '../channels/chat-session-coordinator';
 import { ChatSessionRepository } from '../channels/chat-session-repository';
 import { ChatWhisperRoundRepository } from '../channels/chat-whisper-round-repository';
 import type { DmClosedEvent } from '../channels/dm-channel-service';
+import type { GeneralClosedEvent } from '../channels/general-channel-service';
 import { getDatabase } from '../database/connection';
 import { GeneralChannelOpinionFlow } from '../channels/general-channel-opinion-flow';
 import { tryGetLogger } from '../log/logger-accessor';
@@ -33,6 +34,8 @@ export function wireChatMessageFlows(services: ChatServices): DmAutoResponder {
   chatRoomService?.on('closed', ({ channelId }: { channelId: string }) => responder.closeRoom(channelId));
   // A deleted DM takes the same close path as an archived or deleted room.
   services.dmChannelService.on('closed', ({ channelId }: DmClosedEvent) => responder.closeRoom(channelId));
+  // So does the deleted global general channel (spec 2026-10-08 F1).
+  services.generalChannelService.on('closed', ({ channelId }: GeneralClosedEvent) => responder.closeRoom(channelId));
   services.channelService.setConversationArchiveLifecycle({
     pause: (channelId) => {
       // Both guards take effect before archiveConversation's first await.

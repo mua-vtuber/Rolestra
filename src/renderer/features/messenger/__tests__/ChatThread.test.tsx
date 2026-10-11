@@ -107,7 +107,7 @@ describe('chat thread', () => {
   it('opens loaded history at the latest message and resets following when switching rooms', async () => {
     stubBridge([room]);
     stubMessageLayout();
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByText('Hello from history');
     const list = screen.getByTestId('thread-message-list');
     expect(list.scrollTop).toBe(300);
@@ -124,7 +124,7 @@ describe('chat thread', () => {
     stubBridge();
     stubMessageLayout();
     const receive = stubMessageStream();
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByText('Hello from history');
     const list = screen.getByTestId('thread-message-list');
     const incoming: ChannelMessage = {
@@ -148,7 +148,7 @@ describe('chat thread', () => {
 
   it('renders general history and composer without work IPC', async () => {
     const invoke = stubBridge();
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await waitFor(() => expect(screen.getByText('Hello from history')).toBeTruthy());
     expect(screen.getByTestId('thread-whisper-observer-notice')).toBeTruthy();
     expect(screen.getByTestId('composer')).toBeTruthy();
@@ -161,7 +161,7 @@ describe('chat thread', () => {
   it('clears a remembered legacy DM without opening its conversation controls', async () => {
     stubBridge();
     useActiveChannelStore.setState({ globalChannelId: dm.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await waitFor(() => expect(useActiveChannelStore.getState().globalChannelId).toBeNull());
     expect(screen.getByTestId('thread-empty-state')).toBeTruthy();
     expect(screen.queryByTestId('room-menu-open')).toBeNull();
@@ -171,7 +171,7 @@ describe('chat thread', () => {
   it('offers opinion posting in a writable chat room and hides it after archive', async () => {
     stubBridge([room]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    const view = render(<Thread />);
+    const view = render(<Thread onCreateRoom={vi.fn()} />);
     await openRoomMenu();
     expect(screen.getByTestId('chat-post-opinion')).toBeTruthy();
     expect(screen.getByTestId('room-archive-open')).toBeTruthy();
@@ -179,7 +179,7 @@ describe('chat thread', () => {
 
     view.unmount();
     stubBridge([{ ...room, readOnly: true, archivedAt: 10 }]);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('room-archived-notice');
     await openRoomMenu();
     expect(screen.queryByTestId('chat-post-opinion')).toBeNull();
@@ -190,7 +190,7 @@ describe('chat thread', () => {
   it('shows a manually posted room opinion in the card list without a message event', async () => {
     const invoke = stubBridge([room]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<><Thread /><MemberPanel /></>);
+    render(<><Thread onCreateRoom={vi.fn()} /><MemberPanel /></>);
     await clickMenuItem('chat-post-opinion');
     fireEvent.change(screen.getByTestId('post-opinion-title'), { target: { value: 'Manual topic' } });
     fireEvent.change(screen.getByTestId('post-opinion-content'), { target: { value: 'Manual body' } });
@@ -204,7 +204,7 @@ describe('chat thread', () => {
     const otherRoom = { ...room, id: 'room-2', name: 'Other room' };
     const invoke = stubBridge([room, otherRoom]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await clickMenuItem('chat-post-opinion');
     fireEvent.change(screen.getByTestId('post-opinion-content'), { target: { value: 'Old room draft' } });
     useActiveChannelStore.setState({ globalChannelId: otherRoom.id });
@@ -219,7 +219,7 @@ describe('chat thread', () => {
     const rooms = [{ ...room }];
     stubBridge(rooms);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await clickMenuItem('chat-post-opinion');
     expect(screen.getByTestId('post-opinion-modal')).toBeTruthy();
     rooms[0] = { ...room, readOnly: true, archivedAt: 10 };
@@ -249,7 +249,7 @@ describe('chat thread', () => {
     }];
     stubBridge([{ ...room, readOnly: true, archivedAt: 10 }], [...history].reverse());
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByText('Saved private text');
     expect(screen.getByTestId('room-archived-notice')).toBeTruthy();
     const observing = screen.getByTestId('thread-whisper-observer-notice');
@@ -271,7 +271,7 @@ describe('chat thread', () => {
       createdAt: 1_700_000_000_000,
     }]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('system-message-body');
     expect(screen.getByTestId('system-message-body').textContent).toContain('응답 형식');
   });
@@ -284,7 +284,7 @@ describe('chat thread', () => {
       createdAt: 1_700_000_000_000,
     }]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('system-message-body');
     expect(screen.getByTestId('system-message').getAttribute('data-tone')).toBe('quiet');
     expect(screen.getByTestId('system-message-body').textContent).toContain('Alice은(는) 이번에 말하지 않았습니다');
@@ -307,7 +307,7 @@ describe('chat thread', () => {
     };
     stubBridge([room], [publicAfter, root]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     const publicRow = await screen.findByText('Public line');
     expect(publicRow.closest('[data-testid="message"]')?.getAttribute('data-compact')).toBe('false');
   });
@@ -315,7 +315,7 @@ describe('chat thread', () => {
   it('keeps the room-info drawer closed until the header toggle opens it', async () => {
     stubBridge([room]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     const toggle = await screen.findByTestId('room-info-toggle');
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByTestId('messenger-member-panel')).toBeNull();
@@ -335,7 +335,7 @@ describe('chat thread', () => {
       role: 'assistant', content: 'Older line', meta: null, createdAt: 1_700_000_000_001,
     }]);
     useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByText('Newest line');
     await waitFor(() => expect(invoke).toHaveBeenCalledWith('channel:mark-read', { channelId: room.id, messageId: 'newest' }));
     expect(invoke.mock.calls.filter(([channel]) => channel === 'channel:mark-read')).toHaveLength(1);
@@ -346,7 +346,7 @@ describe('chat thread', () => {
     try {
       const invoke = stubBridge([room]);
       useActiveChannelStore.setState({ globalChannelId: room.id, selectedScope: 'global' });
-      render(<Thread />);
+      render(<Thread onCreateRoom={vi.fn()} />);
       await screen.findByText('Hello from history');
       expect(invoke.mock.calls.filter(([channel]) => channel === 'channel:mark-read')).toHaveLength(0);
       visibility.mockReturnValue('visible');

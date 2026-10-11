@@ -23,6 +23,8 @@ import { ChatWhisperRoundRepository } from '../chat-whisper-round-repository';
 import { ChatPassService } from '../chat-pass-service';
 import { CHAT_ACTIVITY_EVENT, CHAT_ROUND_EVENT, DmAutoResponder } from '../dm-auto-responder';
 import { DmChannelService, type DmClosedEvent } from '../dm-channel-service';
+import { GeneralChannelRepository } from '../general-channel-repository';
+import { GeneralChannelService, type GeneralClosedEvent } from '../general-channel-service';
 import { MessageRepository } from '../message-repository';
 import { MessageService } from '../message-service';
 
@@ -37,6 +39,8 @@ export interface ModelCall {
   hint: string | null;
   messages: Array<{ role: string; content: string }>;
   persona: string;
+  /** The completion options the provider received (`null` when an API call got none). */
+  options: Record<string, unknown> | null;
   signal: AbortSignal | undefined;
 }
 
@@ -96,6 +100,8 @@ export interface ChatRuntime {
   channels: ChannelService;
   rooms: ChatRoomService;
   dms: DmChannelService;
+  /** Global general channel lifecycle; call `provisionOnFirstRun()` to create it. */
+  general: GeneralChannelService;
   messages: MessageService;
   coordinator: ChatSessionCoordinator;
   responder: DmAutoResponder;
@@ -171,9 +177,10 @@ export function createChatRuntime(input: { cli?: string[]; api?: string[]; names
       id, type: 'api', displayName: input.names?.[id] ?? id.toUpperCase(), persona: '',
       config: { type: 'api' }, resetConversationContext: vi.fn(),
       streamCompletion: (messages: Array<{ role: string; content: string }>, persona: string,
-        _options: unknown, signal?: AbortSignal) => nextStep({
+        options: Record<string, unknown> | undefined, signal?: AbortSignal) => nextStep({
         providerId: id, kind: 'api', scopeKey: null, resumed: null, hint: null,
-        messages: messages.map((m) => ({ role: m.role, content: m.content })), persona, signal,
+        messages: messages.map((m) => ({ role: m.role, content: m.content })), persona,
+        options: options ?? null, signal,
       }),
     } as unknown as BaseProvider);
   }
@@ -203,7 +210,8 @@ export function createChatRuntime(input: { cli?: string[]; api?: string[]; names
           return nextStep({
             providerId: source.id, kind: 'cli', scopeKey: options.chatSession.scopeKey,
             resumed: options.chatSession.resumeSessionId, hint: options.chatSession.currentStateHint,
-            messages: messages.map((m) => ({ role: m.role, content: m.content })), persona, signal,
+            messages: messages.map((m) => ({ role: m.role, content: m.content })), persona,
+            options: options as unknown as Record<string, unknown>, signal,
           });
         },
         getChatSessionId: () => sessionId,
@@ -232,6 +240,9 @@ export function createChatRuntime(input: { cli?: string[]; api?: string[]; names
   rooms.on('closed', ({ channelId }: { channelId: string }) => current.responder.closeRoom(channelId));
   const dms = new DmChannelService(channels);
   dms.on('closed', ({ channelId }: DmClosedEvent) => current.responder.closeRoom(channelId));
+  const general = new GeneralChannelService(new GeneralChannelRepository(db), channels,
+    (channel) => channelRepository.insert(channel));
+  general.on('closed', ({ channelId }: GeneralClosedEvent) => current.responder.closeRoom(channelId));
   const observer = (channelId: string): Message[] =>
     messages.listByChannel(channelId, { limit: 200 }, { kind: 'observer' }).reverse();
 
@@ -241,7 +252,7 @@ export function createChatRuntime(input: { cli?: string[]; api?: string[]; names
   });
 
   return {
-    db, channels, rooms, dms, messages, providers, calls, cooldowns, observer, activity,
+    db, channels, rooms, dms, general, messages, providers, calls, cooldowns, observer, activity,
     timeline: (channelId: string) => events.filter((event) => event.channelId === channelId).map((event) => event.step),
     passTurn(channel: Channel): Promise<void> {
       const message = passes.pass(channel.id);

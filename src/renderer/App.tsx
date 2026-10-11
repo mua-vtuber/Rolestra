@@ -5,6 +5,7 @@ import './i18n';
 import { NavRail, Shell } from './components/shell';
 import type { NavRailItem } from './components/shell';
 import { conversationLabel } from './features/chat-list/chat-list-model';
+import { landingConversation } from './features/chat-list/landing-conversation';
 import { MessengerPage } from './features/messenger/MessengerPage';
 import { MessageSearchView } from './features/search/MessageSearchView';
 import { SettingsView } from './features/settings/SettingsView';
@@ -58,26 +59,20 @@ export function App() {
     }
   }, [globalChannelId, selectedScope, setGlobalChannelId]);
 
-  // Restore a room only after the channel lists load; legacy DM selections
-  // fall back to general now that DM entry points have been removed.
+  // Open a conversation only when nothing valid is selected: a restored
+  // legacy selection, then general, then the most recent active room; none
+  // left shows "대화방이 없어요" (spec 2026-10-08 F1). A selected archived
+  // room is in `authoritative`, so it stays selected.
   useEffect(() => {
-    if (generalChannel === null) return;
     const selected = useActiveChannelStore.getState().globalChannelId;
-    if (selected === null) {
-      if (legacyChannelId !== null) {
-        if (authoritative === null) return;
-        const legacyGlobal = authoritative.find((channel) => channel.id === legacyChannelId);
-        if (legacyGlobal) {
-          setGlobalChannelId(legacyGlobal.id);
-          return;
-        }
-      }
-      setGlobalChannelId(generalChannel.id);
-    } else if (authoritative !== null &&
-      !authoritative.some((channel) => channel.id === selected)) {
-      setGlobalChannelId(generalChannel.id);
-    }
-  }, [generalChannel, authoritative, legacyChannelId, setGlobalChannelId]);
+    if (selected !== null && (authoritative === null ||
+      authoritative.some((channel) => channel.id === selected))) return;
+    const decision = landingConversation({
+      channels: authoritative, general: generalChannel, summaries, legacyChannelId,
+    });
+    if (decision.kind === 'open') setGlobalChannelId(decision.channelId);
+    else if (decision.kind === 'none' && selected !== null) setGlobalChannelId(null);
+  }, [generalChannel, authoritative, summaries, legacyChannelId, setGlobalChannelId]);
 
   useEffect(() => {
     const arena = (window as unknown as { arena?: unknown }).arena;

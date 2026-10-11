@@ -68,11 +68,11 @@ function setup(path?: string, channelKind: 'user' | 'system_general' = 'user') {
   })));
   for (const vote of ['agree', 'oppose', 'abstain'] as const) {
     context.repo.settleParticipant('vote', `private-${vote}`, {
-      status: 'submitted', opinion: `PRIVATE reason ${vote}`, vote, error: null,
+      status: 'submitted', opinion: `PRIVATE reason ${vote}`, vote, error: null, errorCause: null, errorDetail: null,
     });
   }
   context.repo.settleParticipant('vote', 'private-failed', {
-    status: 'failed', opinion: null, vote: null, error: 'provider_error',
+    status: 'failed', opinion: null, vote: null, error: 'provider_error', errorCause: null, errorDetail: null,
   });
   context.repo.complete('vote');
   return { db, ...context };

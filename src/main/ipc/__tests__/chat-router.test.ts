@@ -17,6 +17,7 @@ vi.mock('electron', () => ({
 import { registerIpcHandlers, unregisterIpcHandlers } from '../router';
 import { setChatPassServiceAccessor } from '../handlers/chat-pass-handler';
 import { setChatRoundStateAccessor } from '../handlers/chat-round-handler';
+import { setDmChannelServiceAccessor, setGeneralChannelServiceAccessor } from '../handlers/channel-handler';
 import { ChatPassService } from '../../channels/chat-pass-service';
 
 const channels = {
@@ -87,6 +88,26 @@ describe('live chat IPC registrations', () => {
     await expect(vote(null, {
       meta, data: { opinionId: 'work-opinion', vote: 'agree' },
     })).rejects.toThrow('Chat channel not found');
+  });
+
+  it('routes channel:delete to the general channel service or the DM service, and refuses rooms (spec 2026-10-08 F1)', async () => {
+    registerIpcHandlers({
+      get: (id: string) => ({ ...channels.get(id), projectId: null }) as Channel,
+    }, opinions as never);
+    const generalDelete = vi.fn();
+    const dmDelete = vi.fn();
+    setGeneralChannelServiceAccessor(() => ({ delete: generalDelete }));
+    setDmChannelServiceAccessor(() => ({ delete: dmDelete }));
+    const remove = registered.get('channel:delete')!;
+
+    await expect(remove(null, { meta, data: { id: 'general' } })).resolves.toEqual({ success: true });
+    expect(generalDelete).toHaveBeenCalledWith('general');
+    expect(dmDelete).not.toHaveBeenCalled();
+    await expect(remove(null, { meta, data: { id: 'dm' } })).resolves.toEqual({ success: true });
+    expect(dmDelete).toHaveBeenCalledWith('dm');
+    await expect(remove(null, { meta, data: { id: 'room' } })).rejects.toThrow('Chat channel not found');
+    expect(generalDelete).toHaveBeenCalledTimes(1);
+    expect(dmDelete).toHaveBeenCalledTimes(1);
   });
 
   it('routes a pass request to the pass service and surfaces its named refusal (spec 2026-10-01 F1)', async () => {

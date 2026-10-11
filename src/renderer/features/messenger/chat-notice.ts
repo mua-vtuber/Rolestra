@@ -11,6 +11,8 @@
  */
 import type { TFunction } from 'i18next';
 
+import { isProviderFailureCause } from '../../../shared/provider-failure-types';
+import { failureCauseText } from './failure-cause-text';
 import {
   isChatErrorCode, isChatPassMessage, isChatSilenceNotice, isChatVoteResultMessage, type Message as ChannelMessage,
 } from '../../../shared/message-types';
@@ -25,8 +27,10 @@ export function isQuietChatNotice(message: NoticeFields): boolean {
 /**
  * Returns the translated text for a chat notice, or `null` when the message
  * is ordinary speech (the caller then renders its own content).
- * Only a DM failure notice carries a short masked cause
- * (`meta.chatErrorDetail`); room notices never do — see `dm-auto-responder.ts`.
+ * A `provider_error` notice with a known cause (`meta.chatErrorCause`, spec
+ * 2026-10-08 F3) reads as that cause's sentence. Without one (older notices
+ * included) it keeps the general sentence; only a DM failure notice may add
+ * its short masked cause (`meta.chatErrorDetail`) — see `dm-auto-responder.ts`.
  */
 export function chatNoticeText(
   t: TFunction,
@@ -57,6 +61,11 @@ export function chatNoticeText(
     const name = typeof speakerName === 'string' && speakerName.trim()
       ? speakerName : t('messenger.whisper.unknownSpeakerName');
     return t('messenger.whisper.errors.usage_limit', { name });
+  }
+  const cause = message.meta?.chatErrorCause;
+  if (chatError === 'provider_error' && isProviderFailureCause(cause)) {
+    const causeDetail = message.meta?.chatErrorCauseDetail;
+    return failureCauseText(t, cause, typeof causeDetail === 'string' ? causeDetail : null);
   }
   const failure = t(`messenger.whisper.errors.${chatError}`);
   const detail = message.meta?.chatErrorDetail;

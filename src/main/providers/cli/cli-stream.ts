@@ -23,6 +23,7 @@ import type { CliRuntimeConfig } from './cli-provider';
 import type { CliOutputParser } from './cli-output-parser';
 import type { CliSessionState } from './cli-session-state';
 import { ClaudeCodePermissionParser, type ParsedCliPermissionRequest } from './cli-permission-parser';
+import { cliSpawnFailure } from './cli-failure-patterns';
 
 /**
  * Optional callbacks for CLI stream events that require external coordination.
@@ -157,7 +158,7 @@ export class CliStreamer {
     child.on('error', (err) => {
       cleanup();
       if (rejectWait) {
-        rejectWait(err);
+        rejectWait(cliSpawnFailure(err));
         resolveWait = null;
         rejectWait = null;
       }

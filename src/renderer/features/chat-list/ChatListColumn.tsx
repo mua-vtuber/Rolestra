@@ -3,7 +3,8 @@
  * 2026-10-01-messenger-redesign.md R2-2), replacing the old sidebar (general
  * entry, room list, archive toggle, DM list).
  *
- * Title with the "새 채팅방" button (existing room create flow), a search
+ * Title with the "새 채팅방" button (asks the host to open the room create
+ * dialog, which `MessengerPage` owns — spec 2026-10-08 F1), a search
  * field that filters the list by name / preview and offers a message
  * search across every conversation, the 전체 / 채팅방 / 보관함
  * filters, and one list ordered by last activity. Rows come from
@@ -20,7 +21,6 @@ import { useMembers } from '../../hooks/use-members';
 import { useMinuteClock } from '../../hooks/use-minute-clock';
 import { useChannelSummaryStore } from '../../stores/channel-summary-store';
 import { useTheme } from '../../theme/use-theme';
-import { CreateRoom } from '../rooms/CreateRoom';
 import type { Channel } from '../../../shared/channel-types';
 import type { MemberView } from '../../../shared/member-profile-types';
 import {
@@ -50,9 +50,13 @@ export interface ChatListColumnProps {
   onSelectChannel: (channelId: string) => void;
   /** Opens the message search across every conversation with this query. */
   onSearchMessages: (query: string) => void;
+  /** Opens the room create dialog. */
+  onCreateRoom: () => void;
 }
 
-export function ChatListColumn({ channels = [], activeChannelId, onSelectChannel, onSearchMessages }: ChatListColumnProps): ReactElement {
+export function ChatListColumn({
+  channels = [], activeChannelId, onSelectChannel, onSearchMessages, onCreateRoom,
+}: ChatListColumnProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { token } = useTheme();
   const summaries = useChannelSummaryStore((state) => state.summaries);
@@ -60,7 +64,6 @@ export function ChatListColumn({ channels = [], activeChannelId, onSelectChannel
   const { members } = useMembers();
   const [filter, setFilter] = useState<ChatListFilter>('all');
   const [query, setQuery] = useState('');
-  const [createOpen, setCreateOpen] = useState(false);
   const [contextTarget, setContextTarget] = useState<{
     channelId: string; x: number; y: number; trigger: HTMLButtonElement; open: boolean;
   } | null>(null);
@@ -87,7 +90,7 @@ export function ChatListColumn({ channels = [], activeChannelId, onSelectChannel
       <div className="flex items-center justify-between pb-3 pl-5 pr-4 pt-5">
         <h1 className="font-display text-list-title font-bold">{token.titlePrefix}{t('chatList.title')}</h1>
         <button type="button" data-testid="room-create-open" aria-label={t('rooms.create')}
-          onClick={() => setCreateOpen(true)}
+          onClick={onCreateRoom}
           className="flex h-10 w-10 items-center justify-center border border-border text-brand-text hover:bg-sunk [clip-path:var(--clip-control)]">
           <LineIcon name="plus" size={18} stroke={2} />
         </button>
@@ -157,7 +160,6 @@ export function ChatListColumn({ channels = [], activeChannelId, onSelectChannel
           </ul>
         )}
       </div>
-      {createOpen ? <CreateRoom open onOpenChange={setCreateOpen} onCreated={onSelectChannel} /> : null}
       {contextTarget && contextChannel ? (
         <ChatListContextMenu key={`${contextChannel.id}:${contextChannel.readOnly}`} channel={contextChannel} target={contextTarget}
           onOpenChange={(open) => setContextTarget((target) => target ? { ...target, open } : null)} />

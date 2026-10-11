@@ -469,7 +469,13 @@ describe('CliProvider Subprocess Integration', () => {
     const run = (async () => {
       for await (const token of provider.streamCompletion(MESSAGES, '', anyWorkspace())) tokens.push(token);
     })();
-    const rejection = expect(run).rejects.toMatchObject({ name: 'Error', message: expect.stringContaining('Please log in again') });
+    // Spec 2026-10-08 F3: never the usage limit. The envelope code names a
+    // login failure; the bare result sentence is outside the closed table.
+    const rejection = expect(run).rejects.toMatchObject({
+      name: 'ProviderCallError',
+      failureCause: event.type === 'assistant' ? 'cli-login-required' : 'cli-failed',
+      message: expect.stringContaining('Please log in again'),
+    });
     await new Promise((resolve) => setTimeout(resolve, 10));
     emitOutputAndExit(spawnedProcesses[0], [JSON.stringify(event)]);
     await rejection;

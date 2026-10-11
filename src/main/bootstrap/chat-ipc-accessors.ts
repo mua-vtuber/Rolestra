@@ -2,6 +2,7 @@ import {
   setChannelMemberServiceAccessor,
   setChannelServiceAccessor,
   setDmChannelServiceAccessor,
+  setGeneralChannelServiceAccessor,
 } from '../ipc/handlers/channel-handler';
 import { setArenaRootServiceAccessor } from '../ipc/handlers/arena-root-handler';
 import { setChannelSummaryRepositoryAccessor } from '../ipc/handlers/channel-summary-handler';
@@ -38,6 +39,7 @@ export function wireChatAccessors(
   setChannelServiceAccessor(() => services.channelService);
   setChannelSummaryRepositoryAccessor(() => services.channelSummaryRepository);
   setDmChannelServiceAccessor(() => services.dmChannelService);
+  setGeneralChannelServiceAccessor(() => services.generalChannelService);
   setChannelMemberServiceAccessor(() => services.memberProfileService);
   setMessageServiceAccessor(() => services.messageService);
   setChatPassServiceAccessor(() => chatPassService);

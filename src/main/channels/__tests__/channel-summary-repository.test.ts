@@ -158,6 +158,15 @@ describe('ChannelSummaryRepository.listSummaries — last message and activity',
     const last = byId(new ChannelSummaryRepository(db).listSummaries(GENERAL_PARTICIPANTS), 'general').lastMessage;
     expect(last?.notice).toEqual({ chatError: 'usage_limit', chatErrorSpeakerName: 'Alice' });
   });
+
+  it('carries the failure cause code and marker into the preview (spec 2026-10-08 F3)', () => {
+    message('general', { id: 'busy', author: 'ai-a', kind: 'member', role: 'system', content: 'provider_error',
+      meta: { chatError: 'provider_error', chatErrorCause: 'service-busy', chatErrorCauseDetail: 'HTTP 503' } });
+    const last = byId(new ChannelSummaryRepository(db).listSummaries(GENERAL_PARTICIPANTS), 'general').lastMessage;
+    expect(last?.notice).toEqual({
+      chatError: 'provider_error', chatErrorCause: 'service-busy', chatErrorCauseDetail: 'HTTP 503',
+    });
+  });
 });
 
 describe('ChannelSummaryRepository — unread count and read marker', () => {

@@ -56,6 +56,7 @@ describe('active chat event wiring', () => {
         setConversationArchiveLifecycle: vi.fn(),
       },
       dmChannelService: new DmChannelService({ get: () => null, delete: vi.fn() }),
+      generalChannelService: new EventEmitter(),
       messageService: Object.assign(messages, {
         append, listByChannel: () => [userMessage('general')],
       }),
@@ -119,6 +120,7 @@ describe('active chat event wiring', () => {
         setConversationArchiveLifecycle: vi.fn(),
       },
       dmChannelService: new DmChannelService({ get: () => null, delete: vi.fn() }),
+      generalChannelService: new EventEmitter(),
       messageService: Object.assign(messages, {
         append, listByChannel: () => [userMessage('general')],
       }),
@@ -169,6 +171,7 @@ describe('active chat event wiring', () => {
     const services = {
       channelService,
       dmChannelService: new DmChannelService(channelService as never),
+      generalChannelService: new EventEmitter(),
       messageService: Object.assign(new EventEmitter(), {
         append, listByChannel: () => [userMessage('dm')],
       }),

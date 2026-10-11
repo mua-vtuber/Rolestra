@@ -111,6 +111,7 @@
     "channelDelete": {
       "body": "\"{{name}}\" 채널을 삭제하시겠습니까?",
       "bodyDm": "\"{{name}}\" 대화를 닫으시겠습니까?",
+      "bodyGeneral": "일반 채널과 그 대화 기록을 모두 삭제합니다. 삭제한 일반 채널은 다시 생기지 않아요. 여러 AI와 함께 이야기할 곳이 필요하면 새 대화방을 만들어 주세요.",
       "cancel": "취소",
       "errors": {
         "generic": "채널을 삭제하지 못했습니다.",
@@ -121,10 +122,12 @@
       "submit": "삭제",
       "submitDm": "닫기",
       "title": "채널 삭제",
-      "titleDm": "대화 닫기"
+      "titleDm": "대화 닫기",
+      "titleGeneral": "일반 채널 삭제"
     },
     "channelHeader": {
       "delete": "삭제",
+      "deleteGeneral": "일반 채널 삭제",
       "postOpinion": "의견 게시"
     },
     "composer": {
@@ -138,7 +141,28 @@
       "sendLog": "[보내기]"
     },
     "emptyState": {
-      "noActiveChannel": "왼쪽에서 채널을 선택하세요."
+      "createRoom": "새 대화방 만들기",
+      "loadFailed": "대화 목록을 불러오지 못했습니다. ({{message}})",
+      "noActiveChannel": "왼쪽에서 채널을 선택하세요.",
+      "noConversationsBody": "새 대화방을 만들어 AI들과 이야기를 시작해 보세요.",
+      "noConversationsTitle": "대화방이 없어요",
+      "retry": "다시 불러오기"
+    },
+    "failureCause": {
+      "auth": "API 키가 거절됐어요. 키가 만료됐거나 잘못됐을 수 있어요. 설정 > AI에서 키를 바꿔 주세요.",
+      "cliFailed": "{{cli}} 실행이 실패했어요. 자세한 원인은 앱 기록(로그)에 남겼어요.",
+      "cliGeneric": "CLI",
+      "cliLoginRequired": "{{cli}} 로그인이 만료됐거나 로그인되어 있지 않아요. 터미널에서 {{command}} 를 실행해 다시 로그인한 뒤 메시지를 다시 보내 주세요.",
+      "cliLoginRequiredNoCommand": "{{cli}} 로그인이 만료됐거나 로그인되어 있지 않아요. 터미널에서 다시 로그인한 뒤 메시지를 다시 보내 주세요.",
+      "cliNotFound": "{{cli}} 프로그램을 찾지 못했어요. 설치되어 있는지, 터미널에서 실행되는지 확인해 주세요.",
+      "httpError": "AI 서비스가 오류로 응답했어요.",
+      "keyMissing": "이 AI의 API 키가 저장되어 있지 않아요. 설정 > AI에서 API 키를 다시 넣어 주세요.",
+      "localModelMissing": "로컬 AI 서버에 {{model}} 모델이 없어요. 모델을 내려받거나 설정 > AI에서 모델을 바꿔 주세요.",
+      "localNotRunning": "로컬 AI 서버(예: Ollama)가 꺼져 있어요. 서버를 켠 뒤 다시 보내 주세요.",
+      "network": "AI 서비스에 연결하지 못했어요. 인터넷 연결이나 서버 주소를 확인해 주세요.",
+      "rateLimited": "요청이 너무 잦아 AI 서비스가 잠시 막았어요. 잠시 뒤에 다시 보내 주세요.",
+      "requestRejected": "AI 서비스가 요청을 받아들이지 않았어요. 설정 > AI에서 모델 이름이 맞는지 확인해 주세요.",
+      "serviceBusy": "AI 서비스가 지금 붐벼서 응답하지 못했어요. 잠시 뒤에 다시 보내 주세요."
     },
     "log": {
       "me": "나",

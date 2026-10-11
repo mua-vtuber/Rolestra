@@ -23,10 +23,14 @@ const completedVote = {
   id: 'vote-a', opinionId: 'op-a', channelId: 'room-a', status: 'completed',
   createdAt: 1, completedAt: 2, resultMessageId: null,
   participants: [
-    { providerId: 'ai-1', displayName: 'Alpha', status: 'submitted', opinion: 'Ship it', vote: 'agree', error: null },
-    { providerId: 'ai-2', displayName: 'Beta', status: 'submitted', opinion: 'Wait for QA', vote: 'oppose', error: null },
-    { providerId: 'ai-3', displayName: 'Gamma', status: 'submitted', opinion: 'Need more data', vote: 'abstain', error: null },
-    { providerId: 'ai-4', displayName: 'Delta', status: 'failed', opinion: null, vote: null, error: 'timeout' },
+    { providerId: 'ai-1', displayName: 'Alpha', status: 'submitted', opinion: 'Ship it', vote: 'agree', error: null,
+      errorCause: null, errorDetail: null },
+    { providerId: 'ai-2', displayName: 'Beta', status: 'submitted', opinion: 'Wait for QA', vote: 'oppose', error: null,
+      errorCause: null, errorDetail: null },
+    { providerId: 'ai-3', displayName: 'Gamma', status: 'submitted', opinion: 'Need more data', vote: 'abstain', error: null,
+      errorCause: null, errorDetail: null },
+    { providerId: 'ai-4', displayName: 'Delta', status: 'failed', opinion: null, vote: null, error: 'timeout',
+      errorCause: null, errorDetail: null },
   ],
   counts: { agree: 1, oppose: 1, abstain: 1, pending: 0, failed: 1, total: 4 },
 } as const;
@@ -203,6 +207,30 @@ describe('chat opinion AI vote', () => {
     expect(results.textContent).toContain('Failed 1');
     expect(screen.getByTestId('ssm-box-general-vote-agree').textContent).toContain('2');
     expect(screen.getByTestId('ssm-box-general-vote-oppose').textContent).toContain('1');
+  });
+
+  it('adds the failure cause under a participant whose provider failure has one (spec 2026-10-08 F3)', async () => {
+    const withCause = {
+      ...completedVote,
+      participants: [
+        ...completedVote.participants.slice(0, 3),
+        { providerId: 'ai-4', displayName: 'Delta', status: 'failed', opinion: null, vote: null,
+          error: 'provider_error', errorCause: 'service-busy', errorDetail: 'HTTP 503' },
+      ],
+    };
+    setup({ getVote: async () => withCause });
+    show();
+    const causes = await screen.findAllByTestId('chat-vote-participant-cause');
+    expect(causes).toHaveLength(1);
+    expect(causes[0]?.textContent)
+      .toBe('The AI service is overloaded right now. Wait a moment and send again. (Cause: HTTP 503)');
+  });
+
+  it('shows no cause line for a failure without a cause', async () => {
+    setup({ getVote: async () => completedVote });
+    show();
+    await screen.findByTestId('chat-vote-results');
+    expect(screen.queryByTestId('chat-vote-participant-cause')).toBeNull();
   });
 
   it('allows archived rooms to inspect results without start or user vote controls', async () => {

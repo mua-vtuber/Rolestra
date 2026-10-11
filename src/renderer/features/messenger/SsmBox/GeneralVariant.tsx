@@ -18,6 +18,7 @@ import { useGeneralOpinionCards } from '../../../hooks/use-general-opinion-cards
 import { useChatVote } from '../../../hooks/use-chat-vote';
 import type { GeneralOpinionCard } from '../../../../shared/opinion-types';
 import { SsmBoxFrame } from './shared';
+import { failureCauseText } from '../failure-cause-text';
 
 export interface GeneralVariantProps {
   /** `null` = 채널 미선택 / 미해결 (hook 가 cards=null 로 비활성). */
@@ -259,6 +260,11 @@ function GeneralCardItem({ card, readOnly, onVote }: GeneralCardItemProps): Reac
                   </div>
                   {participant.opinion ? <p className="mt-0.5 min-w-0 whitespace-pre-wrap break-words text-fg-muted">{participant.opinion}</p> : null}
                   {participant.error ? <p className="mt-0.5 text-danger-text">{t(`messenger.ssmBox.variants.general.aiVote.failure.${participant.error}`)}</p> : null}
+                  {participant.errorCause ? (
+                    <p data-testid="chat-vote-participant-cause" className="mt-0.5 text-[10px] text-fg-muted">
+                      {failureCauseText(t, participant.errorCause, participant.errorDetail)}
+                    </p>
+                  ) : null}
                 </li>
               ))}
             </ul>

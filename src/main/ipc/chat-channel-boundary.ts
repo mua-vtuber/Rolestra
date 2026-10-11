@@ -44,8 +44,10 @@ export function requireChatOpinionChannel(
   }
 }
 
-export function requireDm(channels: ChannelLookup, channelId: string): void {
-  if (requireChatChannel(channels, channelId).kind !== 'dm') {
-    throw new Error(`DM channel not found: ${channelId}`);
-  }
+/** channel:delete 가 지울 수 있는 채널: DM 또는 전역 일반 채널. 채팅방은 room:delete 를 쓴다. */
+export function requireDeletableChatChannel(channels: ChannelLookup, channelId: string): 'dm' | 'general' {
+  const channel = requireChatChannel(channels, channelId);
+  if (channel.kind === 'dm') return 'dm';
+  if (channel.kind === 'system_general' && channel.projectId === null) return 'general';
+  throw new Error(`Chat channel not deletable: ${channelId}`);
 }

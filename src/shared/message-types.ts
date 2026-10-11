@@ -17,6 +17,7 @@ import type {
 } from './design-checkpoint-types';
 import type { PlanningDesignCheckCardMeta } from './planning-design-check-types';
 import type { ChannelRole } from './channel-role-types';
+import type { ProviderFailureCause } from './provider-failure-types';
 
 export type { PlanningDesignCheckCardMeta } from './planning-design-check-types';
 
@@ -179,6 +180,10 @@ export interface MessageMeta {
    * 저장한다. 그룹 방 알림에는 붙이지 않는다.
    */
   chatErrorDetail?: string;
+  /** 실패 원인 코드. chatError === 'provider_error' 일 때만. */
+  chatErrorCause?: ProviderFailureCause;
+  /** 원인의 짧은 표식(HTTP 503, ENOTFOUND, claude, 모델 이름). 제공자 글·키 값은 절대 없음. */
+  chatErrorCauseDetail?: string;
   /** 사용량 소진 알림에 표시할 등록 이름의 스냅샷. */
   chatErrorSpeakerName?: string;
   /**

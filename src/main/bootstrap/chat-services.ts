@@ -7,6 +7,8 @@ import { ChannelSummaryRepository } from '../channels/channel-summary-repository
 import { ChatRoomRepository } from '../channels/chat-room-repository';
 import { ChatRoomService } from '../channels/chat-room-service';
 import { DmChannelService } from '../channels/dm-channel-service';
+import { GeneralChannelRepository } from '../channels/general-channel-repository';
+import { GeneralChannelService } from '../channels/general-channel-service';
 import { MessageRepository } from '../channels/message-repository';
 import { MessageService } from '../channels/message-service';
 import { getDatabase } from '../database/connection';
@@ -23,7 +25,7 @@ import { NotificationRepository } from '../notifications/notification-repository
 import { NotificationService } from '../notifications/notification-service';
 import { providerRegistry } from '../providers/registry';
 import { createProvider } from '../providers/factory';
-import { getConfigService } from '../config/instance';
+import { resolveStoredApiKey } from '../providers/api-key-resolver';
 import { buildChatPersona } from '../members/persona-builder';
 
 export interface ChatServices {
@@ -35,6 +37,8 @@ export interface ChatServices {
   channelSummaryRepository: ChannelSummaryRepository;
   chatRoomService: ChatRoomService;
   dmChannelService: DmChannelService;
+  /** Global general channel: created on first run only, deletable (spec 2026-10-08 F1). */
+  generalChannelService: GeneralChannelService;
   messageService: MessageService;
   opinionService: OpinionService;
   opinionRepository: OpinionRepository;
@@ -56,7 +60,12 @@ export function createChatServices(arenaRoot: ArenaRootService, chatCliInstructi
       archiveRoot: { getArenaRoot: () => arenaRoot.getPath() },
     },
   );
-  channelService.ensureGlobalGeneralChannel();
+  const generalChannelService = new GeneralChannelService(
+    new GeneralChannelRepository(db),
+    channelService,
+    (channel) => channelRepository.insert(channel),
+  );
+  generalChannelService.provisionOnFirstRun();
 
   const memberProfileService = new MemberProfileService(
     new MemberProfileRepository(db),
@@ -128,11 +137,7 @@ export function createChatServices(arenaRoot: ArenaRootService, chatCliInstructi
       config: provider.config, roles: provider.roles,
       skill_overrides: provider.skill_overrides,
       isDepartmentHead: provider.isDepartmentHead,
-      resolveApiKey: async (ref) => {
-        const secret = getConfigService().getSecret(ref);
-        if (!secret) throw new Error(`API key not found: ${ref}`);
-        return secret;
-      },
+      resolveApiKey: resolveStoredApiKey,
     }),
     () => arenaRoot.consensusPath(),
     chatCliInstructionsDir,
@@ -155,6 +160,7 @@ export function createChatServices(arenaRoot: ArenaRootService, chatCliInstructi
     },
   );
   chatRoomService.on('closed', ({ channelId }: { channelId: string }) => chatVoteService.interruptChannel(channelId));
+  generalChannelService.on('closed', ({ channelId }: { channelId: string }) => chatVoteService.interruptChannel(channelId));
 
   return {
     arenaRoot,
@@ -163,6 +169,7 @@ export function createChatServices(arenaRoot: ArenaRootService, chatCliInstructi
     channelSummaryRepository: new ChannelSummaryRepository(db),
     chatRoomService,
     dmChannelService: new DmChannelService(channelService),
+    generalChannelService,
     messageService,
     opinionService: new OpinionService(opinionRepository, assertChatCardChannel),
     opinionRepository,

@@ -2,8 +2,8 @@
  * `useGlobalGeneralChannel` — R12-C 전역 일반 채널 1개 훅.
  *
  * `channel:get-global-general` IPC 한 번 호출. 사이드바 상단에 단일 entry 로
- * 렌더하는 데 쓰인다. 마이그레이션 / boot 비정상 시 null — Sidebar 가
- * 빈 슬롯 처리.
+ * 렌더하는 데 쓰인다. `channel` 이 null 이면 사용자가 일반 채널을 지운 정상
+ * 상태다(spec 2026-10-08 F1). 읽기 실패는 null 이 아니라 `error` 로 온다.
  *
  * 시멘틱 = `useDms` 의 dm-only 정의를 보존하기 위해 별도 IPC + 별도 hook.
  */

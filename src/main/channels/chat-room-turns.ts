@@ -25,6 +25,7 @@ import type { Channel } from '../../shared/channel-types';
 import type { ChatRoomMember } from '../../shared/chat-room-types';
 import type { ChatSpeakerSilenceCode, Message as ChannelMessage } from '../../shared/message-types';
 import type { ChatActivityTarget } from '../../shared/stream-events';
+import type { StructuredOutputSpec } from '../../shared/structured-output-types';
 import { tryGetLogger } from '../log/logger-accessor';
 import type { BaseProvider } from '../providers/provider-interface';
 import type { ChannelService } from './channel-service';
@@ -32,8 +33,9 @@ import type { ChatRoomService } from './chat-room-service';
 import type { MessageService } from './message-service';
 import { CHAT_WHISPER_THREAD_MAX_MESSAGES } from './chat-limits';
 import {
-  InvalidChatOutputError, parsePrivateReplyOutput, parseRoomTurnOutput, privateReplyHint, roomTurnHint,
-  whisperThreadReplyHint, WhisperRecipientUnavailableError, type ChatRoundSourceKind, type RoomWhisper,
+  InvalidChatOutputError, parsePrivateReplyOutput, parseRoomTurnOutput, privateReplyHint, privateReplyOutputSpec,
+  roomTurnHint, roomTurnOutputSpec, whisperThreadReplyHint, WhisperRecipientUnavailableError,
+  type ChatRoundSourceKind, type RoomWhisper,
 } from './chat-whisper-output';
 import { ParticipantAliasCollisionError, participantAlias, participantAliasMap } from './participant-alias';
 import { WHISPER_THREAD_FIRST_REPLY_SEQ, whisperThreadStep, type WhisperThreadPair } from './whisper-thread';
@@ -50,6 +52,8 @@ export interface ChatTurnCall {
   requiresNewInput: boolean;
   /** What the writing indicator shows for this call (spec 2026-10-01 F5). */
   activity: ChatActivityTarget;
+  /** JSON format the model must return (spec 2026-10-08 F2). Rooms and whisper replies only; DMs have none. */
+  structuredOutput?: StructuredOutputSpec;
   consume(raw: string): void;
 }
 
@@ -109,11 +113,14 @@ export class ChatRoomTurns {
     // Filled by `consume`; an object so the flow after the await reads the
     // values the closure wrote.
     const decided: { silent: boolean; whispers: RoomWhisper[] } = { silent: false, whispers: [] };
+    // The hint and the schema list the same recipients in the same order.
+    const listed = recipients.map((item) => ({
+      id: participantAlias(channel.id, item.providerId), name: item.displayName }));
     const completed = await this.deps.callTurn({
       channel, providerId: senderId, roomMembers, group: true, requiresNewInput: false,
       activity: { kind: 'turn' },
-      hint: roomTurnHint(recipients.map((item) => ({
-        id: participantAlias(channel.id, item.providerId), name: item.displayName })), round.kind),
+      hint: roomTurnHint(listed, round.kind),
+      structuredOutput: roomTurnOutputSpec(listed.map((item) => item.id)),
       consume: (raw) => {
         const decision = parseRoomTurnOutput(raw, recipientsByAlias, senderId);
         if (decision.public !== null) {
@@ -187,6 +194,7 @@ export class ChatRoomTurns {
       channel, providerId: authorId, roomMembers, group: true, requiresNewInput: true,
       activity: { kind: 'whisper', peerProviderId: recipientId },
       hint: seq === WHISPER_THREAD_FIRST_REPLY_SEQ ? privateReplyHint(otherName) : whisperThreadReplyHint(otherName),
+      structuredOutput: privateReplyOutputSpec(),
       consume: (raw) => {
         const { reply } = parsePrivateReplyOutput(raw);
         if (reply === null) {

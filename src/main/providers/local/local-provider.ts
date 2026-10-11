@@ -15,6 +15,7 @@ import { LOCAL_PROVIDER_TIMEOUT_MS } from '../../../shared/timeouts';
 import { resolveLocalCapabilities } from '../capability-resolver';
 import type { ConnectionFailure } from '../../../shared/connection-failure-types';
 import { fetchFailure, httpFailure } from '../connection-failure';
+import { fetchCallError, httpCallError } from '../provider-call-error';
 import { detectOllama } from './ollama-detector';
 
 export type LocalProviderInit = Omit<BaseProviderInit, 'type' | 'capabilities'>;
@@ -126,18 +127,35 @@ export class LocalProvider extends BaseProvider {
         stream: true,
         ...(options?.temperature != null && { temperature: options.temperature }),
         ...(options?.maxTokens != null && { max_tokens: options.maxTokens }),
+        // Constrained JSON output (spec 2026-10-08 F2). A server that rejects
+        // it fails the turn with its cause; there is no retry without it.
+        ...(options?.structuredOutput && {
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: options.structuredOutput.name,
+              strict: true,
+              schema: options.structuredOutput.schema,
+            },
+          },
+        }),
       };
 
-      const res = await fetch(`${base}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal,
-      });
+      let res: Response;
+      try {
+        res = await fetch(`${base}/v1/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal,
+        });
+      } catch (error) {
+        throw fetchCallError(error, 'local');
+      }
 
       if (!res.ok) {
         const text = await res.text();
-        throw new Error(`Local LLM error ${res.status}: ${text}`);
+        throw httpCallError('Local LLM error', res.status, text, { kind: 'local', model: this.localConfig.model });
       }
 
       yield* this.parseSSE(res, signal);

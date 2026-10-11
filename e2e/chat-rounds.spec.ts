@@ -4,12 +4,14 @@
  * - F1 the pass button starts a round without user text;
  * - F5 the writing indicator appears while a turn runs and clears after it;
  * - F3 a round in which every AI stays silent ends with one observer notice.
+ * Spec 2026-10-08: a room turn asks the local model for the `room_turn` JSON
+ * schema (F2), and a busy service shows its cause in the failure notice (F3).
  * Whisper threads of several rows are covered in `chat-first-flow.spec.ts`.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { rm } from 'node:fs/promises';
 
-import { passPublicLine, startFakeProvider, type FakeProvider } from './support/fake-provider';
+import { E2E_BUSY_MODEL, passPublicLine, startFakeProvider, type FakeProvider } from './support/fake-provider';
 import { invokeInApp, launchIsolatedApp, sendMessage, type IsolatedApp } from './support/isolated-app';
 import { addLocalAi } from './support/local-ai';
 import { createRoom } from './support/messenger-ui';
@@ -138,6 +140,14 @@ test('a round in which every AI stays silent ends with one all-silent notice tha
     const { messages } = await invokeInApp(page, 'message:list-by-channel', { channelId: roomId });
     expect([...messages].reverse().filter((message) => message.role === 'system').map((message) =>
       message.meta?.chatSilence?.code)).toEqual(['turn_passed', 'turn_passed', 'round_all_silent']);
+    // Spec 2026-10-08 F2: each local room turn carried the room_turn schema.
+    for (const model of ['e2e-silent-a', 'e2e-silent-b']) {
+      const formats = fake.responseFormatsFor(model);
+      expect(formats.length).toBeGreaterThan(0);
+      for (const format of formats) {
+        expect(format).toMatchObject({ type: 'json_schema', json_schema: { name: 'room_turn', strict: true } });
+      }
+    }
     const silentScreenshot = testInfo.outputPath('all-silent.png');
     await page.screenshot({ path: silentScreenshot, fullPage: true });
     await testInfo.attach('all-silent', { path: silentScreenshot, contentType: 'image/png' });
@@ -151,6 +161,40 @@ test('a round in which every AI stays silent ends with one all-silent notice tha
       expect(request.rawBody).not.toContain('round_all_silent');
       expect(request.rawBody).not.toContain('turn_passed');
     }
+  } finally {
+    if (isolated) await isolated.app.close().catch(() => {});
+    await fake.close();
+    if (isolated) await rm(isolated.tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('a busy service shows its cause in the failure notice while the round goes on (spec 2026-10-08 F3)', async () => {
+  test.setTimeout(120_000);
+  const fake = await startFakeProvider();
+  let isolated: IsolatedApp | null = null;
+  try {
+    isolated = await launchIsolatedApp({ ollamaHost: fake.baseUrl });
+    const page = await isolated.app.firstWindow();
+    await page.waitForLoadState('domcontentloaded');
+    const [busy, calm] = await addProviders(page, fake, [
+      { name: 'Busy Bee', model: E2E_BUSY_MODEL }, { name: 'Calm Cat', model: 'e2e-calm' },
+    ]);
+    await page.reload();
+    const roomId = await createRoom(page, 'Busy room', [busy!.id, calm!.id]);
+
+    await sendMessage(page, 'E2E_BUSY_ROUND');
+    await expect.poll(async () => {
+      const { messages } = await invokeInApp(page, 'message:list-by-channel', { channelId: roomId });
+      return messages.some((message) => message.role === 'assistant' && message.authorId === calm!.id);
+    }, { timeout: 30_000 }).toBe(true);
+
+    const { messages } = await invokeInApp(page, 'message:list-by-channel', { channelId: roomId });
+    const notice = messages.find((message) => message.meta?.chatError !== undefined);
+    expect(notice?.meta).toEqual({
+      chatError: 'provider_error', chatErrorCause: 'service-busy', chatErrorCauseDetail: 'HTTP 503',
+    });
+    await expect(page.getByTestId('system-message-body').filter({ hasText: /붐벼서|overloaded/ })).toHaveCount(1);
+    expect(fake.responseFormatsFor(E2E_BUSY_MODEL)[0]).toMatchObject({ json_schema: { name: 'room_turn' } });
   } finally {
     if (isolated) await isolated.app.close().catch(() => {});
     await fake.close();

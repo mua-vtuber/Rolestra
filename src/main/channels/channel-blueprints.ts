@@ -7,7 +7,7 @@ import type { DepartmentTemplateRole } from '../../shared/department-blueprint-r
  * Fixed blueprint for the per-project system channels.
  *
  * R12-C 변경: `system_general` 제거 — 일반 채널은 전역 1개로 옮겨졌고
- * `ensureGlobalGeneralChannel()` 가 boot 시점에 보장한다. 마이그레이션
+ * `GeneralChannelService.provisionOnFirstRun()` 가 처음 설치 때 한 번 만든다. 마이그레이션
  * 018 이 기존 프로젝트 종속 system_general row 를 정리한다.
  *
  * Order matters: `listByProject()` relies on the kind ordering but

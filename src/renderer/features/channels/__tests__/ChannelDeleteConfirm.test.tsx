@@ -85,6 +85,15 @@ const DM_CH = chatChannelForTest({
   createdAt: 1_700_000_000_000,
 });
 
+const GENERAL_CH = chatChannelForTest({
+  id: 'ch-general',
+  projectId: null,
+  name: '일반',
+  kind: 'system_general',
+  readOnly: false,
+  createdAt: 1_700_000_000_000,
+});
+
 beforeEach(() => {
   invokeCalls.length = 0;
   invokeReject = null;
@@ -159,6 +168,31 @@ describe('ChannelDeleteConfirm — DM label variant', () => {
     expect(content.getAttribute('data-channel-kind')).toBe('dm');
     const submit = screen.getByTestId('channel-delete-submit');
     expect(submit.textContent).toBe('닫기');
+  });
+});
+
+describe('ChannelDeleteConfirm — general channel variant (spec 2026-10-08 F1)', () => {
+  it('says the history goes and the channel never comes back, without the stored name', () => {
+    renderWithTheme(
+      <ChannelDeleteConfirm open onOpenChange={() => {}} channel={GENERAL_CH} />,
+    );
+    const content = screen.getByTestId('channel-delete-confirm');
+    expect(content.getAttribute('data-channel-kind')).toBe('system_general');
+    expect(screen.getByRole('heading').textContent).toBe('일반 채널 삭제');
+    const body = screen.getByTestId('channel-delete-confirm-body').textContent ?? '';
+    expect(body).toContain('일반 채널과 그 대화 기록을 모두 삭제합니다. 삭제한 일반 채널은 다시 생기지 않아요.');
+    expect(body).toContain('메시지는 영구적으로 사라집니다.');
+    expect(screen.getByTestId('channel-delete-submit').textContent).toBe('삭제');
+  });
+
+  it('deletes through channel:delete', async () => {
+    const onDeleted = vi.fn();
+    renderWithTheme(
+      <ChannelDeleteConfirm open onOpenChange={() => {}} channel={GENERAL_CH} onDeleted={onDeleted} />,
+    );
+    fireEvent.click(screen.getByTestId('channel-delete-submit'));
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('ch-general'));
+    expect(invokeCalls).toEqual([{ channel: 'channel:delete', data: { id: 'ch-general' } }]);
   });
 });
 

@@ -12,7 +12,7 @@
  */
 
 import type { CliRuntimeConfig } from './cli-provider';
-import { ProviderUsageLimitError } from '../provider-usage-limit-error';
+import { cliFailureFrom } from './cli-failure-patterns';
 import { ClaudeCodePermissionParser, type ParsedCliPermissionRequest } from './cli-permission-parser';
 
 /** Result of parseStreamJsonWithPermission. */
@@ -71,12 +71,7 @@ export class CliOutputParser {
 
   /** Called only for a provider error envelope or a failed process's stderr. */
   createProviderError(message: string, code?: unknown): Error {
-    const usageExhausted = code === 'usage_limit_reached'
-      || /\byou['’]ve hit your (?:session|weekly|usage) limit\b/i.test(message)
-      || /\b(?:Quota exceeded\.|Your workspace is out of credits\.)/i.test(message);
-    return usageExhausted
-      ? new ProviderUsageLimitError(message)
-      : new Error(`CLI command failed: ${message}`);
+    return cliFailureFrom(message, code);
   }
 
   private extractEventError(obj: Record<string, unknown>, terminalOnly = false): Error | null {

@@ -32,14 +32,19 @@ const SUMMARIES: ChannelSummary[] = [
   summary(dm, 'dm', [{ providerId: 'ai-1', displayName: 'AI One' }]),
 ];
 
-function stubBridge(options: { dms?: Channel[] | Promise<Channel[]>; rooms?: Channel[] | Promise<Channel[]> } = {}) {
+function stubBridge(options: {
+  dms?: Channel[] | Promise<Channel[]>;
+  rooms?: Channel[] | Promise<Channel[]>;
+  general?: Channel | null;
+  summaries?: ChannelSummary[];
+} = {}) {
   const invoke = vi.fn(async (channel: string, data?: unknown) => {
     switch (channel) {
       case 'room:list': return { rooms: await (options.rooms ?? []) };
       case 'onboarding:get-state':
         return { state: { completed: false, currentStep: 1, selections: {}, updatedAt: 1 } };
       case 'config:take-startup-diagnostics': return { settingsCorruption: null };
-      case 'channel:get-global-general': return { channel: general };
+      case 'channel:get-global-general': return { channel: options.general === undefined ? general : options.general };
       case 'channel:list':
         return { channels: (data as { projectId: string | null }).projectId === null
           ? await (options.dms ?? [dm]) : [] };
@@ -51,7 +56,7 @@ function stubBridge(options: { dms?: Channel[] | Promise<Channel[]>; rooms?: Cha
       case 'provider:list': return { providers: [] };
       case 'provider:list-inactive-cli': return { inactive: [] };
       case 'chat:list-active-rounds': return { channelIds: [] };
-      case 'channel:list-summaries': return { summaries: SUMMARIES };
+      case 'channel:list-summaries': return { summaries: options.summaries ?? SUMMARIES };
       default: throw new Error(`unexpected IPC: ${channel}`);
     }
   });
@@ -91,6 +96,32 @@ describe('chat-first shell', () => {
     expect(screen.getByTestId('composer-textarea').hasAttribute('disabled')).toBe(true);
     expect(useActiveChannelStore.getState().globalChannelId).toBe(archived.id);
   });
+  it('opens the most recent active room when the general channel was deleted (spec 2026-10-08 F1)', async () => {
+    const room = (id: string, createdAt: number): Channel => ({
+      ...general, id, kind: 'user', name: id, isChatRoom: true, archivedAt: null, createdAt,
+    });
+    const older = room('room-older', 10);
+    const newer = room('room-newer', 5);
+    stubBridge({
+      general: null, rooms: [older, newer],
+      summaries: [{ ...summary(older, 'room', []), lastActivityAt: 100 },
+        { ...summary(newer, 'room', []), lastActivityAt: 200 }],
+    });
+    render(<App />);
+    await waitFor(() => expect(useActiveChannelStore.getState().globalChannelId).toBe('room-newer'));
+    await waitFor(() => {
+      expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe('room-newer');
+    });
+  });
+
+  it('selects nothing and offers a new room when no conversation is left', async () => {
+    stubBridge({ general: null, rooms: [], summaries: [] });
+    useActiveChannelStore.setState({ globalChannelId: 'deleted-general', selectedScope: 'global' });
+    render(<App />);
+    expect(await screen.findByTestId('thread-no-conversations')).toBeTruthy();
+    expect(useActiveChannelStore.getState().globalChannelId).toBeNull();
+  });
+
   it('opens general with no projects and no forced work onboarding', async () => {
     expect(DEFAULT_APP_VIEW).toBe('messenger');
     const invoke = stubBridge();

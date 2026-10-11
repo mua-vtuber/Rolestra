@@ -174,6 +174,53 @@ describe('LocalProvider SSE Integration', () => {
     }).rejects.toThrow(/500/);
   });
 
+  // ── 6b. Structured output and failure causes (spec 2026-10-08) ─────
+
+  it('sends response_format json_schema only when structuredOutput is given', async () => {
+    const provider = createLocalProvider();
+    const fetchMock = vi.fn().mockImplementation(async () => mockSSEResponse(['data: [DONE]']));
+    vi.stubGlobal('fetch', fetchMock);
+    const schema = { type: 'object' as const, properties: { reply: { type: 'string' as const } } };
+
+    await collectTokens(provider.streamCompletion(MESSAGES, '', { structuredOutput: { name: 'private_reply', schema } }));
+    await collectTokens(provider.streamCompletion(MESSAGES, ''));
+
+    const bodies = fetchMock.mock.calls.map((call) => JSON.parse((call[1] as { body: string }).body) as Record<string, unknown>);
+    expect(bodies[0]?.response_format).toEqual({
+      type: 'json_schema', json_schema: { name: 'private_reply', strict: true, schema },
+    });
+    expect(bodies[0]?.stream).toBe(true);
+    expect(bodies[1]).not.toHaveProperty('response_format');
+  });
+
+  it('names a missing model on 404 and a stopped server on ECONNREFUSED', async () => {
+    const provider = createLocalProvider(makeConfig({ model: 'gemma4:e4b' }));
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false, status: 404, text: async () => 'model not found',
+    } as unknown as Response));
+    await expect(collectTokens(provider.streamCompletion(MESSAGES, ''))).rejects.toMatchObject({
+      failureCause: 'local-model-missing', failureDetail: 'gemma4:e4b',
+    });
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(
+      Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } })));
+    await expect(collectTokens(provider.streamCompletion(MESSAGES, ''))).rejects.toMatchObject({
+      failureCause: 'local-not-running', failureDetail: null,
+    });
+  });
+
+  it('names a rejected request on 400 (no retry without the schema)', async () => {
+    const provider = createLocalProvider();
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false, status: 400, text: async () => 'response_format not supported',
+    } as unknown as Response);
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(collectTokens(provider.streamCompletion(MESSAGES, '', {
+      structuredOutput: { name: 'room_turn', schema: { type: 'object' } },
+    }))).rejects.toMatchObject({ failureCause: 'request-rejected', failureDetail: 'HTTP 400' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   // ── 7. Warmup failure sets not-installed ───────────────────────────
 
   it('warmup failure when both endpoints fail sets not-installed', async () => {

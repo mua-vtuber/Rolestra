@@ -115,16 +115,24 @@ export function ChannelDeleteConfirm({
   // 라벨 분기는 정적 t() 호출을 사용한다 — 동적 key 를 t(variable) 로
   // 건네면 i18next-parser 가 키를 감지하지 못해 ko/en.json 에서 빈값으로
   // 덮어쓴다 (D14 패턴).
+  // 일반 채널(spec 2026-10-08 F1)은 보관 단계 없이 이 확인 창 한 번으로
+  // 지워지므로 본문이 "기록이 모두 사라지고 다시 생기지 않는다" 를 말한다.
+  // DB 에 저장된 '일반' 글자 대신 화면 이름을 쓰려고 이름을 넣지 않는다.
   const isDm = channel?.kind === 'dm';
+  const isGeneral = channel?.kind === 'system_general';
   const titleLabel = isDm
     ? t('messenger.channelDelete.titleDm')
-    : t('messenger.channelDelete.title');
+    : isGeneral
+      ? t('messenger.channelDelete.titleGeneral')
+      : t('messenger.channelDelete.title');
   const submitLabel = isDm
     ? t('messenger.channelDelete.submitDm')
     : t('messenger.channelDelete.submit');
   const bodyLabel = isDm
     ? t('messenger.channelDelete.bodyDm', { name: channel?.name ?? '' })
-    : t('messenger.channelDelete.body', { name: channel?.name ?? '' });
+    : isGeneral
+      ? t('messenger.channelDelete.bodyGeneral')
+      : t('messenger.channelDelete.body', { name: channel?.name ?? '' });
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>

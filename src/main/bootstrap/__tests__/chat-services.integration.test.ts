@@ -31,7 +31,8 @@ describe('chat-only Main composition on an existing database', () => {
     initDatabaseRoot(arena);
     runMigrations();
     const first = createChatServices(arena, asAbsolutePath(path.join(directory, 'chat-cli-instructions'), 'test'));
-    const general = first.channelService.getGlobalGeneralChannel();
+    const general = first.channelService.getGlobalGeneralChannel()!;
+    expect(general).not.toBeNull();
     first.messageService.append({
       channelId: general.id, meetingId: null, authorId: 'user',
       authorKind: 'user', role: 'user', content: 'saved global hello',
@@ -67,7 +68,7 @@ describe('chat-only Main composition on an existing database', () => {
     initDatabaseRoot(arena);
     runMigrations();
     const second = createChatServices(arena, asAbsolutePath(path.join(directory, 'chat-cli-instructions'), 'test'));
-    expect(second.channelService.getGlobalGeneralChannel().id).toBe(general.id);
+    expect(second.channelService.getGlobalGeneralChannel()?.id).toBe(general.id);
     expect(second.messageService.listByChannel(general.id)[0]?.content).toBe('saved global hello');
     expect(second.messageService.listByChannel(archivedChannel.id)[0]?.content).toBe('saved archived hello');
     expect(new ProjectRepository(getDatabase()).get('archived-project')?.status).toBe('archived');
@@ -77,5 +78,32 @@ describe('chat-only Main composition on an existing database', () => {
     expect('projectService' in second).toBe(false);
     expect('meetingService' in second).toBe(false);
     expect('executionService' in second).toBe(false);
+  });
+
+  it('does not create the general channel again after the user deleted it', async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'rolestra-chat-main-'));
+    directories.push(directory);
+    const arena = new ArenaRootService({
+      getSettings: () => ({ arenaRoot: directory }),
+      updateSettings: () => undefined,
+    });
+    await arena.ensure();
+    const instructions = asAbsolutePath(path.join(directory, 'chat-cli-instructions'), 'test');
+    initDatabaseRoot(arena);
+    runMigrations();
+    const first = createChatServices(arena, instructions);
+    const general = first.channelService.getGlobalGeneralChannel();
+    expect(general).not.toBeNull();
+    first.generalChannelService.delete(general!.id);
+    expect(first.channelService.getGlobalGeneralChannel()).toBeNull();
+
+    // Restart: same database, fresh composition.
+    closeDatabase();
+    initDatabaseRoot(arena);
+    runMigrations();
+    const second = createChatServices(arena, instructions);
+    expect(second.channelService.getGlobalGeneralChannel()).toBeNull();
+    expect((getDatabase().prepare(`SELECT COUNT(*) AS n FROM channels WHERE kind = 'system_general'`)
+      .get() as { n: number }).n).toBe(0);
   });
 });

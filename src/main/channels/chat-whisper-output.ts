@@ -1,6 +1,7 @@
 import {
   isChatPassMessage, isChatVoteResultMessage, type ChatErrorCode, type Message as ChannelMessage,
 } from '../../shared/message-types';
+import type { JsonSchema, StructuredOutputSpec } from '../../shared/structured-output-types';
 import { ChatCliInstructionsInsideWorkspaceError } from '../files/chat-cli-instructions';
 import { ProviderUsageLimitError } from '../providers/provider-usage-limit-error';
 import { CHAT_RESPONSE_MAX_BYTES } from './chat-limits';
@@ -19,6 +20,15 @@ export interface RoomWhisper {
 }
 export interface RoomTurnDecision { public: string | null; whispers: RoomWhisper[] }
 export interface PrivateReplyDecision { reply: string | null }
+
+/**
+ * The only definition of each output object's keys (spec 2026-10-08 F2): the
+ * strict parsers below and the JSON schemas sent to the model both read them,
+ * so the two cannot drift apart.
+ */
+export const ROOM_TURN_KEYS = ['public', 'whispers'] as const;
+export const ROOM_WHISPER_KEYS = ['recipientId', 'content'] as const;
+export const PRIVATE_REPLY_KEYS = ['reply'] as const;
 
 /**
  * Output the room cannot use. `empty_response` marks a provider that finished
@@ -120,12 +130,12 @@ export function parseRoomTurnOutput(
   recipientsByAlias: ReadonlyMap<string, string>,
   senderId: string,
 ): RoomTurnDecision {
-  const object = parseExactObject(raw, ['public', 'whispers']);
+  const object = parseExactObject(raw, ROOM_TURN_KEYS);
   const publicText = object.public === null ? null : text(object.public);
   if (!Array.isArray(object.whispers)) throw new InvalidChatOutputError();
   const recipients = new Set<string>();
   const whispers = object.whispers.map((item: unknown): RoomWhisper => {
-    const whisper = exactObject(item, ['recipientId', 'content']);
+    const whisper = exactObject(item, ROOM_WHISPER_KEYS);
     const alias = whisper.recipientId;
     const recipientId = typeof alias === 'string' ? recipientsByAlias.get(alias) : undefined;
     if (recipientId === undefined || recipientId === senderId || recipients.has(recipientId)) {
@@ -139,8 +149,56 @@ export function parseRoomTurnOutput(
 
 /** A private reply can only answer or decline; it can never start a whisper. */
 export function parsePrivateReplyOutput(raw: string): PrivateReplyDecision {
-  const object = parseExactObject(raw, ['reply']);
+  const object = parseExactObject(raw, PRIVATE_REPLY_KEYS);
   return { reply: object.reply === null ? null : text(object.reply) };
+}
+
+/** Text or null. `anyOf` rather than a `type` array, which some grammar converters cannot read. */
+const TEXT_OR_NULL: JsonSchema = { anyOf: [{ type: 'string', minLength: 1 }, { type: 'null' }] };
+
+/**
+ * Structured output of a regular room turn (spec 2026-10-08 F2). `aliases`
+ * are the whisper recipients the same turn's hint lists, in the same order,
+ * so the schema reveals nothing the hint does not. "One whisper per
+ * recipient" and blank text past `minLength` are left to the parser, which
+ * stays the final judge. With no recipient the whisper list must be empty
+ * (an empty `enum` is not a valid schema).
+ */
+export function roomTurnOutputSpec(aliases: readonly string[]): StructuredOutputSpec {
+  const whisperItem: JsonSchema = {
+    type: 'object',
+    properties: {
+      [ROOM_WHISPER_KEYS[0]]: { type: 'string', enum: [...aliases] },
+      [ROOM_WHISPER_KEYS[1]]: { type: 'string', minLength: 1 },
+    },
+    required: ROOM_WHISPER_KEYS,
+    additionalProperties: false,
+  };
+  const whispers: JsonSchema = aliases.length === 0
+    ? { type: 'array', maxItems: 0 }
+    : { type: 'array', maxItems: aliases.length, items: whisperItem };
+  return {
+    name: 'room_turn',
+    schema: {
+      type: 'object',
+      properties: { [ROOM_TURN_KEYS[0]]: TEXT_OR_NULL, [ROOM_TURN_KEYS[1]]: whispers },
+      required: ROOM_TURN_KEYS,
+      additionalProperties: false,
+    },
+  };
+}
+
+/** Structured output of a whisper reply (first and later replies alike). */
+export function privateReplyOutputSpec(): StructuredOutputSpec {
+  return {
+    name: 'private_reply',
+    schema: {
+      type: 'object',
+      properties: { [PRIVATE_REPLY_KEYS[0]]: TEXT_OR_NULL },
+      required: PRIVATE_REPLY_KEYS,
+      additionalProperties: false,
+    },
+  };
 }
 
 /**

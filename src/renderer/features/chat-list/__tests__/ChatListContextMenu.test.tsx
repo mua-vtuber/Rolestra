@@ -36,7 +36,7 @@ function renderColumn(channels = CHANNELS) {
   const onSelectChannel = vi.fn();
   const content = (currentChannels: Channel[]) => <ThemeProvider>
     <ChatListColumn channels={currentChannels} activeChannelId="room-1"
-      onSelectChannel={onSelectChannel} onSearchMessages={vi.fn()} />
+      onSelectChannel={onSelectChannel} onSearchMessages={vi.fn()} onCreateRoom={vi.fn()} />
   </ThemeProvider>;
   const view = render(content(channels));
   return { onSelectChannel, updateChannels: (next: Channel[]) => view.rerender(content(next)) };
@@ -83,6 +83,7 @@ describe('ChatListColumn context menu', () => {
   it.each(CHANNELS)('offers the same actions as the header for $id', async (channel) => {
     const header = render(<RoomMenu channel={channel} actions={{
       onPostOpinion: vi.fn(), onArchiveRoom: vi.fn(), onDeleteRoom: vi.fn(), onDeleteDm: vi.fn(),
+      onDeleteGeneral: vi.fn(),
     }} />);
     fireEvent.click(screen.getByTestId('room-menu-open'));
     const headerLabels = screen.getAllByRole('menuitem').map((item) => item.textContent);
@@ -130,6 +131,23 @@ describe('ChatListColumn context menu', () => {
     fireEvent.click(screen.getByTestId('room-action-confirm'));
     await waitFor(() => expect(invoke).toHaveBeenCalledWith(command, { channelId: id }));
     expect(useActiveChannelStore.getState().globalChannelId).toBe('room-1');
+  });
+
+  it('deletes the general channel after its confirm and clears it when it was open (spec 2026-10-08 F1)', async () => {
+    useActiveChannelStore.getState().setGlobalChannelId('general-1');
+    renderColumn();
+    rightClick('general-1');
+    fireEvent.click(await screen.findByTestId('chat-delete-general'));
+    const dialog = await screen.findByTestId('channel-delete-confirm');
+    expect(dialog.dataset.channelKind).toBe('system_general');
+    expect(screen.getByTestId('channel-delete-confirm-body').textContent)
+      .toContain(i18next.t('messenger.channelDelete.bodyGeneral'));
+    expect(invoke).not.toHaveBeenCalledWith('channel:delete', expect.anything());
+
+    fireEvent.click(screen.getByTestId('channel-delete-submit'));
+    await waitFor(() => expect(invoke).toHaveBeenCalledWith('channel:delete', { id: 'general-1' }));
+    await waitFor(() => expect(useActiveChannelStore.getState().globalChannelId).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('channel-delete-confirm')).toBeNull());
   });
 
   it.each(['tactical', 'retro'] as const)('supports keyboard opening, menu navigation and Escape in %s', async (themeKey) => {

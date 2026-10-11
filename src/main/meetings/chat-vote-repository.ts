@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3';
 import type {
   ChatVote, ChatVoteError, ChatVoteParticipantStatus, ChatVoteStatus, ChatVoteValue,
 } from '../../shared/chat-vote-types';
+import { isProviderFailureCause, type ProviderFailureCause } from '../../shared/provider-failure-types';
 
 interface VoteRow {
   id: string; opinion_id: string; channel_id: string;
@@ -11,9 +12,22 @@ interface ParticipantRow {
   provider_id: string; display_name: string; persona: string;
   status: ChatVoteParticipantStatus; opinion: string | null;
   vote: ChatVoteValue | null; error: ChatVoteError | null;
+  error_cause: string | null; error_detail: string | null;
 }
 export interface VoteParticipantSnapshot {
   providerId: string; displayName: string; persona: string;
+}
+
+/**
+ * `error_cause` has no CHECK (migration 040), so the value is checked here:
+ * an unknown stored value is broken data and throws with the row named.
+ */
+function parseErrorCause(raw: string | null, voteId: string, providerId: string): ProviderFailureCause | null {
+  if (raw === null) return null;
+  if (!isProviderFailureCause(raw)) {
+    throw new Error(`Unknown vote failure cause ${JSON.stringify(raw)} for ${voteId}/${providerId}`);
+  }
+  return raw;
 }
 
 export class ChatVoteRepository {
@@ -35,10 +49,12 @@ export class ChatVoteRepository {
   private fromRow(row: VoteRow): ChatVote {
     const delivery = this.db.prepare('SELECT message_id FROM chat_vote_result_deliveries WHERE vote_id = ?')
       .get(row.id) as { message_id: string } | undefined;
-    const participants = (this.db.prepare(`SELECT provider_id,display_name,persona,status,opinion,vote,error
+    const participants = (this.db.prepare(`SELECT provider_id,display_name,persona,status,opinion,vote,error,
+      error_cause,error_detail
       FROM chat_vote_participants WHERE vote_id = ? ORDER BY sort_order`).all(row.id) as ParticipantRow[])
       .map((part) => ({ providerId: part.provider_id, displayName: part.display_name,
-        status: part.status, opinion: part.opinion, vote: part.vote, error: part.error }));
+        status: part.status, opinion: part.opinion, vote: part.vote, error: part.error,
+        errorCause: parseErrorCause(part.error_cause, row.id, part.provider_id), errorDetail: part.error_detail }));
     const counts = { agree: 0, oppose: 0, abstain: 0, pending: 0, failed: 0, total: participants.length };
     for (const part of participants) {
       if (part.status === 'pending') counts.pending++;
@@ -65,15 +81,21 @@ export class ChatVoteRepository {
   settleParticipant(voteId: string, providerId: string, result: {
     status: 'submitted' | 'failed'; opinion: string | null;
     vote: ChatVoteValue | null; error: ChatVoteError | null;
+    /** Known cause of a `provider_error` failure (spec 2026-10-08 F3), else null. */
+    errorCause: ProviderFailureCause | null; errorDetail: string | null;
   }): boolean {
+    if (result.errorCause !== null && !isProviderFailureCause(result.errorCause)) {
+      throw new Error(`Unknown vote failure cause: ${String(result.errorCause)}`);
+    }
     const updated = this.db.prepare(`UPDATE chat_vote_participants
-      SET status = ?, opinion = ?, vote = ?, error = ?
+      SET status = ?, opinion = ?, vote = ?, error = ?, error_cause = ?, error_detail = ?
       WHERE vote_id = ? AND provider_id = ? AND status = 'pending'
         AND EXISTS (SELECT 1 FROM chat_votes v JOIN channels c ON c.id = v.channel_id
           LEFT JOIN chat_rooms r ON r.channel_id = v.channel_id
           WHERE v.id = ? AND v.status = 'running' AND c.read_only = 0
             AND (r.channel_id IS NULL OR r.archived_at IS NULL))`)
-      .run(result.status, result.opinion, result.vote, result.error, voteId, providerId, voteId);
+      .run(result.status, result.opinion, result.vote, result.error, result.errorCause, result.errorDetail,
+        voteId, providerId, voteId);
     return updated.changes > 0;
   }
 
@@ -86,7 +108,7 @@ export class ChatVoteRepository {
 
   interruptChannel(channelId: string): void {
     this.db.transaction(() => {
-      this.db.prepare(`UPDATE chat_vote_participants SET status='failed',error='interrupted'
+      this.db.prepare(`UPDATE chat_vote_participants SET status='failed',error='interrupted',error_cause=NULL,error_detail=NULL
         WHERE status='pending' AND vote_id IN
           (SELECT id FROM chat_votes WHERE channel_id=? AND status='running')`).run(channelId);
       this.db.prepare(`UPDATE chat_votes SET status='interrupted',completed_at=?
@@ -96,7 +118,7 @@ export class ChatVoteRepository {
 
   interruptRunning(): void {
     this.db.transaction(() => {
-      this.db.prepare(`UPDATE chat_vote_participants SET status='failed',error='interrupted'
+      this.db.prepare(`UPDATE chat_vote_participants SET status='failed',error='interrupted',error_cause=NULL,error_detail=NULL
         WHERE status='pending' AND vote_id IN (SELECT id FROM chat_votes WHERE status='running')`).run();
       this.db.prepare(`UPDATE chat_votes SET status='interrupted',completed_at=? WHERE status='running'`)
         .run(Date.now());

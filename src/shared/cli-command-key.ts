@@ -27,3 +27,13 @@ export type SupportedChatCli = (typeof SUPPORTED_CHAT_CLI_COMMANDS)[number];
 export function isSupportedChatCliKey(key: string): key is SupportedChatCli {
   return (SUPPORTED_CHAT_CLI_COMMANDS as readonly string[]).includes(key);
 }
+
+/**
+ * The terminal command that logs each supported chat CLI in again (spec
+ * 2026-10-08 F3, `cli-login-required` notice). Commands are not translated,
+ * so they live here rather than in the i18n catalogs.
+ */
+export const CLI_LOGIN_COMMANDS: Readonly<Record<SupportedChatCli, string>> = {
+  claude: 'claude auth login',
+  codex: 'codex login',
+};

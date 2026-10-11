@@ -14,8 +14,12 @@
  * - A pass-round hint (spec 2026-10-01 F1-4): a public line naming the model.
  * - `e2e-whisper-a` with the root marker: whispers to the configured name,
  *   picking that participant's opaque alias from the hint (spec 2026-09-29 §C).
+ * - `e2e-busy`: answers HTTP 503, like a crowded service (spec 2026-10-08 F3).
  * - Anything else: a fixed public or plain reply.
  *
+ * Every request's `response_format` is kept per model
+ * (`responseFormatsFor`), so a spec can check the structured output the app
+ * asked for (spec 2026-10-08 F2).
  * `hold(model)` keeps every response of that model pending until the
  * returned release runs, so a spec can watch a turn in progress.
  *
@@ -30,6 +34,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 export interface ChatRequest {
   model?: string;
   messages: Array<{ role: string; content: string }>;
+  /** Structured output the app asked for (local providers only). */
+  response_format?: { type: string; json_schema?: { name: string; strict?: boolean; schema: unknown } };
 }
 
 export interface CapturedChatRequest extends ChatRequest {
@@ -48,6 +54,8 @@ export interface FakeProvider {
   hold: (model: string) => () => void;
   /** Lists `model` in the fake Ollama's `/api/tags` from now on. */
   offerOllamaModel: (model: string) => void;
+  /** The `response_format` of every request `model` received, oldest first (`null` when absent). */
+  responseFormatsFor: (model: string) => Array<ChatRequest['response_format'] | null>;
   close: () => Promise<void>;
 }
 
@@ -57,6 +65,9 @@ const PRIVATE_REPLY_MARKER = 'Private reply to ';
 const THREAD_CONTINUATION_MARKER = 'they answered you.';
 const PASS_ROUND_MARKER = 'The user passed without adding anything.';
 const HINT_PARTICIPANTS_MARKER = 'at most once each: ';
+
+/** Model that always answers HTTP 503 (a busy service). */
+export const E2E_BUSY_MODEL = 'e2e-busy';
 
 /** The one model the fake Ollama lists in `/api/tags`. */
 export const FAKE_OLLAMA_MODEL = 'chat-first-model';
@@ -153,6 +164,12 @@ function captureChatRequest(request: IncomingMessage, response: ServerResponse, 
         response.writeHead(400).end('Invalid JSON');
         return;
       }
+      if (body.model === E2E_BUSY_MODEL) {
+        state.requests.push({ ...body, reply: '', authorization: request.headers.authorization, rawBody });
+        response.writeHead(503, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { message: 'The fake service is busy.' } }));
+        return;
+      }
       const reply = decideReply(body, state.whisperRecipientName);
       state.requests.push({ ...body, reply, authorization: request.headers.authorization, rawBody });
       const hold = body.model ? state.holds.get(body.model) : undefined;
@@ -208,6 +225,8 @@ export async function startFakeProvider(): Promise<FakeProvider> {
     baseUrl: `http://127.0.0.1:${address.port}`,
     requests: state.requests,
     setWhisperRecipientName: (name) => { state.whisperRecipientName = name; },
+    responseFormatsFor: (model) => state.requests
+      .filter((item) => item.model === model).map((item) => item.response_format ?? null),
     offerOllamaModel: (model) => {
       if (!state.ollamaModels.includes(model)) state.ollamaModels.push(model);
     },

@@ -10,6 +10,7 @@ import type { RoleId } from './role-types';
 import type { PermissionMode, ProjectKind } from './project-types';
 import type { PermissionSet } from './permission-set-types';
 import type { AbsolutePath } from './absolute-path';
+import type { StructuredOutputSpec } from './structured-output-types';
 
 /**
  * Max length of `providers.display_name` (F2-2, spec
@@ -132,6 +133,12 @@ export interface CompletionOptions {
   cliWorkspace?: CliWorkspaceContext;
   /** An isolated, persisted room/character CLI conversation. API providers ignore it. */
   chatSession?: ChatCliSessionOptions;
+  /**
+   * The JSON format this call must return. Only the local provider sends it
+   * (as `response_format`) for now; API and CLI providers ignore it. The
+   * caller's parser always judges the format.
+   */
+  structuredOutput?: StructuredOutputSpec;
   [key: string]: unknown;
 }
 

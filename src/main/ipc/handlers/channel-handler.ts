@@ -4,12 +4,14 @@ import type { DmSummary } from '../../../shared/dm-types';
 import type { MemberView } from '../../../shared/member-profile-types';
 import type { ChannelService } from '../../channels/channel-service';
 import type { DmChannelService } from '../../channels/dm-channel-service';
+import type { GeneralChannelService } from '../../channels/general-channel-service';
 import type { MemberProfileService } from '../../members/member-profile-service';
 import { providerRegistry } from '../../providers/registry';
 import { getChatRoomServiceOrNull } from './room-handler';
 
 let channelAccessor: (() => ChannelService) | null = null;
 let dmAccessor: (() => Pick<DmChannelService, 'delete'>) | null = null;
+let generalAccessor: (() => Pick<GeneralChannelService, 'delete'>) | null = null;
 let memberAccessor: (() => MemberProfileService) | null = null;
 
 export function setChannelServiceAccessor(fn: () => ChannelService): void {
@@ -23,6 +25,15 @@ export function setDmChannelServiceAccessor(fn: () => Pick<DmChannelService, 'de
 function getDmChannels(): Pick<DmChannelService, 'delete'> {
   if (!dmAccessor) throw new Error('channel handler: DM service not initialized');
   return dmAccessor();
+}
+
+export function setGeneralChannelServiceAccessor(fn: () => Pick<GeneralChannelService, 'delete'>): void {
+  generalAccessor = fn;
+}
+
+function getGeneralChannels(): Pick<GeneralChannelService, 'delete'> {
+  if (!generalAccessor) throw new Error('channel handler: general channel service not initialized');
+  return generalAccessor();
 }
 
 export function setChannelMemberServiceAccessor(
@@ -49,12 +60,9 @@ export function handleChannelList(
   return { channels: getChannel().listDms() };
 }
 
+/** `null` means the user deleted the general channel; a DB error reaches the renderer as an error. */
 export function handleChannelGetGlobalGeneral(): IpcResponse<'channel:get-global-general'> {
-  try {
-    return { channel: getChannel().getGlobalGeneralChannel() };
-  } catch {
-    return { channel: null };
-  }
+  return { channel: getChannel().getGlobalGeneralChannel() };
 }
 
 export function handleChannelListMembers(
@@ -88,11 +96,16 @@ export function handleChannelListMembers(
   return { members };
 }
 
-/** DM delete also closes the conversation: in-flight reply, late write, CLI clone. */
+/**
+ * DM / general channel delete also closes the conversation: in-flight reply,
+ * late write, CLI clone. `target` comes from `requireDeletableChatChannel`.
+ */
 export function handleChannelDelete(
   data: IpcRequest<'channel:delete'>,
+  target: 'dm' | 'general',
 ): IpcResponse<'channel:delete'> {
-  getDmChannels().delete(data.id);
+  if (target === 'dm') getDmChannels().delete(data.id);
+  else getGeneralChannels().delete(data.id);
   return { success: true };
 }
 

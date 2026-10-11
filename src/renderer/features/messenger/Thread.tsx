@@ -13,6 +13,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElemen
 import { useTranslation } from 'react-i18next';
 
 import { notifyError } from '../../components/ErrorBoundary';
+import { notifyChannelsChanged } from '../../hooks/channel-invalidation-bus';
 import { useActiveChannel } from '../../hooks/use-active-channel';
 import { useChannelMembers } from '../../hooks/use-channel-members';
 import { isPendingMessageId, useChannelMessages } from '../../hooks/use-channel-messages';
@@ -23,6 +24,7 @@ import { useActiveChannelStore } from '../../stores/active-channel-store';
 import { useChannelSummaryStore } from '../../stores/channel-summary-store';
 import { useTheme } from '../../theme/use-theme';
 import { conversationLabel } from '../chat-list/chat-list-model';
+import { isActiveConversation } from '../chat-list/landing-conversation';
 import type { Channel } from '../../../shared/channel-types';
 import { ChatActivityIndicator } from './ChatActivityIndicator';
 import { Composer } from './Composer';
@@ -33,7 +35,10 @@ import { PassTurnButton } from './PassTurnButton';
 import { RoomHeader } from './RoomHeader';
 
 export interface ThreadProps {
-  onDeleteDm?: (channelId: string) => void;
+  /** Opens the delete confirm for a DM or the general channel. */
+  onDeleteChannel?: (channelId: string) => void;
+  /** Opens the room create dialog (the "대화방이 없어요" button). */
+  onCreateRoom: () => void;
   className?: string;
 }
 
@@ -41,10 +46,10 @@ function isGroup(channel: Channel): boolean {
   return channel.kind === 'system_general' || channel.isChatRoom === true;
 }
 
-export function Thread({ onDeleteDm, className }: ThreadProps): ReactElement {
+export function Thread({ onDeleteChannel, onCreateRoom, className }: ThreadProps): ReactElement {
   const { t, i18n } = useTranslation();
   const { token } = useTheme();
-  const { available, authoritative } = useGlobalChannelLists();
+  const { available, authoritative, loadError } = useGlobalChannelLists();
   const { activeChannelId } = useActiveChannel(null, authoritative);
   const setGlobalChannelId = useActiveChannelStore((state) => state.setGlobalChannelId);
   const activeChannel = available.find((channel) => channel.id === activeChannelId) ?? null;
@@ -100,6 +105,42 @@ export function Thread({ onDeleteDm, className }: ThreadProps): ReactElement {
   }, [activeChannelId, newestStoredId, visible, t]);
 
   if (activeChannel === null) {
+    // A failed list read leaves `authoritative` null and the landing rule
+    // waiting, so the failure is shown here instead of "select a channel".
+    if (loadError !== null) {
+      return (
+        <div data-testid="thread" data-empty="true"
+          className={`flex h-full flex-1 items-center justify-center p-6 ${className ?? ''}`}>
+          <div data-testid="thread-load-error" role="alert"
+            className="flex flex-col items-center gap-1.5 text-center text-xs text-danger-text">
+            <span>{t('messenger.emptyState.loadFailed', { message: loadError.message })}</span>
+            <button type="button" data-testid="thread-load-retry" onClick={() => { void notifyChannelsChanged(); }}
+              className="font-semibold underline-offset-2 hover:underline">
+              {t('messenger.emptyState.retry')}
+            </button>
+          </div>
+        </div>
+      );
+    }
+    // No general channel and no active room (archived rooms still show under
+    // the archive filter): offer to create a room (spec 2026-10-08 F1).
+    if (authoritative !== null && !authoritative.some(isActiveConversation)) {
+      return (
+        <div data-testid="thread" data-empty="true"
+          className={`flex h-full flex-1 items-center justify-center p-6 ${className ?? ''}`}>
+          <div data-testid="thread-no-conversations" className="flex flex-col items-center gap-3 text-center">
+            <h2 className="font-display text-room-title font-bold text-fg">
+              {t('messenger.emptyState.noConversationsTitle')}
+            </h2>
+            <p className="text-sm text-fg-muted">{t('messenger.emptyState.noConversationsBody')}</p>
+            <button type="button" data-testid="thread-create-room" onClick={onCreateRoom}
+              className="h-10 bg-brand px-4 text-sm font-semibold text-brand-fg [clip-path:var(--clip-control)]">
+              {t('messenger.emptyState.createRoom')}
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
       <div data-testid="thread" data-empty="true"
         className={`flex h-full flex-1 items-center justify-center p-6 ${className ?? ''}`}>
@@ -123,7 +164,7 @@ export function Thread({ onDeleteDm, className }: ThreadProps): ReactElement {
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-canvas">
         <RoomHeader key={activeChannel.id} channel={activeChannel} title={title} members={members}
           drawerOpen={drawerOpen} onToggleDrawer={() => setDrawerOpen((open) => !open)}
-          onDeleteDm={onDeleteDm} onNavigate={(channelId) => setGlobalChannelId(channelId)} />
+          onDeleteChannel={onDeleteChannel} onNavigate={(channelId) => setGlobalChannelId(channelId)} />
         {activeChannel.isChatRoom && activeChannel.readOnly ? (
           <p data-testid="room-archived-notice" className="border-b border-border-soft px-5 py-2 text-xs text-fg-muted">
             {t('rooms.readOnly')}

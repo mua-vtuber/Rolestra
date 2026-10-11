@@ -111,6 +111,7 @@
     "channelDelete": {
       "body": "Delete the \"{{name}}\" channel?",
       "bodyDm": "Close the conversation with \"{{name}}\"?",
+      "bodyGeneral": "This deletes the general channel and its whole conversation history. It will not come back. To talk with several AIs again, create a new chat room.",
       "cancel": "Cancel",
       "errors": {
         "generic": "Failed to delete the channel.",
@@ -121,10 +122,12 @@
       "submit": "Delete",
       "submitDm": "Close",
       "title": "Delete channel",
-      "titleDm": "Close conversation"
+      "titleDm": "Close conversation",
+      "titleGeneral": "Delete the general channel"
     },
     "channelHeader": {
       "delete": "Delete",
+      "deleteGeneral": "Delete general channel",
       "postOpinion": "Post opinion"
     },
     "composer": {
@@ -138,7 +141,28 @@
       "sendLog": "[send]"
     },
     "emptyState": {
-      "noActiveChannel": "Select a channel on the left."
+      "createRoom": "Create a chat room",
+      "loadFailed": "Could not load the conversations. ({{message}})",
+      "noActiveChannel": "Select a channel on the left.",
+      "noConversationsBody": "Create a chat room to start talking with your AIs.",
+      "noConversationsTitle": "No chat rooms yet",
+      "retry": "Load again"
+    },
+    "failureCause": {
+      "auth": "The API key was rejected. It may be expired or wrong. Replace it in Settings → AI.",
+      "cliFailed": "{{cli}} failed to run. The details are in the app log.",
+      "cliGeneric": "CLI",
+      "cliLoginRequired": "{{cli}} is not logged in, or its login expired. Run {{command}} in a terminal to log in again, then send your message again.",
+      "cliLoginRequiredNoCommand": "{{cli}} is not logged in, or its login expired. Log in again in a terminal, then send your message again.",
+      "cliNotFound": "{{cli}} was not found. Check that it is installed and runs in a terminal.",
+      "httpError": "The AI service answered with an error.",
+      "keyMissing": "No API key is stored for this AI. Enter it again in Settings → AI.",
+      "localModelMissing": "The local AI server does not have the model {{model}}. Download it or pick another model in Settings → AI.",
+      "localNotRunning": "The local AI server (for example Ollama) is not running. Start it and send again.",
+      "network": "Could not reach the AI service. Check your internet connection or the server address.",
+      "rateLimited": "The AI service is limiting requests right now. Wait a moment and send again.",
+      "requestRejected": "The AI service rejected the request. Check the model name in Settings → AI.",
+      "serviceBusy": "The AI service is overloaded right now. Wait a moment and send again."
     },
     "log": {
       "me": "Me",

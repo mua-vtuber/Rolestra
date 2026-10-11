@@ -7,18 +7,11 @@
  */
 import { cliCommandKey } from '../../shared/cli-command-key';
 import type { ProviderConfig, ProviderInfo } from '../../shared/provider-types';
-import { getConfigService } from '../config/instance';
+import { resolveStoredApiKey } from './api-key-resolver';
 import { assertDisplayNameAvailable } from './display-name-uniqueness';
 import { createProvider, isSupportedChatCliCommand } from './factory';
 import { saveProvider } from './provider-repository';
 import { providerRegistry } from './registry';
-
-/** Resolve an API key reference to the actual key value. */
-async function resolveApiKey(ref: string): Promise<string> {
-  const secret = getConfigService().getSecret(ref);
-  if (!secret) throw new Error(`API key not found: ${ref}`);
-  return secret;
-}
 
 export async function registerProvider(requestedName: string, config: ProviderConfig): Promise<ProviderInfo> {
   if (config.type === 'cli' && !isSupportedChatCliCommand(config.command)) {
@@ -33,7 +26,7 @@ export async function registerProvider(requestedName: string, config: ProviderCo
   assertDisplayNameAvailable(displayName);
   // F3 (QA defect 1): no `persona` input — the character sheet
   // (MemberProfile.characterSheet) is the only editable persona surface.
-  const provider = createProvider({ displayName, config, resolveApiKey });
+  const provider = createProvider({ displayName, config, resolveApiKey: resolveStoredApiKey });
 
   providerRegistry.register(provider);
 

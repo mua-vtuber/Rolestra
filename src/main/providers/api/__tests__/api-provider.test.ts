@@ -21,6 +21,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ApiProvider } from '../api-provider';
+import { ApiKeyMissingError, ProviderCallError } from '../../provider-call-error';
 import type { ApiProviderConfig } from '../../../../shared/provider-types';
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -278,6 +279,42 @@ describe('ApiProvider', () => {
       }).rejects.toThrow('Google API error 429');
     });
 
+    it.each([
+      ['https://api.openai.com/v1', 'gpt-4', 503, 'service-busy'],
+      ['https://api.anthropic.com/v1', 'claude', 529, 'service-busy'],
+      ['https://api.openai.com/v1', 'gpt-4', 401, 'auth'],
+      ['https://generativelanguage.googleapis.com/v1beta', 'gemini-pro', 429, 'rate-limited'],
+      ['https://api.openai.com/v1', 'gpt-4', 404, 'request-rejected'],
+    ])('names the cause of an HTTP failure (spec 2026-10-08 F3): %s %i', async (endpoint, model, status, cause) => {
+      const provider = createProvider(makeConfig({ endpoint, model }));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false, status, text: async () => 'provider body text',
+      } as unknown as Response));
+
+      const failure = await collectTokens(provider.streamCompletion([{ role: 'user', content: 'hi' }], ''))
+        .then(() => null, (error: unknown) => error);
+      expect(failure).toBeInstanceOf(ProviderCallError);
+      expect(failure).toMatchObject({ failureCause: cause, failureDetail: `HTTP ${status}` });
+    });
+
+    it('names an unreachable service as a network failure', async () => {
+      const provider = createProvider();
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(
+        Object.assign(new TypeError('fetch failed'), { cause: { code: 'ENOTFOUND' } })));
+
+      const failure = await collectTokens(provider.streamCompletion([{ role: 'user', content: 'hi' }], ''))
+        .then(() => null, (error: unknown) => error);
+      expect(failure).toMatchObject({ failureCause: 'network', failureDetail: 'ENOTFOUND' });
+    });
+
+    it('throws ApiKeyMissingError when the resolved key is empty', async () => {
+      const provider = createProvider(makeConfig(), vi.fn().mockResolvedValue(''));
+      const failure = await collectTokens(provider.streamCompletion([{ role: 'user', content: 'hi' }], ''))
+        .then(() => null, (error: unknown) => error);
+      expect(failure).toBeInstanceOf(ApiKeyMissingError);
+      expect(failure).toMatchObject({ failureCause: 'key-missing', failureDetail: null });
+    });
+
     it('throws when API key is not found', async () => {
       const resolver = vi.fn().mockResolvedValue('');
       const provider = createProvider(makeConfig(), resolver);
@@ -378,6 +415,22 @@ describe('ApiProvider', () => {
   // ── Completion options ──────────────────────────────────────────
 
   describe('completion options', () => {
+    it.each([
+      'https://api.openai.com/v1', 'https://api.anthropic.com/v1', 'https://generativelanguage.googleapis.com/v1beta',
+    ])('never sends response_format even when structuredOutput is given (spec 2026-10-08 F2): %s', async (endpoint) => {
+      const provider = createProvider(makeConfig({ endpoint }));
+      const fetchMock = vi.fn().mockResolvedValue(mockSSEResponse(['data: [DONE]']));
+      vi.stubGlobal('fetch', fetchMock);
+
+      await collectTokens(provider.streamCompletion([{ role: 'user', content: 'hi' }], '', {
+        structuredOutput: { name: 'room_turn', schema: { type: 'object' } },
+      })).catch(() => undefined);
+
+      const body = JSON.parse((fetchMock.mock.calls[0]![1] as { body: string }).body) as Record<string, unknown>;
+      expect(body).not.toHaveProperty('response_format');
+      expect(JSON.stringify(body)).not.toContain('room_turn');
+    });
+
     it('passes temperature and maxTokens to OpenAI body', async () => {
       const provider = createProvider();
 

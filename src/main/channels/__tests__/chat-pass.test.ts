@@ -106,7 +106,7 @@ describe('pass turn (F1)', () => {
 
   it('rejects a general channel without participants, storing nothing (QA m5)', () => {
     const rt = runtime = createChatRuntime({ api: ['alice'] });
-    const general = rt.channels.ensureGlobalGeneralChannel();
+    const general = rt.general.provisionOnFirstRun()!;
 
     expect(rejection(() => rt.passTurn(general))).toBe('no_participants');
     expect(rt.observer(general.id)).toEqual([]);

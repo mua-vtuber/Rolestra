@@ -26,6 +26,7 @@ import {
   googleChunkSchema,
 } from './sse-schemas';
 import { resolveApiCapabilities } from '../capability-resolver';
+import { ApiKeyMissingError, anthropicStreamError, fetchCallError, httpCallError } from '../provider-call-error';
 import { tryGetLogger } from '../../log/logger-accessor';
 
 /** Anthropic API version header — required by the Messages API. */
@@ -99,6 +100,26 @@ export class ApiProvider extends BaseProvider {
     } else {
       console.warn(`[api-provider] ${action}`, detail ?? '');
     }
+  }
+
+  /**
+   * POSTs JSON and returns an OK response. A failed fetch or a non-2xx
+   * answer is thrown with its cause (spec 2026-10-08 F3); `label` starts the
+   * log message as before.
+   */
+  private async postJson(label: string, url: string, headers: Record<string, string>,
+    body: unknown, signal?: AbortSignal): Promise<Response> {
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body), signal,
+      });
+    } catch (error) {
+      throw fetchCallError(error, 'api');
+    }
+    if (!res.ok) throw httpCallError(label, res.status, await res.text(), { kind: 'api' });
+    return res;
   }
 
   private isAnthropicEndpoint(): boolean {
@@ -193,7 +214,7 @@ export class ApiProvider extends BaseProvider {
     this.setStatus('busy');
     try {
       const apiKey = await this.resolveApiKey(this.apiConfig.apiKeyRef);
-      if (!apiKey) throw new Error('API key not found');
+      if (!apiKey) throw new ApiKeyMissingError('API key not found');
 
       if (this.isAnthropicEndpoint()) {
         yield* this.streamAnthropic(messages, persona, apiKey, options, signal);
@@ -237,20 +258,8 @@ export class ApiProvider extends BaseProvider {
       ...(options?.maxTokens != null && { max_output_tokens: options.maxTokens }),
     };
 
-    const res = await fetch(`${this.apiConfig.endpoint}/responses`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`OpenAI Responses API error ${res.status}: ${text}`);
-    }
+    const res = await this.postJson('OpenAI Responses API error', `${this.apiConfig.endpoint}/responses`,
+      { 'Authorization': `Bearer ${apiKey}` }, body, signal);
 
     yield* this.parseOpenAIResponsesSSE(res, signal);
   }
@@ -276,20 +285,8 @@ export class ApiProvider extends BaseProvider {
       ...(options?.maxTokens != null && { max_tokens: options.maxTokens }),
     };
 
-    const res = await fetch(`${this.apiConfig.endpoint}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`API error ${res.status}: ${text}`);
-    }
+    const res = await this.postJson('API error', `${this.apiConfig.endpoint}/chat/completions`,
+      { 'Authorization': `Bearer ${apiKey}` }, body, signal);
 
     yield* this.parseSSE(res, signal);
   }
@@ -312,21 +309,8 @@ export class ApiProvider extends BaseProvider {
       ...(options?.temperature != null && { temperature: options.temperature }),
     };
 
-    const res = await fetch(`${this.apiConfig.endpoint}/messages`, {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': ANTHROPIC_API_VERSION,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Anthropic API error ${res.status}: ${text}`);
-    }
+    const res = await this.postJson('Anthropic API error', `${this.apiConfig.endpoint}/messages`,
+      { 'x-api-key': apiKey, 'anthropic-version': ANTHROPIC_API_VERSION }, body, signal);
 
     yield* this.parseAnthropicSSE(res, signal);
   }
@@ -355,20 +339,7 @@ export class ApiProvider extends BaseProvider {
     };
 
     const url = `${this.apiConfig.endpoint}/models/${this.apiConfig.model}:streamGenerateContent?alt=sse`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify(body),
-      signal,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Google API error ${res.status}: ${text}`);
-    }
+    const res = await this.postJson('Google API error', url, { 'x-goog-api-key': apiKey }, body, signal);
 
     yield* this.parseGoogleSSE(res, signal);
   }
@@ -524,6 +495,8 @@ export class ApiProvider extends BaseProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let completed = false;
+    // A mid-stream `error` event; thrown after the per-line catch below.
+    let streamFailure: Error | null = null;
 
     try {
       while (true) {
@@ -547,6 +520,7 @@ export class ApiProvider extends BaseProvider {
               continue;
             }
             const event = parsed.data;
+            if (event.type === 'error') streamFailure = anthropicStreamError(event.error.type);
             if (event.type === 'message_stop') completed = true;
             if (event.type === 'message_start') {
               const input = event.message?.usage?.input_tokens;
@@ -585,6 +559,7 @@ export class ApiProvider extends BaseProvider {
             }
             this.warnSseParse('anthropic-sse-parse-skip', msg);
           }
+          if (streamFailure) throw streamFailure;
         }
       }
       if (!completed && !signal?.aborted) {

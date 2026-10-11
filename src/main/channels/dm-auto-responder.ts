@@ -19,9 +19,12 @@
  *
  * Failure mode: when a turn fails or ends without content while the room is
  * open, we append a `system` notice that stores only a `meta.chatError` code;
- * the renderer translates it. A DM notice for a generic provider failure may
- * add one masked, shortened line of cause (`meta.chatErrorDetail`); room
- * notices never carry provider text. Notices are observer-only: no model
+ * the renderer translates it. A `provider_error` whose cause main could tell
+ * also stores the cause code and its short app-made marker
+ * (`meta.chatErrorCause` / `chatErrorCauseDetail`, spec 2026-10-08 F3). A DM
+ * notice for a provider failure without a known cause may add one masked,
+ * shortened line of cause (`meta.chatErrorDetail`); room notices never carry
+ * provider text. Notices are observer-only: no model
  * input reads them (`message-visibility.ts`). A room closed by archive,
  * delete, pause or shutdown ends the turn without a notice.
  */
@@ -44,6 +47,8 @@ import type { MemberProfile } from '../../shared/member-profile-types';
 import { buildChatPersona, withChatRuntimeRules } from '../members/persona-builder';
 import { consensusOnlyCliWorkspace } from '../providers/cli/cli-workspace';
 import { isCliProvider } from '../providers/cli/is-cli-provider';
+import type { ProviderFailureCause } from '../../shared/provider-failure-types';
+import { describeChatFailure } from './chat-failure';
 import { isSupportedChatCliCommand } from '../providers/factory';
 import { CliProvider } from '../providers/cli/cli-provider';
 import type { ChannelService } from './channel-service';
@@ -57,7 +62,7 @@ import { ChatRoomTurns, type ChatRoundSource, type ChatTurnCall, type RoomTurnOu
 import { participantAlias } from './participant-alias';
 import { SystemRowInModelInputError } from './message-visibility';
 import {
-  InvalidChatOutputError, chatErrorCodeFor, collectChatOutput, directMessageTurnHint, isEmptyChatOutput,
+  InvalidChatOutputError, collectChatOutput, directMessageTurnHint, isEmptyChatOutput,
   modelFacingBody, roomOutputPersona,
 } from './chat-whisper-output';
 
@@ -340,8 +345,12 @@ export class DmAutoResponder extends EventEmitter {
         if (group) providerMessages.push({ role: 'system', content: turn.hint });
         provider.resetConversationContext();
         startClock();
+        // Only API/local calls carry the output schema (spec 2026-10-08 F2):
+        // a CLI cannot take one, and its session fingerprint stays untouched.
+        const apiOptions = turn.structuredOutput
+          ? { ...(options ?? {}), structuredOutput: turn.structuredOutput } : options;
         const fullContent = await collectChatOutput(provider.streamCompletion(
-          providerMessages, persona, options, controller.signal,
+          providerMessages, persona, apiOptions, controller.signal,
         ), controller.signal);
         if (isEmptyChatOutput(fullContent)) throw new InvalidChatOutputError('empty_response');
         persist(fullContent);
@@ -414,16 +423,23 @@ export class DmAutoResponder extends EventEmitter {
     context: { group: boolean; timedOut: boolean;
       action: 'generate-failed' | 'whisper-store-failed' | 'turn-start-failed' }): void {
     const errMsg = error instanceof Error ? error.message : String(error);
-    const code = chatErrorCodeFor(error, context.timedOut);
-    const cause = maskSecrets(errMsg).slice(0, LOG_ERROR_CAUSE_MAX_CHARS);
+    const failure = describeChatFailure(error, context.timedOut,
+      this.deps.providerLookup.get(providerId)?.config ?? null);
+    const { code } = failure;
+    const causeText = maskSecrets(errMsg).slice(0, LOG_ERROR_CAUSE_MAX_CHARS);
     tryGetLogger()?.error({
       component: 'dm-auto-responder',
       action: context.action,
       result: 'failure',
-      metadata: { channelId, providerId, code, cause },
+      metadata: { channelId, providerId, code, causeText, cause: failure.cause, causeDetail: failure.causeDetail },
     });
-    this.appendSystemError(channelId, providerId, code,
-      !context.group && code === 'provider_error' ? dmErrorDetail(errMsg) : undefined);
+    // A known cause says more than the raw line; the DM keeps the raw line only without one.
+    this.appendSystemError(channelId, providerId, code, {
+      cause: failure.cause,
+      causeDetail: failure.causeDetail,
+      dmDetail: !context.group && code === 'provider_error' && failure.cause === null
+        ? dmErrorDetail(errMsg) : undefined,
+    });
   }
 
   /**
@@ -574,12 +590,15 @@ export class DmAutoResponder extends EventEmitter {
       ?? this.deps.providerLookup.get(authorId)?.displayName ?? participantAlias(channelId, authorId);
   }
 
-  /** Stores a code (never a sentence); `detail` is the DM-only masked cause. */
+  /**
+   * Stores a code (never a sentence). `cause` / `causeDetail` are the known
+   * failure cause; `dmDetail` is the DM-only masked raw line.
+   */
   private appendSystemError(
     channelId: string,
     providerId: string,
     code: ChatErrorCode,
-    detail?: string,
+    extra?: { cause: ProviderFailureCause | null; causeDetail: string | null; dmDetail: string | undefined },
   ): void {
     if (this.isChannelClosed(channelId)) return;
     const provider = this.deps.providerLookup.get(providerId);
@@ -594,7 +613,9 @@ export class DmAutoResponder extends EventEmitter {
         content: code,
         meta: {
           chatError: code,
-          ...(detail ? { chatErrorDetail: detail } : {}),
+          ...(extra?.cause ? { chatErrorCause: extra.cause } : {}),
+          ...(extra?.cause && extra.causeDetail ? { chatErrorCauseDetail: extra.causeDetail } : {}),
+          ...(extra?.dmDetail ? { chatErrorDetail: extra.dmDetail } : {}),
           ...(code === 'usage_limit' && provider ? { chatErrorSpeakerName: provider.displayName } : {}),
         },
       });

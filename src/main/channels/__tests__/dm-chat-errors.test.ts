@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { DM_ERROR_DETAIL_MAX_CHARS } from '../chat-limits';
 import { ProviderUsageLimitError } from '../../providers/provider-usage-limit-error';
+import { ProviderCallError } from '../../providers/provider-call-error';
+import type { ProviderFailureCause } from '../../../shared/provider-failure-types';
 import { createChatRuntime, publicReply, whisperTo, type ChatRuntime, type ModelStep } from './chat-runtime-harness';
 
 let runtime: ChatRuntime | null = null;
@@ -13,6 +15,12 @@ const failWith = (message: string): ModelStep => async function* () {
   yield* [];
   throw new Error(message);
 };
+
+const failWithCause = (message: string, cause: ProviderFailureCause, detail: string | null): ModelStep =>
+  async function* () {
+    yield* [];
+    throw new ProviderCallError(message, cause, detail);
+  };
 
 const usageLimited: ModelStep = async function* () {
   yield* [];
@@ -121,5 +129,43 @@ describe('DM failure notices are stored as codes (A5)', () => {
 
     expect(rt.observer(room.id).filter((m) => m.role === 'system').map((m) => m.meta))
       .toEqual([{ chatError: 'provider_error' }]);
+  });
+
+  it('stores a known DM cause instead of the raw line (spec 2026-10-08 F3)', async () => {
+    const rt = runtime = createChatRuntime({ api: ['bob'] });
+    const dm = rt.channels.createDm('bob');
+    rt.script('bob', failWithCause('Google API error 503: provider text', 'service-busy', 'HTTP 503'));
+
+    await rt.sendUser(dm, 'hello');
+
+    expect(rt.observer(dm.id).filter((m) => m.role === 'system').map((m) => m.meta)).toEqual([
+      { chatError: 'provider_error', chatErrorCause: 'service-busy', chatErrorCauseDetail: 'HTTP 503' },
+    ]);
+  });
+
+  it('names a CLI cause by the configured CLI and stores a room cause without provider text', async () => {
+    const rt = runtime = createChatRuntime({ cli: ['bob'] });
+    const room = rt.createRoom('Room', ['bob']);
+    rt.script('bob', failWithCause('CLI command failed: Failed to authenticate: OAuth session expired',
+      'cli-login-required', null));
+
+    await rt.sendUser(room, 'hello');
+
+    const metas = rt.observer(room.id).filter((m) => m.role === 'system').map((m) => m.meta);
+    expect(metas).toEqual([
+      { chatError: 'provider_error', chatErrorCause: 'cli-login-required', chatErrorCauseDetail: 'codex' },
+    ]);
+    expect(JSON.stringify(metas)).not.toContain('OAuth');
+  });
+
+  it('keeps no cause and the masked DM line when the cause is unknown', async () => {
+    const rt = runtime = createChatRuntime({ api: ['bob'] });
+    const dm = rt.channels.createDm('bob');
+    rt.script('bob', failWith('something odd happened'));
+
+    await rt.sendUser(dm, 'hello');
+
+    const meta = rt.observer(dm.id).find((m) => m.role === 'system')?.meta;
+    expect(meta).toEqual({ chatError: 'provider_error', chatErrorDetail: 'something odd happened' });
   });
 });

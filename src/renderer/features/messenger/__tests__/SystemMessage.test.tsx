@@ -180,6 +180,36 @@ describe('SystemMessage — sanitized group errors', () => {
     expect(screen.getByTestId('system-message-body').textContent).not.toContain('provider secret');
   });
 
+  it('shows the cause sentence for a provider failure with a known cause (spec 2026-10-08 F3)', () => {
+    void i18next.changeLanguage('ko');
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      authorId: 'p-gemini', authorKind: 'member', content: 'provider_error',
+      meta: { chatError: 'provider_error', chatErrorCause: 'service-busy', chatErrorCauseDetail: 'HTTP 503' },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent)
+      .toBe('AI 서비스가 지금 붐벼서 응답하지 못했어요. 잠시 뒤에 다시 보내 주세요. (원인: HTTP 503)');
+    cleanup();
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      authorId: 'p-claude', authorKind: 'member', content: 'provider_error',
+      meta: { chatError: 'provider_error', chatErrorCause: 'cli-login-required', chatErrorCauseDetail: 'claude' },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent).toContain('claude auth login');
+  });
+
+  it('keeps the general sentence for an old notice without a cause, and ignores an unknown cause', () => {
+    void i18next.changeLanguage('ko');
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      authorId: 'p-claude', authorKind: 'member', content: 'provider_error', meta: { chatError: 'provider_error' },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent).toBe('AI 응답에 실패했습니다.');
+    cleanup();
+    renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({
+      authorId: 'p-claude', authorKind: 'member', content: 'provider_error',
+      meta: { chatError: 'provider_error', chatErrorCause: 'made-up' as never },
+    })} />);
+    expect(screen.getByTestId('system-message-body').textContent).toBe('AI 응답에 실패했습니다.');
+  });
+
   it('adds the short DM cause after the translated failure text', () => {
     void i18next.changeLanguage('ko');
     renderWithTheme('tactical', <SystemMessage message={makeSystemMessage({

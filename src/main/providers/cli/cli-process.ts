@@ -16,6 +16,7 @@ import { normalizeAbsolute } from '../../files/absolute-path-node';
 import type { CliSessionState } from './cli-session-state';
 import { KILL_GRACE_PERIOD_MS } from '../../../shared/timeouts';
 import { resolveWindowsCommand } from './windows-command';
+import { cliFailureFrom, cliSpawnFailure } from './cli-failure-patterns';
 
 const MAX_BUFFER_BYTES = 50 * 1024 * 1024; // 50 MB
 
@@ -159,14 +160,14 @@ export class CliProcessManager {
         child.on('error', (err) => {
           clearTimeout(startupTimer);
           if (this.process === child) this.process = null;
-          reject(err);
+          reject(cliSpawnFailure(err));
         });
 
         child.on('exit', (code, signal) => {
           clearTimeout(startupTimer);
           // A previous conversation can exit after its replacement starts.
           if (this.process === child) this.process = null;
-          reject(new Error(`CLI exited during startup (code=${String(code)}, signal=${String(signal)})${startupStderr ? `: ${startupStderr.trim()}` : ''}`));
+          reject(cliFailureFrom(`CLI exited during startup (code=${String(code)}, signal=${String(signal)})`, undefined, startupStderr));
         });
       } catch (err) {
         reject(err);

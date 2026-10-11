@@ -88,12 +88,12 @@ describe('pass button (F1)', () => {
   it('sits next to the input in the general channel and rooms only', async () => {
     stubBridge({ rooms: [room] });
     open(general);
-    const view = render(<Thread />);
+    const view = render(<Thread onCreateRoom={vi.fn()} />);
     expect((await screen.findByTestId('chat-pass-turn')).textContent).toBe('넘기기');
     view.unmount();
 
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('chat-pass-turn');
   });
 
@@ -102,7 +102,7 @@ describe('pass button (F1)', () => {
     open(room);
     useThemeStore.setState({ themeKey: 'retro', mode: 'dark' });
     try {
-      render(<ThemeProvider><Thread /></ThemeProvider>);
+      render(<ThemeProvider><Thread onCreateRoom={vi.fn()} /></ThemeProvider>);
       const pass = await screen.findByTestId('chat-pass-turn');
       expect(pass.textContent).toBe('[넘기기]');
       expect(screen.getByTestId('composer-input-row').contains(pass)).toBe(true);
@@ -114,7 +114,7 @@ describe('pass button (F1)', () => {
   it('is not offered in an archived room', async () => {
     stubBridge({ rooms: [{ ...room, readOnly: true, archivedAt: 10 }] });
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('room-archived-notice');
     expect(screen.queryByTestId('chat-pass-turn')).toBeNull();
   });
@@ -122,7 +122,7 @@ describe('pass button (F1)', () => {
   it('passes through typed IPC and shows the streamed pass row as a quiet translated line', async () => {
     const bridge = stubBridge({ rooms: [room] });
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     fireEvent.click(await screen.findByTestId('chat-pass-turn'));
     await waitFor(() => expect(bridge.invoke).toHaveBeenCalledWith('chat:pass-turn', { channelId: room.id }));
     act(() => bridge.emit('stream:channel-message', { message: passRow(room.id) }));
@@ -138,7 +138,7 @@ describe('pass button (F1)', () => {
       throw new Error("Error invoking remote method 'chat:pass-turn': Error: [INTERNAL_ERROR] chat_pass_rejected:round_running (channel room-1)");
     } });
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     fireEvent.click(await screen.findByTestId('chat-pass-turn'));
     expect((await screen.findByTestId('chat-pass-turn-error')).textContent)
       .toBe('이미 대화가 진행 중입니다. 끝난 뒤 다시 눌러 주세요.');
@@ -147,7 +147,7 @@ describe('pass button (F1)', () => {
   it('stays disabled between one turn\'s idle and the next turn while the round runs (QA M1)', async () => {
     stubBridge({ rooms: [room] });
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     const button = await screen.findByTestId('chat-pass-turn') as HTMLButtonElement;
     const { apply, applyRound } = useChatActivityStore.getState();
     act(() => {
@@ -170,7 +170,7 @@ describe('pass button (F1)', () => {
       throw new Error("Error invoking remote method 'chat:pass-turn': Error: [INTERNAL_ERROR] chat_pass_rejected:no_participants (channel general-1)");
     } });
     open(general);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     fireEvent.click(await screen.findByTestId('chat-pass-turn'));
     expect((await screen.findByTestId('chat-pass-turn-error')).textContent)
       .toBe('대화에 참가한 AI가 없어 넘길 수 없습니다.');
@@ -179,7 +179,7 @@ describe('pass button (F1)', () => {
   it('is disabled while its channel has a turn in progress, and only its own channel counts', async () => {
     stubBridge({ rooms: [room] });
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     const button = await screen.findByTestId('chat-pass-turn') as HTMLButtonElement;
     expect(button.disabled).toBe(false);
     act(() => useChatActivityStore.getState().apply({ channelId: general.id, providerId: 'ai-a', phase: 'writing', kind: 'turn' }));
@@ -195,7 +195,7 @@ describe('writing indicator (F5)', () => {
   it('shows under the message list with participant names in rooms and general', async () => {
     stubBridge({ rooms: [room] });
     open(room);
-    const view = render(<Thread />);
+    const view = render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('chat-activity-indicator');
     await waitFor(() => expect(screen.getByTestId('thread').getAttribute('data-channel-id')).toBe(room.id));
     await screen.findByTestId('chat-pass-turn');
@@ -207,7 +207,7 @@ describe('writing indicator (F5)', () => {
     view.unmount();
 
     open(general);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByTestId('chat-activity-indicator');
     act(() => useChatActivityStore.getState().apply({ channelId: general.id, providerId: 'ai-a', phase: 'writing', kind: 'turn' }));
     await waitFor(() => expect(screen.getByTestId('chat-activity-indicator').textContent).toBe('Alice 입력 중…'));
@@ -233,7 +233,7 @@ describe('whisper threads in the observer view (F2-8)', () => {
     ];
     stubBridge({ rooms: [room], history });
     open(room);
-    render(<Thread />);
+    render(<Thread onCreateRoom={vi.fn()} />);
     await screen.findByText('thread line 1');
     expect(screen.getAllByTestId('message-content').map((element) => element.textContent)).toEqual([
       'thread line 1', 'thread line 2', 'thread line 3', 'thread line 4',

@@ -58,6 +58,7 @@ import {
 } from './cli-channel-permissions';
 import { CliSessionState } from './cli-session-state';
 import { CliOutputParser } from './cli-output-parser';
+import { cliFailureFrom, hasKnownCliCause } from './cli-failure-patterns';
 import { CliPromptBuilder } from './cli-prompt-builder';
 import { CliProcessManager } from './cli-process';
 import { CliStreamer } from './cli-stream';
@@ -585,8 +586,8 @@ export class CliProvider extends BaseProvider {
       const structuredError = this.outputParser.extractStructuredError(stdoutText);
       if (exitCode !== 0 || exitSignal) {
         if (structuredError) throw structuredError;
-        const detail = stderrText || `exit code ${String(exitCode)}${exitSignal ? ` (${exitSignal})` : ''}`;
-        throw this.outputParser.createProviderError(detail);
+        const exit = `exit code ${String(exitCode)}${exitSignal ? ` (${exitSignal})` : ''}`;
+        throw cliFailureFrom(stderrText ? 'CLI process failed' : exit, undefined, stderrText);
       }
 
       if (!yieldedAny && structuredError) {
@@ -594,7 +595,7 @@ export class CliProvider extends BaseProvider {
       }
 
       if (!yieldedAny && stderrText) {
-        throw new Error(`CLI returned no output: ${stderrText}`);
+        throw cliFailureFrom('CLI returned no output', undefined, stderrText);
       }
 
       if (!yieldedAny) {
@@ -669,13 +670,13 @@ export class CliProvider extends BaseProvider {
         }
         return; // success
       } catch (err) {
-        if (err instanceof ProviderUsageLimitError) throw err;
+        if (err instanceof ProviderUsageLimitError || hasKnownCliCause(err)) throw err;
         if (options?.chatSession) {
           const message = err instanceof Error ? err.message : String(err);
           if (message.includes('error_during_execution') && !stderrTail) {
             await new Promise<void>((resolve) => setTimeout(resolve, 100));
           }
-          throw new Error(`${message}${stderrTail ? `: ${stderrTail.trim()}` : ''}`);
+          throw cliFailureFrom(message, undefined, stderrTail);
         }
         const message = err instanceof Error ? err.message : String(err);
         const isHang = message.includes('hang timeout');

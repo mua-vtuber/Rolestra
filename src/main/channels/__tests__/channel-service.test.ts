@@ -17,8 +17,9 @@
  * Coverage that remains:
  *   - createDm: partial-unique index enforcement → DuplicateDmError;
  *     channel_members row created with project_id=NULL
- *   - getGlobalGeneralChannel: throws when no row exists, returns it
- *     once inserted
+ *   - getGlobalGeneralChannel: null when no row exists (the user deleted
+ *     it — spec 2026-10-08 F1), returns it once inserted. Creating it on
+ *     first run is covered by general-channel-service.test.ts.
  *
  * D1 follow-up (2026-09-29): the constructor's `ProjectMemberLookup`
  * parameter was residue from the same removal (only the deleted
@@ -132,12 +133,10 @@ describe('ChannelService', () => {
   });
 
   describe('R12-C: getGlobalGeneralChannel', () => {
-    it('throws when no global general row exists yet', () => {
-      // beforeEach ran migration 018 — system_general consolidation deleted
-      // any pre-existing rows. No ensureGlobalGeneralChannel was called.
-      expect(() => channelService.getGlobalGeneralChannel()).toThrow(
-        /no global system_general row/,
-      );
+    it('returns null when no global general row exists', () => {
+      // A fresh DB has no general row until GeneralChannelService creates
+      // it; after the user deletes it there is none either. Both are normal.
+      expect(channelService.getGlobalGeneralChannel()).toBeNull();
     });
 
     it('returns the row after one is inserted with project_id NULL', () => {
@@ -146,7 +145,7 @@ describe('ChannelService', () => {
            (id, project_id, name, kind, read_only, created_at, role, purpose, handoff_mode)
          VALUES (?, NULL, ?, 'system_general', 0, ?, NULL, NULL, 'check')`,
       ).run('global-general', '#일반', 1700000000000);
-      const ch = channelService.getGlobalGeneralChannel();
+      const ch = channelService.getGlobalGeneralChannel()!;
       expect(ch.id).toBe('global-general');
       expect(ch.projectId).toBeNull();
       expect(ch.kind).toBe('system_general');
